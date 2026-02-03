@@ -3,10 +3,10 @@
 import React from "react"
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
-import { ResultsDashboard, type ResearchResponse } from '@/components/results-dashboard'
 
 const MIN_LOADING_MS = 2500 // 최소 로딩 표시 시간 (API가 빨라도 UX를 위해 유지)
 
@@ -17,10 +17,10 @@ const loadingMessages = [
 ]
 
 export default function RinAISearch() {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
-  const [results, setResults] = useState<ResearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -30,7 +30,6 @@ export default function RinAISearch() {
     const searchQuery = query.trim()
     setIsSearching(true)
     setCurrentMessageIndex(0)
-    setResults(null)
     setError(null)
 
     // Cycle through loading messages
@@ -54,14 +53,14 @@ export default function RinAISearch() {
         new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
       ])
 
-      const data: ResearchResponse = await apiResponse.json()
+      const data = await apiResponse.json()
 
       if (!apiResponse.ok) {
         throw new Error(data.error ?? '리서치 요청에 실패했습니다.')
       }
 
-      // API 성공 → 결과 대시보드로 전환
-      setResults(data)
+      // API 성공 → 대시보드 페이지로 이동
+      router.push(`/dashboard?keyword=${encodeURIComponent(searchQuery)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
     } finally {
@@ -70,21 +69,6 @@ export default function RinAISearch() {
       setQuery('')
       setCurrentMessageIndex(0)
     }
-  }
-
-  const handleSearchAgain = () => {
-    setResults(null)
-    setError(null)
-  }
-
-  // API 응답 수신 시 → 결과 대시보드 화면으로 전환
-  if (results && !isSearching) {
-    return (
-      <ResultsDashboard
-        results={results}
-        onSearchAgain={handleSearchAgain}
-      />
-    )
   }
 
   if (isSearching) {
