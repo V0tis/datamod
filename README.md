@@ -4,6 +4,5 @@ When I enter keywords for a specific industry, it crawls the latest news, compet
 ui: v0 dev
 dev: cursor claude 3.5 sonnet
 deployed: vercel
-
-perplexity
+firecrawl+claude
 
