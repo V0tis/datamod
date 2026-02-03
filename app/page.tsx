@@ -6,6 +6,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
+import { ResultsDashboard, type ResearchResponse } from '@/components/results-dashboard'
+
+const MIN_LOADING_MS = 2500 // 최소 로딩 표시 시간 (API가 빨라도 UX를 위해 유지)
 
 const loadingMessages = [
   '린이 최신 시장 뉴스를 검색 중입니다...',
@@ -17,13 +20,18 @@ export default function RinAISearch() {
   const [query, setQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
+  const [results, setResults] = useState<ResearchResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
 
+    const searchQuery = query.trim()
     setIsSearching(true)
     setCurrentMessageIndex(0)
+    setResults(null)
+    setError(null)
 
     // Cycle through loading messages
     const interval = setInterval(() => {
@@ -35,14 +43,48 @@ export default function RinAISearch() {
       })
     }, 2000)
 
-    // Stop after all messages
-    setTimeout(() => {
+    try {
+      // API 호출과 최소 로딩 시간을 동시에 대기 (API가 빨라도 로딩 UX 유지)
+      const [apiResponse] = await Promise.all([
+        fetch('/api/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: searchQuery }),
+        }),
+        new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
+      ])
+
+      const data: ResearchResponse = await apiResponse.json()
+
+      if (!apiResponse.ok) {
+        throw new Error(data.error ?? '리서치 요청에 실패했습니다.')
+      }
+
+      // API 성공 → 결과 대시보드로 전환
+      setResults(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+    } finally {
       clearInterval(interval)
-      // In a real app, you would navigate to results or show results
       setIsSearching(false)
       setQuery('')
       setCurrentMessageIndex(0)
-    }, 7000)
+    }
+  }
+
+  const handleSearchAgain = () => {
+    setResults(null)
+    setError(null)
+  }
+
+  // API 응답 수신 시 → 결과 대시보드 화면으로 전환
+  if (results && !isSearching) {
+    return (
+      <ResultsDashboard
+        results={results}
+        onSearchAgain={handleSearchAgain}
+      />
+    )
   }
 
   if (isSearching) {
@@ -103,6 +145,12 @@ export default function RinAISearch() {
             </h1>
           </div>
         </div>
+
+        {error && (
+          <div className="w-full p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+            {error}
+          </div>
+        )}
 
         {/* Search Form */}
         <form onSubmit={handleSearch} className="w-full space-y-4">
