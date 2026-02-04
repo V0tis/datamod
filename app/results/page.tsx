@@ -18,6 +18,7 @@ interface ResearchData {
   painPoints?: string[]
   competitorTrends?: string
   sentiment?: number
+  reportId?: string | null
   error?: string
 }
 
@@ -94,9 +95,33 @@ function ResultsContent() {
   const painPoints = data?.painPoints ?? []
   const competitorTrends = data?.competitorTrends ?? ''
   const sentiment = data?.sentiment ?? 0
+  const reportId = data?.reportId ?? null
 
   return (
     <main className="min-h-screen bg-background p-8 max-w-6xl mx-auto space-y-8">
+      {/* 저장 완료 메시지 또는 로그인 유도 */}
+      {reportId ? (
+        <div className="rounded-lg bg-primary/10 border border-primary/20 text-primary px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm font-medium">리포트가 내 기록에 저장되었습니다.</span>
+          <Link href={`/reports/${reportId}`}>
+            <Button size="sm" variant="secondary" className="rounded-full">
+              내 기록에서 보기
+            </Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="rounded-lg bg-muted border border-border px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            로그인하면 이 리포트를 내 기록에 저장할 수 있어요.
+          </p>
+          <Link href={`/auth/login?callbackUrl=${encodeURIComponent(`/results?keyword=${encodeURIComponent(keyword ?? '')}`)}`}>
+            <Button size="sm" className="rounded-full">
+              로그인하고 저장하기
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <header className="flex flex-wrap justify-between items-center gap-4">
         <h1 className="text-3xl font-bold font-serif">
           &quot;{keyword}&quot; 리서치 리포트

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// 본인 데이터만 조회: supabase.auth.getUser() 후 user_id로 필터
 export async function GET() {
   try {
     const supabase = await createClient()

@@ -73,7 +73,7 @@ export default function HistoryPage() {
     )
   }
 
-  // Empty state
+  // 빈 화면: Rin 스타일 문구 + 검색 연결 버튼
   if (reports.length === 0) {
     return (
       <div className="min-h-screen bg-background">
@@ -95,21 +95,16 @@ export default function HistoryPage() {
         <main className="container mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="max-w-md text-center space-y-6">
             <div className="text-8xl">🐕</div>
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold text-foreground">
-                아직 물어온 소식이 없어요
-              </h2>
-              <p className="text-muted-foreground leading-relaxed">
-                첫 리서치를 시작해볼까요?
-              </p>
-            </div>
+            <p className="text-lg text-foreground leading-relaxed">
+              린이 아직 소식을 물어오지 않았어요!
+            </p>
             <Link href="/">
               <Button
                 size="lg"
                 className="rounded-full bg-primary hover:bg-primary/90 gap-2 mt-4"
               >
                 <Search className="w-5 h-5" />
-                첫 검색 시작하기
+                메인 검색창으로 이동
               </Button>
             </Link>
           </div>
@@ -182,7 +177,7 @@ export default function HistoryPage() {
                           className="rounded-full bg-primary hover:bg-primary/90 gap-2 w-full"
                         >
                           <FileText className="w-4 h-4" />
-                          리포트 보기
+                          상세 보기
                         </Button>
                       </Link>
                       <Button
