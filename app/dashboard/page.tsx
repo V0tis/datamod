@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, TrendingUp, MessageSquare, Eye, BarChart3 } from 'lucide-react'
+import { RinLogo } from '@/components/rin-logo'
 
 // TODO: API 응답 타입으로 교체
 interface DashboardData {
@@ -118,7 +119,7 @@ function DashboardContent() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🐕</span>
+              <RinLogo size={28} />
               <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
             </div>
             <div className="h-8 w-px bg-border" />

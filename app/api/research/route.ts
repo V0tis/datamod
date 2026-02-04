@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       sentiment,
     }
 
-    // 로그인한 유저만 public.reports에 저장 (content = AI 분석 JSON 전체, JSONB로 저장)
+    // 자동 저장: 로그인(signUp 직후 포함) 상태면 reports에 user_id와 함께 저장
     let reportId: string | null = null
     if (user?.id) {
       const { data: report, error: insertError } = await supabase

@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
 import { Loader2 } from 'lucide-react'
 
-/** API returns same shape as DB content + keyword */
+/**
+ * 동적 라우팅 /results/[id]: URL의 리포트 ID로 DB에서 데이터를 불러와 분석 결과 표시.
+ * 히스토리에서 항목 클릭 시 이 페이지로 이동. Supabase Auth 세션으로 본인 데이터만 조회.
+ */
 interface ReportApiResponse {
   keyword: string
   marketNews?: string[]

@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Search, Trash2, FileText, Loader2 } from 'lucide-react'
+import { RinLogo } from '@/components/rin-logo'
 
+/**
+ * 히스토리: Supabase Auth 세션 기준으로 본인 리서치 목록만 불러옴.
+ * 검색 키워드, 날짜, 분석 요약 일부 표시 → 클릭 시 /results/[id] 상세로 이동.
+ * 로딩 중에는 스켈레톤 UI 표시.
+ */
 interface ResearchReport {
   id: string
   keyword: string
@@ -59,7 +65,7 @@ export default function HistoryPage() {
         <header className="border-b border-border bg-card">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🐕</span>
+              <RinLogo size={28} />
               <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
             </div>
             <div className="h-9 w-24 rounded-full bg-muted animate-pulse" />
@@ -118,7 +124,7 @@ export default function HistoryPage() {
         <header className="border-b border-border bg-card">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🐕</span>
+              <RinLogo size={28} />
               <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
             </div>
             <Link href="/">
@@ -132,7 +138,7 @@ export default function HistoryPage() {
 
         <main className="container mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="max-w-md text-center space-y-6">
-            <div className="text-8xl">🐕</div>
+            <RinLogo size={80} />
             <p className="text-lg text-foreground leading-relaxed">
               린이 아직 소식을 물어오지 않았어요!
             </p>
@@ -156,7 +162,7 @@ export default function HistoryPage() {
       <header className="border-b border-border bg-card sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🐕</span>
+            <RinLogo size={28} />
             <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
           </div>
           <Link href="/">
@@ -181,11 +187,14 @@ export default function HistoryPage() {
             {reports.map((report) => (
               <Card
                 key={report.id}
-                className="shadow-sm hover:shadow-md transition-all duration-200 border border-border"
+                className="hover:shadow-[0_12px_48px_-12px_rgba(255,184,0,0.25)] transition-shadow duration-200 border border-border"
               >
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
+                    <Link
+                      href={`/results/${report.id}`}
+                      className="flex-1 space-y-3 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
                       <div className="space-y-1">
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-bold text-foreground">
@@ -206,13 +215,13 @@ export default function HistoryPage() {
                           {report.sentiment}%
                         </span>
                       </div>
-                    </div>
+                    </Link>
 
                     <div className="flex flex-col gap-2 shrink-0">
                       <Link href={`/results/${report.id}`}>
                         <Button
                           size="sm"
-                          className="rounded-full bg-primary hover:bg-primary/90 gap-2 w-full"
+                          className="bg-primary hover:bg-primary/90 gap-2 w-full"
                         >
                           <FileText className="w-4 h-4" />
                           상세 보기
@@ -221,9 +230,12 @@ export default function HistoryPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDelete(report.id)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleDelete(report.id)
+                        }}
                         disabled={deletingId === report.id}
-                        className="rounded-full gap-2 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
+                        className="gap-2 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
                       >
                         {deletingId === report.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />

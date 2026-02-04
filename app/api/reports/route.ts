@@ -14,7 +14,7 @@ export async function GET() {
       .from('reports')
       .select('id, keyword, content, created_at')
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }) // 최신순
 
     if (error) {
       console.error('[Reports API] list error:', error)

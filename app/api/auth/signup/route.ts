@@ -25,8 +25,6 @@ export async function POST(req: Request) {
 
     const supabase = getSupabase()
 
-    console.log('email', email);
-
     // 1. auth.signUp 호출 전 반드시 profiles에서 이메일 존재 여부 조회 (중복 가입 차단)
     const { data: existingByEmail } = await supabase
       .from('profiles')

@@ -4,6 +4,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Mail, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import { RinLogo } from '@/components/rin-logo'
 
 export default function VerifyPage() {
   return (
@@ -23,8 +24,8 @@ export default function VerifyPage() {
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center space-y-3">
-            <div className="flex justify-center gap-2">
-              <span className="text-4xl">🐕</span>
+            <div className="flex justify-center items-center gap-3">
+              <RinLogo size={48} className="shrink-0" />
               <h1 className="text-4xl font-bold tracking-tight text-foreground">Rin-AI</h1>
             </div>
           </div>
