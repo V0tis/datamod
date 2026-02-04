@@ -1,25 +1,34 @@
 'use client'
 
-import React from "react"
-import { useState } from 'react'
+import React, { useState } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search } from 'lucide-react'
+import { Search, LogOut } from 'lucide-react'
+import Link from 'next/link'
 
 export default function RinAISearch() {
+  const { data: session } = useSession()
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
-
-    // 결과 페이지로 이동 (쿼리 파라미터 전달)
     window.location.href = `/results?keyword=${encodeURIComponent(query.trim())}`
   }
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      {session && (
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{session.user?.email}</span>
+          <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/auth/login' })} className="gap-1">
+            <LogOut className="w-4 h-4" />
+            로그아웃
+          </Button>
+        </div>
+      )}
       <div className="w-full max-w-2xl space-y-8 flex flex-col items-center">
         {/* Logo/Brand */}
         <div className="text-center space-y-4">

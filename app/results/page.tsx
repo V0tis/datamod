@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -21,7 +21,7 @@ interface ResearchData {
   error?: string
 }
 
-export default function ResultsPage() {
+function ResultsContent() {
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')
   const [data, setData] = useState<ResearchData | null>(null)
@@ -175,5 +175,19 @@ export default function ResultsPage() {
         </Link>
       </div>
     </main>
+  )
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="text-8xl animate-bounce">🐕</div>
+        </div>
+      }
+    >
+      <ResultsContent />
+    </Suspense>
   )
 }
