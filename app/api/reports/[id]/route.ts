@@ -20,7 +20,7 @@ export async function GET(
 
     const { data: report, error } = await getSupabase()
       .from('reports')
-      .select('id, user_id, keyword, summary, created_at')
+      .select('id, user_id, keyword, content, created_at')
       .eq('id', id)
       .single()
 
@@ -38,7 +38,7 @@ export async function GET(
       )
     }
 
-    const s = report.summary as {
+    const s = report.content as {
       marketNews?: string[]
       painPoints?: string[]
       competitorTrends?: string

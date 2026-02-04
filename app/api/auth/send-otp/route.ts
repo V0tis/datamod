@@ -1,78 +1,14 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
-import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Rin-AI <onboarding@resend.dev>'
-
-const OTP_EXPIRES_MINUTES = 5
-const OTP_LENGTH = 6
-
-function generateOtp(): string {
-  let code = ''
-  for (let i = 0; i < OTP_LENGTH; i++) {
-    code += Math.floor(Math.random() * 10).toString()
-  }
-  return code
-}
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json()
-    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : null
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { error: '유효한 이메일을 입력해주세요.' },
-        { status: 400 }
-      )
-    }
-
-    if (!process.env.RESEND_API_KEY) {
-      return NextResponse.json(
-        { error: '이메일 발송 설정이 되어 있지 않습니다.' },
-        { status: 500 }
-      )
-    }
-
-    const { data: user } = await getSupabase()
-      .from('auth_users')
-      .select('id')
-      .eq('email', email)
-      .single()
-
-    if (!user) {
-      return NextResponse.json(
-        { error: '가입된 이메일이 없습니다. 먼저 회원가입해주세요.' },
-        { status: 400 }
-      )
-    }
-
-    const code = generateOtp()
-    const otp_expires_at = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString()
-
-    await getSupabase()
-      .from('auth_users')
-      .update({ otp_code: code, otp_expires_at, updated_at: new Date().toISOString() })
-      .eq('email', email)
-
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: email,
-      subject: 'Rin-AI 이메일 인증 코드',
-      html: `
-        <p>린(Rin)이 보낸 인증 코드입니다 🐕</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${code}</p>
-        <p>${OTP_EXPIRES_MINUTES}분 내에 입력해주세요. 요청하지 않으셨다면 무시해주세요.</p>
-      `,
-    })
-
-    return NextResponse.json({ ok: true, message: '인증 코드가 발송되었습니다.' })
-  } catch (e) {
-    console.error('[send-otp]', e)
-    return NextResponse.json(
-      { error: '인증 코드 발송에 실패했습니다.' },
-      { status: 500 }
-    )
-  }
+/**
+ * @deprecated Supabase Auth 이메일 인증을 사용합니다. 회원가입 시 발송되는 확인 링크로 인증해주세요.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        '이제 이메일 인증은 Supabase 인증 메일의 확인 링크로 진행됩니다. 가입 시 발송된 메일을 확인해주세요.',
+    },
+    { status: 410 }
+  )
 }

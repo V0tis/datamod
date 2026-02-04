@@ -1,22 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { Resend } from 'resend'
-import bcrypt from 'bcryptjs'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Rin-AI <onboarding@resend.dev>'
-
-const OTP_EXPIRES_MINUTES = 5
-const OTP_LENGTH = 6
-const SALT_ROUNDS = 10
-
-function generateOtp(): string {
-  let code = ''
-  for (let i = 0; i < OTP_LENGTH; i++) {
-    code += Math.floor(Math.random() * 10).toString()
-  }
-  return code
-}
 
 export async function POST(req: Request) {
   try {
@@ -38,61 +21,63 @@ export async function POST(req: Request) {
       )
     }
 
-    const { data: existing } = await getSupabase()
-      .from('auth_users')
-      .select('id')
-      .eq('email', email)
-      .single()
+    const supabase = getSupabase()
 
-    if (existing) {
+    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL
+          ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+          : undefined,
+      },
+    })
+
+    if (signUpError) {
+      if (signUpError.message?.toLowerCase().includes('already registered')) {
+        return NextResponse.json(
+          { error: '이미 가입된 이메일입니다. 로그인해주세요.' },
+          { status: 400 }
+        )
+      }
+      console.error('[signup] Supabase auth.signUp:', signUpError)
       return NextResponse.json(
-        { error: '이미 가입된 이메일입니다. 로그인해주세요.' },
+        { error: signUpError.message || '회원가입 처리에 실패했습니다.' },
         { status: 400 }
       )
     }
 
-    if (!process.env.RESEND_API_KEY) {
-      return NextResponse.json(
-        { error: '이메일 발송 설정이 되어 있지 않습니다.' },
-        { status: 500 }
-      )
-    }
-
-    const password_hash = await bcrypt.hash(password, SALT_ROUNDS)
-    const code = generateOtp()
-    const otp_expires_at = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString()
-
-    const { error: insertError } = await getSupabase().from('auth_users').insert({
-      email,
-      password_hash,
-      status: 'pending_verification',
-      otp_code: code,
-      otp_expires_at,
-      updated_at: new Date().toISOString(),
-    })
-
-    if (insertError) {
-      console.error('[signup] Supabase insert:', insertError)
+    const user = authData.user
+    if (!user?.id || !user?.email) {
       return NextResponse.json(
         { error: '회원가입 처리에 실패했습니다.' },
         { status: 500 }
       )
     }
 
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: email,
-      subject: 'Rin-AI 이메일 인증 코드',
-      html: `
-        <p>린(Rin)이 보낸 인증 코드입니다 🐕</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${code}</p>
-        <p>${OTP_EXPIRES_MINUTES}분 내에 입력해주세요. 요청하지 않으셨다면 무시해주세요.</p>
-      `,
+    const { error: insertError } = await supabase.from('profiles').insert({
+      id: user.id,
+      email: user.email,
     })
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        return NextResponse.json(
+          { error: '이미 가입된 이메일입니다. 로그인해주세요.' },
+          { status: 400 }
+        )
+      }
+      console.error('[signup] profiles insert:', insertError)
+      return NextResponse.json(
+        { error: '회원가입 처리에 실패했습니다.' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       ok: true,
-      message: '가입되었습니다. 이메일로 전송된 인증 코드를 입력해주세요.',
+      message:
+        '가입되었습니다. 이메일로 전송된 확인 링크를 클릭해 인증을 완료한 뒤 로그인해주세요.',
     })
   } catch (e) {
     console.error('[signup]', e)

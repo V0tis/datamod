@@ -97,13 +97,13 @@ export async function POST(req: Request) {
       sentiment,
     }
 
-    // Supabase reports 테이블에 저장 (계정별 귀속)
+    // Supabase reports 테이블에 저장 (user_id, keyword, content)
     const { data: report, error: insertError } = await getSupabase()
       .from('reports')
       .insert({
         user_id: session.user.id,
         keyword: keyword.trim(),
-        summary,
+        content: summary,
       })
       .select('id')
       .single()

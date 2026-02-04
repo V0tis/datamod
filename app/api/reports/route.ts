@@ -12,7 +12,7 @@ export async function GET() {
 
     const { data: reports, error } = await getSupabase()
       .from('reports')
-      .select('id, keyword, summary, created_at')
+      .select('id, keyword, content, created_at')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
@@ -28,10 +28,10 @@ export async function GET() {
       id: r.id,
       keyword: r.keyword,
       date: r.created_at?.slice(0, 10) ?? '',
-      sentiment: typeof (r.summary as { sentiment?: number })?.sentiment === 'number'
-        ? (r.summary as { sentiment: number }).sentiment
+      sentiment: typeof (r.content as { sentiment?: number })?.sentiment === 'number'
+        ? (r.content as { sentiment: number }).sentiment
         : 0,
-      summary: [((r.summary as { marketNews?: string[] })?.marketNews)?.[0]]
+      summary: [((r.content as { marketNews?: string[] })?.marketNews)?.[0]]
         .filter(Boolean)
         .join('') || '—',
     }))
