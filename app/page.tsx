@@ -1,16 +1,26 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import React, { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, LogOut, History, LogIn } from 'lucide-react'
+import { Search, LogOut, History } from 'lucide-react'
 import Link from 'next/link'
 
 export default function RinAISearch() {
-  const { data: session } = useSession()
+  const [user, setUser] = useState<User | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null))
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null))
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -18,27 +28,32 @@ export default function RinAISearch() {
     window.location.href = `/results?keyword=${encodeURIComponent(query.trim())}`
   }
 
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = '/auth/login'
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       <div className="absolute top-4 right-4 flex items-center gap-2 flex-wrap justify-end">
-        {session ? (
+        {user ? (
           <>
             <Link href="/history">
               <Button variant="outline" size="sm" className="gap-1 rounded-full">
                 <History className="w-4 h-4" />
-                내 기록
+                내 리서치 기록
               </Button>
             </Link>
-            <span className="text-sm text-muted-foreground hidden sm:inline">{session.user?.email}</span>
-            <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/' })} className="gap-1">
+            <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="gap-1">
               <LogOut className="w-4 h-4" />
               로그아웃
             </Button>
           </>
         ) : (
           <Link href="/auth/login">
-            <Button variant="outline" size="sm" className="gap-1 rounded-full">
-              <LogIn className="w-4 h-4" />
+            <Button variant="outline" size="sm" className="rounded-full">
               로그인
             </Button>
           </Link>

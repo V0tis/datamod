@@ -1,3 +1,4 @@
+// Next.js App Router용 브라우저 Supabase 클라이언트 (@supabase/ssr)
 import { createBrowserClient } from '@supabase/ssr'
 
 export function createClient() {

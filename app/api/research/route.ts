@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
+import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { authOptions } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
       return NextResponse.json(
         { error: '로그인이 필요합니다.' },
         { status: 401 }
@@ -98,10 +97,10 @@ export async function POST(req: Request) {
     }
 
     // Supabase reports 테이블에 저장 (계정별 귀속)
-    const { data: report, error: insertError } = await getSupabase()
+    const { data: report, error: insertError } = await supabase
       .from('reports')
       .insert({
-        user_id: session.user.id,
+        user_id: user.id,
         keyword: keyword.trim(),
         content: summary,
       })

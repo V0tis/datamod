@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
 
@@ -18,7 +17,7 @@ export async function GET(
       return NextResponse.json({ error: '리포트 ID가 필요합니다.' }, { status: 400 })
     }
 
-    const { data: report, error } = await getSupabase()
+    const { data: report, error } = await supabase
       .from('reports')
       .select('id, user_id, keyword, content, created_at')
       .eq('id', id)
@@ -31,7 +30,7 @@ export async function GET(
       )
     }
 
-    if (report.user_id !== session.user.id) {
+    if (report.user_id !== user.id) {
       return NextResponse.json(
         { error: '이 리포트에 접근할 수 없습니다.' },
         { status: 403 }
@@ -68,8 +67,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
 
@@ -78,7 +78,7 @@ export async function DELETE(
       return NextResponse.json({ error: '리포트 ID가 필요합니다.' }, { status: 400 })
     }
 
-    const { data: report, error: fetchError } = await getSupabase()
+    const { data: report, error: fetchError } = await supabase
       .from('reports')
       .select('user_id')
       .eq('id', id)
@@ -91,14 +91,14 @@ export async function DELETE(
       )
     }
 
-    if (report.user_id !== session.user.id) {
+    if (report.user_id !== user.id) {
       return NextResponse.json(
         { error: '이 리포트를 삭제할 수 없습니다.' },
         { status: 403 }
       )
     }
 
-    const { error: deleteError } = await getSupabase()
+    const { error: deleteError } = await supabase
       .from('reports')
       .delete()
       .eq('id', id)

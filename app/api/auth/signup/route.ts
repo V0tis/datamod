@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 
+const ALREADY_REGISTERED_MESSAGE = '이미 가입된 이메일입니다. 로그인해 주세요.'
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -23,15 +25,15 @@ export async function POST(req: Request) {
 
     const supabase = getSupabase()
 
-    const { data: existing } = await supabase
+    const { data: existingProfile } = await supabase
       .from('profiles')
       .select('id')
       .eq('email', email)
       .maybeSingle()
 
-    if (existing) {
+    if (existingProfile) {
       return NextResponse.json(
-        { error: '이미 가입된 이메일입니다.' },
+        { error: ALREADY_REGISTERED_MESSAGE },
         { status: 400 }
       )
     }
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     if (signUpError) {
       if (signUpError.message?.toLowerCase().includes('already registered')) {
         return NextResponse.json(
-          { error: '이미 가입된 이메일입니다. 로그인해주세요.' },
+          { error: ALREADY_REGISTERED_MESSAGE },
           { status: 400 }
         )
       }
@@ -57,33 +59,6 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: signUpError.message || '회원가입 처리에 실패했습니다.' },
         { status: 400 }
-      )
-    }
-
-    const user = authData.user
-    if (!user?.id || !user?.email) {
-      return NextResponse.json(
-        { error: '회원가입 처리에 실패했습니다.' },
-        { status: 500 }
-      )
-    }
-
-    const { error: insertError } = await supabase.from('profiles').insert({
-      id: user.id,
-      email: user.email,
-    })
-
-    if (insertError) {
-      if (insertError.code === '23505') {
-        return NextResponse.json(
-          { error: '이미 가입된 이메일입니다. 로그인해주세요.' },
-          { status: 400 }
-        )
-      }
-      console.error('[signup] profiles insert:', insertError)
-      return NextResponse.json(
-        { error: '회원가입 처리에 실패했습니다.' },
-        { status: 500 }
       )
     }
 

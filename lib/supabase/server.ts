@@ -1,3 +1,4 @@
+// Next.js App Router용 서버 Supabase 클라이언트 (@supabase/ssr)
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -16,7 +17,7 @@ export async function createClient() {
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         } catch {
-          // Server Component에서는 set이 무시될 수 있음 (middleware에서 처리)
+          // Server Component 등에서 set이 무시될 수 있음 (middleware에서 갱신)
         }
       },
     },

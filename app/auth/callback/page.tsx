@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -19,7 +18,6 @@ function parseHashParams(hash: string): Record<string, string> {
 }
 
 export default function AuthCallbackPage() {
-  const router = useRouter()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -29,6 +27,7 @@ export default function AuthCallbackPage() {
     const hash = window.location.hash
     const params = parseHashParams(hash)
     const accessToken = params.access_token
+    const refreshToken = params.refresh_token
 
     if (!accessToken) {
       setStatus('error')
@@ -36,30 +35,21 @@ export default function AuthCallbackPage() {
       return
     }
 
-    signIn('magic-link', {
-      access_token: accessToken,
-      callbackUrl: '/',
-      redirect: false,
-    })
-      .then((res) => {
-        if (res?.error) {
-          setStatus('error')
-          setErrorMessage(res.error === 'CredentialsSignin' ? '인증에 실패했습니다.' : res.error)
-          return
-        }
-        if (res?.url) {
-          setStatus('success')
-          window.location.href = res.url
-          return
-        }
+    const supabase = createClient()
+    supabase.auth
+      .setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken ?? '',
+      })
+      .then(() => {
         setStatus('success')
-        router.replace('/')
+        window.location.href = '/'
       })
       .catch(() => {
         setStatus('error')
         setErrorMessage('로그인 처리 중 오류가 발생했습니다.')
       })
-  }, [router])
+  }, [])
 
   if (status === 'loading') {
     return (

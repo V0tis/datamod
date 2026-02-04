@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, Suspense } from 'react'
-import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,23 +29,22 @@ function LoginForm() {
 
     setLoading(true)
     try {
-      const res = await signIn('credentials', {
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
-        callbackUrl,
-        redirect: false,
       })
 
-      if (res?.error) {
-        setError(res.error === 'CredentialsSignin' ? '이메일 또는 비밀번호가 올바르지 않습니다.' : res.error)
-        if (res.error.includes('인증')) setError(res.error)
+      if (signInError) {
+        const msg = signInError.message ?? ''
+        setError(
+          msg.includes('Invalid') || msg.includes('invalid') || msg.includes('credentials')
+            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+            : msg.includes('이메일') ? msg : '이메일 또는 비밀번호가 올바르지 않습니다.'
+        )
         return
       }
 
-      if (res?.url) {
-        window.location.href = res.url
-        return
-      }
       window.location.href = callbackUrl
     } catch {
       setError('로그인 처리에 실패했습니다.')
@@ -58,11 +57,7 @@ function LoginForm() {
     <main className="min-h-screen flex flex-col bg-background">
       <div className="p-6">
         <Link href="/">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground hover:text-foreground"
-          >
+          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" />
             홈으로 돌아가기
           </Button>
@@ -72,22 +67,16 @@ function LoginForm() {
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center space-y-3">
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex justify-center gap-2">
               <span className="text-4xl">🐕</span>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">
-                Rin-AI
-              </h1>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground">Rin-AI</h1>
             </div>
-            <p className="text-muted-foreground text-sm">
-              로그인하고 최신 정보를 받아보세요
-            </p>
+            <p className="text-muted-foreground text-sm">로그인하고 최신 정보를 받아보세요</p>
           </div>
 
           <div className="bg-card rounded-3xl shadow-lg border border-border p-8 space-y-6">
             <form onSubmit={handleLogin} className="space-y-5">
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="space-y-2">
                 <Label htmlFor="email">이메일</Label>
@@ -122,11 +111,7 @@ function LoginForm() {
                 disabled={loading}
                 className="w-full h-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base shadow-md"
               >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                ) : (
-                  '로그인'
-                )}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : '로그인'}
               </Button>
             </form>
 
