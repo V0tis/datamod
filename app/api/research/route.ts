@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
 import Anthropic from '@anthropic-ai/sdk'
+import { authOptions } from '@/lib/auth'
+import { getSupabase } from '@/lib/supabase'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: '로그인이 필요합니다.' },
+        { status: 401 }
+      )
+    }
+
     const body = await req.json()
     const keyword = body?.keyword ?? body?.query
     if (!keyword || typeof keyword !== 'string') {
@@ -76,7 +87,7 @@ export async function POST(req: Request) {
         ? Math.min(100, Math.max(0, parsed.sentiment))
         : 0
 
-    return NextResponse.json({
+    const summary = {
       marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
       painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
       competitorTrends:
@@ -84,6 +95,27 @@ export async function POST(req: Request) {
           ? parsed.competitorTrends
           : '',
       sentiment,
+    }
+
+    // Supabase reports 테이블에 저장 (계정별 귀속)
+    const { data: report, error: insertError } = await getSupabase()
+      .from('reports')
+      .insert({
+        user_id: session.user.id,
+        keyword: keyword.trim(),
+        summary,
+      })
+      .select('id')
+      .single()
+
+    if (insertError) {
+      console.error('[Research API] Report insert failed:', insertError)
+      // 저장 실패해도 분석 결과는 반환
+    }
+
+    return NextResponse.json({
+      ...summary,
+      reportId: report?.id ?? null,
     })
   } catch (e) {
     console.error('[Research API] 분석 실패:', e)

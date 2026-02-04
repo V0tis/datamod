@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, LogOut } from 'lucide-react'
+import { Search, LogOut, History } from 'lucide-react'
 import Link from 'next/link'
 
 export default function RinAISearch() {
@@ -21,8 +21,14 @@ export default function RinAISearch() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       {session && (
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{session.user?.email}</span>
+        <div className="absolute top-4 right-4 flex items-center gap-2 flex-wrap justify-end">
+          <Link href="/history">
+            <Button variant="outline" size="sm" className="gap-1 rounded-full">
+              <History className="w-4 h-4" />
+              내 리서치 기록
+            </Button>
+          </Link>
+          <span className="text-sm text-muted-foreground hidden sm:inline">{session.user?.email}</span>
           <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/auth/login' })} className="gap-1">
             <LogOut className="w-4 h-4" />
             로그아웃

@@ -32,5 +32,8 @@ ANTHROPIC_API_KEY=
 
 ### Supabase 테이블 생성
 
-Supabase 대시보드 → SQL Editor에서 `supabase/migrations/001_auth_tables.sql` 내용을 실행해 `auth_users`, `one_time_tokens` 테이블을 생성하세요.
+Supabase 대시보드 → SQL Editor에서 순서대로 실행하세요.
+
+1. `supabase/migrations/001_auth_tables.sql` — `auth_users`, `one_time_tokens`
+2. `supabase/migrations/002_reports_table.sql` — `reports` (검색/분석 결과 계정별 저장)
 
