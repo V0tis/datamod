@@ -23,6 +23,19 @@ export async function POST(req: Request) {
 
     const supabase = getSupabase()
 
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (existing) {
+      return NextResponse.json(
+        { error: '이미 가입된 이메일입니다.' },
+        { status: 400 }
+      )
+    }
+
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,

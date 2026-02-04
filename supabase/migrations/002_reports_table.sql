@@ -1,5 +1,5 @@
 -- Rin-AI 검색/분석 리포트 (계정별 귀속)
--- Supabase SQL Editor에서 실행 (profiles 테이블 생성 후 실행)
+-- Supabase SQL Editor에서 실행
 
 CREATE TABLE IF NOT EXISTS reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

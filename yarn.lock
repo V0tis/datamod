@@ -2088,6 +2088,13 @@
     tslib "2.8.1"
     ws "^8.18.2"
 
+"@supabase/ssr@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@supabase/ssr/-/ssr-0.8.0.tgz#2b4e7380ebf5a204506bbff0e0cb4a529fdfd015"
+  integrity sha512-/PKk8kNFSs8QvvJ2vOww1mF5/c5W8y42duYtXvkOSe+yZKRgTTZywYG2l41pjhNomqESZCpZtXuWmYjFRMV+dw==
+  dependencies:
+    cookie "^1.0.2"
+
 "@supabase/storage-js@2.94.0":
   version "2.94.0"
   resolved "https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.94.0.tgz"
@@ -2229,13 +2236,6 @@
   integrity sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==
   dependencies:
     tslib "^2.4.0"
-
-"@types/bcryptjs@^3.0.0":
-  version "3.0.0"
-  resolved "https://registry.npmjs.org/@types/bcryptjs/-/bcryptjs-3.0.0.tgz"
-  integrity sha512-WRZOuCuaz8UcZZE4R5HXTco2goQSI2XxjGY3hbM/xDvwmqFWd4ivooImsMx65OKM6CtNKbnZ5YL+YwAwK7c1dg==
-  dependencies:
-    bcryptjs "*"
 
 "@types/d3-array@^3.0.3":
   version "3.2.2"
@@ -2731,11 +2731,6 @@ baseline-browser-mapping@^2.8.3, baseline-browser-mapping@^2.9.0:
   resolved "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.9.19.tgz"
   integrity sha512-ipDqC8FrAl/76p2SSWKSI+H9tFwm7vYqXQrItCuiVPt26Km0jS+NzSsBWAaBusvSbQcfJG+JitdMm+wZAgTYqg==
 
-bcryptjs@*, bcryptjs@^3.0.3:
-  version "3.0.3"
-  resolved "https://registry.npmjs.org/bcryptjs/-/bcryptjs-3.0.3.tgz"
-  integrity sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==
-
 brace-expansion@^1.1.7:
   version "1.1.12"
   resolved "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz"
@@ -2925,6 +2920,11 @@ cookie@^0.7.0:
   version "0.7.2"
   resolved "https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz"
   integrity sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==
+
+cookie@^1.0.2:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/cookie/-/cookie-1.1.1.tgz#3bb9bdfc82369db9c2f69c93c9c3ceb310c88b3c"
+  integrity sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==
 
 cross-spawn@^7.0.6:
   version "7.0.6"

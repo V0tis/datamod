@@ -1,14 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get('callbackUrl') || '/'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,7 +32,7 @@ export default function LoginPage() {
       const res = await signIn('credentials', {
         email: trimmedEmail,
         password,
-        callbackUrl: '/',
+        callbackUrl,
         redirect: false,
       })
 
@@ -43,7 +46,7 @@ export default function LoginPage() {
         window.location.href = res.url
         return
       }
-      window.location.href = '/'
+      window.location.href = callbackUrl
     } catch {
       setError('로그인 처리에 실패했습니다.')
     } finally {
@@ -137,5 +140,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">로딩 중...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }
