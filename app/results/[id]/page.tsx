@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
 import { Loader2 } from 'lucide-react'
 
+/** API returns same shape as DB content + keyword */
 interface ReportApiResponse {
   keyword: string
   marketNews?: string[]
@@ -15,8 +16,7 @@ interface ReportApiResponse {
   sentiment?: number
 }
 
-/** Same UI as /results/[id]; uses shared ResearchReportView (data format = DB content) */
-export default function ReportDetailPage() {
+export default function ResultDetailPage() {
   const params = useParams()
   const id = params?.id as string
   const [data, setData] = useState<ReportApiResponse | null>(null)

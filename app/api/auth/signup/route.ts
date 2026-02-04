@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
 
-const ALREADY_REGISTERED_MESSAGE = '이미 가입된 이메일입니다. 로그인해 주세요.'
+const ALREADY_REGISTERED_MESSAGE = '이미 등록된 이메일입니다. 로그인해 주세요.'
 
 export async function POST(req: Request) {
   try {
@@ -25,19 +25,24 @@ export async function POST(req: Request) {
 
     const supabase = getSupabase()
 
-    const { data: existingProfile } = await supabase
+    console.log('email', email);
+
+    // 1. auth.signUp 호출 전 반드시 profiles에서 이메일 존재 여부 조회 (중복 가입 차단)
+    const { data: existingByEmail } = await supabase
       .from('profiles')
-      .select('id')
+      .select('email')
       .eq('email', email)
       .maybeSingle()
 
-    if (existingProfile) {
+    if (existingByEmail) {
+      // 이미 존재하면 절대 signUp 실행하지 않고 에러만 반환
       return NextResponse.json(
         { error: ALREADY_REGISTERED_MESSAGE },
         { status: 400 }
       )
     }
 
+    // 2. 존재하지 않을 때만 확인 메일을 보내기 위해 signUp 실행
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,

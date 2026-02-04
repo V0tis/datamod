@@ -1,11 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// 로그인하지 않은 사용자는 /auth/login으로 리다이렉트 (/results는 비로그인도 접근 가능)
+// 로그인하지 않은 사용자는 /auth/login으로 리다이렉트
+// /results (검색 결과)는 비로그인 가능, /results/[id] (저장된 상세)는 로그인 필요
 const PROTECTED_PATHS = ['/history', '/reports']
 
 function isProtected(pathname: string): boolean {
-  return PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  if (PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/')))
+    return true
+  if (pathname.startsWith('/results/')) return true // /results/[id] dynamic route
+  return false
 }
 
 export async function middleware(request: NextRequest) {
@@ -39,5 +43,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/history', '/reports', '/reports/:path*'],
+  matcher: ['/history', '/reports', '/reports/:path*', '/results/:path*'],
 }

@@ -55,9 +55,47 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">히스토리를 불러오는 중...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border bg-card">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🐕</span>
+              <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
+            </div>
+            <div className="h-9 w-24 rounded-full bg-muted animate-pulse" />
+          </div>
+        </header>
+        <main className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="space-y-2">
+              <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-72 bg-muted rounded animate-pulse" />
+            </div>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-lg border border-border bg-card p-6 animate-pulse"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-6 w-32 bg-muted rounded" />
+                        <div className="h-5 w-20 bg-muted rounded" />
+                      </div>
+                      <div className="h-4 w-full max-w-md bg-muted rounded" />
+                      <div className="h-4 w-24 bg-muted rounded" />
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="h-9 w-24 bg-muted rounded-full" />
+                      <div className="h-9 w-16 bg-muted rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
       </div>
     )
   }
@@ -171,7 +209,7 @@ export default function HistoryPage() {
                     </div>
 
                     <div className="flex flex-col gap-2 shrink-0">
-                      <Link href={`/reports/${report.id}`}>
+                      <Link href={`/results/${report.id}`}>
                         <Button
                           size="sm"
                           className="rounded-full bg-primary hover:bg-primary/90 gap-2 w-full"
