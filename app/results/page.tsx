@@ -1,115 +1,68 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Search, ArrowLeft, Newspaper, MessageCircle, BarChart3 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
-interface ResearchSource {
-  type: 'news' | 'community' | 'data'
-  title: string
-  snippet: string
-  url?: string
-  publishedAt?: string
-}
-
-interface ResearchResponse {
-  success: boolean
-  query: string
-  sources: ResearchSource[]
-  summary?: string
+interface ResearchData {
+  marketNews?: string[]
+  painPoints?: string[]
+  competitorTrends?: string
+  sentiment?: number
   error?: string
 }
 
-const sourceConfig = {
-  news: {
-    icon: Newspaper,
-    label: '시장 뉴스',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-500/10',
-  },
-  community: {
-    icon: MessageCircle,
-    label: '커뮤니티 반응',
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-500/10',
-  },
-  data: {
-    icon: BarChart3,
-    label: '데이터 신선도',
-    color: 'text-violet-600',
-    bgColor: 'bg-violet-500/10',
-  },
-} as const
-
-export default function ResultsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ query?: string }>
-}) {
-  const [data, setData] = useState<ResearchResponse | null>(null)
+export default function ResultsPage() {
+  const searchParams = useSearchParams()
+  const keyword = searchParams.get('keyword')
+  const [data, setData] = useState<ResearchData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    let mounted = true
+    if (!keyword) {
+      setLoading(false)
+      setError('검색어가 없습니다.')
+      return
+    }
 
-    async function load() {
-      const params = await searchParams
-      const q = params?.query?.trim()
-
-      if (!q) {
-        setLoading(false)
-        setError('검색어가 없습니다.')
-        return
-      }
-
+    const fetchData = async () => {
       try {
-        const res = await fetch(`/api/research?query=${encodeURIComponent(q)}`)
-        const json: ResearchResponse = await res.json()
+        const response = await fetch('/api/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword }),
+        })
+        const result: ResearchData = await response.json()
 
-        if (!mounted) return
-
-        if (!res.ok) {
-          setError(json.error ?? '리서치를 불러오는데 실패했습니다.')
+        if (!response.ok) {
+          setError(result?.error ?? '분석에 실패했습니다.')
           return
         }
 
-        setData(json)
+        setData(result)
       } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
-        }
+        console.error('데이터 수집 실패:', err)
+        setError('데이터를 불러오는 중 오류가 발생했습니다.')
       } finally {
-        if (mounted) setLoading(false)
+        setLoading(false)
       }
     }
 
-    load()
-    return () => {
-      mounted = false
-    }
-  }, [searchParams])
+    fetchData()
+  }, [keyword])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="size-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">리서치 결과를 불러오는 중...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error || !data) {
+  // 검색어 없음 / API 오류
+  if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
         <p className="text-destructive">{error}</p>
@@ -123,137 +76,104 @@ export default function ResultsPage({
     )
   }
 
-  const newsCount = data.sources.filter((s) => s.type === 'news').length
-  const communityCount = data.sources.filter((s) => s.type === 'community').length
-  const dataCount = data.sources.filter((s) => s.type === 'data').length
+  // 1. 수집 중 UI (Loading State)
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-6 bg-background">
+        <div className="text-8xl animate-bounce">🐕</div>
+        <h2 className="text-2xl font-bold text-center px-4">
+          린(Rin)이 &apos;{keyword}&apos;에 대해 냄새를 맡고 있습니다...
+        </h2>
+        <p className="text-muted-foreground">최신 뉴스 및 커뮤니티 반응을 분석 중입니다.</p>
+      </div>
+    )
+  }
+
+  // 2. 분석 결과 대시보드 UI
+  const marketNews = data?.marketNews ?? []
+  const painPoints = data?.painPoints ?? []
+  const competitorTrends = data?.competitorTrends ?? ''
+  const sentiment = data?.sentiment ?? 0
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center gap-4 px-4 md:px-6">
-          <Link href="/">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <ArrowLeft className="size-5" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-lg font-semibold">Rin-AI 대시보드</h1>
-            <p className="text-sm text-muted-foreground">
-              &quot;{data.query}&quot; 검색 결과
-            </p>
-          </div>
-          <Link href="/">
-            <Button className="rounded-full">
-              <Search className="mr-2 size-4" />
-              새 검색
-            </Button>
-          </Link>
-        </div>
+    <main className="min-h-screen bg-background p-8 max-w-6xl mx-auto space-y-8">
+      <header className="flex flex-wrap justify-between items-center gap-4">
+        <h1 className="text-3xl font-bold font-serif">
+          &quot;{keyword}&quot; 리서치 리포트
+        </h1>
+        <Badge variant="outline" className="text-sm">Verified by Rin-AI</Badge>
       </header>
 
-      {/* Dashboard Content */}
-      <main className="container px-4 py-8 md:px-6">
-        {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-3 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                뉴스 소스
-              </CardTitle>
-              <Newspaper className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{newsCount}</div>
-              <p className="text-xs text-muted-foreground">
-                시장 뉴스 수집 완료
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                커뮤니티 반응
-              </CardTitle>
-              <MessageCircle className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{communityCount}</div>
-              <p className="text-xs text-muted-foreground">
-                유저 반응 수집 완료
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                데이터 검증
-              </CardTitle>
-              <BarChart3 className="size-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{dataCount}</div>
-              <p className="text-xs text-muted-foreground">
-                신선도 검증 완료
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 시장 뉴스 요약 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>📰 시장 뉴스 요약</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc pl-5 space-y-2">
+              {marketNews.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+              {marketNews.length === 0 && (
+                <li className="text-muted-foreground">수집된 뉴스가 없습니다.</li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
 
-        {/* Summary */}
-        {data.summary && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>요약</CardTitle>
-              <CardDescription>{data.summary}</CardDescription>
-            </CardHeader>
-          </Card>
-        )}
+        {/* 페인 포인트 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>😫 유저 페인 포인트</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc pl-5 space-y-2 text-red-600 dark:text-red-400">
+              {painPoints.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+              {painPoints.length === 0 && (
+                <li className="text-muted-foreground">수집된 페인 포인트가 없습니다.</li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
 
-        {/* Source Cards */}
-        <div className="space-y-6">
-          <h2 className="text-xl font-semibold">수집된 소스</h2>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {data.sources.map((source, index) => {
-              const config = sourceConfig[source.type]
-              const Icon = config.icon
-              return (
-                <Card
-                  key={index}
-                  className="overflow-hidden transition-shadow hover:shadow-md"
-                >
-                  <CardHeader className="pb-2">
-                    <div
-                      className={`mb-2 inline-flex size-10 items-center justify-center rounded-lg ${config.bgColor} ${config.color}`}
-                    >
-                      <Icon className="size-5" />
-                    </div>
-                    <CardTitle className="text-base">{source.title}</CardTitle>
-                    <CardDescription className="text-xs uppercase tracking-wider">
-                      {config.label}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {source.snippet}
-                    </p>
-                    {source.url && (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 inline-flex text-sm font-medium text-primary hover:underline"
-                      >
-                        자세히 보기 →
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-      </main>
-    </div>
+        {/* 경쟁사 동향 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>🚀 경쟁사 동향</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-wrap">{competitorTrends || '수집된 경쟁사 동향이 없습니다.'}</p>
+          </CardContent>
+        </Card>
+
+        {/* 유저 반응 온도 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>🌡️ 유저 반응 (긍정 점수)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center">
+            <div className="text-5xl font-bold text-yellow-500">{sentiment}%</div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 h-4 rounded-full mt-4 overflow-hidden">
+              <div
+                className="bg-yellow-500 h-4 rounded-full transition-[width] duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, sentiment))}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="pt-4">
+        <Link href="/">
+          <Button variant="outline" className="rounded-full">
+            <ArrowLeft className="mr-2 size-4" />
+            새 검색
+          </Button>
+        </Link>
+      </div>
+    </main>
   )
 }

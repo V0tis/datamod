@@ -1,120 +1,21 @@
 'use client'
 
 import React from "react"
-
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
 
-const MIN_LOADING_MS = 2500 // 최소 로딩 표시 시간 (API가 빨라도 UX를 위해 유지)
-
-const loadingMessages = [
-  '린이 최신 시장 뉴스를 검색 중입니다...',
-  '커뮤니티의 유저 반응을 수집하고 있습니다...',
-  '데이터 신선도를 검증하는 중입니다...',
-]
-
 export default function RinAISearch() {
-  const router = useRouter()
   const [query, setQuery] = useState('')
-  const [isSearching, setIsSearching] = useState(false)
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
 
-    const searchQuery = query.trim()
-    setIsSearching(true)
-    setCurrentMessageIndex(0)
-    setError(null)
-
-    // Cycle through loading messages
-    const interval = setInterval(() => {
-      setCurrentMessageIndex((prev) => {
-        if (prev < loadingMessages.length - 1) {
-          return prev + 1
-        }
-        return prev
-      })
-    }, 2000)
-
-    try {
-      // API 호출과 최소 로딩 시간을 동시에 대기 (API가 빨라도 로딩 UX 유지)
-      const [apiResponse] = await Promise.all([
-        fetch('/api/research', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: searchQuery }),
-        }),
-        new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
-      ])
-
-      const data = await apiResponse.json()
-
-      if (!apiResponse.ok) {
-        throw new Error(data.error ?? '리서치 요청에 실패했습니다.')
-      }
-
-      // API 성공 → 대시보드 페이지로 이동
-      router.push(`/dashboard?keyword=${encodeURIComponent(searchQuery)}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
-    } finally {
-      clearInterval(interval)
-      setIsSearching(false)
-      setQuery('')
-      setCurrentMessageIndex(0)
-    }
-  }
-
-  if (isSearching) {
-    return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
-        <div className="w-full max-w-2xl space-y-8 flex flex-col items-center">
-          {/* Dog Animation Placeholder */}
-          <div className="relative w-48 h-48 rounded-full bg-primary/10 flex items-center justify-center animate-bounce-slow">
-            <div className="text-8xl animate-wiggle">🐕</div>
-          </div>
-
-          {/* Progress Log */}
-          <div className="w-full space-y-3">
-            {loadingMessages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex items-center gap-3 p-4 rounded-lg transition-all duration-500 ${
-                  index <= currentMessageIndex
-                    ? 'bg-card shadow-sm border border-border opacity-100'
-                    : 'bg-muted/30 opacity-40'
-                }`}
-              >
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    index === currentMessageIndex
-                      ? 'bg-primary animate-pulse'
-                      : index < currentMessageIndex
-                        ? 'bg-primary'
-                        : 'bg-muted-foreground/30'
-                  }`}
-                />
-                <p
-                  className={`text-sm ${
-                    index <= currentMessageIndex
-                      ? 'text-foreground'
-                      : 'text-muted-foreground'
-                  }`}
-                >
-                  {message}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </main>
-    )
+    // 결과 페이지로 이동 (쿼리 파라미터 전달)
+    window.location.href = `/results?keyword=${encodeURIComponent(query.trim())}`
   }
 
   return (
