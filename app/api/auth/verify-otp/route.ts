@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSupabase } from '@/lib/supabase'
 import crypto from 'crypto'
 
 export async function POST(req: Request) {
@@ -15,36 +15,52 @@ export async function POST(req: Request) {
       )
     }
 
-    const otp = await prisma.emailOtp.findFirst({
-      where: { email, code, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-    })
+    const { data: user, error: fetchError } = await getSupabase()
+      .from('auth_users')
+      .select('id, otp_code, otp_expires_at')
+      .eq('email', email)
+      .single()
 
-    if (!otp) {
+    if (fetchError || !user) {
       return NextResponse.json(
-        { error: '인증 코드가 일치하지 않거나 만료되었습니다.' },
+        { error: '가입된 이메일이 없습니다.' },
         { status: 400 }
       )
     }
 
-    await prisma.emailOtp.delete({ where: { id: otp.id } })
+    const now = new Date().toISOString()
+    if (!user.otp_code || user.otp_code !== code || !user.otp_expires_at || user.otp_expires_at < now) {
+      return NextResponse.json(
+        { error: '인증 코드가 일치하지 않거나 만료되었습니다. (5분 내에 입력해주세요.)' },
+        { status: 400 }
+      )
+    }
 
-    let user = await prisma.user.findUnique({ where: { email } })
-    if (!user) {
-      user = await prisma.user.create({
-        data: { email, emailVerified: new Date() },
+    const { error: updateError } = await getSupabase()
+      .from('auth_users')
+      .update({
+        status: 'verified',
+        otp_code: null,
+        otp_expires_at: null,
+        updated_at: now,
       })
-    } else if (!user.emailVerified) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerified: new Date() },
-      })
+      .eq('email', email)
+
+    if (updateError) {
+      console.error('[verify-otp] update:', updateError)
+      return NextResponse.json(
+        { error: '인증 처리에 실패했습니다.' },
+        { status: 500 }
+      )
     }
 
     const oneTimeToken = crypto.randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5분
-    await prisma.oneTimeToken.create({
-      data: { email, token: oneTimeToken, expiresAt },
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+
+    await getSupabase().from('one_time_tokens').insert({
+      email,
+      token: oneTimeToken,
+      expires_at,
     })
 
     return NextResponse.json({

@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,56 +9,49 @@ import Link from 'next/link'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState<'magic' | 'otp' | null>(null)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
 
-  const handleMagicLink = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) return
     setError('')
-    setMessage('')
-    setLoading('magic')
-    try {
-      const res = await signIn('email', {
-        email: email.trim().toLowerCase(),
-        callbackUrl: '/',
-        redirect: false,
-      })
-      if (res?.error) {
-        setError(res?.error === 'EmailSignin' ? '이메일 발송에 실패했습니다.' : res.error)
-        return
-      }
-      setMessage('가입/로그인 링크가 이메일로 발송되었습니다. 메일을 확인해주세요.')
-    } catch {
-      setError('요청 처리에 실패했습니다.')
-    } finally {
-      setLoading(null)
+
+    if (password !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.')
+      return
     }
-  }
+    if (password.length < 8) {
+      setError('비밀번호는 최소 8자 이상이어야 합니다.')
+      return
+    }
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email.trim()) return
-    setError('')
-    setMessage('')
-    setLoading('otp')
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('유효한 이메일을 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ email: trimmedEmail, password }),
       })
       const data = await res.json()
+
       if (!res.ok) {
-        setError(data?.error ?? '인증 코드 발송에 실패했습니다.')
+        setError(data?.error ?? '회원가입에 실패했습니다.')
         return
       }
-      window.location.href = `/auth/verify?email=${encodeURIComponent(email.trim().toLowerCase())}`
+
+      window.location.href = `/auth/verify?email=${encodeURIComponent(trimmedEmail)}`
     } catch {
       setError('요청 처리에 실패했습니다.')
     } finally {
-      setLoading(null)
+      setLoading(false)
     }
   }
 
@@ -91,16 +83,14 @@ export default function SignupPage() {
           </div>
 
           <div className="bg-card rounded-3xl shadow-lg border border-border p-8 space-y-6">
-            <form onSubmit={handleMagicLink} className="space-y-5">
+            <form onSubmit={handleSignup} className="space-y-5">
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
                   <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
                   <p className="text-sm text-destructive">{error}</p>
                 </div>
               )}
-              {message && (
-                <p className="text-sm text-primary">{message}</p>
-              )}
+
               <div className="space-y-2">
                 <Label htmlFor="email">이메일</Label>
                 <Input
@@ -111,45 +101,51 @@ export default function SignupPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11 rounded-xl"
                   required
-                  disabled={!!loading}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">비밀번호</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="최소 8자 이상"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 rounded-xl"
+                  required
+                  minLength={8}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">비밀번호 확인</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="비밀번호를 다시 입력하세요"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="h-11 rounded-xl"
+                  required
+                  disabled={loading}
                 />
               </div>
 
               <Button
                 type="submit"
-                disabled={!!loading}
+                disabled={loading}
                 className="w-full h-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base shadow-md"
               >
-                {loading === 'magic' ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                 ) : (
-                  'Magic Link로 가입/로그인'
+                  '회원가입'
                 )}
               </Button>
             </form>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">또는</span>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-12 rounded-full"
-              disabled={!!loading}
-              onClick={handleSendOtp}
-            >
-              {loading === 'otp' ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                '인증 코드로 가입'
-              )}
-            </Button>
 
             <div className="text-center text-sm">
               <span className="text-muted-foreground">이미 계정이 있으신가요? </span>

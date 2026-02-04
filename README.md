@@ -8,10 +8,29 @@ firecrawl+claude
 
 ## Environment Variables
 
-Create a `.env` file (see `.env.example` if present) and provide the following API keys so the research endpoint can proxy external services securely:
+Create a `.env.local` (or `.env`) in the project root with:
 
-- `FIRECRAWL_API_KEY`: Server-side key for Firecrawl. Used to fetch recent market news and public chatter related to the search keyword.
-- `ANTHROPIC_API_KEY`: Server-side key for Anthropic Claude. Used to synthesize Firecrawl findings into a short summary.
+```bash
+# Supabase (Dashboard → Project Settings → API)
+NEXT_PUBLIC_SUPABASE_URL=your_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+# 서버에서 회원가입/인증 처리 시 사용 (Dashboard → API → service_role)
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-These values are only required on the server; do **not** expose them to the browser.
+# Resend (이메일 OTP 발송)
+RESEND_API_KEY=your_resend_key
+EMAIL_FROM="Rin-AI <onboarding@resend.dev>"
+
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=random_string_at_least_32_chars
+
+# 리서치 API (기존)
+FIRECRAWL_API_KEY=
+ANTHROPIC_API_KEY=
+```
+
+### Supabase 테이블 생성
+
+Supabase 대시보드 → SQL Editor에서 `supabase/migrations/001_auth_tables.sql` 내용을 실행해 `auth_users`, `one_time_tokens` 테이블을 생성하세요.
 
