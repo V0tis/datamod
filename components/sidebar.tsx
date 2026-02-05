@@ -41,10 +41,14 @@ export function Sidebar() {
         borderColor: 'var(--sidebar-border)',
       }}
     >
-      <div className="flex h-14 items-center gap-2 border-b px-4" style={{ borderColor: 'var(--sidebar-border)' }}>
+      <Link
+        href="/"
+        className="flex h-14 items-center gap-2 border-b px-4 hover:opacity-90 transition-opacity"
+        style={{ borderColor: 'var(--sidebar-border)' }}
+      >
         <RinLogo size={24} className="shrink-0 opacity-95" />
         <span className="font-semibold tracking-tight text-[var(--sidebar-fg)]">Rin-AI</span>
-      </div>
+      </Link>
       <nav className="flex-1 space-y-0.5 p-3">
         {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))

@@ -9,9 +9,10 @@ import { ResearchReportView } from '@/components/research-report-view'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useResearchStore } from '@/lib/stores/research-store'
+import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
-import { FileDown, Share2 } from 'lucide-react'
+import { ResearchCharts } from '@/components/research-charts'
+import { FileDown, Share2, X, ExternalLink } from 'lucide-react'
 
 function ReportSkeleton() {
   return (
@@ -49,6 +50,111 @@ function TabLoadingPlaceholder() {
   )
 }
 
+function ChartSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+        <div className="h-6 w-40 bg-muted rounded mb-4" />
+        <div className="h-[280px] w-full bg-muted rounded" />
+      </div>
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+        <div className="h-6 w-40 bg-muted rounded mb-4" />
+        <div className="h-[320px] w-full bg-muted rounded" />
+      </div>
+      <div className="h-4 w-full max-w-md bg-muted rounded" />
+    </div>
+  )
+}
+
+function NewsDetailModal({
+  item,
+  onClose,
+}: {
+  item: NewsItem
+  onClose: () => void
+}) {
+  const [summary, setSummary] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!item.content || item.content.length < 50) {
+      setSummary(null)
+      return
+    }
+    setSummaryLoading(true)
+    setSummaryError(null)
+    fetch('/api/research/summarize-article', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: item.content }),
+    })
+      .then((res) => res.json())
+      .then((data: { summary?: string; error?: string }) => {
+        if (data.summary) setSummary(data.summary)
+        else setSummaryError(data.error ?? '요약을 불러오지 못했어요.')
+      })
+      .catch(() => setSummaryError('요약 요청에 실패했어요.'))
+      .finally(() => setSummaryLoading(false))
+  }, [item.content])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
+      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl border border-border bg-card shadow-lg flex flex-col">
+        <div className="flex items-start justify-between gap-4 p-4 border-b border-border shrink-0">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-foreground">{item.title || '제목 없음'}</h3>
+            {item.url && (
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                원문 보기 <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose} className="shrink-0">
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {item.content ? (
+            <section>
+              <h4 className="text-sm font-semibold text-foreground mb-2">본문</h4>
+              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                {item.content}
+              </div>
+            </section>
+          ) : (
+            <p className="text-sm text-muted-foreground">수집된 본문이 없어요. 원문 링크에서 확인해 주세요.</p>
+          )}
+          <section>
+            <h4 className="text-sm font-semibold text-foreground mb-2">AI 요약</h4>
+            {summaryLoading && (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
+                요약 생성 중...
+              </p>
+            )}
+            {summaryError && <p className="text-sm text-destructive">{summaryError}</p>}
+            {summary && !summaryLoading && (
+              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed rounded-lg bg-muted/50 p-3">
+                {summary}
+              </div>
+            )}
+            {!item.content && !summaryLoading && (
+              <p className="text-sm text-muted-foreground">본문이 없어 요약을 생성할 수 없어요.</p>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ResultsContent() {
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')
@@ -65,11 +171,12 @@ function ResultsContent() {
 
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('report')
+  const [activeTab, setActiveTab] = useState('news')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [followUps, setFollowUps] = useState<Array<{ question: string; answer: string }>>([])
   const [followUpQuestion, setFollowUpQuestion] = useState('')
   const [followUpLoading, setFollowUpLoading] = useState(false)
+  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
   const scheduledInsightsForRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -212,21 +319,7 @@ function ResultsContent() {
     )
   }
 
-  if (loading && newsList.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen space-y-8 bg-background px-4">
-        <RinAnimation variant="loading" size={280} className="shrink-0" />
-        <div className="text-center space-y-2">
-          <h2 className="text-xl md:text-2xl font-semibold text-foreground">
-            린이 뉴스를 물어오고 있어요...
-          </h2>
-          <p className="text-muted-foreground text-sm">잠시만 기다려 주세요.</p>
-        </div>
-      </div>
-    )
-  }
-
-  const showTabs = loading ? newsList.length > 0 : true
+  const showTabs = !!currentKeyword
   if (showTabs) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-8 max-w-6xl mx-auto">
@@ -237,15 +330,16 @@ function ResultsContent() {
           <p className="text-muted-foreground text-sm mt-1">
             {loading
               ? '린이 가져온 뉴스예요. 다른 페이지로 이동해도 분석은 계속돼요.'
-              : '탭을 전환해 리포트 요약, 관련 뉴스, 유저 반응을 확인하세요.'}
+              : '탭을 전환해 관련 뉴스, 데이터 분석, 유저 반응, 리포트 요약을 확인하세요.'}
           </p>
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
-            <TabsTrigger value="report">리포트 요약</TabsTrigger>
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="news">관련 뉴스</TabsTrigger>
+            <TabsTrigger value="charts">데이터 분석</TabsTrigger>
             <TabsTrigger value="insights">유저 반응</TabsTrigger>
+            <TabsTrigger value="report">리포트 요약</TabsTrigger>
           </TabsList>
 
           <TabsContent value="report" className="mt-6">
@@ -294,6 +388,12 @@ function ResultsContent() {
           </TabsContent>
 
           <TabsContent value="news" className="mt-6">
+            {loading && newsList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-[280px] text-center">
+                <RinAnimation variant="loading" size={180} className="shrink-0" />
+                <p className="mt-4 text-muted-foreground text-sm">뉴스를 찾는 중...</p>
+              </div>
+            ) : (
             <ul className="space-y-3">
               {newsList.length === 0 ? (
                 <li className="text-muted-foreground text-sm py-8 text-center">
@@ -302,31 +402,34 @@ function ResultsContent() {
               ) : (
                 newsList.map((item, i) => (
                   <li key={i}>
-                    {item.url ? (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="font-medium text-foreground">
-                          {item.title || '제목 없음'}
-                        </span>
-                        <span className="block text-xs text-muted-foreground mt-1 truncate">
-                          {item.url}
-                        </span>
-                      </a>
-                    ) : (
-                      <div className="rounded-xl border border-border bg-card p-4">
-                        <span className="font-medium text-foreground">
-                          {item.title || '제목 없음'}
-                        </span>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNews(item)}
+                      className="w-full text-left rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
+                    >
+                      <span className="font-medium text-foreground">
+                        {item.title || '제목 없음'}
+                      </span>
+                      <span className="block text-xs text-muted-foreground mt-1 truncate">
+                        {item.url || '링크 없음'}
+                      </span>
+                      <span className="block text-xs text-primary mt-1">클릭하면 본문 · AI 요약 보기</span>
+                    </button>
                   </li>
                 ))
               )}
             </ul>
+            )}
+          </TabsContent>
+
+          <TabsContent value="charts" className="mt-6">
+            {loading && newsList.length > 0 ? (
+              <ChartSkeleton />
+            ) : status === 'done' && result?.chartData ? (
+              <ResearchCharts chartData={result.chartData} />
+            ) : (
+              <TabLoadingPlaceholder />
+            )}
           </TabsContent>
 
           <TabsContent value="insights" className="mt-6">
@@ -394,6 +497,9 @@ function ResultsContent() {
             )}
           </TabsContent>
         </Tabs>
+        {selectedNews && (
+          <NewsDetailModal item={selectedNews} onClose={() => setSelectedNews(null)} />
+        )}
       </div>
     )
   }

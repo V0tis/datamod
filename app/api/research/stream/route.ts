@@ -9,7 +9,7 @@ const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. 반드시 JSON 형식으로만 답변하세요."
 const USER_PROMPT_PREFIX = '다음 데이터를 분석해 JSON으로 출력해: '
 const USER_PROMPT_SUFFIX =
-  '. 구조는 {marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: ""} 반드시 publicReactionTrends에는 이 이슈에 대한 대중들의 예상 반응과 온라인 트렌드 분석을 1~2문단으로 작성해줘.'
+  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] } }. positive+neutral+negative 합계는 100이 되게 하고, impact에는 경제/사회/기술/정치/환경 등 관련 분야 5개 정도의 subject와 0~10 점수 score를 넣어줘. publicReactionTrends에는 이 이슈에 대한 대중 예상 반응과 온라인 트렌드 분석을 1~2문단으로 작성해줘.'
 
 function normalizeText(text: string): string {
   if (!text || typeof text !== 'string') return ''
@@ -18,6 +18,7 @@ function normalizeText(text: string): string {
 
 function buildSourceSummary(
   item: {
+    metadata?: { title?: string; description?: string }
     description?: string
     snippet?: string
     markdown?: string
@@ -25,7 +26,8 @@ function buildSourceSummary(
   },
   maxChars: number
 ): string {
-  const preferred = item.description ?? item.snippet ?? ''
+  const preferred =
+    item.metadata?.description ?? item.metadata?.title ?? item.description ?? item.snippet ?? ''
   const preferredNorm = normalizeText(preferred)
   if (preferredNorm.length >= 50) return preferredNorm.slice(0, maxChars)
   const full = item.markdown ?? item.content ?? ''
@@ -179,19 +181,25 @@ export async function POST(req: Request) {
 
         const searchData = (await searchRes.json()) as {
           data?: Array<{
-            title?: string
             url?: string
-            description?: string
-            snippet?: string
             markdown?: string
             content?: string
+            metadata?: { title?: string; description?: string; language?: string; sourceURL?: string }
           }>
         }
         const rawItems = (searchData.data ?? []).slice(0, 5)
-        const news = rawItems.map((d) => ({
-          title: normalizeText(d.title ?? d.description ?? d.snippet ?? '제목 없음').slice(0, 200),
-          url: typeof d.url === 'string' ? d.url : '',
-        }))
+        const MAX_CONTENT_LENGTH = 3500
+        const news = rawItems.map((d) => {
+          const title =
+            d.metadata?.title ?? d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? '제목 없음'
+          const rawContent = d.markdown ?? d.content ?? ''
+          const content = normalizeText(rawContent).slice(0, MAX_CONTENT_LENGTH)
+          return {
+            title: normalizeText(title).slice(0, 200),
+            url: typeof d.url === 'string' ? d.url : '',
+            content: content || undefined,
+          }
+        })
 
         send('progress', { step: 'firecrawl_done', news })
         if (isClosed) {
@@ -265,6 +273,10 @@ export async function POST(req: Request) {
           competitorTrends?: string
           sentiment?: number
           publicReactionTrends?: string
+          chartData?: {
+            sentiment?: { positive?: number; neutral?: number; negative?: number }
+            impact?: Array<{ subject?: string; score?: number }>
+          }
         }
         try {
           parsed = JSON.parse(rawJson) as typeof parsed
@@ -278,6 +290,35 @@ export async function POST(req: Request) {
           typeof parsed.sentiment === 'number'
             ? Math.min(100, Math.max(0, parsed.sentiment))
             : 0
+        const sd = parsed.chartData?.sentiment
+        const positive = Math.min(100, Math.max(0, typeof sd?.positive === 'number' ? sd.positive : 65))
+        const neutral = Math.min(100, Math.max(0, typeof sd?.neutral === 'number' ? sd.neutral : 20))
+        const negative = Math.min(100, Math.max(0, typeof sd?.negative === 'number' ? sd.negative : 15))
+        const sum = positive + neutral + negative
+        const chartSentiment = sum > 0
+          ? {
+              positive: Math.round((positive / sum) * 100),
+              neutral: Math.round((neutral / sum) * 100),
+              negative: Math.round((negative / sum) * 100),
+            }
+          : { positive: 65, neutral: 20, negative: 15 }
+        const rawImpact = Array.isArray(parsed.chartData?.impact) ? parsed.chartData.impact : []
+        const impactList = rawImpact
+          .filter((i): i is { subject: string; score: number } => typeof i?.subject === 'string' && typeof i?.score === 'number')
+          .map((i) => ({ subject: i.subject, score: Math.min(10, Math.max(0, i.score)) }))
+          .slice(0, 8)
+        const chartImpact =
+          impactList.length > 0
+            ? impactList
+            : [
+                { subject: '경제', score: 5 },
+                { subject: '사회', score: 5 },
+                { subject: '기술', score: 5 },
+                { subject: '정치', score: 5 },
+                { subject: '환경', score: 5 },
+              ]
+        const chartData = { sentiment: chartSentiment, impact: chartImpact }
+
         const summary = {
           marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
           painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
@@ -286,6 +327,7 @@ export async function POST(req: Request) {
           sentiment,
           publicReactionTrends:
             typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
+          chartData,
         }
 
         const supabase = await createClient()
@@ -305,7 +347,7 @@ export async function POST(req: Request) {
           if (!insertError && report?.id) reportId = report.id
         }
 
-        send('progress', { step: 'result', data: { ...summary, reportId } })
+        send('progress', { step: 'result', data: { ...summary, reportId } as Record<string, unknown> })
       } catch (e) {
         console.error('[Research Stream]', e)
         send('progress', {

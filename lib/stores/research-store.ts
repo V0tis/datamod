@@ -7,6 +7,12 @@ import { toast } from 'sonner'
 export interface NewsItem {
   title: string
   url: string
+  content?: string
+}
+
+export interface ChartData {
+  sentiment: { positive: number; neutral: number; negative: number }
+  impact: Array<{ subject: string; score: number }>
 }
 
 export interface ResearchResponse {
@@ -15,6 +21,7 @@ export interface ResearchResponse {
   competitorTrends?: string
   sentiment?: number
   publicReactionTrends?: string
+  chartData?: ChartData
   reportId?: string | null
   error?: string
 }
