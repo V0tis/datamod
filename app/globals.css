@@ -1,29 +1,29 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
+@import '../node_modules/tw-animate-css/dist/tw-animate.css';
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Rin 컨셉: 메인 #FFB800, 배경 #FFFEFA, 텍스트 #333333 */
+  /* 완전한 화이트 배경, 진한 그레이 텍스트로 가독성 극대화 */
   --rin-primary: #FFB800;
-  --rin-bg: #FFFEFA;
-  --rin-foreground: #333333;
-  --card: oklch(1 0 0);
-  --card-foreground: #333333;
-  --popover: oklch(1 0 0);
-  --popover-foreground: #333333;
+  --rin-bg: #FFFFFF;
+  --rin-foreground: #1A1A1A;
+  --card: #FFFFFF;
+  --card-foreground: #1A1A1A;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1A1A;
   --primary: #FFB800;
-  --primary-foreground: #333333;
-  --secondary: oklch(0.98 0.02 85);
-  --secondary-foreground: #333333;
-  --muted: oklch(0.98 0.01 85);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.96 0.04 85);
-  --accent-foreground: #333333;
+  --primary-foreground: #1A1A1A;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #1A1A1A;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f9fafb;
+  --accent-foreground: #1A1A1A;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.02 85);
-  --input: oklch(0.92 0.02 85);
+  --border: #e5e7eb;
+  --input: #e5e7eb;
   --ring: #FFB800;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -39,8 +39,8 @@
   --sidebar-accent-foreground: #333333;
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: #FFB800;
-  --background: #FFFEFA;
-  --foreground: #333333;
+  --background: #FFFFFF;
+  --foreground: #1A1A1A;
 }
 
 .dark {
@@ -82,9 +82,9 @@
   --font-sans: var(--font-nunito), 'Nunito', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
   --color-rin-primary: #FFB800;
-  --color-rin-bg: #FFFEFA;
-  --shadow-rin-glow: 0 0 24px -4px rgba(255, 184, 0, 0.35);
-  --shadow-rin-card: 0 10px 40px -10px rgba(255, 184, 0, 0.2);
+  --color-rin-bg: #FFFFFF;
+  --shadow-rin-glow: 0 0 20px -4px rgba(0, 0, 0, 0.06);
+  --shadow-rin-card: 0 1px 3px rgba(0, 0, 0, 0.08);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -125,28 +125,11 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
 
-  /* Custom animations */
-  --animate-bounce-slow: bounce-slow 2s infinite;
-  --animate-wiggle: wiggle 600ms ease-in-out infinite;
-
+  /* 연한 포인트용 애니메이션만 유지 (복잡한 배경 애니메이션 없음) */
+  --animate-bounce-slow: bounce-slow 2.5s ease-in-out infinite;
   @keyframes bounce-slow {
-    0%, 100% {
-      transform: translateY(-25%);
-      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-    }
-    50% {
-      transform: translateY(0);
-      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-    }
-  }
-
-  @keyframes wiggle {
-    0%, 100% {
-      transform: rotate(-3deg);
-    }
-    50% {
-      transform: rotate(3deg);
-    }
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
   }
 }
 

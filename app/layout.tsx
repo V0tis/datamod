@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/providers";
 import { Header } from "@/components/header";
 import { PageTransition } from "@/components/common/PageTransition";
+import { Toaster } from "sonner";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -34,6 +35,8 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           <PageTransition>{children}</PageTransition>
+          {/* 전역 토스트: 어느 페이지에 있든 리서치 진행 상황(토스트) 표시 */}
+          <Toaster richColors position="top-center" closeButton />
         </AuthProvider>
       </body>
     </html>

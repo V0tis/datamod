@@ -11,6 +11,8 @@ import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+import { useResearchStore } from '@/lib/stores/research-store'
 
 export default function RinAISearch() {
   const router = useRouter()
@@ -32,6 +34,10 @@ export default function RinAISearch() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
+    if (useResearchStore.getState().status === 'loading') {
+      toast.info('린이 이미 열심히 분석 중이에요!')
+      return
+    }
     setSearching(true)
     router.push(`/results?keyword=${encodeURIComponent(query.trim())}`)
   }

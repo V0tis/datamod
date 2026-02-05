@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,24 +27,35 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const res = await fetch('/api/reports')
-        const data = await res.json()
-        if (!res.ok) {
-          setError(data?.error ?? '목록을 불러오지 못했습니다.')
-          return
-        }
-        setReports(data.reports ?? [])
-      } catch {
-        setError('목록을 불러오지 못했습니다.')
-      } finally {
-        setLoading(false)
+  const syncReportsFromDb = useCallback(async () => {
+    try {
+      const res = await fetch('/api/reports')
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data?.error ?? '목록을 불러오지 못했습니다.')
+        return
       }
+      setReports(data.reports ?? [])
+    } catch {
+      setError('목록을 불러오지 못했습니다.')
+    } finally {
+      setLoading(false)
     }
-    fetchReports()
   }, [])
+
+  useEffect(() => {
+    syncReportsFromDb()
+  }, [syncReportsFromDb])
+
+  useEffect(() => {
+    const onVisible = () => {
+      syncReportsFromDb()
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisible)
+      return () => document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [syncReportsFromDb])
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 리포트를 삭제할까요?')) return

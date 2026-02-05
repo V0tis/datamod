@@ -47,6 +47,8 @@ export interface ResearchReportViewProps {
   showLoginCta?: boolean
   /** Callback URL for login redirect */
   loginCallbackUrl?: string
+  /** When true, use compact layout (e.g. inside tabs) */
+  embedded?: boolean
 }
 
 export function ResearchReportView({
@@ -55,13 +57,17 @@ export function ResearchReportView({
   reportId = null,
   showLoginCta = false,
   loginCallbackUrl,
+  embedded = false,
 }: ResearchReportViewProps) {
   const { marketNews, painPoints, competitorTrends, sentiment } = normalizeContent(content)
+  const wrapperClass = embedded
+    ? 'space-y-6'
+    : 'min-h-screen bg-background p-8 max-w-6xl mx-auto space-y-8'
 
   return (
-    <main className="min-h-screen bg-background p-8 max-w-6xl mx-auto space-y-8">
-      {/* 저장 완료 또는 로그인 유도 (결과 페이지에서만) */}
-      {reportId ? (
+    <main className={wrapperClass}>
+      {/* 저장 완료 또는 로그인 유도 (결과 페이지에서만, embedded 시 생략) */}
+      {!embedded && reportId ? (
         <div className="rounded-[20px] bg-primary/10 border border-primary/20 text-primary px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm font-medium">리포트가 내 기록에 저장되었습니다.</span>
           <Link href={`/results/${reportId}`}>
@@ -70,7 +76,7 @@ export function ResearchReportView({
             </Button>
           </Link>
         </div>
-      ) : showLoginCta ? (
+      ) : !embedded && showLoginCta ? (
         <div className="rounded-[20px] bg-muted border border-border px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             로그인하면 이 리포트를 내 기록에 저장할 수 있어요.
@@ -90,7 +96,7 @@ export function ResearchReportView({
       ) : null}
 
       <header className="flex flex-wrap justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold font-serif">
+        <h1 className={embedded ? 'text-xl font-bold font-serif' : 'text-3xl font-bold font-serif'}>
           &quot;{keyword}&quot; 리서치 리포트
         </h1>
         <Badge variant="outline" className="text-sm">Verified by Rin-AI</Badge>
@@ -179,19 +185,21 @@ export function ResearchReportView({
         ))}
       </motion.div>
 
-      <div className="pt-4 flex gap-2">
-        <Link href="/history">
-          <Button variant="outline">
-            <ArrowLeft className="mr-2 size-4" />
-            히스토리
-          </Button>
-        </Link>
-        <Link href="/">
-          <Button variant="outline">
-            새 검색
-          </Button>
-        </Link>
-      </div>
+      {!embedded && (
+        <div className="pt-4 flex gap-2">
+          <Link href="/history">
+            <Button variant="outline">
+              <ArrowLeft className="mr-2 size-4" />
+              히스토리
+            </Button>
+          </Link>
+          <Link href="/">
+            <Button variant="outline">
+              새 검색
+            </Button>
+          </Link>
+        </div>
+      )}
     </main>
   )
 }
