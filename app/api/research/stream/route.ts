@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { trackUsage } from '@/lib/usage'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export const runtime = 'nodejs'
@@ -9,11 +10,57 @@ const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. 반드시 JSON 형식으로만 답변하세요."
 const USER_PROMPT_PREFIX = '다음 데이터를 분석해 JSON으로 출력해: '
 const USER_PROMPT_SUFFIX =
-  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] } }. positive+neutral+negative 합계는 100이 되게 하고, impact에는 경제/사회/기술/정치/환경 등 관련 분야 5개 정도의 subject와 0~10 점수 score를 넣어줘. publicReactionTrends에는 이 이슈에 대한 대중 예상 반응과 온라인 트렌드 분석을 1~2문단으로 작성해줘.'
+  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [] }. 위에서 제시한 소스(뉴스) 순서대로 각각 1문단 요약을 articleSummaries 배열에 넣어줘(소스 개수만큼). positive+neutral+negative 합계는 100, impact는 경제/사회/기술/정치/환경 등 5개, publicReactionTrends는 대중 예상 반응·온라인 트렌드 1~2문단.'
 
 function normalizeText(text: string): string {
   if (!text || typeof text !== 'string') return ''
   return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** 마크다운 링크 패턴 [text](url) 개수 */
+function countMarkdownLinks(line: string): number {
+  return (line.match(/\]\s*\(\s*https?:\/\/[^\s)]+/gi) ?? []).length
+}
+
+/** 한 줄이 링크만 있는지 (네비/사이드바용) */
+function isLinkOnlyLine(line: string): boolean {
+  const t = line.trim()
+  if (!t) return true
+  const linkCount = countMarkdownLinks(t)
+  const approxLinkLength = (t.match(/\]\s*\(\s*[^)]+\)/g) ?? []).join('').length
+  return linkCount >= 1 && approxLinkLength >= t.length * 0.5
+}
+
+/**
+ * 스크래핑된 본문에서 네비/사이드바(링크 나열)를 제거하고 기사 본문에 가까운 부분만 반환.
+ * 링크 비율이 높으면 fallback(메타 설명 등)을 우선 사용.
+ */
+function cleanArticleContent(
+  raw: string,
+  fallback: string,
+  maxLen: number
+): string {
+  if (!raw || typeof raw !== 'string') return fallback.trim().slice(0, maxLen) || ''
+  const normalizedFallback = normalizeText(fallback).trim()
+
+  const lines = raw
+    .replace(/\r\n/g, '\n')
+    .split(/\n|\s+-\s+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+
+  const contentLines = lines.filter((l) => !isLinkOnlyLine(l))
+  let cleaned = normalizeText(contentLines.join('\n')).trim()
+
+  const linkCount = (cleaned.match(/\]\s*\(\s*https?:\/\/[^\s)]+/gi) ?? []).length
+  const linkChars = (cleaned.match(/\]\s*\(\s*[^)]+\)/g) ?? []).join('').length
+  const linkDensity = cleaned.length > 0 ? linkChars / cleaned.length : 0
+
+  if (linkDensity > 0.35 || (cleaned.length < 120 && normalizedFallback.length >= 50)) {
+    cleaned = normalizedFallback
+  }
+
+  return (cleaned || normalizedFallback).slice(0, maxLen)
 }
 
 function buildSourceSummary(
@@ -43,11 +90,12 @@ function extractJsonFromText(text: string): string {
 
 type StreamEvent =
   | { step: 'firecrawl_start' }
-  | { step: 'firecrawl_done'; news: Array<{ title: string; url: string }> }
+  | { step: 'firecrawl_done'; news: Array<{ title: string; url: string; content?: string }> }
   | { step: 'gemini_start' }
+  | { step: 'chart_ready' }
   | { step: 'gemini_done' }
   | { step: 'result'; data: Record<string, unknown> }
-  | { step: 'error'; error: string }
+  | { step: 'error'; error: string; retryDelay?: number }
 
 function sseMessage(event: string, data: StreamEvent): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
@@ -187,17 +235,20 @@ export async function POST(req: Request) {
             metadata?: { title?: string; description?: string; language?: string; sourceURL?: string }
           }>
         }
-        const rawItems = (searchData.data ?? []).slice(0, 5)
+        const rawItems = (searchData.data ?? []).slice(0, 10)
+        await trackUsage('firecrawl')
         const MAX_CONTENT_LENGTH = 3500
         const news = rawItems.map((d) => {
           const title =
             d.metadata?.title ?? d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? '제목 없음'
           const rawContent = d.markdown ?? d.content ?? ''
-          const content = normalizeText(rawContent).slice(0, MAX_CONTENT_LENGTH)
+          const fallback =
+            d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? ''
+          const content = cleanArticleContent(rawContent, fallback, MAX_CONTENT_LENGTH)
           return {
             title: normalizeText(title).slice(0, 200),
             url: typeof d.url === 'string' ? d.url : '',
-            content: content || undefined,
+            content: content.length > 0 ? content : undefined,
           }
         })
 
@@ -218,10 +269,10 @@ export async function POST(req: Request) {
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
           systemInstruction: SYSTEM_INSTRUCTION,
-          generationConfig: { maxOutputTokens: 1500 },
+          generationConfig: { maxOutputTokens: 3500 },
         })
 
-        const maxRetries = 2
+        const maxRetries = 3
         let responseText: string | null = null
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
@@ -236,19 +287,23 @@ export async function POST(req: Request) {
               msg.includes('resource exhausted') ||
               msg.includes('rate limit')
             if (is429 && attempt < maxRetries) {
-              const retrySec =
-                parseInt(msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1] ?? '60', 10) || 60
-              const waitMs = Math.min(retrySec * 1000, 120_000)
+              const retryAfterSec = msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1]
+              const baseWaitMs = retryAfterSec ? parseInt(retryAfterSec, 10) * 1000 : 2000 * Math.pow(2, attempt)
+              const waitMs = Math.min(baseWaitMs, 60_000)
+              console.warn('[Research Stream] 429, exponential backoff wait', waitMs, 'ms attempt', attempt + 1)
               await new Promise((r) => setTimeout(r, waitMs))
               continue
             }
             console.error('[Research Stream] Gemini error:', msg)
+            const retryAfterSec = msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1]
+            const retryDelaySec = retryAfterSec ? Math.min(parseInt(retryAfterSec, 10), 60) : 13
             send('progress', {
               step: 'error',
               error:
                 msg.includes('429') || msg.includes('quota')
                   ? '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
                   : '린이 분석하는 중 오류가 났어요. 잠시 후 다시 시도해 주세요.',
+              retryDelay: retryDelaySec,
             })
             safeClose()
             return
@@ -266,6 +321,13 @@ export async function POST(req: Request) {
           return
         }
 
+        send('progress', { step: 'chart_ready' })
+        if (isClosed) {
+          safeClose()
+          return
+        }
+        await trackUsage('gemini')
+
         const rawJson = extractJsonFromText(responseText)
         let parsed: {
           marketNews?: string[]
@@ -273,6 +335,7 @@ export async function POST(req: Request) {
           competitorTrends?: string
           sentiment?: number
           publicReactionTrends?: string
+          articleSummaries?: string[]
           chartData?: {
             sentiment?: { positive?: number; neutral?: number; negative?: number }
             impact?: Array<{ subject?: string; score?: number }>
@@ -319,6 +382,10 @@ export async function POST(req: Request) {
               ]
         const chartData = { sentiment: chartSentiment, impact: chartImpact }
 
+        const articleSummaries = Array.isArray(parsed.articleSummaries)
+          ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string').slice(0, rawItems.length)
+          : []
+
         const summary = {
           marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
           painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
@@ -328,6 +395,7 @@ export async function POST(req: Request) {
           publicReactionTrends:
             typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
           chartData,
+          articleSummaries,
         }
 
         const supabase = await createClient()

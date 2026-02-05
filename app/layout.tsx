@@ -3,6 +3,7 @@ import { Nunito, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
+import { QuotaBar } from "@/components/quota-bar";
 import { PageTransition } from "@/components/common/PageTransition";
 import { Toaster } from "sonner";
 
@@ -34,7 +35,8 @@ export default function RootLayout({
       >
         <AuthProvider>
           <Sidebar />
-          <main className="min-h-screen bg-background pl-56">
+          <main className="min-h-screen bg-[#FFFFFF] pl-0 lg:pl-56 transition-[padding]">
+            <QuotaBar />
             <PageTransition>{children}</PageTransition>
           </main>
           <Toaster richColors position="bottom-right" closeButton />

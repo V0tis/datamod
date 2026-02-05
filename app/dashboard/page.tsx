@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -130,14 +131,21 @@ function DashboardContent() {
               </h2>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => (window.location.href = '/')}
-            className="gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            새로운 검색
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/usage" className="gap-1.5 text-muted-foreground hover:text-foreground">
+                리소스 사용량
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => (window.location.href = '/')}
+              className="gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              새로운 검색
+            </Button>
+          </div>
         </div>
       </header>
 

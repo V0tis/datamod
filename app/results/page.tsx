@@ -68,35 +68,15 @@ function ChartSkeleton() {
 
 function NewsDetailModal({
   item,
+  preSummary,
   onClose,
 }: {
   item: NewsItem
+  preSummary?: string | null
   onClose: () => void
 }) {
-  const [summary, setSummary] = useState<string | null>(null)
-  const [summaryLoading, setSummaryLoading] = useState(false)
-  const [summaryError, setSummaryError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!item.content || item.content.length < 50) {
-      setSummary(null)
-      return
-    }
-    setSummaryLoading(true)
-    setSummaryError(null)
-    fetch('/api/research/summarize-article', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: item.content }),
-    })
-      .then((res) => res.json())
-      .then((data: { summary?: string; error?: string }) => {
-        if (data.summary) setSummary(data.summary)
-        else setSummaryError(data.error ?? '요약을 불러오지 못했어요.')
-      })
-      .catch(() => setSummaryError('요약 요청에 실패했어요.'))
-      .finally(() => setSummaryLoading(false))
-  }, [item.content])
+  const [showRawBody, setShowRawBody] = useState(false)
+  const summary = preSummary ?? null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -121,32 +101,66 @@ function NewsDetailModal({
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {item.content ? (
-            <section>
-              <h4 className="text-sm font-semibold text-foreground mb-2">본문</h4>
-              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                {item.content}
-              </div>
-            </section>
-          ) : (
-            <p className="text-sm text-muted-foreground">수집된 본문이 없어요. 원문 링크에서 확인해 주세요.</p>
-          )}
+          {/* AI 요약: 통합 분석 결과에서만 표시 (summarize-article 호출 없음) */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-2">AI 요약</h4>
-            {summaryLoading && (
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
-                요약 생성 중...
-              </p>
-            )}
-            {summaryError && <p className="text-sm text-destructive">{summaryError}</p>}
-            {summary && !summaryLoading && (
-              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed rounded-lg bg-muted/50 p-3">
+            {summary ? (
+              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed rounded-lg bg-primary/5 border border-primary/20 p-4">
                 {summary}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                이 기사 요약은 이번 분석에 포함되지 않았어요. 원문에서 확인해 주세요.
+              </p>
             )}
-            {!item.content && !summaryLoading && (
-              <p className="text-sm text-muted-foreground">본문이 없어 요약을 생성할 수 없어요.</p>
+            {item.url && (
+              <Button variant="outline" size="sm" className="mt-3 gap-1.5" asChild>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  원문 링크 가기
+                </a>
+              </Button>
+            )}
+          </section>
+
+          {/* 본문: 원문 링크 강조, 수집된 텍스트는 접기/펼치기 */}
+          <section>
+            <h4 className="text-sm font-semibold text-foreground mb-2">본문</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              전체 내용은 원문에서 확인하세요.
+            </p>
+            {item.url && (
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              >
+                원문 보기 <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            {item.content && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRawBody((v) => !v)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  {showRawBody ? '수집된 텍스트 접기' : '수집된 텍스트 보기'}
+                </button>
+                {showRawBody && (
+                  <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed rounded border border-border bg-muted/30 p-3 max-h-48 overflow-y-auto">
+                    {item.content}
+                  </div>
+                )}
+              </div>
+            )}
+            {!item.content && (
+              <p className="text-sm text-muted-foreground">수집된 본문이 없어요. 위 링크에서 확인해 주세요.</p>
             )}
           </section>
         </div>
@@ -171,12 +185,13 @@ function ResultsContent() {
 
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('news')
+  const [activeTab, setActiveTab] = useState('report')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [followUps, setFollowUps] = useState<Array<{ question: string; answer: string }>>([])
   const [followUpQuestion, setFollowUpQuestion] = useState('')
   const [followUpLoading, setFollowUpLoading] = useState(false)
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
+  const [selectedNewsIndex, setSelectedNewsIndex] = useState<number | null>(null)
   const scheduledInsightsForRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -308,21 +323,10 @@ function ResultsContent() {
     }
   }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, storeInsights])
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
-        <p className="text-destructive text-center">{error}</p>
-        <Link href="/">
-          <Button variant="outline">검색으로 돌아가기</Button>
-        </Link>
-      </div>
-    )
-  }
-
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="min-h-screen bg-background p-6 md:p-8 max-w-6xl mx-auto">
+      <div className="min-h-screen bg-[#FFFFFF] p-6 md:p-8 max-w-6xl mx-auto">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">
             &quot;{currentKeyword}&quot; 검색 결과
@@ -334,12 +338,33 @@ function ResultsContent() {
           </p>
         </header>
 
+        {error && (
+          <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-destructive text-sm text-center sm:text-left flex-1">{error}</p>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  startResearch(currentKeyword ?? '')
+                }}
+              >
+                다시 시도
+              </Button>
+              <Link href="/">
+                <Button variant="outline" size="sm">검색으로 돌아가기</Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">
-            <TabsTrigger value="news">관련 뉴스</TabsTrigger>
+            <TabsTrigger value="report">리포트</TabsTrigger>
             <TabsTrigger value="charts">데이터 분석</TabsTrigger>
             <TabsTrigger value="insights">유저 반응</TabsTrigger>
-            <TabsTrigger value="report">리포트 요약</TabsTrigger>
+            <TabsTrigger value="news">뉴스</TabsTrigger>
           </TabsList>
 
           <TabsContent value="report" className="mt-6">
@@ -402,19 +427,37 @@ function ResultsContent() {
               ) : (
                 newsList.map((item, i) => (
                   <li key={i}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNews(item)}
-                      className="w-full text-left rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
-                    >
-                      <span className="font-medium text-foreground">
-                        {item.title || '제목 없음'}
-                      </span>
-                      <span className="block text-xs text-muted-foreground mt-1 truncate">
-                        {item.url || '링크 없음'}
-                      </span>
-                      <span className="block text-xs text-primary mt-1">클릭하면 본문 · AI 요약 보기</span>
-                    </button>
+                    <div className="rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors flex flex-col sm:flex-row sm:items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedNews(item)
+                          setSelectedNewsIndex(i)
+                        }}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <span className="font-medium text-foreground block">
+                          {item.title || '제목 없음'}
+                        </span>
+                        <span className="block text-xs text-muted-foreground mt-1 truncate">
+                          {item.url || '링크 없음'}
+                        </span>
+                        <span className="block text-xs text-primary mt-1">클릭하면 본문 · AI 요약 보기</span>
+                      </button>
+                      {item.url && (
+                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" asChild>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            원문 링크 가기
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 ))
               )}
@@ -498,7 +541,18 @@ function ResultsContent() {
           </TabsContent>
         </Tabs>
         {selectedNews && (
-          <NewsDetailModal item={selectedNews} onClose={() => setSelectedNews(null)} />
+          <NewsDetailModal
+            item={selectedNews}
+            preSummary={
+              selectedNewsIndex != null && result?.articleSummaries?.[selectedNewsIndex]
+                ? result.articleSummaries[selectedNewsIndex]
+                : null
+            }
+            onClose={() => {
+              setSelectedNews(null)
+              setSelectedNewsIndex(null)
+            }}
+          />
         )}
       </div>
     )

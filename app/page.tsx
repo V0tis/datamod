@@ -14,6 +14,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
 
+interface UsageData {
+  gemini: { used: number; limit: number }
+  firecrawl: { used: number; limit: number }
+  supabase: { used: number; limit: number }
+}
+
+function remainingPercent(used: number, limit: number): number {
+  if (limit <= 0) return 100
+  return Math.max(0, 100 - (used / limit) * 100)
+}
+
 export default function RinAISearch() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -21,6 +32,7 @@ export default function RinAISearch() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
+  const [lowQuotaBanner, setLowQuotaBanner] = useState<{ minRemaining: number } | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -29,6 +41,23 @@ export default function RinAISearch() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null))
     return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    fetch('/api/usage')
+      .then((res) => res.json())
+      .then((d: UsageData) => {
+        if (!mounted) return
+        const geminiRem = remainingPercent(d.gemini.used, d.gemini.limit)
+        const fireRem = remainingPercent(d.firecrawl.used, d.firecrawl.limit)
+        const dbRem = remainingPercent(d.supabase.used, d.supabase.limit)
+        const minRemaining = Math.min(geminiRem, fireRem, dbRem)
+        if (minRemaining < 10) setLowQuotaBanner({ minRemaining })
+        else setLowQuotaBanner(null)
+      })
+      .catch(() => {})
+    return () => { mounted = false }
   }, [])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -43,7 +72,18 @@ export default function RinAISearch() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-white px-4 pt-14 lg:pt-0">
+      {lowQuotaBanner && (
+        <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 bg-amber-500/95 px-4 py-2.5 text-sm font-medium text-amber-950 shadow-md">
+          <span>린이 에너지가 부족해요 (잔여 {lowQuotaBanner.minRemaining.toFixed(0)}%)</span>
+          <Link href="/dashboard/usage">
+            <Button variant="outline" size="sm" className="border-amber-700 text-amber-900 hover:bg-amber-600/20">
+              사용량 보기
+            </Button>
+          </Link>
+        </div>
+      )}
+      <div className={lowQuotaBanner ? 'pt-12' : ''}>
       <AnimatePresence mode="wait">
         {searching ? (
           <motion.div
@@ -89,7 +129,7 @@ export default function RinAISearch() {
 
             {/* Search Form */}
             <form onSubmit={handleSearch} className="w-full space-y-4">
-              <div className="relative flex items-center gap-2 bg-card rounded-[20px] border border-border p-2 shadow-lg transition-shadow focus-within:shadow-[0_0_24px_-4px_rgba(255,184,0,0.35)]">
+              <div className="relative flex items-center gap-2 bg-card rounded-[20px] border border-border p-2 shadow-lg transition-shadow hover:shadow-md focus-within:shadow-[0_0_24px_-4px_rgba(255,184,0,0.35)]">
                 <div className="flex-1 flex items-center gap-2 px-4">
                   <Search className="w-5 h-5 text-primary/80" />
                   <Input
@@ -117,7 +157,7 @@ export default function RinAISearch() {
 
             {/* 로그인 유도: 비로그인 시 분석 결과 저장 안내 */}
             {!user && (
-              <div className="w-full rounded-[20px] border border-border bg-muted/50 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left">
+              <div className="w-full rounded-[20px] border border-border bg-muted/50 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left hover:shadow-md transition-shadow">
                 <p className="text-sm text-muted-foreground">
                   로그인하면 분석 결과를 저장할 수 있어요
                 </p>
@@ -137,6 +177,7 @@ export default function RinAISearch() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </main>
   )
 }
