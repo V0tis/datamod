@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
-import { Loader2 } from 'lucide-react'
+import { Loader2, FileDown, Share2 } from 'lucide-react'
+import { printReportAsPdf } from '@/lib/pdf-export'
 
 interface ReportApiResponse {
   keyword: string
@@ -22,6 +24,33 @@ export default function ReportDetailPage() {
   const [data, setData] = useState<ReportApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+
+  const handleShare = useCallback(async () => {
+    if (!id) return
+    if (shareUrl) {
+      await navigator.clipboard.writeText(shareUrl)
+      toast.success('공유 링크가 복사되었어요.')
+      return
+    }
+    try {
+      const res = await fetch(`/api/reports/${id}/share`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error((data as { error?: string }).error ?? '공유 링크를 만들 수 없어요.')
+        return
+      }
+      const url = (data as { url?: string }).url
+      if (url) {
+        const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`
+        setShareUrl(absoluteUrl)
+        await navigator.clipboard.writeText(absoluteUrl)
+        toast.success('공유 링크가 생성되었고 클립보드에 복사되었어요.')
+      }
+    } catch {
+      toast.error('공유 링크 생성에 실패했어요.')
+    }
+  }, [id, shareUrl])
 
   useEffect(() => {
     if (!id) {
@@ -88,11 +117,25 @@ export default function ReportDetailPage() {
   }
 
   return (
-    <ResearchReportView
-      keyword={data.keyword}
-      content={content}
-      reportId={null}
-      showLoginCta={false}
-    />
+    <div>
+      <div className="no-print flex flex-wrap items-center gap-2 mb-4 max-w-6xl mx-auto px-8">
+        <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
+          <FileDown className="w-4 h-4" />
+          PDF로 저장
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
+          <Share2 className="w-4 h-4" />
+          {shareUrl ? '링크 복사' : '공유하기'}
+        </Button>
+      </div>
+      <div className="pdf-source">
+        <ResearchReportView
+          keyword={data.keyword}
+          content={content}
+          reportId={null}
+          showLoginCta={false}
+        />
+      </div>
+    </div>
   )
 }

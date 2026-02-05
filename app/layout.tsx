@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Nunito, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers";
-import { Header } from "@/components/header";
+import { Sidebar } from "@/components/sidebar";
 import { PageTransition } from "@/components/common/PageTransition";
 import { Toaster } from "sonner";
 
@@ -33,10 +33,11 @@ export default function RootLayout({
         className={`${nunito.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <AuthProvider>
-          <Header />
-          <PageTransition>{children}</PageTransition>
-          {/* 전역 토스트: 어느 페이지에 있든 리서치 진행 상황(토스트) 표시 */}
-          <Toaster richColors position="top-center" closeButton />
+          <Sidebar />
+          <main className="min-h-screen bg-background pl-56">
+            <PageTransition>{children}</PageTransition>
+          </main>
+          <Toaster richColors position="bottom-right" closeButton />
         </AuthProvider>
       </body>
     </html>

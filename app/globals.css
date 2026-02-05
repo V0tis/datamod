@@ -4,41 +4,47 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* 완전한 화이트 배경, 진한 그레이 텍스트로 가독성 극대화 */
+  /* 프로 대시보드: 화이트 메인 + 다크 사이드바, 블루 악센트 */
   --rin-primary: #FFB800;
   --rin-bg: #FFFFFF;
   --rin-foreground: #1A1A1A;
-  --card: #FFFFFF;
+  --card: #FAFAFA;
   --card-foreground: #1A1A1A;
   --popover: #FFFFFF;
   --popover-foreground: #1A1A1A;
-  --primary: #FFB800;
-  --primary-foreground: #1A1A1A;
+  --primary: #2563EB;
+  --primary-foreground: #FFFFFF;
   --secondary: #f5f5f5;
   --secondary-foreground: #1A1A1A;
   --muted: #f3f4f6;
   --muted-foreground: #6b7280;
-  --accent: #f9fafb;
+  --accent: #f0f7ff;
   --accent-foreground: #1A1A1A;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
   --border: #e5e7eb;
   --input: #e5e7eb;
-  --ring: #FFB800;
-  --chart-1: oklch(0.646 0.222 41.116);
+  --ring: #2563EB;
+  --chart-1: #2563EB;
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 1.25rem; /* 20px - 카드/버튼 통일 */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: #333333;
-  --sidebar-primary: #FFB800;
-  --sidebar-primary-foreground: #333333;
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: #333333;
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: #FFB800;
+  --radius: 0.75rem;
+  /* 다크 사이드바 (프로 대시보드) */
+  --sidebar-bg: #0f172a;
+  --sidebar-fg: #f8fafc;
+  --sidebar-fg-muted: #94a3b8;
+  --sidebar-active: rgba(255, 255, 255, 0.08);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #2563EB;
   --background: #FFFFFF;
   --foreground: #1A1A1A;
 }
@@ -139,5 +145,28 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .pdf-source,
+  .pdf-source * {
+    visibility: visible;
+  }
+  .pdf-source {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    padding: 1rem;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
   }
 }

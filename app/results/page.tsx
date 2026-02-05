@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -10,6 +10,8 @@ import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimat
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore } from '@/lib/stores/research-store'
+import { printReportAsPdf } from '@/lib/pdf-export'
+import { FileDown, Share2 } from 'lucide-react'
 
 function ReportSkeleton() {
   return (
@@ -64,11 +66,20 @@ function ResultsContent() {
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('report')
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [followUps, setFollowUps] = useState<Array<{ question: string; answer: string }>>([])
+  const [followUpQuestion, setFollowUpQuestion] = useState('')
+  const [followUpLoading, setFollowUpLoading] = useState(false)
+  const scheduledInsightsForRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!keyword) return
     startResearch(keyword)
   }, [keyword, startResearch])
+
+  useEffect(() => {
+    if (status === 'loading') scheduledInsightsForRef.current = null
+  }, [status])
 
   const loading = status === 'loading'
   const currentKeyword = keyword ?? storeKeyword
@@ -77,21 +88,20 @@ function ResultsContent() {
     if (storeInsights !== null || insightsLoading) return
     setInsightsLoading(true)
     setInsightsError(null)
-    toast.info('유저 반응 예측 중...')
     try {
-      const summary = result
+      const reportSummary = result
         ? [
-            result.marketNews?.join(' '),
-            result.painPoints?.join(' '),
-            result.competitorTrends,
+            result.marketNews?.length ? `시장 뉴스 요약: ${result.marketNews.join(' ')}` : '',
+            result.painPoints?.length ? `유저 페인포인트: ${result.painPoints.join(' ')}` : '',
+            result.competitorTrends ? `경쟁사 동향: ${result.competitorTrends}` : '',
           ]
             .filter(Boolean)
-            .join('\n')
+            .join('\n\n')
         : ''
       const res = await fetch('/api/research/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: currentKeyword, summary }),
+        body: JSON.stringify({ keyword: currentKeyword, summary: reportSummary }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -113,15 +123,83 @@ function ResultsContent() {
 
   useEffect(() => {
     if (
-      activeTab === 'insights' &&
-      !result?.publicReactionTrends &&
-      storeInsights === null &&
-      !insightsLoading &&
-      !insightsError
+      status !== 'done' ||
+      !result ||
+      result.publicReactionTrends ||
+      storeInsights !== null ||
+      insightsLoading ||
+      !currentKeyword ||
+      scheduledInsightsForRef.current === currentKeyword
     ) {
-      fetchInsights()
+      return
     }
-  }, [activeTab, storeInsights, insightsLoading, insightsError, result?.publicReactionTrends, fetchInsights])
+    scheduledInsightsForRef.current = currentKeyword
+    const delayMs = 1000 + Math.random() * 1000
+    const t = setTimeout(() => {
+      toast.info('리포트 분석 완료! 이제 유저 반응을 예측하고 있어요...')
+      fetchInsights()
+    }, delayMs)
+    return () => clearTimeout(t)
+  }, [status, result, currentKeyword, storeInsights, insightsLoading, fetchInsights])
+
+  const handleShare = useCallback(async () => {
+    const reportId = result?.reportId
+    if (!reportId) return
+    if (shareUrl) {
+      await navigator.clipboard.writeText(shareUrl)
+      toast.success('공유 링크가 복사되었어요.')
+      return
+    }
+    try {
+      const res = await fetch(`/api/reports/${reportId}/share`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error((data as { error?: string }).error ?? '공유 링크를 만들 수 없어요.')
+        return
+      }
+      const url = (data as { url?: string }).url
+      if (url) {
+        const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`
+        setShareUrl(absoluteUrl)
+        await navigator.clipboard.writeText(absoluteUrl)
+        toast.success('공유 링크가 생성되었고 클립보드에 복사되었어요.')
+      }
+    } catch {
+      toast.error('공유 링크 생성에 실패했어요.')
+    }
+  }, [result?.reportId, shareUrl])
+
+  const handleFollowUp = useCallback(async () => {
+    const q = followUpQuestion.trim()
+    if (!q || followUpLoading) return
+    const previousInsights = result?.publicReactionTrends ?? storeInsights ?? ''
+    if (!previousInsights) return
+    setFollowUpLoading(true)
+    setFollowUpQuestion('')
+    try {
+      const res = await fetch('/api/research/insights/follow-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: currentKeyword,
+          previousInsights,
+          question: q,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error((data as { error?: string }).error ?? '답변을 불러오지 못했어요.')
+        setFollowUpLoading(false)
+        return
+      }
+      const answer = (data as { answer?: string }).answer ?? '답변을 생성하지 못했어요.'
+      setFollowUps((prev) => [...prev, { question: q, answer }])
+    } catch {
+      toast.error('추가 질문 처리에 실패했어요.')
+    } finally {
+      setFollowUpLoading(false)
+    }
+  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, storeInsights])
 
   if (error) {
     return (
@@ -174,14 +252,42 @@ function ResultsContent() {
             {loading && newsList.length > 0 ? (
               <ReportSkeleton />
             ) : status === 'done' && result ? (
-              <ResearchReportView
-                keyword={currentKeyword}
-                content={result}
-                reportId={result.reportId ?? null}
-                showLoginCta={!result.reportId}
-                loginCallbackUrl={`/results?keyword=${encodeURIComponent(currentKeyword)}`}
-                embedded
-              />
+              <div>
+                <div className="no-print flex flex-wrap items-center gap-2 mb-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={printReportAsPdf}
+                    className="gap-1.5"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    PDF로 저장
+                  </Button>
+                  {result.reportId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleShare}
+                      className="gap-1.5"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      {shareUrl ? '링크 복사' : '공유하기'}
+                    </Button>
+                  )}
+                </div>
+                <div className="pdf-source">
+                  <ResearchReportView
+                    keyword={currentKeyword}
+                    content={result}
+                    reportId={result.reportId ?? null}
+                    showLoginCta={!result.reportId}
+                    loginCallbackUrl={`/results?keyword=${encodeURIComponent(currentKeyword)}`}
+                    embedded
+                  />
+                </div>
+              </div>
             ) : (
               <TabLoadingPlaceholder />
             )}
@@ -225,9 +331,46 @@ function ResultsContent() {
 
           <TabsContent value="insights" className="mt-6">
             {(result?.publicReactionTrends ?? storeInsights) != null ? (
-              <div className="rounded-xl border border-border bg-card p-6">
-                <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                  {result?.publicReactionTrends ?? storeInsights}
+              <div className="space-y-6">
+                <div className="rounded-xl border border-border bg-card p-6">
+                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
+                    {result?.publicReactionTrends ?? storeInsights}
+                  </div>
+                </div>
+                {followUps.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground">추가 Q&amp;A</h3>
+                    {followUps.map((item, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+                        <p className="text-sm text-muted-foreground font-medium">Q. {item.question}</p>
+                        <p className="text-foreground whitespace-pre-wrap text-sm">{item.answer}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="rounded-xl border border-border bg-card p-6">
+                  <p className="text-sm font-medium text-foreground mb-3">
+                    이 반응들에 대해 더 궁금한 점이 있나요?
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="궁금한 점을 입력하세요"
+                      value={followUpQuestion}
+                      onChange={(e) => setFollowUpQuestion(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
+                      className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      disabled={followUpLoading}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleFollowUp}
+                      disabled={followUpLoading || !followUpQuestion.trim()}
+                    >
+                      {followUpLoading ? '답변 중...' : '질문하기'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : insightsError ? (
