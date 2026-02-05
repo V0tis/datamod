@@ -2,31 +2,23 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Home, History, LogOut, LogIn, Menu, X, TrendingUp } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
-import { useResearchStore } from '@/lib/stores/research-store'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
+  { href: '/trends', label: '실시간 트렌드', icon: TrendingUp },
   { href: '/history', label: '내 리서치 기록', icon: History },
 ]
 
-const TREND_MOCK: Record<'KR' | 'US' | 'JP', string[]> = {
-  KR: ['명일방주 최신트렌드', '전기차 시장', 'AI 챗봇', '배터리 기술', '메타버스'],
-  US: ['AI regulation', 'Electric vehicles', 'Crypto market', 'Cloud computing', 'Climate tech'],
-  JP: ['AIトレンド', 'EV市場', '半導体', 'ゲーム業界', 'DX推進'],
-}
-
 export function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [trendCountry, setTrendCountry] = useState<'KR' | 'US' | 'JP'>('KR')
 
   useEffect(() => {
     const supabase = createClient()
@@ -45,13 +37,6 @@ export function Sidebar() {
     const supabase = createClient()
     await supabase.auth.signOut()
     window.location.href = '/auth/login'
-  }
-
-  const startResearch = useResearchStore((s) => s.startResearch)
-
-  const handleTrendClick = (keyword: string) => {
-    startResearch(keyword)
-    router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
   }
 
   const sidebarContent = (
@@ -82,44 +67,6 @@ export function Sidebar() {
             </Link>
           )
         })}
-
-        {/* 실시간 트렌드 */}
-        <div className="mt-6 rounded-xl border border-border bg-card p-3 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">실시간 트렌드</span>
-          </div>
-          <div className="flex gap-1 mb-2">
-            {(['KR', 'US', 'JP'] as const).map((code) => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setTrendCountry(code)}
-                className={cn(
-                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  trendCountry === code
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
-                )}
-              >
-                {code}
-              </button>
-            ))}
-          </div>
-          <ul className="space-y-1">
-            {TREND_MOCK[trendCountry].map((keyword) => (
-              <li key={keyword}>
-                <button
-                  type="button"
-                  onClick={() => handleTrendClick(keyword)}
-                  className="w-full text-left rounded-lg px-2 py-1.5 text-xs text-foreground hover:bg-primary/10 hover:text-primary transition-colors truncate"
-                >
-                  {keyword}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
       </nav>
       <div className="border-t border-border bg-white p-3">
         {user ? (
