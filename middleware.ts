@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 
 // 로그인하지 않은 사용자는 /auth/login으로 리다이렉트
 // /results (검색 결과)는 비로그인 가능, /results/[id] (저장된 상세)는 로그인 필요
-const PROTECTED_PATHS = ['/history', '/reports']
+const PROTECTED_PATHS = ['/history']
 
 function isProtected(pathname: string): boolean {
   if (PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/')))
@@ -43,5 +43,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/history', '/reports', '/reports/:path*', '/results/:path*'],
+  matcher: ['/history', '/results/:path*'],
 }
