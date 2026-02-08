@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 
 /** 안정적인 기본 모델 (env로 오버라이드 가능) */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
 
     if (responseText == null) {
       return NextResponse.json(
-        { error: '린이 분석하는 중 오류가 났어요. Gemini·OpenAI 키를 확인하거나 잠시 후 다시 시도해 주세요.' },
+        { error: '분석을 완료하지 못했어요. API 키를 확인하거나 잠시 후 다시 시도해 주세요.' },
         { status: 500 }
       )
     }
@@ -216,21 +216,22 @@ export async function POST(req: Request) {
 
     let reportId: string | null = null
     if (user?.id) {
-      const { data: report, error: insertError } = await supabase
-        .from('reports')
-        .insert({
-          user_id: user.id,
-          keyword: keyword.trim(),
-          content: summary,
-          source_links: sourceLinks,
-        })
-        .select('id')
-        .single()
-
-      if (insertError) {
-        console.error('[Research API] Report insert failed:', insertError)
-      } else {
-        reportId = report?.id ?? null
+      try {
+        const { data: report, error: insertError } = await supabase
+          .from('reports')
+          .insert({
+            user_id: user.id,
+            keyword: keyword.trim(),
+            content: summary,
+            source_links: sourceLinks,
+            ai_responses: {},
+          })
+          .select('id')
+          .single()
+        if (!insertError && report?.id) reportId = report.id
+        else if (insertError) console.warn('[Research API] Report insert failed (컬럼 확인):', insertError.message)
+      } catch (e) {
+        console.warn('[Research API] Report insert:', e)
       }
     }
 
@@ -241,7 +242,7 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error('[Research API] 분석 실패:', e)
     return NextResponse.json(
-      { error: '예기치 않은 오류가 났어요. 잠시 후 다시 시도해 주세요.' },
+      { error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.' },
       { status: 500 }
     )
   }

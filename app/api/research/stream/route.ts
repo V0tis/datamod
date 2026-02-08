@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export const runtime = 'nodejs'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
 const USER_PROMPT_TEMPLATE = (keyword: string) =>
@@ -149,8 +149,8 @@ export async function POST(req: Request) {
               step: 'error',
               error:
                 msg.includes('429') || msg.includes('quota')
-                  ? '현재 구글 엔진의 요청이 많아 잠시 후 다시 시도해 주세요.'
-                  : '린이 분석하는 중 오류가 났어요. 잠시 후 다시 시도해 주세요.',
+                  ? '현재 요청이 많아 잠시 후 다시 시도해 주세요.'
+                  : '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
               retryDelay: retryDelaySec,
             })
             safeClose()
@@ -285,25 +285,31 @@ export async function POST(req: Request) {
         const { data: { user } } = await supabase.auth.getUser()
         let reportId: string | null = null
         if (user?.id) {
-          const { data: report, error: insertError } = await supabase
-            .from('reports')
-            .insert({
-              user_id: user.id,
-              keyword: keyword.trim(),
-              content: summary,
-              source_links: news,
-            })
-            .select('id')
-            .single()
-          if (!insertError && report?.id) reportId = report.id
+          try {
+            const { data: report, error: insertError } = await supabase
+              .from('reports')
+              .insert({
+                user_id: user.id,
+                keyword: keyword.trim(),
+                content: summary,
+                source_links: news,
+                ai_responses: {},
+              })
+              .select('id')
+              .single()
+            if (!insertError && report?.id) reportId = report.id
+            else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)
+          } catch (insertErr) {
+            console.warn('[Research Stream] Report insert:', insertErr)
+          }
         }
 
-        send('progress', { step: 'result', data: { ...summary, reportId } as Record<string, unknown> })
+        send('progress', { step: 'result', data: { ...summary, reportId, source_links: news } as Record<string, unknown> })
       } catch (e) {
         console.error('[Research Stream]', e)
         send('progress', {
           step: 'error',
-          error: '예기치 않은 오류가 났어요. 잠시 후 다시 시도해 주세요.',
+          error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
         })
       }
       if (!isClosed) {

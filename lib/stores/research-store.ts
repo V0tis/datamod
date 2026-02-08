@@ -36,6 +36,8 @@ export interface ResearchResponse {
   keyConclusions?: string[]
   /** DB 캐시 복원 시 탭 분석 결과 (logic, creative, fact) */
   ai_responses?: Record<string, string>
+  /** 참고 문헌 (뉴스/소스 링크) */
+  source_links?: Array<{ title?: string; url?: string }>
 }
 
 type StreamPayload =
@@ -100,7 +102,7 @@ function showToastForStep(step: string) {
   } else if (step === 'gemini_done') {
     toast.info('리포트 정리 중...')
   } else if (step === 'result') {
-    toast.success('리포트 배달 완료! 🐕')
+    toast.success('분석이 완료되었습니다.')
   }
 }
 
@@ -127,7 +129,15 @@ export const useResearchStore = create<ResearchStore>()(
         if (!k) return false
         try {
           const res = await fetch(`/api/reports?keyword=${encodeURIComponent(k)}`)
-          const data = (await res.json()) as { report?: { id: string; keyword: string; content: Record<string, unknown>; ai_responses?: Record<string, string> } }
+          const data = (await res.json()) as {
+            report?: {
+              id: string
+              keyword: string
+              content: Record<string, unknown>
+              ai_responses?: Record<string, string>
+              source_links?: Array<{ title?: string; url?: string }>
+            }
+          }
           const report = data.report
           if (!report?.id) return false
           const content = report.content ?? {}
@@ -138,6 +148,7 @@ export const useResearchStore = create<ResearchStore>()(
               ...content,
               reportId: report.id,
               ai_responses: report.ai_responses ?? {},
+              source_links: report.source_links ?? [],
             } as ResearchResponse,
             error: null,
             newsList: get().newsList,
@@ -296,7 +307,7 @@ export const useResearchStore = create<ResearchStore>()(
       } catch (err) {
         if ((err as Error).name === 'AbortError') return
         console.error('[ResearchStore] stream failed:', err)
-        const msg = '데이터를 불러오는 중 오류가 발생했습니다.'
+        const msg = '분석을 완료하지 못했어요. 다시 시도해 주세요.'
         showErrorToast(err, { fallbackMessage: msg })
         set({
           status: 'error',

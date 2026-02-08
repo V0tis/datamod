@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey } from '@/lib/license'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getEffectiveOpenAIKey } from '@/lib/license'
 import OpenAI from 'openai'
-import Anthropic from '@anthropic-ai/sdk'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
-const OPENAI_REPORT_MODEL = process.env.OPENAI_FALLBACK_MODEL ?? 'gpt-4o-mini'
-const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-3-5-sonnet-20241022'
-const MAX_RETRIES = 3
+/** 긴급 복구: 모든 탭에서 비용 효율적인 gpt-4o-mini로 일시 통합 */
+const TAB_MODEL = process.env.OPENAI_FALLBACK_MODEL ?? 'gpt-4o-mini'
+const UNIFIED_ERROR_MESSAGE = '현재 모든 AI 엔진의 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 
 export type TabType = 'logic' | 'creative' | 'fact'
 
@@ -18,16 +15,7 @@ const TAB_SYSTEM_PROMPTS: Record<TabType, string> = {
   creative:
     "당신은 비즈니스 전략 전문가 '린'입니다. **비즈니스적 통찰**과 **구체적인 Action Item**을 도출해주세요. 실행 가능한 제안을 2~4문단으로 답변하세요. 마크다운 형식, 중요 키워드는 **강조**.",
   fact:
-    "당신은 리서치 보고서 작성 전문가 '린'입니다. 아래 시장 분석·인사이트·데이터를 하나로 통합하여 **격식 있는 전문가 리서치 보고서** 형식으로 작성해주세요. 제목, 요약, 본문(소제목과 문단), 결론 순으로 구성하고, 객관적 톤을 유지하세요. **마지막에 반드시 'PM을 위한 Next Steps (P0, P1, P2)' 섹션을 고정**해주세요. P0=즉시 실행, P1=단기, P2=중장기로 구분하고 각 항목을 구체적으로 나열하세요. 마크다운 형식, 중요 키워드는 **강조**.",
-}
-
-function getRetryDelaySeconds(err: unknown): number {
-  const obj = err as { message?: string; retryDelay?: number; [k: string]: unknown }
-  if (typeof obj?.retryDelay === 'number' && obj.retryDelay > 0) return Math.min(obj.retryDelay, 120)
-  const msg = String(obj?.message ?? '')
-  const match = msg.match(/(?:retry[- ]?after|retryDelay)[:\s]+(\d+)/i)
-  if (match) return Math.min(parseInt(match[1], 10) || 60, 120)
-  return 60
+    "당신은 리서치 보고서 작성 전문가 '린'입니다. 아래 시장 분석·인사이트·데이터를 하나로 통합하여 **격식 있는 전문가 리서치 보고서** 형식으로 작성해주세요. 제목, 요약, 본문(소제목과 문단), 결론 순으로 구성하고, 객관적 톤을 유지하세요. **마지막에 반드시 'PM을 위한 우선순위별 Action Item (P0, P1, P2)' 섹션을 포함**해주세요. P0=즉시 실행, P1=단기, P2=중장기로 구분하고 각 항목을 구체적으로 나열하세요. 마크다운 형식, 중요 키워드는 **강조**.",
 }
 
 export async function POST(req: Request) {
@@ -41,13 +29,10 @@ export async function POST(req: Request) {
 
   const { data: row } = await supabase
     .from('user_settings')
-    .select('gemini_api_key, openai_api_key, anthropic_api_key')
+    .select('openai_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
-  const effective = getEffectiveLicenseKeys(row?.gemini_api_key ?? null)
-  const openaiKey = getEffectiveOpenAIKey(row?.openai_api_key)
-  const anthropicKey = getEffectiveAnthropicKey((row as { anthropic_api_key?: string })?.anthropic_api_key)
-  const geminiKey = effective.gemini
+  const openaiKey = getEffectiveOpenAIKey((row as { openai_api_key?: string })?.openai_api_key)
 
   let body: { keyword?: string; summary?: string; tab?: string; reportId?: string; newsHeadlines?: string; logicText?: string; creativeText?: string }
   try {
@@ -85,23 +70,63 @@ export async function POST(req: Request) {
     }
   }
 
+  if (!openaiKey) {
+    console.warn('[Research Insights Tab API] OpenAI API 키 없음: 사용자 설정 또는 서버 env 확인')
+    return NextResponse.json(
+      { error: '분석을 사용하려면 설정에서 OpenAI API 키를 등록해 주세요.' },
+      { status: 400 }
+    )
+  }
+
   const systemInstruction = TAB_SYSTEM_PROMPTS[tab]
   const newsBlock = newsHeadlines ? `\n\n실시간 뉴스 헤드라인:\n${newsHeadlines}\n\n` : ''
 
   async function saveToReport(text: string) {
     if (!reportId) return
-    const { data: report } = await supabase.from('reports').select('user_id, ai_responses').eq('id', reportId).single()
-    if (report?.user_id === user.id) {
-      const current = (report.ai_responses as Record<string, string>) ?? {}
-      await supabase.from('reports').update({ ai_responses: { ...current, [tab]: text } }).eq('id', reportId)
+    try {
+      const { data: report } = await supabase.from('reports').select('user_id, ai_responses').eq('id', reportId).single()
+      if (report?.user_id === user.id) {
+        const current = (report.ai_responses as Record<string, string>) ?? {}
+        const { error } = await supabase.from('reports').update({ ai_responses: { ...current, [tab]: text } }).eq('id', reportId)
+        if (error) console.warn('[Research Insights Tab] DB 저장 실패(컬럼 확인):', error.message)
+      }
+    } catch (e) {
+      console.warn('[Research Insights Tab] saveToReport:', e)
     }
   }
 
-  // —— 3번 탭: 분석 리포트 (GPT-4o-mini 전용) ——
-  if (tab === 'fact') {
-    if (!openaiKey) {
-      return NextResponse.json({ error: '분석 리포트를 사용하려면 OpenAI API 키를 설정해 주세요.' }, { status: 400 })
+  const openai = new OpenAI({ apiKey: openaiKey })
+
+  async function callOpenAI(userPrompt: string, maxTokens = 1500): Promise<NextResponse> {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: TAB_MODEL,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+      })
+      const text = (completion.choices[0]?.message?.content ?? '').trim() || '분석 결과를 생성하지 못했어요.'
+      await saveToReport(text)
+      return NextResponse.json({ text })
+    } catch (e) {
+      const msg = String((e as { message?: string })?.message ?? e)
+      const code = (e as { code?: string })?.code ?? ''
+      const isQuota = /429|quota|insufficient_quota|rate limit/i.test(msg) || code === 'insufficient_quota'
+      if (isQuota) {
+        console.warn('[Research Insights Tab API] OpenAI 잔액/쿼터 부족:', msg)
+      } else {
+        console.warn('[Research Insights Tab API] OpenAI 호출 실패 (키 확인 또는 네트워크):', msg)
+      }
+      return NextResponse.json(
+        { error: UNIFIED_ERROR_MESSAGE, code: isQuota ? 'QUOTA' : undefined },
+        { status: isQuota ? 429 : 500 }
+      )
     }
+  }
+
+  if (tab === 'fact') {
     const reportParts = [
       logicText ? `## 시장 분석\n${logicText}` : '',
       creativeText ? `## 인사이트\n${creativeText}` : '',
@@ -109,85 +134,15 @@ export async function POST(req: Request) {
       newsHeadlines ? `## 참고 뉴스 헤드라인\n${newsHeadlines}` : '',
     ].filter(Boolean)
     const reportPrompt = `키워드: "${keyword}"\n\n아래 내용을 하나의 격식 있는 리서치 보고서로 통합해 주세요.\n\n${reportParts.join('\n\n')}`
-    try {
-      const openai = new OpenAI({ apiKey: openaiKey })
-      const completion = await openai.chat.completions.create({
-        model: OPENAI_REPORT_MODEL,
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: reportPrompt },
-        ],
-        max_tokens: 2000,
-      })
-      const text = (completion.choices[0]?.message?.content ?? '').trim() || '분석 결과를 생성하지 못했어요.'
-      await saveToReport(text)
-      return NextResponse.json({ text })
-    } catch (err) {
-      console.error('[Research Insights Tab API] fact (OpenAI) failed:', err)
-      return NextResponse.json(
-        { error: '분석 리포트 생성 중 오류가 발생했어요.' },
-        { status: 500 }
-      )
-    }
+    return callOpenAI(reportPrompt, 2000)
   }
 
-  // —— 2번 탭: 인사이트 (Claude 3.5 Sonnet 우선, 실패 시 GPT-4o-mini) ——
   if (tab === 'creative') {
     const baseSummary = summary ? `리포트 요약:\n${summary}` : ''
     const userPrompt = `키워드: "${keyword}"${newsBlock}${baseSummary ? baseSummary + '\n\n' : ''}위 내용을 바탕으로 비즈니스 통찰과 실행 가능한 Action Item을 제안해 주세요.`
-    if (anthropicKey) {
-      let lastErr: unknown = null
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const anthropic = new Anthropic({ apiKey: anthropicKey })
-          const msg = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: 1500,
-            system: systemInstruction,
-            messages: [{ role: 'user', content: userPrompt }],
-          })
-          const textBlock = msg.content.find((b): b is { type: 'text'; text: string } => b.type === 'text')
-          const text = (textBlock?.text ?? '').trim() || '분석 결과를 생성하지 못했어요.'
-          await saveToReport(text)
-          return NextResponse.json({ text })
-        } catch (err) {
-          lastErr = err
-          const msg = String((err as { message?: string })?.message ?? err)
-          const is429 = /429|quota|resource exhausted|rate limit/i.test(msg)
-          if (is429 && attempt < MAX_RETRIES) {
-            const waitSec = Math.min(2 * Math.pow(2, attempt), 60)
-            await new Promise((r) => setTimeout(r, waitSec * 1000))
-            continue
-          }
-          break
-        }
-      }
-    }
-    if (openaiKey) {
-      try {
-        const openai = new OpenAI({ apiKey: openaiKey })
-        const completion = await openai.chat.completions.create({
-          model: OPENAI_REPORT_MODEL,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 1500,
-        })
-        const text = (completion.choices[0]?.message?.content ?? '').trim() || '분석 결과를 생성하지 못했어요.'
-        await saveToReport(text)
-        return NextResponse.json({ text })
-      } catch (e) {
-        console.error('[Research Insights Tab API] creative OpenAI fallback failed:', e)
-      }
-    }
-    return NextResponse.json(
-      { error: '인사이트를 사용하려면 Claude 또는 OpenAI API 키를 설정해 주세요.' },
-      { status: 400 }
-    )
+    return callOpenAI(userPrompt)
   }
 
-  // —— 1번 탭: 시장 분석 (Gemini 1.5 Flash, 404/429 등 실패 시 즉시 GPT-4o-mini Fallback) ——
   if (tab === 'logic') {
     const baseSummary = summary ? `리포트 요약:\n${summary}` : ''
     const userPrompt = newsBlock
@@ -195,85 +150,7 @@ export async function POST(req: Request) {
       : baseSummary
         ? `키워드: "${keyword}"\n\n${baseSummary}\n\n위 요약을 바탕으로 시장 분석해 주세요.`
         : `키워드: "${keyword}"\n\n이 키워드/이슈에 대해 시장 분석해 주세요.`
-
-    const runGemini = async (): Promise<{ text: string } | null> => {
-      if (!geminiKey) return null
-      try {
-        const genAI = new GoogleGenerativeAI(geminiKey)
-        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, systemInstruction })
-        const result = await model.generateContent(userPrompt)
-        const text = (result.response.text() || '').trim() || '분석 결과를 생성하지 못했어요.'
-        return { text }
-      } catch (err) {
-        const msg = String((err as { message?: string })?.message ?? err)
-        const is404 = /404|not found|invalid model/i.test(msg)
-        const is429 = /429|quota|resource exhausted|rate limit/i.test(msg)
-        if (is404) {
-          console.warn('[Research Insights Tab API] Gemini 404/모델 오류, Fallback으로 전환:', msg)
-          return null
-        }
-        if (is429) throw err
-        console.warn('[Research Insights Tab API] Gemini 오류, Fallback으로 전환:', msg)
-        return null
-      }
-    }
-
-    let geminiResult: { text: string } | null = null
-    let lastErr: unknown = null
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        geminiResult = await runGemini()
-        if (geminiResult) break
-        lastErr = null
-        break
-      } catch (err) {
-        lastErr = err
-        const msg = String((err as { message?: string })?.message ?? err)
-        const is429 = /429|quota|resource exhausted|rate limit/i.test(msg)
-        if (is429 && attempt < MAX_RETRIES) {
-          const waitSec = getRetryDelaySeconds(err) > 0 ? getRetryDelaySeconds(err) : Math.min(2 * Math.pow(2, attempt), 60)
-          await new Promise((r) => setTimeout(r, waitSec * 1000))
-          continue
-        }
-        break
-      }
-    }
-
-    if (geminiResult) {
-      await saveToReport(geminiResult.text)
-      return NextResponse.json({ text: geminiResult.text })
-    }
-
-    if (openaiKey) {
-      try {
-        const openai = new OpenAI({ apiKey: openaiKey })
-        const completion = await openai.chat.completions.create({
-          model: OPENAI_REPORT_MODEL,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 1500,
-        })
-        const text = (completion.choices[0]?.message?.content ?? '').trim() || '분석 결과를 생성하지 못했어요.'
-        await saveToReport(text)
-        return NextResponse.json({ text, fallback: true })
-      } catch (e) {
-        console.error('[Research Insights Tab API] logic OpenAI fallback failed:', e)
-      }
-    }
-
-    const is429 = lastErr && /429|quota|rate limit/i.test(String((lastErr as { message?: string })?.message ?? lastErr))
-    if (is429) {
-      return NextResponse.json(
-        { error: '현재 구글 엔진의 요청이 많아 잠시 후 다시 시도해 주세요.', code: 'QUOTA' },
-        { status: 429 }
-      )
-    }
-    return NextResponse.json(
-      { error: '분석 중 오류가 발생했어요. 설정에서 Gemini 또는 OpenAI API 키를 확인해 주세요.' },
-      { status: 500 }
-    )
+    return callOpenAI(userPrompt)
   }
 
   return NextResponse.json({ error: 'Invalid tab' }, { status: 400 })
