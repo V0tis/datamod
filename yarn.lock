@@ -4759,6 +4759,11 @@ ohash@^2.0.11:
   resolved "https://registry.npmjs.org/ohash/-/ohash-2.0.11.tgz"
   integrity sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==
 
+openai@^6.18.0:
+  version "6.18.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.18.0.tgz#bd6c0bdb1aebf93375d324de51756280f7e85c6f"
+  integrity sha512-odLRYyz9rlzz6g8gKn61RM2oP5UUm428sE2zOxZqS9MzVfD5/XW8UoEjpnRkzTuScXP7ZbP/m7fC+bl8jCOZZw==
+
 optionator@^0.9.3:
   version "0.9.4"
   resolved "https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz"

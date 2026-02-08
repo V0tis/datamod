@@ -11,7 +11,7 @@ const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. 반드시 JSON 형식으로만 답변하세요."
 const USER_PROMPT_PREFIX = '다음 데이터를 분석해 JSON으로 출력해: '
 const USER_PROMPT_SUFFIX =
-  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [] }. 위에서 제시한 소스(뉴스) 순서대로 각각 1문단 요약을 articleSummaries 배열에 넣어줘(소스 개수만큼). positive+neutral+negative 합계는 100, impact는 경제/사회/기술/정치/환경 등 5개, publicReactionTrends는 대중 예상 반응·온라인 트렌드 1~2문단.'
+  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. keyConclusions에는 이 이슈의 핵심 결론을 정확히 3개 문장으로 넣어줘(배열 길이 3). 위에서 제시한 소스 순서대로 articleSummaries 1문단씩, positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.'
 
 function normalizeText(text: string): string {
   if (!text || typeof text !== 'string') return ''
@@ -257,6 +257,7 @@ export async function POST(req: Request) {
         const rawItems = (searchData.data ?? []).slice(0, 10)
         await trackUsage('firecrawl')
         const MAX_CONTENT_LENGTH = 3500
+        const collectedAt = new Date().toISOString()
         const news = rawItems.map((d) => {
           const title =
             d.metadata?.title ?? d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? '제목 없음'
@@ -264,10 +265,19 @@ export async function POST(req: Request) {
           const fallback =
             d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? ''
           const content = cleanArticleContent(rawContent, fallback, MAX_CONTENT_LENGTH)
+          const url = typeof d.url === 'string' ? d.url : ''
+          let publisher = ''
+          try {
+            if (url) publisher = new URL(url).hostname.replace(/^www\./, '')
+          } catch {
+            /* ignore */
+          }
           return {
             title: normalizeText(title).slice(0, 200),
-            url: typeof d.url === 'string' ? d.url : '',
+            url,
             content: content.length > 0 ? content : undefined,
+            publisher: publisher || undefined,
+            publishedAt: collectedAt,
           }
         })
 
@@ -355,6 +365,7 @@ export async function POST(req: Request) {
           sentiment?: number
           publicReactionTrends?: string
           articleSummaries?: string[]
+          keyConclusions?: string[]
           chartData?: {
             sentiment?: { positive?: number; neutral?: number; negative?: number }
             impact?: Array<{ subject?: string; score?: number }>
@@ -404,6 +415,9 @@ export async function POST(req: Request) {
         const articleSummaries = Array.isArray(parsed.articleSummaries)
           ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string').slice(0, rawItems.length)
           : []
+        const keyConclusions = Array.isArray(parsed.keyConclusions)
+          ? parsed.keyConclusions.filter((s): s is string => typeof s === 'string').slice(0, 3)
+          : (Array.isArray(parsed.marketNews) ? parsed.marketNews : []).slice(0, 3)
 
         const summary = {
           marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
@@ -415,6 +429,7 @@ export async function POST(req: Request) {
             typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
           chartData,
           articleSummaries,
+          keyConclusions,
         }
 
         const supabase = await createClient()

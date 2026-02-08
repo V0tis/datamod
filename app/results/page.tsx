@@ -13,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare } from 'lucide-react'
+import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
+import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper } from 'lucide-react'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
@@ -57,9 +58,9 @@ function TabLoadingPlaceholder() {
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
-  { id: 'logic', label: '시장 분석', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
-  { id: 'creative', label: '인사이트', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
-  { id: 'fact', label: '데이터 팩트', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
+  { id: 'logic', label: '시장 분석 (Logic)', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
+  { id: 'creative', label: '인사이트 (Insight)', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
+  { id: 'fact', label: '데이터 팩트 (Fact)', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
 ]
 
 function ChartSkeleton() {
@@ -398,6 +399,41 @@ function ResultsContent() {
           </div>
         )}
 
+        {/* Section 1. 실시간 주요 뉴스: 가로형 카드 리스트 */}
+        {!error && newsList.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Newspaper className="h-4 w-4 text-primary" />
+              실시간 주요 뉴스
+            </h2>
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+              {newsList.map((item, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { setSelectedNews(item); setSelectedNewsIndex(i) }}
+                  className="flex-shrink-0 w-[280px] rounded-xl border border-border bg-card overflow-hidden hover:bg-muted/50 transition-colors text-left flex flex-col"
+                >
+                  <div className="h-32 bg-muted/50 flex items-center justify-center">
+                    {item.image ? (
+                      <img src={item.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Newspaper className="h-10 w-10 text-muted-foreground/50" />
+                    )}
+                  </div>
+                  <div className="p-3 flex flex-col gap-1">
+                    <span className="font-medium text-foreground text-sm line-clamp-2">{item.title || '제목 없음'}</span>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{item.publisher || '출처'}</span>
+                      <span>{item.publishedAt ? formatTimeAgo(item.publishedAt) : '최신'}</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-3xl grid-cols-4 h-12 p-1 gap-1 bg-muted/60">
             <TabsTrigger
@@ -418,6 +454,10 @@ function ResultsContent() {
           <TabsContent value="summary" className="mt-6">
             {loading && newsList.length > 0 ? (
               <ReportSkeleton />
+            ) : status === 'error' ? (
+              <div className="flex flex-col items-center justify-center min-h-[280px] text-center">
+                <p className="text-muted-foreground text-sm">위 배너에서 &quot;다시 시도&quot; 또는 &quot;검색으로 돌아가기&quot;를 선택해 주세요.</p>
+              </div>
             ) : status === 'done' && result ? (
               <div className="space-y-8">
                 <div>
@@ -526,9 +566,15 @@ function ResultsContent() {
                 </div>
               ) : tabCache[id] ? (
                 <div className="space-y-6">
+                  {id === 'logic' && result?.chartData && (
+                    <div className="rounded-xl border border-border bg-card p-6">
+                      <h3 className="text-sm font-semibold text-foreground mb-3">24시간 검색량·감성 추이</h3>
+                      <ResearchCharts chartData={result.chartData} />
+                    </div>
+                  )}
                   <div className="rounded-xl border border-border bg-card p-6">
-                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                      {tabCache[id]}
+                    <div className="prose prose-sm max-w-none text-foreground">
+                      <MarkdownWithSearchLinks text={tabCache[id]!} />
                     </div>
                   </div>
                   {id === 'creative' && (
@@ -572,6 +618,21 @@ function ResultsContent() {
             </TabsContent>
           ))}
         </Tabs>
+
+        {/* Section 3. 핵심 요약: 결론 3가지 Badge */}
+        {!error && status === 'done' && result && (result.keyConclusions?.length ?? 0) > 0 && (
+          <div className="mt-8 pt-6 border-t border-border">
+            <h2 className="text-sm font-semibold text-foreground mb-3">핵심 요약</h2>
+            <div className="flex flex-wrap gap-2">
+              {result.keyConclusions!.slice(0, 3).map((line, i) => (
+                <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
+                  {line}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
         {selectedNews && (
           <NewsDetailModal
             item={selectedNews}

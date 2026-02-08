@@ -21,7 +21,8 @@ type SettingsData = {
   nickname: string
   hasGeminiKey: boolean
   hasFirecrawlKey: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; firecrawl: LicenseOrigin }
+  hasOpenAIKey?: boolean
+  licenseOrigin?: { gemini: LicenseOrigin; firecrawl: LicenseOrigin; openai?: LicenseOrigin | null }
 }
 
 export default function SettingsPage() {
@@ -33,8 +34,10 @@ export default function SettingsPage() {
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [firecrawlApiKey, setFirecrawlApiKey] = useState('')
+  const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [showFirecrawlKey, setShowFirecrawlKey] = useState(false)
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -64,6 +67,7 @@ export default function SettingsPage() {
           setNickname(json.nickname)
           setGeminiApiKey('')
           setFirecrawlApiKey('')
+          setOpenaiApiKey('')
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했어요.' }))
@@ -97,9 +101,10 @@ export default function SettingsPage() {
     if (!user) return
     setSaving(true)
     try {
-      const body: { gemini_api_key?: string; firecrawl_api_key?: string } = {}
+      const body: { gemini_api_key?: string; firecrawl_api_key?: string; openai_api_key?: string } = {}
       if (geminiApiKey !== '') body.gemini_api_key = geminiApiKey
       if (firecrawlApiKey !== '') body.firecrawl_api_key = firecrawlApiKey
+      if (openaiApiKey !== '') body.openai_api_key = openaiApiKey
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,19 +117,21 @@ export default function SettingsPage() {
       }
       setGeminiApiKey('')
       setFirecrawlApiKey('')
+      setOpenaiApiKey('')
       setData((prev) =>
         prev
           ? {
               ...prev,
               hasGeminiKey: prev.hasGeminiKey || !!body.gemini_api_key,
               hasFirecrawlKey: prev.hasFirecrawlKey || !!body.firecrawl_api_key,
+              hasOpenAIKey: prev.hasOpenAIKey || !!body.openai_api_key,
             }
           : null
       )
       const nextRes = await fetch('/api/settings')
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
-        setData((prev) => (prev ? { ...prev, licenseOrigin: nextJson.licenseOrigin } : null))
+        setData((prev) => (prev ? { ...prev, licenseOrigin: nextJson.licenseOrigin, hasOpenAIKey: nextJson.hasOpenAIKey } : null))
       }
       toast.success('라이선스 설정이 저장되었어요.')
     } finally {
@@ -236,7 +243,7 @@ export default function SettingsPage() {
                       <Input
                         id="gemini"
                         type={showGeminiKey ? 'text' : 'password'}
-                        placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
+                        placeholder={data?.hasGeminiKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : '키를 입력하거나 변경하려면 새 키를 입력하세요'}
                         value={geminiApiKey}
                         onChange={(e) => setGeminiApiKey(e.target.value)}
                         className="bg-white pr-10"
@@ -268,7 +275,7 @@ export default function SettingsPage() {
                       <Input
                         id="firecrawl"
                         type={showFirecrawlKey ? 'text' : 'password'}
-                        placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
+                        placeholder={data?.hasFirecrawlKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : '키를 입력하거나 변경하려면 새 키를 입력하세요'}
                         value={firecrawlApiKey}
                         onChange={(e) => setFirecrawlApiKey(e.target.value)}
                         className="bg-white pr-10"
@@ -285,6 +292,38 @@ export default function SettingsPage() {
                     </div>
                     {data?.hasFirecrawlKey && !firecrawlApiKey && (
                       <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요.</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label htmlFor="openai">OpenAI API Key (Fallback)</Label>
+                      {data?.licenseOrigin?.openai && (
+                        <Badge variant={data.licenseOrigin.openai === 'USER' ? 'default' : 'secondary'} className="text-xs">
+                          {data.licenseOrigin.openai === 'USER' ? '직접 입력' : '서버 제공'}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="relative flex items-center">
+                      <Input
+                        id="openai"
+                        type={showOpenAIKey ? 'text' : 'password'}
+                        placeholder={data?.hasOpenAIKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : 'Gemini 실패 시 Fallback용 (선택)'}
+                        value={openaiApiKey}
+                        onChange={(e) => setOpenaiApiKey(e.target.value)}
+                        className="bg-white pr-10"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenAIKey((v) => !v)}
+                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
+                        aria-label={showOpenAIKey ? '숨기기' : '보기'}
+                      >
+                        {showOpenAIKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {data?.hasOpenAIKey && !openaiApiKey && (
+                      <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요. (탭 분석 Fallback 시 사용)</p>
                     )}
                   </div>
                   <Button type="submit" disabled={saving}>

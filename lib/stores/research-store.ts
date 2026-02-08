@@ -9,6 +9,12 @@ export interface NewsItem {
   title: string
   url: string
   content?: string
+  /** 썸네일 이미지 URL (선택) */
+  image?: string
+  /** 언론사/출처 (도메인 등) */
+  publisher?: string
+  /** 업로드/수집 시각 ISO 문자열 (표시: n시간 전) */
+  publishedAt?: string
 }
 
 export interface ChartData {
@@ -26,6 +32,8 @@ export interface ResearchResponse {
   articleSummaries?: string[]
   reportId?: string | null
   error?: string
+  /** 핵심 결론 3가지 (하단 Badge용) */
+  keyConclusions?: string[]
 }
 
 type StreamPayload =

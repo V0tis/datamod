@@ -36,3 +36,10 @@ export function getEffectiveLicenseKeys(
     canSearch: gemini.length > 0 && firecrawl.length > 0,
   }
 }
+
+/** OpenAI 키: 사용자 입력 키 우선, 없으면 env. (탭 Fallback 등) */
+export function getEffectiveOpenAIKey(userOpenAI: string | null | undefined): string {
+  const systemOpenAI = (process.env.OPENAI_API_KEY ?? '').trim()
+  const hasUser = !!(userOpenAI && userOpenAI.trim())
+  return hasUser ? userOpenAI!.trim() : systemOpenAI
+}
