@@ -26,6 +26,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<{ KR: TrendsResponse['KR']; updatedAt: string | null }>({ KR: [], updatedAt: null })
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
+  const [licenseKeySource, setLicenseKeySource] = useState<{ gemini: string; firecrawl: string } | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -56,6 +57,7 @@ export function Sidebar() {
   useEffect(() => {
     if (!user) {
       setLicenseOrigin(null)
+      setLicenseKeySource(null)
       return
     }
     fetch('/api/settings')
@@ -63,10 +65,14 @@ export function Sidebar() {
       .then((data: { licenseOrigin?: { gemini: string; firecrawl: string } } | null) => {
         if (!data?.licenseOrigin) return
         const { gemini, firecrawl } = data.licenseOrigin
+        setLicenseKeySource({ gemini, firecrawl })
         if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
         else setLicenseOrigin('SYSTEM')
       })
-      .catch(() => setLicenseOrigin(null))
+      .catch(() => {
+        setLicenseOrigin(null)
+        setLicenseKeySource(null)
+      })
   }, [user])
 
   useEffect(() => {
@@ -108,7 +114,15 @@ export function Sidebar() {
           <span className="font-semibold text-lg tracking-tight text-foreground">린(Rin)</span>
         </Link>
         {user && licenseOrigin && (
-          <Badge variant={licenseOrigin === 'USER' ? 'default' : 'secondary'} className="mt-2 text-xs">
+          <Badge
+            variant={licenseOrigin === 'USER' ? 'default' : 'secondary'}
+            className="mt-2 text-xs cursor-help"
+            title={
+              licenseKeySource
+                ? `키 출처: Gemini ${licenseKeySource.gemini === 'USER' ? 'DB' : 'env'}, Firecrawl ${licenseKeySource.firecrawl === 'USER' ? 'DB' : 'env'}`
+                : undefined
+            }
+          >
             {licenseOrigin === 'USER' ? 'Personal' : 'System'}
           </Badge>
         )}
