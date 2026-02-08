@@ -10,6 +10,7 @@ import { RinLogo } from '@/components/rin-logo'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
+  const [nickname, setNickname] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,12 +35,18 @@ export default function SignupPage() {
       return
     }
 
+    const trimmedNickname = nickname.trim()
+    if (!trimmedNickname) {
+      setError('닉네임을 입력해주세요.')
+      return
+    }
+
     setLoading(true)
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, password }),
+        body: JSON.stringify({ email: trimmedEmail, password, nickname: trimmedNickname }),
       })
       const data = await res.json()
 
@@ -101,6 +108,20 @@ export default function SignupPage() {
                   placeholder="your@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  className="h-11 rounded-xl"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="nickname">닉네임</Label>
+                <Input
+                  id="nickname"
+                  type="text"
+                  placeholder="사용할 닉네임"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
                   className="h-11 rounded-xl"
                   required
                   disabled={loading}

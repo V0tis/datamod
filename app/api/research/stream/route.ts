@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { trackUsage } from '@/lib/usage'
+import { getEffectiveLicenseKeys } from '@/lib/license'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export const runtime = 'nodejs'
@@ -102,14 +103,6 @@ function sseMessage(event: string, data: StreamEvent): string {
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: 'GOOGLE_GENERATIVE_AI_API_KEY is not set' }),
-      { status: 500 }
-    )
-  }
-
   let body: { keyword?: string; query?: string }
   try {
     body = await req.json()
@@ -119,6 +112,33 @@ export async function POST(req: Request) {
   const keyword = body?.keyword ?? body?.query
   if (!keyword || typeof keyword !== 'string') {
     return new Response(JSON.stringify({ error: 'keyword required' }), { status: 400 })
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  let userGemini: string | null = null
+  let userFirecrawl: string | null = null
+  if (user?.id) {
+    const { data: row } = await supabase
+      .from('user_settings')
+      .select('gemini_api_key, firecrawl_api_key')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    userGemini = row?.gemini_api_key ?? null
+    userFirecrawl = row?.firecrawl_api_key ?? null
+  }
+  const effective = getEffectiveLicenseKeys(userGemini, userFirecrawl)
+  const apiKey = effective.gemini
+  const firecrawlApiKey = effective.firecrawl
+  if (!effective.canSearch) {
+    return new Response(
+      JSON.stringify({
+        error: '라이선스 키가 필요합니다.',
+      }),
+      { status: 400 }
+    )
   }
 
   const encoder = new TextEncoder()
@@ -162,7 +182,6 @@ export async function POST(req: Request) {
       try {
         send('progress', { step: 'firecrawl_start' })
 
-        const firecrawlApiKey = process.env.FIRECRAWL_API_KEY ?? ''
         const firecrawlBody = JSON.stringify({
           query: `${keyword} 최신 트렌드 유저 반응`,
           searchOptions: { limit: 5 },

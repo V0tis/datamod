@@ -137,6 +137,18 @@ export const useResearchStore = create<ResearchStore>()(
     const run = async () => {
       const k = keyword.trim()
       try {
+        const checkRes = await fetch('/api/settings')
+        if (checkRes.ok) {
+          const checkData = (await checkRes.json()) as { canSearch?: boolean }
+          if (checkData.canSearch === false) {
+            toast.error('라이선스 키가 필요합니다.')
+            set({
+              status: 'error',
+              error: '라이선스 키가 필요합니다.',
+            })
+            return
+          }
+        }
         const res = await fetch('/api/research/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

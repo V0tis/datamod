@@ -6,13 +6,20 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search } from 'lucide-react'
+import { Search, TrendingUp, History, Zap, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts'
 
 interface UsageData {
   gemini: { used: number; limit: number }
@@ -25,6 +32,13 @@ function remainingPercent(used: number, limit: number): number {
   return Math.max(0, 100 - (used / limit) * 100)
 }
 
+/** 국가별 트렌드 키워드 비중 (도넛용) - 한국/미국/일본 비율 */
+const TREND_SHARE = [
+  { name: '한국', value: 42, color: '#2563eb' },
+  { name: '미국', value: 35, color: '#22c55e' },
+  { name: '일본', value: 23, color: '#f59e0b' },
+]
+
 export default function RinAISearch() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -32,7 +46,8 @@ export default function RinAISearch() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
-  const [lowQuotaBanner, setLowQuotaBanner] = useState<{ minRemaining: number } | null>(null)
+  const [recentKeywords, setRecentKeywords] = useState<string[]>([])
+  const { geminiQuota, fetchGeminiQuota } = useResearchStore()
 
   useEffect(() => {
     const supabase = createClient()
@@ -44,21 +59,23 @@ export default function RinAISearch() {
   }, [])
 
   useEffect(() => {
-    let mounted = true
-    fetch('/api/usage')
+    fetchGeminiQuota()
+  }, [fetchGeminiQuota])
+
+  useEffect(() => {
+    if (!user) {
+      setRecentKeywords([])
+      return
+    }
+    fetch('/api/reports')
       .then((res) => res.json())
-      .then((d: UsageData) => {
-        if (!mounted) return
-        const geminiRem = remainingPercent(d.gemini.used, d.gemini.limit)
-        const fireRem = remainingPercent(d.firecrawl.used, d.firecrawl.limit)
-        const dbRem = remainingPercent(d.supabase.used, d.supabase.limit)
-        const minRemaining = Math.min(geminiRem, fireRem, dbRem)
-        if (minRemaining < 10) setLowQuotaBanner({ minRemaining })
-        else setLowQuotaBanner(null)
+      .then((data: { reports?: { keyword: string }[] }) => {
+        const list = data?.reports ?? []
+        const keywords = [...new Set(list.map((r) => r.keyword).filter(Boolean))].slice(0, 3)
+        setRecentKeywords(keywords)
       })
-      .catch(() => {})
-    return () => { mounted = false }
-  }, [])
+      .catch(() => setRecentKeywords([]))
+  }, [user])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,19 +88,44 @@ export default function RinAISearch() {
     router.push(`/results?keyword=${encodeURIComponent(query.trim())}`)
   }
 
+  const used = geminiQuota?.used ?? 0
+  const limit = geminiQuota?.limit ?? 1500
+  const remainingPct = remainingPercent(used, limit)
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-white px-4 pt-14 lg:pt-0">
-      {lowQuotaBanner && (
-        <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 bg-amber-500/95 px-4 py-2.5 text-sm font-medium text-amber-950 shadow-md">
-          <span>린이 에너지가 부족해요 (잔여 {lowQuotaBanner.minRemaining.toFixed(0)}%)</span>
-          <Link href="/dashboard/usage">
-            <Button variant="outline" size="sm" className="border-amber-700 text-amber-900 hover:bg-amber-600/20">
-              사용량 보기
-            </Button>
+    <div className="min-h-screen bg-[#F8F9FA]">
+      {/* Header: 로고 + 검색창 (상단 작게) */}
+      <header className="sticky top-0 z-20 border-b border-border bg-white px-4 py-3 shadow-sm">
+        <div className="mx-auto flex max-w-6xl items-center gap-4">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <RinLogo size={28} className="shrink-0 opacity-95" />
+            <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
           </Link>
+          <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 max-w-xl">
+            <div className="relative flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20">
+              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Input
+                type="text"
+                placeholder="키워드 검색..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="border-0 bg-transparent p-0 h-8 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+            <Button type="submit" size="sm" className="shrink-0 h-8 px-4">
+              검색
+            </Button>
+          </form>
+          {!user && (
+            <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`} className="shrink-0">
+              <Button variant="outline" size="sm" className="h-8 text-sm">
+                로그인
+              </Button>
+            </Link>
+          )}
         </div>
-      )}
-      <div className={lowQuotaBanner ? 'pt-12' : ''}>
+      </header>
+
       <AnimatePresence mode="wait">
         {searching ? (
           <motion.div
@@ -91,93 +133,139 @@ export default function RinAISearch() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex flex-col items-center justify-center min-h-[60vh] w-full max-w-2xl space-y-8"
+            className="flex flex-col items-center justify-center min-h-[60vh] p-8"
           >
-            <RinAnimation variant="loading" size={280} className="shrink-0" />
-            <div className="text-center space-y-2">
-              <h2 className="text-xl md:text-2xl font-semibold text-foreground">
-                {loadingMessage}
-              </h2>
-              <p className="text-muted-foreground text-sm">잠시만 기다려 주세요.</p>
+            <div className="rounded-2xl border border-border bg-white p-8 shadow-sm">
+              <RinAnimation variant="loading" size={200} className="mx-auto block" />
+              <p className="text-center font-medium text-foreground mt-4">{loadingMessage}</p>
+              <p className="text-center text-muted-foreground text-sm mt-1">잠시만 기다려 주세요.</p>
             </div>
           </motion.div>
         ) : (
           <motion.div
-            key="form"
+            key="dashboard"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="w-full max-w-2xl space-y-8 flex flex-col items-center"
+            className="p-6 md:p-8"
           >
-            {/* Logo/Brand */}
-            <div className="text-center space-y-4">
-              <div className="flex items-center justify-center gap-3">
-                <RinLogo size={56} className="shrink-0" />
-                <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-foreground">
-                  Rin-AI
-                </h1>
-              </div>
-            </div>
-
             {error && (
-              <div className="w-full p-4 rounded-[20px] bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm">
                 {error}
               </div>
             )}
 
-            {/* Search Form */}
-            <form onSubmit={handleSearch} className="w-full space-y-4">
-              <div className="relative flex items-center gap-2 bg-card rounded-[20px] border border-border p-2 shadow-lg transition-shadow hover:shadow-md focus-within:shadow-[0_0_24px_-4px_rgba(255,184,0,0.35)]">
-                <div className="flex-1 flex items-center gap-2 px-4">
-                  <Search className="w-5 h-5 text-primary/80" />
-                  <Input
-                    type="text"
-                    placeholder="검색어를 입력하세요..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
-                  />
+            {/* 대시보드 그리드: 3열 카드 */}
+            <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* 카드 1: 실시간 트렌드 분석 (도넛) */}
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    실시간 트렌드 분석
+                  </h2>
+                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
+                    전체 <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </div>
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="rounded-[20px] bg-primary hover:bg-primary/90 text-primary-foreground font-medium px-8"
-                >
-                  검색
-                </Button>
-              </div>
-
-              {/* Subtext */}
-              <p className="text-center text-muted-foreground text-sm">
-                린(Rin)이 오늘 어떤 최신 소식을 물어다 줄까요?
-              </p>
-            </form>
-
-            {/* 로그인 유도: 비로그인 시 분석 결과 저장 안내 */}
-            {!user && (
-              <div className="w-full rounded-[20px] border border-border bg-muted/50 px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-3 text-center sm:text-left hover:shadow-md transition-shadow">
-                <p className="text-sm text-muted-foreground">
-                  로그인하면 분석 결과를 저장할 수 있어요
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={TREND_SHARE}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={2}
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {TREND_SHARE.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value}%`, '비중']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-muted-foreground text-xs text-center mt-1">
+                  국가별 인기 키워드 비중
                 </p>
-                <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`}>
-                  <Button size="sm" className="shrink-0">
-                    로그인
-                  </Button>
-                </Link>
               </div>
-            )}
 
-            {/* Decorative Element */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span>AI가 실시간으로 신선한 정보를 찾아드립니다</span>
+              {/* 카드 2: 나의 리서치 활동 */}
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <History className="h-5 w-5 text-primary" />
+                    나의 리서치 활동
+                  </h2>
+                  <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
+                    전체 <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                {user ? (
+                  recentKeywords.length > 0 ? (
+                    <ul className="space-y-2">
+                      {recentKeywords.map((kw, i) => (
+                        <li key={kw}>
+                          <Link
+                            href={`/results?keyword=${encodeURIComponent(kw)}`}
+                            className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="font-medium text-foreground truncate">{kw}</span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground text-sm py-6 text-center">
+                      아직 검색 기록이 없어요.
+                    </p>
+                  )
+                ) : (
+                  <p className="text-muted-foreground text-sm py-6 text-center">
+                    로그인하면 최근 검색 키워드가 표시돼요.
+                  </p>
+                )}
+              </div>
+
+              {/* 카드 3: AI 에너지 현황 (상단 에너지 바를 카드로) */}
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+                <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
+                  <Zap className="h-5 w-5 text-primary" />
+                  AI 에너지 현황
+                </h2>
+                <div className="space-y-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-3xl font-bold text-foreground tabular-nums">
+                      {Math.round(remainingPct)}%
+                    </span>
+                    <span className="text-sm text-muted-foreground">잔여</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${remainingPct}%`,
+                        backgroundColor:
+                          remainingPct >= 50 ? '#22c55e' : remainingPct >= 20 ? '#f59e0b' : '#ef4444',
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>사용 {used.toLocaleString()}</span>
+                    <span>한도 {limit.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-      </div>
-    </main>
+    </div>
   )
 }

@@ -5,14 +5,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Search, Trash2, FileText, Loader2 } from 'lucide-react'
-import { RinLogo } from '@/components/rin-logo'
+import { Search, Trash2, FileText, Loader2, History } from 'lucide-react'
 
-/**
- * 히스토리: Supabase Auth 세션 기준으로 본인 리서치 목록만 불러옴.
- * 검색 키워드, 날짜, 분석 요약 일부 표시 → 클릭 시 /results/[id] 상세로 이동.
- * 로딩 중에는 스켈레톤 UI 표시.
- */
 interface ResearchReport {
   id: string
   keyword: string
@@ -48,9 +42,7 @@ export default function HistoryPage() {
   }, [syncReportsFromDb])
 
   useEffect(() => {
-    const onVisible = () => {
-      syncReportsFromDb()
-    }
+    const onVisible = () => syncReportsFromDb()
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisible)
       return () => document.removeEventListener('visibilitychange', onVisible)
@@ -62,9 +54,7 @@ export default function HistoryPage() {
     setDeletingId(id)
     try {
       const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        setReports((prev) => prev.filter((r) => r.id !== id))
-      }
+      if (res.ok) setReports((prev) => prev.filter((r) => r.id !== id))
     } finally {
       setDeletingId(null)
     }
@@ -72,203 +62,139 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-card">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <RinLogo size={28} />
-              <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
-            </div>
-            <div className="h-9 w-24 rounded-full bg-muted animate-pulse" />
-          </div>
-        </header>
-        <main className="container mx-auto px-4 py-8">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="space-y-2">
-              <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-72 bg-muted rounded animate-pulse" />
-            </div>
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-border bg-card p-6 animate-pulse"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-6 w-32 bg-muted rounded" />
-                        <div className="h-5 w-20 bg-muted rounded" />
-                      </div>
-                      <div className="h-4 w-full max-w-md bg-muted rounded" />
-                      <div className="h-4 w-24 bg-muted rounded" />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="h-9 w-24 bg-muted rounded-full" />
-                      <div className="h-9 w-16 bg-muted rounded-full" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
+      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+        <div className="space-y-2 mb-6">
+          <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-72 bg-muted rounded animate-pulse" />
+        </div>
+        <Card className="border border-border bg-white shadow-sm">
+          <CardContent className="p-6 space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-lg border border-border bg-muted/30 p-6 animate-pulse">
+                <div className="h-6 w-32 bg-muted rounded mb-2" />
+                <div className="h-4 w-full max-w-md bg-muted rounded" />
+                <div className="h-4 w-24 bg-muted rounded mt-2" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
-        <p className="text-destructive">{error}</p>
-        <Button variant="outline" onClick={() => window.location.reload()} className="rounded-full">
-          다시 시도
-        </Button>
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center gap-4 min-h-[40vh]">
+        <Card className="border border-border bg-white shadow-sm max-w-md">
+          <CardContent className="p-8 text-center">
+            <p className="text-destructive mb-4">{error}</p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              다시 시도
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  // 빈 화면: Rin 스타일 문구 + 검색 연결 버튼
   if (reports.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-card">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <RinLogo size={28} />
-              <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
-            </div>
-            <Link href="/">
-              <Button className="gap-2 rounded-full bg-primary hover:bg-primary/90">
-                <Search className="w-4 h-4" />
-                새로운 검색
-              </Button>
-            </Link>
-          </div>
-        </header>
-
-        <main className="container mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
-          <div className="max-w-md text-center space-y-6">
-            <RinLogo size={80} />
-            <p className="text-lg text-foreground leading-relaxed">
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh]">
+        <Card className="border border-border bg-white shadow-sm max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <History className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">
               린이 아직 소식을 물어오지 않았어요!
+            </h2>
+            <p className="text-muted-foreground text-sm mb-6">
+              검색하면 분석 결과가 여기에 쌓여요.
             </p>
             <Link href="/">
-              <Button
-                size="lg"
-                className="rounded-full bg-primary hover:bg-primary/90 gap-2 mt-4"
-              >
-                <Search className="w-5 h-5" />
+              <Button className="gap-2 bg-primary hover:bg-primary/90">
+                <Search className="w-4 h-4" />
                 메인 검색창으로 이동
               </Button>
             </Link>
-          </div>
-        </main>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <RinLogo size={28} />
-            <h1 className="text-xl font-bold text-foreground">Rin-AI</h1>
-          </div>
-          <Link href="/">
-            <Button className="gap-2 rounded-full bg-primary hover:bg-primary/90">
-              <Search className="w-4 h-4" />
-              새로운 검색
-            </Button>
-          </Link>
-        </div>
+    <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <History className="h-6 w-6 text-primary" />
+          내 리서치 기록
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          린(Rin)이 과거에 물어온 리서치 리포트를 확인해보세요.
+        </p>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-foreground">리서치 히스토리</h2>
-            <p className="text-muted-foreground">
-              린(Rin)이 과거에 물어온 리서치 리포트를 확인해보세요
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {reports.map((report) => (
-              <Card
-                key={report.id}
-                className="hover:shadow-[0_12px_48px_-12px_rgba(255,184,0,0.25)] transition-shadow duration-200 border border-border"
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <Link
-                      href={`/results/${report.id}`}
-                      className="flex-1 space-y-3 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-bold text-foreground">
-                            {report.keyword}
-                          </h3>
-                          <Badge variant="outline" className="text-xs bg-muted">
-                            {report.date}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {report.summary}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🌡️</span>
-                        <span className="text-sm font-medium text-foreground">긍정도:</span>
-                        <span className="text-sm font-bold text-primary">
-                          {report.sentiment}%
-                        </span>
-                      </div>
-                    </Link>
-
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <Link href={`/results/${report.id}`}>
-                        <Button
-                          size="sm"
-                          className="bg-primary hover:bg-primary/90 gap-2 w-full"
-                        >
-                          <FileText className="w-4 h-4" />
-                          상세 보기
-                        </Button>
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleDelete(report.id)
-                        }}
-                        disabled={deletingId === report.id}
-                        className="gap-2 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
-                      >
-                        {deletingId === report.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                        삭제
-                      </Button>
+      <div className="space-y-4">
+        {reports.map((report) => (
+          <Card
+            key={report.id}
+            className="border border-border bg-white shadow-sm hover:shadow-md transition-shadow"
+          >
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <Link
+                  href={`/results/${report.id}`}
+                  className="flex-1 space-y-3 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-lg font-bold text-foreground">{report.keyword}</h3>
+                      <Badge variant="outline" className="text-xs bg-muted/50">
+                        {report.date}
+                      </Badge>
                     </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                      {report.summary}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">긍정도:</span>
+                    <span className="text-sm font-bold text-primary">{report.sentiment}%</span>
+                  </div>
+                </Link>
+                <div className="flex flex-row sm:flex-col gap-2 shrink-0">
+                  <Link href={`/results/${report.id}`}>
+                    <Button size="sm" className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto">
+                      <FileText className="w-4 h-4" />
+                      상세 보기
+                    </Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleDelete(report.id)
+                    }}
+                    disabled={deletingId === report.id}
+                    className="gap-2 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
+                  >
+                    {deletingId === report.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    삭제
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-          <div className="text-center pt-4">
-            <p className="text-sm text-muted-foreground">
-              총 <span className="font-semibold text-foreground">{reports.length}</span>개의 리서치 리포트
-            </p>
-          </div>
-        </div>
-      </main>
+      <p className="text-center text-sm text-muted-foreground mt-6">
+        총 <span className="font-semibold text-foreground">{reports.length}</span>개의 리서치 리포트
+      </p>
     </div>
   )
 }

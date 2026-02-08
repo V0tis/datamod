@@ -8,10 +8,18 @@ export async function POST(req: Request) {
     const body = await req.json()
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
     const password = typeof body?.password === 'string' ? body.password : ''
+    const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : ''
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: '유효한 이메일을 입력해주세요.' },
+        { status: 400 }
+      )
+    }
+
+    if (!nickname) {
+      return NextResponse.json(
+        { error: '닉네임을 입력해주세요.' },
         { status: 400 }
       )
     }
@@ -40,11 +48,12 @@ export async function POST(req: Request) {
       )
     }
 
-    // 2. 존재하지 않을 때만 확인 메일을 보내기 위해 signUp 실행
+    // 2. 존재하지 않을 때만 확인 메일을 보내기 위해 signUp 실행 (닉네임은 user_metadata에 저장, 인증 후 sync-profile에서 user_settings로 복사)
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        data: { nickname },
         emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL
           ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
           : undefined,

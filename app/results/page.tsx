@@ -326,7 +326,8 @@ function ResultsContent() {
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="min-h-screen bg-[#FFFFFF] p-6 md:p-8 max-w-6xl mx-auto">
+      <div className="p-6 md:p-8 max-w-6xl mx-auto">
+        <div className="rounded-2xl border border-border bg-white shadow-sm p-6 md:p-8">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">
             &quot;{currentKeyword}&quot; 검색 결과
@@ -554,17 +555,20 @@ function ResultsContent() {
             }}
           />
         )}
+        </div>
       </div>
     )
   }
 
   if (!keyword) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
-        <p className="text-muted-foreground">검색어가 없습니다.</p>
-        <Link href="/">
-          <Button variant="outline">검색으로 돌아가기</Button>
-        </Link>
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6">
+        <div className="rounded-2xl border border-border bg-white shadow-sm p-8 text-center max-w-md">
+          <p className="text-muted-foreground mb-4">검색어가 없습니다.</p>
+          <Link href="/">
+            <Button variant="outline">검색으로 돌아가기</Button>
+          </Link>
+        </div>
       </div>
     )
   }
@@ -576,9 +580,11 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
-          <RinAnimation variant="loading" size={240} />
-          <p className="text-muted-foreground">{getRandomRinMessage()}</p>
+        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6">
+          <div className="rounded-2xl border border-border bg-white shadow-sm p-8">
+            <RinAnimation variant="loading" size={200} />
+            <p className="text-muted-foreground mt-4">{getRandomRinMessage()}</p>
+          </div>
         </div>
       }
     >

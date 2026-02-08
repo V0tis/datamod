@@ -30,36 +30,35 @@ export default function TrendsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFFFF] p-6 md:p-8 max-w-2xl mx-auto">
-      <header className="mb-8">
+    <div className="p-6 md:p-8 max-w-2xl mx-auto">
+      <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <TrendingUp className="h-7 w-7 text-primary" />
-          실시간 트렌드
+          <TrendingUp className="h-6 w-6 text-primary" />
+          국가별 트렌드
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
           국가별 인기 검색어를 클릭하면 바로 분석 결과를 볼 수 있어요.
         </p>
       </header>
 
-      <div className="flex gap-2 mb-4">
-        {(['KR', 'US', 'JP'] as const).map((code) => (
-          <button
-            key={code}
-            type="button"
-            onClick={() => setCountry(code)}
-            className={cn(
-              'rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
-              country === code
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
-            )}
-          >
-            {COUNTRY_LABELS[code]} ({code})
-          </button>
-        ))}
-      </div>
-
-      <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <Card className="border border-border bg-white shadow-sm">
+        <div className="p-4 border-b border-border flex gap-2 flex-wrap">
+          {(['KR', 'US', 'JP'] as const).map((code) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setCountry(code)}
+              className={cn(
+                'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                country === code
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+              )}
+            >
+              {COUNTRY_LABELS[code]} ({code})
+            </button>
+          ))}
+        </div>
         <CardHeader>
           <CardTitle className="text-lg">{COUNTRY_LABELS[country]} 인기 검색어</CardTitle>
           <CardDescription>클릭 시 해당 키워드로 분석이 시작돼요.</CardDescription>
@@ -71,7 +70,7 @@ export default function TrendsPage() {
                 <button
                   type="button"
                   onClick={() => handleKeywordClick(keyword)}
-                  className="w-full text-left rounded-xl border border-border bg-card px-4 py-3.5 hover:bg-primary/5 hover:border-primary/30 hover:shadow-md transition-all flex items-center gap-3"
+                  className="w-full text-left rounded-xl border border-border bg-muted/30 px-4 py-3.5 hover:bg-primary/5 hover:border-primary/30 transition-all flex items-center gap-3"
                 >
                   <span className="text-muted-foreground text-sm font-medium w-6">{i + 1}</span>
                   <span className="text-foreground font-medium flex-1 truncate">{keyword}</span>

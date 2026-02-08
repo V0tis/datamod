@@ -12,7 +12,6 @@ function remainingPercent(used: number, limit: number): number {
   return Math.max(0, Math.min(100, 100 - (used / limit) * 100))
 }
 
-/** 잔여량에 따른 색상: Green(50% 이상) → Orange(20~50%) → Red(20% 미만) */
 function getQuotaColorClass(remainingPct: number): string {
   if (remainingPct >= 50) return 'text-emerald-600'
   if (remainingPct >= 20) return 'text-amber-600'
@@ -25,6 +24,7 @@ function getProgressIndicatorClass(remainingPct: number): string {
   return '[&_[data-slot=progress-indicator]]:bg-red-500'
 }
 
+/** 상단 에너지 바: 가로로 길고 얇게 배치해 디자인을 해치지 않음 */
 export function QuotaBar() {
   const { geminiQuota, fetchGeminiQuota } = useResearchStore()
 
@@ -37,17 +37,20 @@ export function QuotaBar() {
   const remainingPct = remainingPercent(used, limit)
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-border bg-white px-4 py-2.5 shadow-sm">
-      <div className="flex flex-1 items-center gap-3">
-        <span className={cn('text-sm font-medium whitespace-nowrap', getQuotaColorClass(remainingPct))}>
-          린의 분석 에너지: {Math.round(remainingPct)}%
-        </span>
-        <div className="min-w-[120px] max-w-[240px] flex-1">
-          <Progress
-            value={remainingPct}
-            className={cn('h-2', getProgressIndicatorClass(remainingPct))}
-          />
-        </div>
+    <header className="sticky top-0 z-30 flex h-9 w-full items-center gap-3 border-b border-border bg-white/95 px-4 py-1.5 backdrop-blur-sm">
+      <span
+        className={cn(
+          'text-xs font-medium whitespace-nowrap shrink-0',
+          getQuotaColorClass(remainingPct)
+        )}
+      >
+        에너지 {Math.round(remainingPct)}%
+      </span>
+      <div className="min-w-0 flex-1 max-w-full">
+        <Progress
+          value={remainingPct}
+          className={cn('h-1.5', getProgressIndicatorClass(remainingPct))}
+        />
       </div>
     </header>
   )

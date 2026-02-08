@@ -41,7 +41,8 @@ export default function AuthCallbackPage() {
         access_token: accessToken,
         refresh_token: refreshToken ?? '',
       })
-      .then(() => {
+      .then(async () => {
+        await fetch('/api/auth/sync-profile', { method: 'POST' })
         setStatus('success')
         window.location.href = '/'
       })
