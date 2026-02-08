@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, Share2, X, ExternalLink, TrendingUp } from 'lucide-react'
-import { formatTimeAgo } from '@/lib/utils'
+import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare } from 'lucide-react'
+import { cn, formatTimeAgo } from '@/lib/utils'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
@@ -54,6 +54,13 @@ function TabLoadingPlaceholder() {
     </div>
   )
 }
+
+type AiTabId = 'logic' | 'creative' | 'fact'
+const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
+  { id: 'logic', label: '시장 분석', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
+  { id: 'creative', label: '인사이트', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
+  { id: 'fact', label: '데이터 팩트', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
+]
 
 function ChartSkeleton() {
   return (
@@ -183,15 +190,14 @@ function ResultsContent() {
     newsList,
     result,
     error,
-    insights: storeInsights,
-    setInsights: setStoreInsights,
     startResearch,
   } = useResearchStore()
 
-  const [insightsLoading, setInsightsLoading] = useState(false)
-  const [insightsError, setInsightsError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('report')
+  const [activeTab, setActiveTab] = useState('summary')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [tabCache, setTabCache] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
+  const [tabLoading, setTabLoading] = useState<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
+  const [tabError, setTabError] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [followUps, setFollowUps] = useState<Array<{ question: string; answer: string }>>([])
   const [followUpQuestion, setFollowUpQuestion] = useState('')
   const [followUpLoading, setFollowUpLoading] = useState(false)
@@ -200,7 +206,7 @@ function ResultsContent() {
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
-  const scheduledInsightsForRef = useRef<string | null>(null)
+  const reportFetchedForCacheRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!keyword) return
@@ -221,72 +227,77 @@ function ResultsContent() {
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
   }, [])
 
-  useEffect(() => {
-    if (status === 'loading') scheduledInsightsForRef.current = null
-  }, [status])
-
   const loading = status === 'loading'
   const currentKeyword = keyword ?? storeKeyword
 
-  const fetchInsights = useCallback(async () => {
-    if (storeInsights !== null || insightsLoading) return
-    setInsightsLoading(true)
-    setInsightsError(null)
-    try {
-      const reportSummary = result
-        ? [
-            result.marketNews?.length ? `시장 뉴스 요약: ${result.marketNews.join(' ')}` : '',
-            result.painPoints?.length ? `유저 페인포인트: ${result.painPoints.join(' ')}` : '',
-            result.competitorTrends ? `경쟁사 동향: ${result.competitorTrends}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n\n')
-        : ''
-      const res = await fetch('/api/research/insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: currentKeyword, summary: reportSummary }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        showErrorToast(data, { fallbackMessage: '분석을 불러오지 못했어요.' })
-        setInsightsError((data as { error?: string }).error ?? '분석을 불러오지 못했어요.')
-        setStoreInsights(null)
-        return
-      }
-      const text = typeof (data as { insights?: string }).insights === 'string'
-        ? (data as { insights: string }).insights
-        : '분석 결과가 없어요.'
-      setStoreInsights(text)
-    } catch (err) {
-      showErrorToast(err, { fallbackMessage: '유저 반응 분석 중 오류가 발생했어요.' })
-      setInsightsError('유저 반응 분석 중 오류가 발생했어요.')
-      setStoreInsights(null)
-    } finally {
-      setInsightsLoading(false)
-    }
-  }, [currentKeyword, result, storeInsights, insightsLoading, setStoreInsights])
+  const reportSummary = result
+    ? [
+        result.marketNews?.length ? `시장 뉴스 요약: ${result.marketNews.join(' ')}` : '',
+        result.painPoints?.length ? `유저 페인포인트: ${result.painPoints.join(' ')}` : '',
+        result.competitorTrends ? `경쟁사 동향: ${result.competitorTrends}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    : ''
 
   useEffect(() => {
-    if (
-      status !== 'done' ||
-      !result ||
-      result.publicReactionTrends ||
-      storeInsights !== null ||
-      insightsLoading ||
-      !currentKeyword ||
-      scheduledInsightsForRef.current === currentKeyword
-    ) {
-      return
+    if (status !== 'done' || !result?.reportId || reportFetchedForCacheRef.current === result.reportId) return
+    reportFetchedForCacheRef.current = result.reportId
+    fetch(`/api/reports/${result.reportId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { ai_responses?: Record<string, string> } | null) => {
+        if (!data?.ai_responses) return
+        setTabCache((prev) => ({
+          ...prev,
+          logic: data.ai_responses!.logic ?? prev.logic,
+          creative: data.ai_responses!.creative ?? prev.creative,
+          fact: data.ai_responses!.fact ?? prev.fact,
+        }))
+      })
+      .catch(() => {})
+  }, [status, result?.reportId])
+
+  const fetchTabAnalysis = useCallback(
+    async (tabId: AiTabId) => {
+      if (tabCache[tabId] || tabLoading[tabId]) return
+      setTabLoading((prev) => ({ ...prev, [tabId]: true }))
+      setTabError((prev) => ({ ...prev, [tabId]: null }))
+      try {
+        const res = await fetch('/api/research/insights/tab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keyword: currentKeyword,
+            summary: reportSummary,
+            tab: tabId,
+            reportId: result?.reportId ?? undefined,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const errMsg = (data as { error?: string }).error ?? '분석에 실패했습니다.'
+          setTabError((prev) => ({ ...prev, [tabId]: errMsg }))
+          showErrorToast(data, { fallbackMessage: errMsg })
+          return
+        }
+        const text = typeof (data as { text?: string }).text === 'string' ? (data as { text: string }).text : ''
+        setTabCache((prev) => ({ ...prev, [tabId]: text }))
+      } catch (err) {
+        setTabError((prev) => ({ ...prev, [tabId]: '분석에 실패했습니다. 다시 시도해주세요.' }))
+        showErrorToast(err, { fallbackMessage: '네트워크 오류 등으로 분석을 불러오지 못했어요.' })
+      } finally {
+        setTabLoading((prev) => ({ ...prev, [tabId]: false }))
+      }
+    },
+    [currentKeyword, reportSummary, result?.reportId, tabCache, tabLoading]
+  )
+
+  useEffect(() => {
+    const t = activeTab as AiTabId
+    if ((t === 'logic' || t === 'creative' || t === 'fact') && !tabCache[t] && !tabLoading[t] && status === 'done') {
+      fetchTabAnalysis(t)
     }
-    scheduledInsightsForRef.current = currentKeyword
-    const delayMs = 1000 + Math.random() * 1000
-    const t = setTimeout(() => {
-      toast.info('리포트 분석 완료! 이제 유저 반응을 예측하고 있어요...')
-      fetchInsights()
-    }, delayMs)
-    return () => clearTimeout(t)
-  }, [status, result, currentKeyword, storeInsights, insightsLoading, fetchInsights])
+  }, [activeTab, status, tabCache, tabLoading, fetchTabAnalysis])
 
   const handleShare = useCallback(async () => {
     const reportId = result?.reportId
@@ -318,7 +329,7 @@ function ResultsContent() {
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
-    const previousInsights = result?.publicReactionTrends ?? storeInsights ?? ''
+    const previousInsights = result?.publicReactionTrends ?? tabCache.creative ?? ''
     if (!previousInsights) return
     setFollowUpLoading(true)
     setFollowUpQuestion('')
@@ -345,7 +356,7 @@ function ResultsContent() {
     } finally {
       setFollowUpLoading(false)
     }
-  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, storeInsights])
+  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, tabCache.creative])
 
   const showTabs = !!currentKeyword
   if (showTabs) {
@@ -362,7 +373,7 @@ function ResultsContent() {
           <p className="text-muted-foreground text-sm mt-1">
             {loading
               ? '린이 가져온 뉴스예요. 다른 페이지로 이동해도 분석은 계속돼요.'
-              : '탭을 전환해 관련 뉴스, 데이터 분석, 유저 반응, 리포트 요약을 확인하세요.'}
+              : '탭을 전환해 종합 분석, 시장 분석, 인사이트, 데이터 팩트를 확인하세요.'}
           </p>
         </header>
 
@@ -388,185 +399,178 @@ function ResultsContent() {
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
-            <TabsTrigger value="report">리포트</TabsTrigger>
-            <TabsTrigger value="charts">데이터 분석</TabsTrigger>
-            <TabsTrigger value="insights">유저 반응</TabsTrigger>
-            <TabsTrigger value="news">뉴스</TabsTrigger>
+          <TabsList className="grid w-full max-w-3xl grid-cols-4 h-12 p-1 gap-1 bg-muted/60">
+            <TabsTrigger
+              value="summary"
+              className="gap-2 data-[state=active]:bg-violet-100 data-[state=active]:text-violet-800 data-[state=active]:border data-[state=active]:border-violet-200"
+            >
+              <FileText className="w-4 h-4 shrink-0" />
+              종합 분석
+            </TabsTrigger>
+            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
+              <TabsTrigger key={id} value={id} className={cn('gap-2 border border-transparent', theme)}>
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="report" className="mt-6">
+          <TabsContent value="summary" className="mt-6">
             {loading && newsList.length > 0 ? (
               <ReportSkeleton />
             ) : status === 'done' && result ? (
-              <div>
-                <div className="no-print flex flex-wrap items-center gap-2 mb-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={printReportAsPdf}
-                    className="gap-1.5"
-                  >
-                    <FileDown className="w-4 h-4" />
-                    PDF로 저장
-                  </Button>
-                  {result.reportId && (
+              <div className="space-y-8">
+                <div>
+                  <div className="no-print flex flex-wrap items-center gap-2 mb-4">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={handleShare}
+                      onClick={printReportAsPdf}
                       className="gap-1.5"
                     >
-                      <Share2 className="w-4 h-4" />
-                      {shareUrl ? '링크 복사' : '공유하기'}
+                      <FileDown className="w-4 h-4" />
+                      PDF로 저장
                     </Button>
-                  )}
-                </div>
-                <div className="pdf-source">
-                  <ResearchReportView
-                    keyword={currentKeyword}
-                    content={result}
-                    reportId={result.reportId ?? null}
-                    showLoginCta={!result.reportId}
-                    loginCallbackUrl={`/results?keyword=${encodeURIComponent(currentKeyword)}`}
-                    embedded
-                  />
-                </div>
-              </div>
-            ) : (
-              <TabLoadingPlaceholder />
-            )}
-          </TabsContent>
-
-          <TabsContent value="news" className="mt-6">
-            {loading && newsList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center min-h-[280px] text-center">
-                <RinAnimation variant="loading" size={180} className="shrink-0" />
-                <p className="mt-4 text-muted-foreground text-sm">뉴스를 찾는 중...</p>
-              </div>
-            ) : (
-            <ul className="space-y-3">
-              {newsList.length === 0 ? (
-                <li className="text-muted-foreground text-sm py-8 text-center">
-                  수집된 뉴스가 없어요.
-                </li>
-              ) : (
-                newsList.map((item, i) => (
-                  <li key={i}>
-                    <div className="rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors flex flex-col sm:flex-row sm:items-center gap-3">
-                      <button
+                    {result.reportId && (
+                      <Button
                         type="button"
-                        onClick={() => {
-                          setSelectedNews(item)
-                          setSelectedNewsIndex(i)
-                        }}
-                        className="flex-1 text-left min-w-0"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleShare}
+                        className="gap-1.5"
                       >
-                        <span className="font-medium text-foreground block">
-                          {item.title || '제목 없음'}
-                        </span>
-                        <span className="block text-xs text-muted-foreground mt-1 truncate">
-                          {item.url || '링크 없음'}
-                        </span>
-                        <span className="block text-xs text-primary mt-1">클릭하면 본문 · AI 요약 보기</span>
-                      </button>
-                      {item.url && (
-                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" asChild>
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            원문 링크 가기
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))
-              )}
-            </ul>
-            )}
-          </TabsContent>
-
-          <TabsContent value="charts" className="mt-6">
-            {loading && newsList.length > 0 ? (
-              <ChartSkeleton />
-            ) : status === 'done' && result?.chartData ? (
-              <ResearchCharts chartData={result.chartData} />
-            ) : (
-              <TabLoadingPlaceholder />
-            )}
-          </TabsContent>
-
-          <TabsContent value="insights" className="mt-6">
-            {(result?.publicReactionTrends ?? storeInsights) != null ? (
-              <div className="space-y-6">
-                <div className="rounded-xl border border-border bg-card p-6">
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
-                    {result?.publicReactionTrends ?? storeInsights}
+                        <Share2 className="w-4 h-4" />
+                        {shareUrl ? '링크 복사' : '공유하기'}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="pdf-source">
+                    <ResearchReportView
+                      keyword={currentKeyword}
+                      content={result}
+                      reportId={result.reportId ?? null}
+                      showLoginCta={!result.reportId}
+                      loginCallbackUrl={`/results?keyword=${encodeURIComponent(currentKeyword)}`}
+                      embedded
+                    />
                   </div>
                 </div>
-                {followUps.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground">추가 Q&amp;A</h3>
-                    {followUps.map((item, i) => (
-                      <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
-                        <p className="text-sm text-muted-foreground font-medium">Q. {item.question}</p>
-                        <p className="text-foreground whitespace-pre-wrap text-sm">{item.answer}</p>
-                      </div>
-                    ))}
+                {result.chartData && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-3">데이터 분석</h3>
+                    <ResearchCharts chartData={result.chartData} />
                   </div>
                 )}
-                <div className="rounded-xl border border-border bg-card p-6">
-                  <p className="text-sm font-medium text-foreground mb-3">
-                    이 반응들에 대해 더 궁금한 점이 있나요?
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="궁금한 점을 입력하세요"
-                      value={followUpQuestion}
-                      onChange={(e) => setFollowUpQuestion(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
-                      className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                      disabled={followUpLoading}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleFollowUp}
-                      disabled={followUpLoading || !followUpQuestion.trim()}
-                    >
-                      {followUpLoading ? '답변 중...' : '질문하기'}
-                    </Button>
-                  </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">뉴스</h3>
+                  {newsList.length === 0 ? (
+                    <p className="text-muted-foreground text-sm py-4">수집된 뉴스가 없어요.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {newsList.map((item, i) => (
+                        <li key={i}>
+                          <div className="rounded-xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors flex flex-col sm:flex-row sm:items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedNews(item); setSelectedNewsIndex(i) }}
+                              className="flex-1 text-left min-w-0"
+                            >
+                              <span className="font-medium text-foreground block">{item.title || '제목 없음'}</span>
+                              <span className="block text-xs text-muted-foreground mt-1 truncate">{item.url || '링크 없음'}</span>
+                              <span className="block text-xs text-primary mt-1">클릭하면 본문 · AI 요약 보기</span>
+                            </button>
+                            {item.url && (
+                              <Button variant="outline" size="sm" className="gap-1.5 shrink-0" asChild>
+                                <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  원문 링크 가기
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              </div>
-            ) : insightsError ? (
-              <div className="rounded-xl border border-border bg-card p-6 text-center">
-                <p className="text-destructive text-sm">{insightsError}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => {
-                    setInsightsError(null)
-                    setStoreInsights(null)
-                    setInsightsLoading(false)
-                  }}
-                >
-                  다시 시도
-                </Button>
               </div>
             ) : (
               <TabLoadingPlaceholder />
             )}
           </TabsContent>
+
+          {AI_TABS.map(({ id }) => (
+            <TabsContent key={id} value={id} className="mt-6">
+              {tabError[id] ? (
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <p className="text-destructive text-sm">{tabError[id]}</p>
+                  <p className="text-muted-foreground text-xs mt-1">다시 시도해주세요.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => {
+                      setTabError((prev) => ({ ...prev, [id]: null }))
+                      setTabCache((prev) => ({ ...prev, [id]: null }))
+                      fetchTabAnalysis(id)
+                    }}
+                  >
+                    재시도
+                  </Button>
+                </div>
+              ) : tabLoading[id] ? (
+                <div className="flex flex-col items-center justify-center min-h-[320px] text-center">
+                  <RinAnimation variant="loading" size={180} className="shrink-0" />
+                  <p className="mt-4 text-muted-foreground text-sm">분석 중...</p>
+                </div>
+              ) : tabCache[id] ? (
+                <div className="space-y-6">
+                  <div className="rounded-xl border border-border bg-card p-6">
+                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
+                      {tabCache[id]}
+                    </div>
+                  </div>
+                  {id === 'creative' && (
+                    <div className="rounded-xl border border-border bg-card p-6">
+                      <p className="text-sm font-medium text-foreground mb-3">더 궁금한 점이 있나요?</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="궁금한 점을 입력하세요"
+                          value={followUpQuestion}
+                          onChange={(e) => setFollowUpQuestion(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
+                          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                          disabled={followUpLoading}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleFollowUp}
+                          disabled={followUpLoading || !followUpQuestion.trim()}
+                        >
+                          {followUpLoading ? '답변 중...' : '질문하기'}
+                        </Button>
+                      </div>
+                      {followUps.length > 0 && (
+                        <div className="mt-4 space-y-3">
+                          {followUps.map((item, i) => (
+                            <div key={i} className="rounded-lg border border-border bg-muted/30 p-4 space-y-1">
+                              <p className="text-sm text-muted-foreground font-medium">Q. {item.question}</p>
+                              <p className="text-foreground whitespace-pre-wrap text-sm">{item.answer}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <TabLoadingPlaceholder />
+              )}
+            </TabsContent>
+          ))}
         </Tabs>
         {selectedNews && (
           <NewsDetailModal

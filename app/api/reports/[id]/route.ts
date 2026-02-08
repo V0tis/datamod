@@ -19,7 +19,7 @@ export async function GET(
 
     const { data: report, error } = await supabase
       .from('reports')
-      .select('id, user_id, keyword, content, source_links, created_at')
+      .select('id, user_id, keyword, content, source_links, ai_responses, created_at')
       .eq('id', id)
       .single()
 
@@ -48,6 +48,7 @@ export async function GET(
       ? (report as { source_links: Array<{ title?: string; url?: string }> }).source_links
       : []
 
+    const aiResponses = (report as { ai_responses?: Record<string, string> }).ai_responses ?? {}
     return NextResponse.json({
       id: report.id,
       keyword: report.keyword,
@@ -57,6 +58,7 @@ export async function GET(
       competitorTrends: s?.competitorTrends ?? '',
       sentiment: typeof s?.sentiment === 'number' ? s.sentiment : 0,
       source_links: sourceLinks,
+      ai_responses: aiResponses,
     })
   } catch (e) {
     console.error('[Reports API] GET by id:', e)
