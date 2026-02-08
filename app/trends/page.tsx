@@ -9,6 +9,8 @@ import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
+import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
+import { Badge } from '@/components/ui/badge'
 
 const COUNTRY_LABELS: Record<string, string> = {
   KR: '한국',
@@ -22,7 +24,7 @@ export default function TrendsPage() {
   const router = useRouter()
   const startResearch = useResearchStore((s) => s.startResearch)
   const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
-  const [trends, setTrends] = useState<Record<string, string[]>>({ KR: [], US: [], JP: [] })
+  const [trends, setTrends] = useState<Record<string, TrendItem[]>>({ KR: [], US: [], JP: [] })
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -30,13 +32,12 @@ export default function TrendsPage() {
   const loadTrends = () => {
     setLoading(true)
     fetch('/api/trends')
-      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((res) => parseJsonResponse<TrendsResponse>(res))
       .then((data) => {
-        console.log('data', data);
         setTrends({
-          KR: Array.isArray(data.KR) ? data.KR : [],
-          US: Array.isArray(data.US) ? data.US : [],
-          JP: Array.isArray(data.JP) ? data.JP : [],
+          KR: normalizeTrendItems(data.KR),
+          US: normalizeTrendItems(data.US),
+          JP: normalizeTrendItems(data.JP),
         })
         setUpdatedAt(data.updatedAt ?? null)
       })
@@ -66,7 +67,7 @@ export default function TrendsPage() {
     router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
   }
 
-  const keywords = trends[country] ?? []
+  const items = trends[country] ?? []
 
   return (
     <div className="p-6 md:p-8 max-w-2xl mx-auto bg-[#F8F9FA] min-h-screen">
@@ -119,21 +120,40 @@ export default function TrendsPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : keywords.length === 0 ? (
+          ) : items.length === 0 ? (
             <p className="text-muted-foreground text-sm py-8 text-center">
               아직 캐시된 트렌드가 없어요. &quot;트렌드 갱신&quot;을 눌러 주세요.
             </p>
           ) : (
             <ul className="space-y-2">
-              {keywords.map((keyword, i) => (
-                <li key={`${keyword}-${i}`}>
+              {items.map((item, i) => (
+                <li key={`${item.keyword}-${i}`}>
                   <button
                     type="button"
-                    onClick={() => handleKeywordClick(keyword)}
-                    className="w-full text-left rounded-xl border border-border bg-muted/30 px-4 py-3.5 hover:bg-primary/5 hover:border-primary/30 transition-all flex items-center gap-3"
+                    onClick={() => handleKeywordClick(item.keyword)}
+                    className="w-full text-left rounded-xl border border-border bg-muted/30 px-4 py-3.5 hover:bg-primary/5 hover:border-primary/30 transition-all flex flex-col gap-1.5"
                   >
-                    <span className="text-muted-foreground text-sm font-medium w-6">{i + 1}</span>
-                    <span className="text-foreground font-medium flex-1 truncate">{keyword}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground text-sm font-medium w-6">{item.rank}</span>
+                      <span className="text-foreground font-medium flex-1 truncate">{item.keyword}</span>
+                      {item.search_volume && (
+                        <Badge variant="secondary" className="text-xs shrink-0">{item.search_volume}</Badge>
+                      )}
+                    </div>
+                    {(item.started_at || (item.analysis_keywords?.length ?? 0) > 0) && (
+                      <div className="flex flex-wrap items-center gap-1.5 pl-9 text-xs text-muted-foreground">
+                        {item.started_at && <span>{item.started_at}</span>}
+                        {item.analysis_keywords?.length > 0 && (
+                          <span className="flex flex-wrap gap-1">
+                            {item.analysis_keywords.slice(0, 5).map((kw, j) => (
+                              <Badge key={j} variant="outline" className="text-xs font-normal cursor-pointer" onClick={(e) => { e.stopPropagation(); handleKeywordClick(kw); }}>
+                                {kw}
+                              </Badge>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </button>
                 </li>
               ))}

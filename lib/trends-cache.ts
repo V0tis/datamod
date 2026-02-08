@@ -1,35 +1,63 @@
 import { getSupabase } from '@/lib/supabase'
+import type { TrendItem } from '@/lib/trends-types'
 
 const COUNTRY_GEO: Record<string, string> = { KR: 'KR', US: 'US', JP: 'JP' }
 const TRENDS_URL = 'https://trends.google.com/trending'
 const STALE_MINUTES = 60
 
-function extractKeywordsFromMarkdown(markdown: string): string[] {
+export type { TrendItem }
+
+/** 마크다운에서 트렌드명·검색량·시작시점·분석키워드 추출 (휴리스틱) */
+function extractTrendItemsFromMarkdown(markdown: string): TrendItem[] {
   if (!markdown || typeof markdown !== 'string') return []
-  const lines = markdown
-    .split(/\n/)
-    .map((l) => l.replace(/^#+\s*/, '').replace(/\s*\[.*?\]\(.*?\)\s*/g, '').trim())
-    .filter((l) => l.length >= 2 && l.length <= 80 && !/^https?:\/\//i.test(l) && !/^[\d.]+\s*$/.test(l))
+  const lines = markdown.split(/\n/).map((l) => l.trim()).filter(Boolean)
+  const items: TrendItem[] = []
   const seen = new Set<string>()
-  const out: string[] = []
-  for (const line of lines) {
+
+  const volumeRe = /(\d+[\d,.]*(?:만|K|M|k|m)?\+?)\s*(?:검색|search|회)/i
+  const startedRe = /(\d+\s*(?:시간|일|분|주)\s*전|hours?|days? ago)/i
+  const keywordLabelRe = /(?:관련|분석|키워드|related|keywords?)\s*[:\-]\s*(.+)/i
+
+  for (let i = 0; i < lines.length && items.length < 10; i++) {
+    const raw = lines[i]
+    const line = raw.replace(/^#+\s*/, '').replace(/\s*\[.*?\]\(.*?\)\s*/g, '').trim()
+    if (line.length < 2 || line.length > 80 || /^https?:\/\//i.test(line) || /^[\d.]+\s*$/.test(line)) continue
     const key = line.slice(0, 100)
     if (seen.has(key)) continue
     seen.add(key)
-    out.push(line)
-    if (out.length >= 10) break
+
+    let search_volume: string | null = null
+    let started_at: string | null = null
+    let analysis_keywords: string[] = []
+
+    const volMatch = line.match(volumeRe) || (lines[i + 1] && lines[i + 1].match(volumeRe))
+    if (volMatch) search_volume = volMatch[1].trim()
+    const startMatch = line.match(startedRe) || (lines[i + 1] && lines[i + 1].match(startedRe))
+    if (startMatch) started_at = startMatch[1].trim()
+    const kwMatch = line.match(keywordLabelRe) || (lines[i + 1] && lines[i + 1].match(keywordLabelRe))
+    if (kwMatch) {
+      analysis_keywords = kwMatch[1]
+        .split(/[,··]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 1 && s.length <= 50)
+        .slice(0, 10)
+    }
+
+    items.push({
+      keyword: line,
+      rank: items.length + 1,
+      search_volume,
+      started_at,
+      analysis_keywords,
+    })
   }
-  return out
+  return items
 }
 
-/** Firecrawl으로 국가별 트렌드 크롤링 후 global_trends에 upsert (공유 캐시 갱신) */
-export async function refreshGlobalTrends(): Promise<{
-  KR: string[]
-  US: string[]
-  JP: string[]
-}> {
+/** Firecrawl으로 국가별 트렌드 크롤링 후 global_trends에 upsert (확장 스키마) */
+export async function refreshGlobalTrends(): Promise<{ KR: TrendItem[]; US: TrendItem[]; JP: TrendItem[] }> {
   const firecrawlKey = process.env.FIRECRAWL_API_KEY?.trim()
-  const results: Record<string, string[]> = { KR: [], US: [], JP: [] }
+  const results: Record<string, TrendItem[]> = { KR: [], US: [], JP: [] }
   const supabase = getSupabase()
 
   console.log('[Trends] Google 트렌드 페이지에서 데이터 수집 시작. URL:', TRENDS_URL)
@@ -69,17 +97,24 @@ export async function refreshGlobalTrends(): Promise<{
       const markdown = json?.data?.markdown ?? ''
       const markdownPreview = markdown.length > 2000 ? markdown.slice(0, 2000) + '\n\n... (이하 생략, 총 ' + markdown.length + '자)' : markdown
       console.log('[Trends] Firecrawl markdown 본문:\n' + '---\n' + markdownPreview + '\n---')
-      const keywords = extractKeywordsFromMarkdown(markdown)
-      results[countryCode] = keywords
-      console.log('[Trends] 수집 완료:', url, '→ 키워드', keywords.length, '개', keywords.slice(0, 3).join(', '), keywords.length > 3 ? '...' : '')
-      await supabase.from('global_trends').upsert(
-        {
-          country_code: countryCode,
-          keywords: keywords,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'country_code' }
-      )
+      const items = extractTrendItemsFromMarkdown(markdown)
+      results[countryCode] = items
+      console.log('[Trends] 수집 완료:', url, '→ 트렌드', items.length, '개', items.slice(0, 2).map((t) => t.keyword).join(', '), items.length > 2 ? '...' : '')
+
+      await supabase.from('global_trends').delete().eq('country_code', countryCode)
+      if (items.length > 0) {
+        await supabase.from('global_trends').insert(
+          items.map((t) => ({
+            country_code: countryCode,
+            keyword: t.keyword,
+            rank: t.rank,
+            search_volume: t.search_volume,
+            started_at: t.started_at,
+            analysis_keywords: t.analysis_keywords,
+            created_at: new Date().toISOString(),
+          }))
+        )
+      }
     } catch (e) {
       console.warn('[Trends] 수집 실패:', countryCode, `${TRENDS_URL}?geo=${geo}`, e)
       throw e
@@ -89,14 +124,18 @@ export async function refreshGlobalTrends(): Promise<{
   return { KR: results.KR, US: results.US, JP: results.JP }
 }
 
-/** 데이터가 비었거나 STALE_MINUTES보다 오래됐으면 true */
+/** 데이터가 비었거나 STALE_MINUTES보다 오래됐으면 true (확장 스키마: country별 최신 created_at 기준) */
 export function isTrendsStale(
   rows: { country_code: string; created_at: string | null }[],
   countryCodes: string[] = ['KR', 'US', 'JP']
 ): boolean {
   const now = Date.now()
   const staleMs = STALE_MINUTES * 60 * 1000
-  const byCode = new Map(rows.map((r) => [r.country_code, r.created_at]))
+  const byCode = new Map<string, string | null>()
+  for (const r of rows) {
+    const cur = byCode.get(r.country_code)
+    if (!cur || (r.created_at && r.created_at > cur)) byCode.set(r.country_code, r.created_at)
+  }
   for (const code of countryCodes) {
     const at = byCode.get(code)
     if (!at) return true

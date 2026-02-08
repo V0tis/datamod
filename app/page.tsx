@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
+import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import {
@@ -47,7 +48,7 @@ export default function RinAISearch() {
   const [loadingMessage] = useState(() => getRandomRinMessage())
   const [recentKeywords, setRecentKeywords] = useState<string[]>([])
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
-  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; US: string[]; JP: string[]; updatedAt: string | null }>({
+  const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
   const { geminiQuota, fetchGeminiQuota } = useResearchStore()
@@ -104,12 +105,12 @@ export default function RinAISearch() {
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((res) => parseJsonResponse<TrendsResponse>(res))
       .then((data) => {
         setSharedTrends({
-          KR: Array.isArray(data.KR) ? data.KR : [],
-          US: Array.isArray(data.US) ? data.US : [],
-          JP: Array.isArray(data.JP) ? data.JP : [],
+          KR: normalizeTrendItems(data.KR),
+          US: normalizeTrendItems(data.US),
+          JP: normalizeTrendItems(data.JP),
           updatedAt: data.updatedAt ?? null,
         })
       })

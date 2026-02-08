@@ -13,9 +13,9 @@ export async function POST() {
         { status: 500, headers: JSON_HEADERS }
       )
     }
-    const updated = await refreshGlobalTrends()
+    const { KR, US, JP } = await refreshGlobalTrends()
 
-    return NextResponse.json({ success: true, updated }, { headers: JSON_HEADERS })
+    return NextResponse.json({ success: true, updated: { KR, US, JP } }, { headers: JSON_HEADERS })
   } catch (err) {
     if (isDev) console.log('[Dev] Trends update exception:', err, err instanceof Error ? err.stack : '')
     console.error('[Trends update]', err)

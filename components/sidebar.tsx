@@ -10,6 +10,8 @@ import { RinLogo } from '@/components/rin-logo'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
+import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
+import { Badge } from '@/components/ui/badge'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
@@ -22,7 +24,8 @@ export function Sidebar() {
   const [user, setUser] = useState<User | null>(null)
   const [displayName, setDisplayName] = useState<string>('')
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; updatedAt: string | null }>({ KR: [], updatedAt: null })
+  const [sharedTrends, setSharedTrends] = useState<{ KR: TrendsResponse['KR']; updatedAt: string | null }>({ KR: [], updatedAt: null })
+  const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -51,15 +54,31 @@ export function Sidebar() {
   }, [user])
 
   useEffect(() => {
+    if (!user) {
+      setLicenseOrigin(null)
+      return
+    }
+    fetch('/api/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { licenseOrigin?: { gemini: string; firecrawl: string } } | null) => {
+        if (!data?.licenseOrigin) return
+        const { gemini, firecrawl } = data.licenseOrigin
+        if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
+        else setLicenseOrigin('SYSTEM')
+      })
+      .catch(() => setLicenseOrigin(null))
+  }, [user])
+
+  useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => parseJsonResponse<{ KR?: string[]; updatedAt?: string | null }>(res))
+      .then((res) => parseJsonResponse<TrendsResponse>(res))
       .then((data) => {
         setSharedTrends({
-          KR: Array.isArray(data.KR) ? data.KR.slice(0, 3) : [],
+          KR: normalizeTrendItems(data.KR).slice(0, 3),
           updatedAt: data.updatedAt ?? null,
         })
       })
@@ -82,14 +101,18 @@ export function Sidebar() {
 
   const sidebarContent = (
     <>
-      {/* 상단: 린(Rin) 로고 */}
-      <Link
-        href="/"
-        className="flex h-16 items-center gap-2 border-b border-border px-5 hover:opacity-90 transition-opacity"
-      >
-        <RinLogo size={28} className="shrink-0 opacity-95" />
-        <span className="font-semibold text-lg tracking-tight text-foreground">린(Rin)</span>
-      </Link>
+      {/* 상단: 로고 + 라이선스 배지 */}
+      <div className="border-b border-border px-5 py-3">
+        <Link href="/" className="flex h-12 items-center gap-2 hover:opacity-90 transition-opacity">
+          <RinLogo size={28} className="shrink-0 opacity-95" />
+          <span className="font-semibold text-lg tracking-tight text-foreground">린(Rin)</span>
+        </Link>
+        {user && licenseOrigin && (
+          <Badge variant={licenseOrigin === 'USER' ? 'default' : 'secondary'} className="mt-2 text-xs">
+            {licenseOrigin === 'USER' ? 'Personal' : 'System'}
+          </Badge>
+        )}
+      </div>
 
       {/* 중간: 네비게이션 */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
@@ -118,10 +141,10 @@ export function Sidebar() {
         </Link>
         {sharedTrends.KR.length > 0 ? (
           <ul className="mt-1.5 space-y-0.5 px-3">
-            {sharedTrends.KR.map((kw, i) => (
-              <li key={`${kw}-${i}`}>
-                <Link href={`/results?keyword=${encodeURIComponent(kw)}`} className="text-xs text-foreground hover:text-primary truncate block">
-                  {kw}
+            {sharedTrends.KR.map((item, i) => (
+              <li key={`${item.keyword}-${i}`}>
+                <Link href={`/results?keyword=${encodeURIComponent(item.keyword)}`} className="text-xs text-foreground hover:text-primary truncate block">
+                  {item.keyword}
                 </Link>
               </li>
             ))}
@@ -147,7 +170,7 @@ export function Sidebar() {
               className={cn(
                 'mt-2 mb-2 truncate px-3',
                 displayName && displayName !== (user.email ?? '')
-                  ? 'text-sm font-semibold text-foreground'
+                  ? 'text-sm font-bold text-foreground'
                   : 'text-xs text-muted-foreground'
               )}
               title={user.email ?? ''}

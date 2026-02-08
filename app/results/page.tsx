@@ -16,6 +16,8 @@ import { ResearchCharts } from '@/components/research-charts'
 import { FileDown, Share2, X, ExternalLink, TrendingUp } from 'lucide-react'
 import { formatTimeAgo } from '@/lib/utils'
 import { parseJsonResponse } from '@/lib/fetch-json'
+import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
+import { Badge } from '@/components/ui/badge'
 
 function ReportSkeleton() {
   return (
@@ -195,7 +197,7 @@ function ResultsContent() {
   const [followUpLoading, setFollowUpLoading] = useState(false)
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
   const [selectedNewsIndex, setSelectedNewsIndex] = useState<number | null>(null)
-  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; US: string[]; JP: string[]; updatedAt: string | null }>({
+  const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
   const scheduledInsightsForRef = useRef<string | null>(null)
@@ -207,12 +209,12 @@ function ResultsContent() {
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((res) => parseJsonResponse<TrendsResponse>(res))
       .then((data) => {
         setSharedTrends({
-          KR: Array.isArray(data.KR) ? data.KR : [],
-          US: Array.isArray(data.US) ? data.US : [],
-          JP: Array.isArray(data.JP) ? data.JP : [],
+          KR: normalizeTrendItems(data.KR),
+          US: normalizeTrendItems(data.US),
+          JP: normalizeTrendItems(data.JP),
           updatedAt: data.updatedAt ?? null,
         })
       })
@@ -348,7 +350,7 @@ function ResultsContent() {
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="p-6 md:p-8 min-h-screen bg-[#F8F9FA]">
+      <div className="p-6 md:p-8 min-h-screen bg-[#F9FAFB]">
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main: col-span-8 */}
           <div className="lg:col-span-8 space-y-6">
@@ -583,25 +585,45 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* Side widgets: col-span-4 */}
-          <div className="lg:col-span-4 space-y-4">
-            {/* 국가별 트렌드 (공유 캐시) */}
+          {/* Side widgets: col-span-4 - 실시간 트렌드 위젯 (Viva Engage 스타일) */}
+          <div className="lg:col-span-4 space-y-4 bg-[#F9FAFB] rounded-xl p-1">
             <div className="rounded-xl border border-border bg-white shadow-sm p-4">
               <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                국가별 트렌드
+                실시간 트렌드
               </h3>
               {(sharedTrends.KR.length + sharedTrends.US.length + sharedTrends.JP.length) > 0 ? (
                 <>
-                  <ul className="space-y-1.5 mb-2">
-                    {[...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP].slice(0, 6).map((kw, i) => (
-                      <li key={`${kw}-${i}`}>
-                        <Link
-                          href={`/results?keyword=${encodeURIComponent(kw)}`}
-                          className="text-xs font-medium text-foreground hover:text-primary truncate block"
-                        >
-                          {kw}
-                        </Link>
+                  <ul className="space-y-3 mb-3">
+                    {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
+                      <li key={`${item.keyword}-${i}`}>
+                        <div className="rounded-lg border border-border bg-[#F9FAFB] p-3 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link
+                              href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
+                              className="text-sm font-medium text-foreground truncate hover:text-primary"
+                            >
+                              {item.keyword}
+                            </Link>
+                            {item.search_volume && (
+                              <Badge variant="secondary" className="text-xs shrink-0">{item.search_volume}</Badge>
+                            )}
+                          </div>
+                          {item.started_at && (
+                            <p className="text-xs text-muted-foreground mt-1">{item.started_at}</p>
+                          )}
+                          {item.analysis_keywords?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {item.analysis_keywords.slice(0, 4).map((kw, j) => (
+                                <Link key={j} href={`/results?keyword=${encodeURIComponent(kw)}`}>
+                                  <Badge variant="outline" className="text-xs font-normal cursor-pointer hover:bg-primary/10">
+                                    {kw}
+                                  </Badge>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

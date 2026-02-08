@@ -1,11 +1,21 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { refreshGlobalTrends, isTrendsStale } from '@/lib/trends-cache'
+import { refreshGlobalTrends, isTrendsStale, type TrendItem } from '@/lib/trends-cache'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
 const isDev = process.env.NODE_ENV === 'development'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
+
+type TrendRow = {
+  country_code: string
+  keyword: string
+  rank: number
+  search_volume: string | null
+  started_at: string | null
+  analysis_keywords: string[] | null
+  created_at: string | null
+}
 
 function formatErrorPayload(err: unknown): Record<string, unknown> {
   const summary = { error: '트렌드 데이터를 불러오지 못했습니다.' }
@@ -30,20 +40,30 @@ function formatErrorPayload(err: unknown): Record<string, unknown> {
   return { ...summary, message: String(err) }
 }
 
-function buildResponse(
-  rows: { country_code: string; keywords: unknown; created_at: string | null }[]
-): { KR: string[]; US: string[]; JP: string[]; updatedAt: string | null } {
-  const map: Record<string, string[]> = { KR: [], US: [], JP: [] }
+function rowToItem(r: TrendRow): TrendItem {
+  return {
+    keyword: r.keyword,
+    rank: r.rank,
+    search_volume: r.search_volume ?? null,
+    started_at: r.started_at ?? null,
+    analysis_keywords: Array.isArray(r.analysis_keywords) ? r.analysis_keywords : [],
+  }
+}
+
+function buildResponse(rows: TrendRow[]): { KR: TrendItem[]; US: TrendItem[]; JP: TrendItem[]; updatedAt: string | null } {
+  const map: Record<string, TrendItem[]> = { KR: [], US: [], JP: [] }
   let latestAt: string | null = null
   for (const row of rows) {
-    const code = row.country_code as string
-    const keywords = Array.isArray(row.keywords) ? row.keywords : []
+    const code = row.country_code
     if (COUNTRY_CODES.includes(code as (typeof COUNTRY_CODES)[number])) {
-      map[code] = keywords.filter((k): k is string => typeof k === 'string').slice(0, 10)
+      map[code].push(rowToItem(row))
     }
     if (row.created_at) {
       if (!latestAt || row.created_at > latestAt) latestAt = row.created_at
     }
+  }
+  for (const code of COUNTRY_CODES) {
+    map[code].sort((a, b) => a.rank - b.rank)
   }
   return {
     KR: map.KR,
@@ -59,8 +79,9 @@ export async function GET() {
     const supabase = await createClient()
     const { data: rows, error } = await supabase
       .from('global_trends')
-      .select('country_code, keywords, created_at')
+      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
       .in('country_code', COUNTRY_CODES)
+      .order('rank', { ascending: true })
 
     if (error) {
       if (isDev) console.log('[Dev] Trends GET Supabase error:', error, new Error().stack)
@@ -76,8 +97,9 @@ export async function GET() {
       await refreshGlobalTrends()
       const { data: fresh, error: freshError } = await supabase
         .from('global_trends')
-        .select('country_code, keywords, created_at')
+        .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
         .in('country_code', COUNTRY_CODES)
+        .order('rank', { ascending: true })
       if (freshError) {
         if (isDev) console.log('[Dev] Trends GET fresh after refresh error:', freshError, new Error().stack)
         console.error('[Trends GET] fresh after refresh', freshError)
