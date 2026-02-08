@@ -13,6 +13,7 @@ import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimat
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
+import { parseJsonResponse } from '@/lib/fetch-json'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import {
@@ -103,8 +104,8 @@ export default function RinAISearch() {
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => res.json())
-      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
+      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((data) => {
         setSharedTrends({
           KR: Array.isArray(data.KR) ? data.KR : [],
           US: Array.isArray(data.US) ? data.US : [],

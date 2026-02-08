@@ -9,6 +9,7 @@ import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight } 
 import { RinLogo } from '@/components/rin-logo'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
+import { parseJsonResponse } from '@/lib/fetch-json'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
@@ -55,8 +56,8 @@ export function Sidebar() {
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => res.json())
-      .then((data: { KR?: string[]; updatedAt?: string | null }) => {
+      .then((res) => parseJsonResponse<{ KR?: string[]; updatedAt?: string | null }>(res))
+      .then((data) => {
         setSharedTrends({
           KR: Array.isArray(data.KR) ? data.KR.slice(0, 3) : [],
           updatedAt: data.updatedAt ?? null,

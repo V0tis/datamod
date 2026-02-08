@@ -15,6 +15,7 @@ import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
 import { FileDown, Share2, X, ExternalLink, TrendingUp } from 'lucide-react'
 import { formatTimeAgo } from '@/lib/utils'
+import { parseJsonResponse } from '@/lib/fetch-json'
 
 function ReportSkeleton() {
   return (
@@ -206,8 +207,8 @@ function ResultsContent() {
 
   useEffect(() => {
     fetch('/api/trends')
-      .then((res) => res.json())
-      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
+      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((data) => {
         setSharedTrends({
           KR: Array.isArray(data.KR) ? data.KR : [],
           US: Array.isArray(data.US) ? data.US : [],

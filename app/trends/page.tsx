@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
+import { parseJsonResponse } from '@/lib/fetch-json'
 
 const COUNTRY_LABELS: Record<string, string> = {
   KR: '한국',
@@ -29,8 +30,9 @@ export default function TrendsPage() {
   const loadTrends = () => {
     setLoading(true)
     fetch('/api/trends')
-      .then((res) => res.json())
-      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
+      .then((res) => parseJsonResponse<{ KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }>(res))
+      .then((data) => {
+        console.log('data', data);
         setTrends({
           KR: Array.isArray(data.KR) ? data.KR : [],
           US: Array.isArray(data.US) ? data.US : [],
@@ -53,6 +55,7 @@ export default function TrendsPage() {
   const handleRefresh = () => {
     setUpdating(true)
     fetch('/api/trends/update', { method: 'POST' })
+      .then((res) => parseJsonResponse<{ success?: boolean }>(res))
       .then(() => loadTrends())
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 갱신에 실패했어요.' }))
       .finally(() => setUpdating(false))
