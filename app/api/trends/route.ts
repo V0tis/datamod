@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { refreshGlobalTrends, isTrendsStale } from '@/lib/trends-cache'
+import { TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
@@ -31,7 +31,7 @@ function formatErrorPayload(err: unknown): Record<string, unknown> {
   return { ...summary, message: String(err) }
 }
 
-/** GET: 공유 캐시(global_trends) 우선 조회. 없거나 오래됐으면 RSS 갱신 후 반환. */
+/** GET: 공유 캐시(global_trends)만 조회. RSS 수집은 트렌드 페이지 [트렌드 갱신] 버튼(POST /api/trends/update)에서만 수행. */
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -50,30 +50,16 @@ export async function GET() {
       })
     }
 
-    const needRefresh = isTrendsStale(rows ?? [], [...COUNTRY_CODES])
-    if (needRefresh) {
-      await refreshGlobalTrends()
-      const { data: fresh, error: freshError } = await supabase
-        .from('global_trends')
-        .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
-        .in('country_code', COUNTRY_CODES)
-        .order('rank', { ascending: true })
-      if (freshError) {
-        if (isDev) console.log('[Dev] Trends GET fresh after refresh error:', freshError, new Error().stack)
-        console.error('[Trends GET] fresh after refresh', freshError)
-        return NextResponse.json(formatErrorPayload(freshError), {
-          status: 500,
-          headers: JSON_HEADERS,
-        })
-      }
-      return NextResponse.json(buildTrendsResponse(fresh ?? []), { headers: JSON_HEADERS })
-    }
-
     return NextResponse.json(buildTrendsResponse(rows ?? []), { headers: JSON_HEADERS })
   } catch (err) {
     if (isDev) console.log('[Dev] Trends GET exception:', err, err instanceof Error ? err.stack : '')
     console.error('[Trends GET]', err)
-    return NextResponse.json(formatErrorPayload(err), {
+    const payload = formatErrorPayload(err) as Record<string, unknown>
+    if (err instanceof TrendsFetchError) {
+      payload.failedCountryCode = err.countryCode
+      payload.attemptedUrls = err.attemptedUrls
+    }
+    return NextResponse.json(payload, {
       status: 500,
       headers: JSON_HEADERS,
     })

@@ -3,18 +3,53 @@
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
+import { Drawer } from 'vaul'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
+import { TrendingUp, RefreshCw, Loader2, BarChart3, Newspaper, Tag, X } from 'lucide-react'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
-import { parseJsonResponse } from '@/lib/fetch-json'
+import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
 
-const trendsFetcher = (url: string) =>
-  fetch(url).then((res) => parseJsonResponse<TrendsResponse>(res))
+function showTrendsErrorToast(err: unknown): void {
+  const e = err as Error & { failedCountryCode?: string; attemptedUrls?: string[] }
+  const code = e.failedCountryCode
+  const urls = e.attemptedUrls
+  if (code != null && Array.isArray(urls) && urls.length > 0) {
+    toast.error(e.message ?? '트렌드 수집 실패', {
+      description: `실패한 국가: ${code}\n시도한 URL:\n${urls.map((u) => `• ${u}`).join('\n')}`,
+      duration: 10000,
+    })
+    return
+  }
+  showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
+}
+
+async function trendsFetcher(url: string): Promise<TrendsResponse> {
+  const res = await fetch(url)
+  const text = await res.text()
+  if (!res.ok) {
+    let body: { error?: string; failedCountryCode?: string; attemptedUrls?: string[] } = {}
+    try {
+      body = JSON.parse(text) as typeof body
+    } catch {
+      /* ignore */
+    }
+    const err = new Error(body.error ?? (text || res.statusText)) as Error & {
+      status?: number
+      failedCountryCode?: string
+      attemptedUrls?: string[]
+    }
+    err.status = res.status
+    err.failedCountryCode = body.failedCountryCode
+    err.attemptedUrls = body.attemptedUrls
+    throw err
+  }
+  return JSON.parse(text) as TrendsResponse
+}
 
 const COUNTRY_LABELS: Record<string, string> = {
   KR: '한국',
@@ -54,6 +89,8 @@ export default function TrendsPage() {
   const startResearch = useResearchStore((s) => s.startResearch)
   const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
   const [updating, setUpdating] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<TrendItem | null>(null)
 
   const { data, error, isLoading, mutate } = useSWR<TrendsResponse>('/api/trends', trendsFetcher, {
     revalidateOnFocus: false,
@@ -70,15 +107,29 @@ export default function TrendsPage() {
   const loading = isLoading
 
   useEffect(() => {
-    if (error) showErrorToast(error, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
+    if (error) showTrendsErrorToast(error)
   }, [error])
 
   const handleRefresh = () => {
     setUpdating(true)
     fetch('/api/trends/update', { method: 'POST' })
-      .then((res) => {
-        if (!res.ok) return res.json().then((body) => Promise.reject(new Error(body?.error ?? '갱신 실패')))
-        return parseJsonResponse<{ success?: boolean; data?: TrendsResponse }>(res)
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({})) as {
+          error?: string
+          failedCountryCode?: string
+          attemptedUrls?: string[]
+          data?: TrendsResponse
+        }
+        if (!res.ok) {
+          const err = new Error(body?.error ?? '갱신 실패') as Error & {
+            failedCountryCode?: string
+            attemptedUrls?: string[]
+          }
+          err.failedCountryCode = body.failedCountryCode
+          err.attemptedUrls = body.attemptedUrls
+          return Promise.reject(err)
+        }
+        return body
       })
       .then((payload) => {
         if (payload?.data) {
@@ -87,26 +138,34 @@ export default function TrendsPage() {
           mutate()
         }
       })
-      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 갱신에 실패했어요.' }))
+      .catch((err) => showTrendsErrorToast(err))
       .finally(() => setUpdating(false))
   }
 
-  const handleKeywordClick = (keyword: string) => {
-    startResearch(keyword)
-    router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
+  const handleRowClick = (item: TrendItem) => {
+    setSelectedItem(item)
+    setDrawerOpen(true)
+  }
+
+  const handleAnalyzeFromDrawer = () => {
+    if (!selectedItem) return
+    startResearch(selectedItem.keyword)
+    setDrawerOpen(false)
+    setSelectedItem(null)
+    router.push(`/results?keyword=${encodeURIComponent(selectedItem.keyword)}`)
   }
 
   const items = trends[country] ?? []
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-full bg-[#F9FAFB] min-h-screen">
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] min-h-screen">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />
           국가별 트렌드
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          DB에 캐시된 국가별 인기 검색어예요. 갱신 버튼으로 최신 트렌드를 불러올 수 있어요.
+          DB에 캐시된 국가별 인기 검색어예요. 갱신 버튼으로 최신 트렌드를 불러올 수 있어요. 키워드를 클릭하면 상세 패널이 열려요.
         </p>
       </header>
 
@@ -142,7 +201,7 @@ export default function TrendsPage() {
         </div>
         <CardHeader>
           <CardTitle className="text-lg">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
-          <CardDescription>행 클릭 시 해당 키워드로 분석이 시작돼요. 분석 키워드 배지를 눌러도 이동해요.</CardDescription>
+          <CardDescription>키워드를 클릭하면 우측 상세 패널이 열려요. 패널에서 &quot;이 키워드로 분석하기&quot;를 누르면 리서치가 시작돼요.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -153,26 +212,26 @@ export default function TrendsPage() {
             </p>
           ) : (
             <>
-              {/* 테이블 헤더: 순위 | 키워드 | 검색량 | 시작일 | 분석 키워드 */}
+              {/* 테이블 헤더: 순위 | 키워드 | 검색량 | n시간 전 | 분석 키워드 */}
               <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1">
                 <span className="col-span-1">순위</span>
-                <span className="col-span-3">키워드</span>
+                <span className="col-span-4">키워드</span>
                 <span className="col-span-2">검색량</span>
-                <span className="col-span-2">시작일</span>
-                <span className="col-span-4">분석 키워드</span>
+                <span className="col-span-2">등록</span>
+                <span className="col-span-3">연관 키워드</span>
               </div>
               <ul className="space-y-1">
                 {items.map((item, i) => (
                   <li key={`${item.keyword}-${i}`}>
                     <button
                       type="button"
-                      onClick={() => handleKeywordClick(item.keyword)}
+                      onClick={() => handleRowClick(item)}
                       className="w-full text-left grid grid-cols-12 gap-3 items-center rounded-xl border border-border bg-muted/30 px-4 py-3 hover:bg-primary/5 hover:border-primary/30 transition-all"
                     >
                       <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
                         {item.rank}
                       </span>
-                      <span className="col-span-3 text-foreground font-medium truncate">
+                      <span className="col-span-4 text-foreground font-medium truncate">
                         {item.keyword}
                       </span>
                       <span className="col-span-2">
@@ -182,19 +241,20 @@ export default function TrendsPage() {
                           <span className="text-muted-foreground text-xs">—</span>
                         )}
                       </span>
-                      <span className="col-span-2 text-muted-foreground text-xs truncate">
-                        {item.started_at ?? '—'}
+                      <span className="col-span-2 text-muted-foreground text-xs">
+                        {formatTimeAgo(item.started_at)}
                       </span>
-                      <span className="col-span-4 flex flex-wrap gap-1">
+                      <span className="col-span-3 flex flex-wrap gap-1">
                         {(item.analysis_keywords?.length ?? 0) > 0
-                          ? item.analysis_keywords.slice(0, 8).map((kw, j) => (
+                          ? item.analysis_keywords.slice(0, 6).map((kw, j) => (
                               <Badge
                                 key={j}
                                 variant="outline"
                                 className="text-xs font-normal cursor-pointer hover:bg-primary/10"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleKeywordClick(kw)
+                                  setSelectedItem({ ...item, keyword: kw })
+                                  setDrawerOpen(true)
                                 }}
                               >
                                 {kw}
@@ -217,6 +277,70 @@ export default function TrendsPage() {
           </p>
         </div>
       </Card>
+
+      {/* 우측 상세 Drawer */}
+      <Drawer.Root open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/20 z-40" />
+          <Drawer.Content className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white shadow-xl flex flex-col border-l border-border">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <Drawer.Title className="text-lg font-semibold text-foreground truncate pr-2">
+                {selectedItem?.keyword ?? '트렌드 상세'}
+              </Drawer.Title>
+              <Drawer.Close asChild>
+                <button type="button" className="p-1 rounded hover:bg-muted" aria-label="닫기">
+                  <X className="h-5 w-5" />
+                </button>
+              </Drawer.Close>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {selectedItem && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <BarChart3 className="h-3.5 w-3.5" /> 지난 24시간 검색 추이
+                    </p>
+                    <div className="rounded-lg border border-border bg-muted/20 h-32 flex items-center justify-center text-muted-foreground text-sm">
+                      그래프 이미지 (Google Trends 연동 시 표시)
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                      <Newspaper className="h-3.5 w-3.5" /> 관련 뉴스
+                    </p>
+                    <ul className="space-y-2">
+                      <li className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                        관련 뉴스는 &quot;이 키워드로 분석하기&quot; 실행 후 리서치 결과에서 확인할 수 있어요.
+                      </li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                      <Tag className="h-3.5 w-3.5" /> 연관 키워드
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(selectedItem.analysis_keywords?.length ?? 0) > 0
+                        ? selectedItem.analysis_keywords.map((kw, j) => (
+                            <Badge key={j} variant="outline" className="text-xs font-normal">
+                              {kw}
+                            </Badge>
+                          ))
+                        : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <Button className="w-full" onClick={handleAnalyzeFromDrawer}>
+                      이 키워드로 분석하기
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     </div>
   )
 }

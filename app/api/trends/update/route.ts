@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { refreshGlobalTrends } from '@/lib/trends-cache'
+import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
@@ -33,9 +33,18 @@ export async function POST() {
   } catch (err) {
     if (isDev) console.log('[Dev] Trends update exception:', err, err instanceof Error ? err.stack : '')
     console.error('[Trends update]', err)
-    const payload: { error: string; message?: string } = { error: '트렌드 갱신 중 오류가 발생했습니다.' }
+    const payload: {
+      error: string
+      message?: string
+      failedCountryCode?: string
+      attemptedUrls?: string[]
+    } = { error: '트렌드 갱신 중 오류가 발생했습니다.' }
     if (isDev && err) {
       payload.message = err instanceof Error ? err.message : String(err)
+    }
+    if (err instanceof TrendsFetchError) {
+      payload.failedCountryCode = err.countryCode
+      payload.attemptedUrls = err.attemptedUrls
     }
     return NextResponse.json(payload, { status: 500, headers: JSON_HEADERS })
   }

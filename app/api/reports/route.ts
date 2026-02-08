@@ -27,6 +27,7 @@ export async function GET() {
     const list = (reports ?? []).map((r) => ({
       id: r.id,
       keyword: r.keyword,
+      created_at: r.created_at ?? null,
       date: r.created_at?.slice(0, 10) ?? '',
       sentiment: typeof (r.content as { sentiment?: number })?.sentiment === 'number'
         ? (r.content as { sentiment: number }).sentiment

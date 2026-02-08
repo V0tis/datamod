@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight } from 'lucide-react'
+import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight, Cpu } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
@@ -27,6 +27,8 @@ export function Sidebar() {
   const [sharedTrends, setSharedTrends] = useState<{ KR: TrendsResponse['KR']; updatedAt: string | null }>({ KR: [], updatedAt: null })
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [licenseKeySource, setLicenseKeySource] = useState<{ gemini: string; firecrawl: string } | null>(null)
+  const [systemModalOpen, setSystemModalOpen] = useState(false)
+  const [systemInfo, setSystemInfo] = useState<{ model?: string } | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -90,6 +92,14 @@ export function Sidebar() {
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
   }, [])
+
+  const openSystemModal = () => {
+    setSystemModalOpen(true)
+    fetch('/api/health')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { model?: string } | null) => setSystemInfo(data ?? null))
+      .catch(() => setSystemInfo(null))
+  }
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -169,8 +179,20 @@ export function Sidebar() {
         </p>
       </div>
 
-      {/* 하단: 설정 */}
-      <div className="border-t border-border px-3 py-4">
+      {/* 하단: System + 설정 */}
+      <div className="border-t border-border px-3 py-4 space-y-0.5">
+        <button
+          type="button"
+          onClick={openSystemModal}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
+            'text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+          title="연결된 AI 모델 정보"
+        >
+          <Cpu className="h-5 w-5 shrink-0 opacity-85" />
+          System
+        </button>
         <Link
           href="/settings"
           className={linkClass(pathname === '/settings')}
@@ -241,6 +263,45 @@ export function Sidebar() {
           className="fixed inset-0 z-30 bg-black/20 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
+      )}
+
+      {/* 시스템 설정 모달: 연결된 AI 모델 정보 */}
+      {systemModalOpen && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            className="fixed inset-0 z-50 bg-black/30"
+            onClick={() => setSystemModalOpen(false)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-white p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-primary" />
+                시스템 정보
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSystemModalOpen(false)}
+                className="p-1 rounded hover:bg-muted"
+                aria-label="닫기"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-1">연결된 AI 모델</p>
+            <p className="font-mono text-sm text-foreground mb-4">
+              {systemInfo?.model ?? '확인 중...'}
+            </p>
+            <Link
+              href="/settings"
+              onClick={() => setSystemModalOpen(false)}
+              className="text-primary text-sm font-medium hover:underline"
+            >
+              설정에서 API 키 관리 →
+            </Link>
+          </div>
+        </>
       )}
     </>
   )

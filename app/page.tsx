@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, Zap, ChevronRight } from 'lucide-react'
+import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -17,27 +17,8 @@ import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn, formatTimeAgo } from '@/lib/utils'
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts'
-
-interface UsageData {
-  gemini: { used: number; limit: number }
-  firecrawl: { used: number; limit: number }
-  supabase: { used: number; limit: number }
-}
-
-function remainingPercent(used: number, limit: number): number {
-  if (limit <= 0) return 100
-  return Math.max(0, 100 - (used / limit) * 100)
-}
-
-const TREND_PIE_COLORS = ['#2563eb', '#22c55e', '#f59e0b'] as const
-const TREND_PIE_NAMES = ['한국', '미국', '일본'] as const
+const COUNTRY_LABELS: Record<string, string> = { KR: '한국', US: '미국', JP: '일본' }
+const COUNTRY_ORDER = ['KR', 'US', 'JP'] as const
 
 export default function RinAISearch() {
   const router = useRouter()
@@ -46,12 +27,14 @@ export default function RinAISearch() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
-  const [recentKeywords, setRecentKeywords] = useState<string[]>([])
+  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null }[]>([])
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
-  const { geminiQuota, fetchGeminiQuota } = useResearchStore()
+  const [apiStatus, setApiStatus] = useState<{ gemini: boolean; firecrawl: boolean; supabase: boolean } | null>(null)
+  const { status: researchStatus } = useResearchStore()
+  const engineActive = researchStatus === 'loading'
 
   useEffect(() => {
     const supabase = createClient()
@@ -63,8 +46,14 @@ export default function RinAISearch() {
   }, [])
 
   useEffect(() => {
-    fetchGeminiQuota()
-  }, [fetchGeminiQuota])
+    fetch('/api/health')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { gemini?: boolean; firecrawl?: boolean; supabase?: boolean } | null) => {
+        if (data) setApiStatus({ gemini: !!data.gemini, firecrawl: !!data.firecrawl, supabase: !!data.supabase })
+        else setApiStatus(null)
+      })
+      .catch(() => setApiStatus(null))
+  }, [])
 
   useEffect(() => {
     if (!user) {
@@ -87,19 +76,18 @@ export default function RinAISearch() {
 
   useEffect(() => {
     if (!user) {
-      setRecentKeywords([])
+      setRecentReports([])
       return
     }
     fetch('/api/reports')
       .then((res) => res.json())
-      .then((data: { reports?: { keyword: string }[] }) => {
+      .then((data: { reports?: { keyword: string; created_at?: string | null }[] }) => {
         const list = data?.reports ?? []
-        const keywords = [...new Set(list.map((r) => r.keyword).filter(Boolean))].slice(0, 3)
-        setRecentKeywords(keywords)
+        setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.created_at ?? null })))
       })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '최근 검색어를 불러오지 못했어요.' })
-        setRecentKeywords([])
+        setRecentReports([])
       })
   }, [user])
 
@@ -128,10 +116,6 @@ export default function RinAISearch() {
     router.push(`/results?keyword=${encodeURIComponent(query.trim())}`)
   }
 
-  const used = geminiQuota?.used ?? 0
-  const limit = geminiQuota?.limit ?? 1500
-  const remainingPct = remainingPercent(used, limit)
-
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       {/* Header: 로고 + 검색창 (상단 작게) */}
@@ -146,12 +130,14 @@ export default function RinAISearch() {
               <span
                 className={cn(
                   'rounded-md px-2.5 py-1 text-xs font-medium',
-                  licenseOrigin === 'USER'
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-muted text-muted-foreground'
+                  engineActive
+                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                    : licenseOrigin === 'USER'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
                 )}
               >
-                {licenseOrigin === 'USER' ? '개인 자원 사용 중' : '서버 자원 사용 중'}
+                {engineActive ? 'AI 분석 엔진 가동 중' : licenseOrigin === 'USER' ? '개인 자원 사용 중' : '시스템 자원 사용 중'}
               </span>
             )}
           </div>
@@ -211,7 +197,7 @@ export default function RinAISearch() {
 
             {/* 대시보드 그리드: 3열 카드 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* 카드 1: 실시간 트렌드 분석 (도넛) - 공유 캐시 데이터 */}
+              {/* 카드 1: 실시간 트렌드 분석 - KR / US / JP 각 Top 5 */}
               <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
@@ -222,41 +208,32 @@ export default function RinAISearch() {
                     전체 <ChevronRight className="h-4 w-4" />
                   </Link>
                 </div>
-                <div className="h-[200px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={(() => {
-                          const kr = sharedTrends.KR.length
-                          const us = sharedTrends.US.length
-                          const jp = sharedTrends.JP.length
-                          const total = kr + us + jp
-                          const v = total === 0 ? [1, 1, 1] : [kr, us, jp]
-                          return TREND_PIE_NAMES.map((name, i) => ({
-                            name,
-                            value: v[i],
-                            color: TREND_PIE_COLORS[i],
-                          }))
-                        })()}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={2}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {TREND_PIE_NAMES.map((_, i) => (
-                          <Cell key={i} fill={TREND_PIE_COLORS[i]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => [`${value}건`, '키워드 수']} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="space-y-4">
+                  {COUNTRY_ORDER.map((code) => {
+                    const list = sharedTrends[code].slice(0, 5)
+                    return (
+                      <div key={code} className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">{COUNTRY_LABELS[code]} Top 5</p>
+                        <ul className="space-y-1">
+                          {list.length === 0 ? (
+                            <li className="text-xs text-muted-foreground">데이터 없음</li>
+                          ) : (
+                            list.map((item, i) => (
+                              <li key={`${code}-${i}`} className="flex items-center justify-between gap-2 text-sm">
+                                <span className="font-medium text-foreground truncate">{item.keyword}</span>
+                                {item.search_volume != null && (
+                                  <span className="text-muted-foreground text-xs shrink-0">{item.search_volume}</span>
+                                )}
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    )
+                  })}
                 </div>
-                <p className="text-muted-foreground text-xs text-center mt-1">
-                  국가별 인기 키워드 비중 · 최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+                <p className="text-muted-foreground text-xs text-center mt-3">
+                  최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
                 </p>
               </div>
 
@@ -272,16 +249,19 @@ export default function RinAISearch() {
                   </Link>
                 </div>
                 {user ? (
-                  recentKeywords.length > 0 ? (
+                  recentReports.length > 0 ? (
                     <ul className="space-y-2">
-                      {recentKeywords.map((kw, i) => (
-                        <li key={kw}>
+                      {recentReports.map((r, i) => (
+                        <li key={r.keyword + (r.created_at ?? '') + i}>
                           <Link
-                            href={`/results?keyword=${encodeURIComponent(kw)}`}
+                            href={`/results?keyword=${encodeURIComponent(r.keyword)}`}
                             className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors"
                           >
-                            <span className="font-medium text-foreground truncate">{kw}</span>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium text-foreground truncate">{r.keyword}</span>
+                            <span className="flex items-center gap-1 shrink-0">
+                              <span className="text-muted-foreground text-xs">{formatTimeAgo(r.created_at)}</span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </span>
                           </Link>
                         </li>
                       ))}
@@ -298,34 +278,44 @@ export default function RinAISearch() {
                 )}
               </div>
 
-              {/* 카드 3: AI 에너지 현황 (상단 에너지 바를 카드로) */}
+              {/* 카드 3: API 키 연결 상태 */}
               <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
                 <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
-                  <Zap className="h-5 w-5 text-primary" />
-                  AI 에너지 현황
+                  <KeyRound className="h-5 w-5 text-primary" />
+                  API 연결 상태
                 </h2>
-                <div className="space-y-4">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-3xl font-bold text-foreground tabular-nums">
-                      {Math.round(remainingPct)}%
-                    </span>
-                    <span className="text-sm text-muted-foreground">잔여</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${remainingPct}%`,
-                        backgroundColor:
-                          remainingPct >= 50 ? '#22c55e' : remainingPct >= 20 ? '#f59e0b' : '#ef4444',
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>사용 {used.toLocaleString()}</span>
-                    <span>한도 {limit.toLocaleString()}</span>
-                  </div>
-                </div>
+                <ul className="space-y-3">
+                  {apiStatus ? (
+                    <>
+                      <li className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground">Gemini</span>
+                        {apiStatus.gemini ? (
+                          <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-4 w-4" /> 연결됨</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground">Firecrawl</span>
+                        {apiStatus.firecrawl ? (
+                          <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-4 w-4" /> 연결됨</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground">Supabase</span>
+                        {apiStatus.supabase ? (
+                          <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-4 w-4" /> 연결됨</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
+                        )}
+                      </li>
+                    </>
+                  ) : (
+                    <li className="text-sm text-muted-foreground">연결 상태 확인 중...</li>
+                  )}
+                </ul>
               </div>
             </div>
           </motion.div>
