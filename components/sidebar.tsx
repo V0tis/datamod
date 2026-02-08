@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings } from 'lucide-react'
+import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
-import { cn } from '@/lib/utils'
+import { cn, formatTimeAgo } from '@/lib/utils'
+import { showErrorToast } from '@/lib/error-toast'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
@@ -20,6 +21,7 @@ export function Sidebar() {
   const [user, setUser] = useState<User | null>(null)
   const [displayName, setDisplayName] = useState<string>('')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; updatedAt: string | null }>({ KR: [], updatedAt: null })
 
   useEffect(() => {
     const supabase = createClient()
@@ -41,12 +43,27 @@ export function Sidebar() {
         if (data?.nickname) setDisplayName(data.nickname)
         else setDisplayName(data?.email ?? user.email ?? '')
       })
-      .catch(() => setDisplayName(user.email ?? ''))
+      .catch((err) => {
+        showErrorToast(err, { fallbackMessage: '프로필을 불러오지 못했어요.' })
+        setDisplayName(user.email ?? '')
+      })
   }, [user])
 
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    fetch('/api/trends')
+      .then((res) => res.json())
+      .then((data: { KR?: string[]; updatedAt?: string | null }) => {
+        setSharedTrends({
+          KR: Array.isArray(data.KR) ? data.KR.slice(0, 3) : [],
+          updatedAt: data.updatedAt ?? null,
+        })
+      })
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
+  }, [])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -85,6 +102,34 @@ export function Sidebar() {
           )
         })}
       </nav>
+
+      {/* 국가별 트렌드 (공유 캐시) */}
+      <div className="px-3 py-2 border-t border-border">
+        <Link
+          href="/trends"
+          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <span className="flex items-center gap-2">
+            <Globe className="h-4 w-4 shrink-0" />
+            트렌드 (한국 상위)
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0" />
+        </Link>
+        {sharedTrends.KR.length > 0 ? (
+          <ul className="mt-1.5 space-y-0.5 px-3">
+            {sharedTrends.KR.map((kw, i) => (
+              <li key={`${kw}-${i}`}>
+                <Link href={`/results?keyword=${encodeURIComponent(kw)}`} className="text-xs text-foreground hover:text-primary truncate block">
+                  {kw}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="mt-1.5 px-3 text-xs text-muted-foreground">
+          최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+        </p>
+      </div>
 
       {/* 하단: 설정 */}
       <div className="border-t border-border px-3 py-4">

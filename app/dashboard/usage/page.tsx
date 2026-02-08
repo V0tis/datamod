@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, Cpu, Globe, Database } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
+import { showErrorToast } from '@/lib/error-toast'
 import {
   BarChart,
   Bar,
@@ -47,13 +48,15 @@ export default function UsageDashboardPage() {
       .then((d: UsageData) => {
         if (mounted) setData(d)
       })
-      .catch(() => {
-        if (mounted)
+      .catch((err) => {
+        if (mounted) {
+          showErrorToast(err, { fallbackMessage: '사용량 정보를 불러오지 못했어요.' })
           setData({
             gemini: { used: 0, limit: 1500 },
             firecrawl: { used: 0, limit: 500 },
             supabase: { used: 0, limit: 50000 },
           })
+        }
       })
       .finally(() => {
         if (mounted) setLoading(false)

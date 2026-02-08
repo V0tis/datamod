@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, TrendingUp, MessageSquare, Eye, BarChart3 } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
+import { showErrorToast } from '@/lib/error-toast'
 
 // TODO: API 응답 타입으로 교체
 interface DashboardData {
@@ -67,7 +68,9 @@ function DashboardContent() {
         if (mounted) setData(MOCK_DATA)
       } catch (err) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+          const msg = err instanceof Error ? err.message : '오류가 발생했습니다.'
+          showErrorToast(err, { fallbackMessage: msg })
+          setError(msg)
         }
       } finally {
         if (mounted) setLoading(false)

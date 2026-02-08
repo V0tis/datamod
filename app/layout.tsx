@@ -4,7 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
 import { PageTransition } from "@/components/common/PageTransition";
-import { Toaster } from "sonner";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { ErrorToastProvider } from "@/components/error-toast-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,15 +31,11 @@ export default function RootLayout({
         <AuthProvider>
           <Sidebar />
           <main className="min-h-screen bg-[#F8F9FA] pl-0 lg:pl-[240px] overflow-auto transition-[padding]">
-            <PageTransition>{children}</PageTransition>
+            <ErrorBoundary>
+              <PageTransition>{children}</PageTransition>
+            </ErrorBoundary>
           </main>
-          <Toaster
-            position="bottom-right"
-            closeButton
-            toastOptions={{
-              className: "shadow-lg border border-border rounded-xl bg-white text-foreground",
-            }}
-          />
+          <ErrorToastProvider />
         </AuthProvider>
       </body>
     </html>

@@ -1,0 +1,21 @@
+'use client'
+
+import { toast } from 'sonner'
+import { useErrorDetailStore } from '@/lib/stores/error-detail-store'
+import { getFriendlyMessage, formatErrorDetail } from '@/lib/error-handler'
+
+/**
+ * 토스트 알림 + 클릭 시 상세 모달 연동.
+ * 클라이언트 컴포넌트/훅에서만 사용.
+ */
+export function showErrorToast(err: unknown, options?: { fallbackMessage?: string }): void {
+  const friendly = options?.fallbackMessage ?? getFriendlyMessage(err)
+  const detail = formatErrorDetail(err)
+  toast.error(friendly, {
+    description: '클릭하여 상세 내용을 확인하세요.',
+    duration: 6000,
+    onClick: () => {
+      useErrorDetailStore.getState().openDetail(detail)
+    },
+  })
+}

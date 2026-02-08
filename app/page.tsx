@@ -12,8 +12,9 @@ import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/error-toast'
 import { useResearchStore } from '@/lib/stores/research-store'
-import { cn } from '@/lib/utils'
+import { cn, formatTimeAgo } from '@/lib/utils'
 import {
   PieChart,
   Pie,
@@ -33,12 +34,8 @@ function remainingPercent(used: number, limit: number): number {
   return Math.max(0, 100 - (used / limit) * 100)
 }
 
-/** 국가별 트렌드 키워드 비중 (도넛용) - 한국/미국/일본 비율 */
-const TREND_SHARE = [
-  { name: '한국', value: 42, color: '#2563eb' },
-  { name: '미국', value: 35, color: '#22c55e' },
-  { name: '일본', value: 23, color: '#f59e0b' },
-]
+const TREND_PIE_COLORS = ['#2563eb', '#22c55e', '#f59e0b'] as const
+const TREND_PIE_NAMES = ['한국', '미국', '일본'] as const
 
 export default function RinAISearch() {
   const router = useRouter()
@@ -49,6 +46,9 @@ export default function RinAISearch() {
   const [loadingMessage] = useState(() => getRandomRinMessage())
   const [recentKeywords, setRecentKeywords] = useState<string[]>([])
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
+  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; US: string[]; JP: string[]; updatedAt: string | null }>({
+    KR: [], US: [], JP: [], updatedAt: null,
+  })
   const { geminiQuota, fetchGeminiQuota } = useResearchStore()
 
   useEffect(() => {
@@ -77,7 +77,10 @@ export default function RinAISearch() {
         if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
         else setLicenseOrigin('SYSTEM')
       })
-      .catch(() => setLicenseOrigin(null))
+      .catch((err) => {
+        showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했어요.' })
+        setLicenseOrigin(null)
+      })
   }, [user])
 
   useEffect(() => {
@@ -92,8 +95,25 @@ export default function RinAISearch() {
         const keywords = [...new Set(list.map((r) => r.keyword).filter(Boolean))].slice(0, 3)
         setRecentKeywords(keywords)
       })
-      .catch(() => setRecentKeywords([]))
+      .catch((err) => {
+        showErrorToast(err, { fallbackMessage: '최근 검색어를 불러오지 못했어요.' })
+        setRecentKeywords([])
+      })
   }, [user])
+
+  useEffect(() => {
+    fetch('/api/trends')
+      .then((res) => res.json())
+      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
+        setSharedTrends({
+          KR: Array.isArray(data.KR) ? data.KR : [],
+          US: Array.isArray(data.US) ? data.US : [],
+          JP: Array.isArray(data.JP) ? data.JP : [],
+          updatedAt: data.updatedAt ?? null,
+        })
+      })
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 데이터를 불러오지 못했어요.' }))
+  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -189,7 +209,7 @@ export default function RinAISearch() {
 
             {/* 대시보드 그리드: 3열 카드 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* 카드 1: 실시간 트렌드 분석 (도넛) */}
+              {/* 카드 1: 실시간 트렌드 분석 (도넛) - 공유 캐시 데이터 */}
               <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
@@ -204,7 +224,18 @@ export default function RinAISearch() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={TREND_SHARE}
+                        data={(() => {
+                          const kr = sharedTrends.KR.length
+                          const us = sharedTrends.US.length
+                          const jp = sharedTrends.JP.length
+                          const total = kr + us + jp
+                          const v = total === 0 ? [1, 1, 1] : [kr, us, jp]
+                          return TREND_PIE_NAMES.map((name, i) => ({
+                            name,
+                            value: v[i],
+                            color: TREND_PIE_COLORS[i],
+                          }))
+                        })()}
                         cx="50%"
                         cy="50%"
                         innerRadius={55}
@@ -214,16 +245,16 @@ export default function RinAISearch() {
                         nameKey="name"
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
-                        {TREND_SHARE.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
+                        {TREND_PIE_NAMES.map((_, i) => (
+                          <Cell key={i} fill={TREND_PIE_COLORS[i]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => [`${value}%`, '비중']} />
+                      <Tooltip formatter={(value: number) => [`${value}건`, '키워드 수']} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <p className="text-muted-foreground text-xs text-center mt-1">
-                  국가별 인기 키워드 비중
+                  국가별 인기 키워드 비중 · 최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
                 </p>
               </div>
 

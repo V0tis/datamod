@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { showErrorToast } from '@/lib/error-toast'
 
 function parseHashParams(hash: string): Record<string, string> {
   const params: Record<string, string> = {}
@@ -46,9 +47,10 @@ export default function AuthCallbackPage() {
         setStatus('success')
         window.location.href = '/'
       })
-      .catch(() => {
+      .catch((err) => {
         setStatus('error')
         setErrorMessage('로그인 처리 중 오류가 발생했습니다.')
+        showErrorToast(err, { fallbackMessage: '로그인 처리 중 오류가 발생했습니다.' })
       })
   }, [])
 

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/error-toast'
 import { Eye, EyeOff } from 'lucide-react'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
@@ -65,7 +66,7 @@ export default function SettingsPage() {
           setFirecrawlApiKey('')
         }
       })
-      .catch(() => toast.error('설정을 불러오지 못했어요.'))
+      .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했어요.' }))
       .finally(() => setLoading(false))
   }, [user, router])
 
@@ -81,7 +82,7 @@ export default function SettingsPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((json as { error?: string }).error ?? '저장에 실패했어요.')
+        showErrorToast(json, { fallbackMessage: '저장에 실패했어요.' })
         return
       }
       setData((prev) => (prev ? { ...prev, nickname: nickname.trim() } : null))
@@ -106,7 +107,7 @@ export default function SettingsPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((json as { error?: string }).error ?? '저장에 실패했어요.')
+        showErrorToast(json, { fallbackMessage: '저장에 실패했어요.' })
         return
       }
       setGeminiApiKey('')

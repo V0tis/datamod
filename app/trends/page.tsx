@@ -6,7 +6,8 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatTimeAgo } from '@/lib/utils'
+import { showErrorToast } from '@/lib/error-toast'
 
 const COUNTRY_LABELS: Record<string, string> = {
   KR: '한국',
@@ -21,6 +22,7 @@ export default function TrendsPage() {
   const startResearch = useResearchStore((s) => s.startResearch)
   const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
   const [trends, setTrends] = useState<Record<string, string[]>>({ KR: [], US: [], JP: [] })
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
@@ -28,14 +30,19 @@ export default function TrendsPage() {
     setLoading(true)
     fetch('/api/trends')
       .then((res) => res.json())
-      .then((data: { KR?: string[]; US?: string[]; JP?: string[] }) => {
+      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
         setTrends({
           KR: Array.isArray(data.KR) ? data.KR : [],
           US: Array.isArray(data.US) ? data.US : [],
           JP: Array.isArray(data.JP) ? data.JP : [],
         })
+        setUpdatedAt(data.updatedAt ?? null)
       })
-      .catch(() => setTrends({ KR: [], US: [], JP: [] }))
+      .catch((err) => {
+        showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
+        setTrends({ KR: [], US: [], JP: [] })
+        setUpdatedAt(null)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -47,6 +54,7 @@ export default function TrendsPage() {
     setUpdating(true)
     fetch('/api/trends/update', { method: 'POST' })
       .then(() => loadTrends())
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 갱신에 실패했어요.' }))
       .finally(() => setUpdating(false))
   }
 
@@ -129,6 +137,11 @@ export default function TrendsPage() {
             </ul>
           )}
         </CardContent>
+        <div className="px-6 pb-4 pt-0">
+          <p className="text-muted-foreground text-xs">
+            최근 업데이트: {formatTimeAgo(updatedAt)}
+          </p>
+        </div>
       </Card>
     </div>
   )

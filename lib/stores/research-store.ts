@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/error-toast'
 
 export interface NewsItem {
   title: string
@@ -163,11 +164,10 @@ export const useResearchStore = create<ResearchStore>()(
 
         if (!res.ok || !res.body) {
           const err = await res.json().catch(() => ({}))
-          const errMsg = (err as { error?: string }).error ?? '요청에 실패했어요.'
-          toast.error(errMsg)
+          showErrorToast(err, { fallbackMessage: '요청에 실패했어요.' })
           set({
             status: 'error',
-            error: errMsg,
+            error: (err as { error?: string }).error ?? '요청에 실패했어요.',
           })
           return
         }
@@ -224,7 +224,7 @@ export const useResearchStore = create<ResearchStore>()(
                 get().fetchGeminiQuota()
                 return
               } else if (step === 'error' && 'error' in payload) {
-                toast.error(payload.error)
+                showErrorToast({ error: payload.error })
                 set({
                   status: 'error',
                   error: payload.error,
@@ -252,14 +252,14 @@ export const useResearchStore = create<ResearchStore>()(
 
         if (get().status === 'loading') {
           const msg = '응답이 완료되지 않았어요.'
-          toast.error(msg)
+          showErrorToast(new Error(msg))
           set({ status: 'error', error: msg })
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') return
         console.error('[ResearchStore] stream failed:', err)
         const msg = '데이터를 불러오는 중 오류가 발생했습니다.'
-        toast.error(msg)
+        showErrorToast(err, { fallbackMessage: msg })
         set({
           status: 'error',
           error: msg,

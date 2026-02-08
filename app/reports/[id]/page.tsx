@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
 import { Loader2, FileDown, Share2 } from 'lucide-react'
@@ -37,7 +38,7 @@ export default function ReportDetailPage() {
       const res = await fetch(`/api/reports/${id}/share`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((data as { error?: string }).error ?? '공유 링크를 만들 수 없어요.')
+        showErrorToast(data, { fallbackMessage: '공유 링크를 만들 수 없어요.' })
         return
       }
       const url = (data as { url?: string }).url
@@ -47,8 +48,8 @@ export default function ReportDetailPage() {
         await navigator.clipboard.writeText(absoluteUrl)
         toast.success('공유 링크가 생성되었고 클립보드에 복사되었어요.')
       }
-    } catch {
-      toast.error('공유 링크 생성에 실패했어요.')
+    } catch (err) {
+      showErrorToast(err, { fallbackMessage: '공유 링크 생성에 실패했어요.' })
     }
   }, [id, shareUrl])
 
@@ -78,6 +79,7 @@ export default function ReportDetailPage() {
         })
       } catch (err) {
         console.error('리포트 로드 실패:', err)
+        showErrorToast(err, { fallbackMessage: '리포트를 불러오는 중 오류가 발생했습니다.' })
         setError('리포트를 불러오는 중 오류가 발생했습니다.')
       } finally {
         setLoading(false)

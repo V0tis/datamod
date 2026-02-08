@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
 import { ResearchReportView } from '@/components/research-report-view'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -12,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, Share2, X, ExternalLink } from 'lucide-react'
+import { FileDown, Share2, X, ExternalLink, TrendingUp } from 'lucide-react'
+import { formatTimeAgo } from '@/lib/utils'
 
 function ReportSkeleton() {
   return (
@@ -192,12 +194,29 @@ function ResultsContent() {
   const [followUpLoading, setFollowUpLoading] = useState(false)
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
   const [selectedNewsIndex, setSelectedNewsIndex] = useState<number | null>(null)
+  const [sharedTrends, setSharedTrends] = useState<{ KR: string[]; US: string[]; JP: string[]; updatedAt: string | null }>({
+    KR: [], US: [], JP: [], updatedAt: null,
+  })
   const scheduledInsightsForRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!keyword) return
     startResearch(keyword)
   }, [keyword, startResearch])
+
+  useEffect(() => {
+    fetch('/api/trends')
+      .then((res) => res.json())
+      .then((data: { KR?: string[]; US?: string[]; JP?: string[]; updatedAt?: string | null }) => {
+        setSharedTrends({
+          KR: Array.isArray(data.KR) ? data.KR : [],
+          US: Array.isArray(data.US) ? data.US : [],
+          JP: Array.isArray(data.JP) ? data.JP : [],
+          updatedAt: data.updatedAt ?? null,
+        })
+      })
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
+  }, [])
 
   useEffect(() => {
     if (status === 'loading') scheduledInsightsForRef.current = null
@@ -227,6 +246,7 @@ function ResultsContent() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        showErrorToast(data, { fallbackMessage: '분석을 불러오지 못했어요.' })
         setInsightsError((data as { error?: string }).error ?? '분석을 불러오지 못했어요.')
         setStoreInsights(null)
         return
@@ -235,7 +255,8 @@ function ResultsContent() {
         ? (data as { insights: string }).insights
         : '분석 결과가 없어요.'
       setStoreInsights(text)
-    } catch {
+    } catch (err) {
+      showErrorToast(err, { fallbackMessage: '유저 반응 분석 중 오류가 발생했어요.' })
       setInsightsError('유저 반응 분석 중 오류가 발생했어요.')
       setStoreInsights(null)
     } finally {
@@ -276,7 +297,7 @@ function ResultsContent() {
       const res = await fetch(`/api/reports/${reportId}/share`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((data as { error?: string }).error ?? '공유 링크를 만들 수 없어요.')
+        showErrorToast(data, { fallbackMessage: '공유 링크를 만들 수 없어요.' })
         return
       }
       const url = (data as { url?: string }).url
@@ -286,8 +307,8 @@ function ResultsContent() {
         await navigator.clipboard.writeText(absoluteUrl)
         toast.success('공유 링크가 생성되었고 클립보드에 복사되었어요.')
       }
-    } catch {
-      toast.error('공유 링크 생성에 실패했어요.')
+    } catch (err) {
+      showErrorToast(err, { fallbackMessage: '공유 링크 생성에 실패했어요.' })
     }
   }, [result?.reportId, shareUrl])
 
@@ -310,14 +331,14 @@ function ResultsContent() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((data as { error?: string }).error ?? '답변을 불러오지 못했어요.')
+        showErrorToast(data, { fallbackMessage: '답변을 불러오지 못했어요.' })
         setFollowUpLoading(false)
         return
       }
       const answer = (data as { answer?: string }).answer ?? '답변을 생성하지 못했어요.'
       setFollowUps((prev) => [...prev, { question: q, answer }])
-    } catch {
-      toast.error('추가 질문 처리에 실패했어요.')
+    } catch (err) {
+      showErrorToast(err, { fallbackMessage: '추가 질문 처리에 실패했어요.' })
     } finally {
       setFollowUpLoading(false)
     }
@@ -563,6 +584,33 @@ function ResultsContent() {
 
           {/* Side widgets: col-span-4 */}
           <div className="lg:col-span-4 space-y-4">
+            {/* 국가별 트렌드 (공유 캐시) */}
+            <div className="rounded-xl border border-border bg-white shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                국가별 트렌드
+              </h3>
+              {(sharedTrends.KR.length + sharedTrends.US.length + sharedTrends.JP.length) > 0 ? (
+                <>
+                  <ul className="space-y-1.5 mb-2">
+                    {[...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP].slice(0, 6).map((kw, i) => (
+                      <li key={`${kw}-${i}`}>
+                        <Link
+                          href={`/results?keyword=${encodeURIComponent(kw)}`}
+                          className="text-xs font-medium text-foreground hover:text-primary truncate block"
+                        >
+                          {kw}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-muted-foreground">최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}</p>
+                  <Link href="/trends" className="text-xs text-primary hover:underline mt-1 inline-block">전체 보기</Link>
+                </>
+              ) : (
+                <p className="text-muted-foreground text-xs">트렌드 데이터를 불러오는 중이에요.</p>
+              )}
+            </div>
             {/* 관련 뉴스 피드 */}
             <div className="rounded-xl border border-border bg-white shadow-sm p-4">
               <h3 className="text-sm font-semibold text-foreground mb-3">관련 뉴스 피드</h3>
