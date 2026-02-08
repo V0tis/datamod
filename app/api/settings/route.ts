@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
+import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey } from '@/lib/license'
 
 /** GET: 현재 사용자 설정 조회 (키 원문은 절대 노출하지 않음) + 검색 가능 여부 + 키 출처 */
 export async function GET() {
@@ -14,7 +14,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -26,24 +26,31 @@ export async function GET() {
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
   const hasGeminiKey = !!(row?.gemini_api_key && row.gemini_api_key.trim().length > 0)
   const hasOpenAIKey = !!(row?.openai_api_key && row.openai_api_key.trim().length > 0)
+  const hasAnthropicKey = !!(row?.anthropic_api_key && (row as { anthropic_api_key?: string }).anthropic_api_key?.trim().length > 0)
   const effectiveOpenAI = getEffectiveOpenAIKey(row?.openai_api_key)
   const openaiOrigin =
     hasOpenAIKey ? 'USER' : (process.env.OPENAI_API_KEY?.trim() ? 'SYSTEM' : null)
+  const anthropicOrigin =
+    hasAnthropicKey ? 'USER' : (process.env.ANTHROPIC_API_KEY?.trim() ? 'SYSTEM' : null)
 
   const systemGemini = !!(process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '').trim()
   const systemOpenAI = !!(process.env.OPENAI_API_KEY ?? '').trim()
+  const systemAnthropic = !!(process.env.ANTHROPIC_API_KEY ?? '').trim()
 
   return NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
     hasGeminiKey,
     hasOpenAIKey,
+    hasAnthropicKey,
     hasServerGemini: systemGemini,
     hasServerOpenAI: systemOpenAI,
+    hasServerAnthropic: systemAnthropic,
     canSearch: effective.canSearch,
     licenseOrigin: {
       gemini: effective.geminiOrigin,
       openai: openaiOrigin ?? (effectiveOpenAI ? 'SYSTEM' : null),
+      anthropic: anthropicOrigin ?? (systemAnthropic ? 'SYSTEM' : null),
     },
   })
 }
@@ -58,7 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string }
+  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string }
   try {
     body = await req.json()
   } catch {
@@ -71,10 +78,12 @@ export async function POST(req: Request) {
     typeof body.gemini_api_key === 'string' ? body.gemini_api_key.trim() || null : undefined
   const openai_api_key =
     typeof body.openai_api_key === 'string' ? body.openai_api_key.trim() || null : undefined
+  const anthropic_api_key =
+    typeof body.anthropic_api_key === 'string' ? body.anthropic_api_key.trim() || null : undefined
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -85,6 +94,8 @@ export async function POST(req: Request) {
       gemini_api_key !== undefined ? gemini_api_key : existing?.gemini_api_key ?? null,
     openai_api_key:
       openai_api_key !== undefined ? openai_api_key : existing?.openai_api_key ?? null,
+    anthropic_api_key:
+      anthropic_api_key !== undefined ? anthropic_api_key : (existing as { anthropic_api_key?: string } | null)?.anthropic_api_key ?? null,
     updated_at: new Date().toISOString(),
   }
 

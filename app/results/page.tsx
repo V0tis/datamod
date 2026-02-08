@@ -58,10 +58,12 @@ function TabLoadingPlaceholder() {
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
-  { id: 'logic', label: '시장 분석 (Logic)', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
-  { id: 'creative', label: '인사이트 (Insight)', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
-  { id: 'fact', label: '데이터 팩트 (Fact)', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
+  { id: 'logic', label: '시장 분석', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
+  { id: 'creative', label: '인사이트', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
+  { id: 'fact', label: '종합 리포트', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
 ]
+
+type RssNewsItem = { title: string; link: string; pubDate: string; source: string }
 
 function ChartSkeleton() {
   return (
@@ -192,9 +194,10 @@ function ResultsContent() {
     result,
     error,
     startResearch,
+    loadReportByKeyword,
   } = useResearchStore()
 
-  const [activeTab, setActiveTab] = useState('summary')
+  const [activeTab, setActiveTab] = useState<AiTabId | 'summary'>('logic')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [tabCache, setTabCache] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [tabLoading, setTabLoading] = useState<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
@@ -204,15 +207,22 @@ function ResultsContent() {
   const [followUpLoading, setFollowUpLoading] = useState(false)
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
   const [selectedNewsIndex, setSelectedNewsIndex] = useState<number | null>(null)
+  const [rssNews, setRssNews] = useState<RssNewsItem[]>([])
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
   const reportFetchedForCacheRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!keyword) return
-    startResearch(keyword)
-  }, [keyword, startResearch])
+    const k = keyword ?? storeKeyword
+    if (!k?.trim()) return
+    let cancelled = false
+    loadReportByKeyword(k).then((fromCache) => {
+      if (cancelled) return
+      if (!fromCache) startResearch(k)
+    })
+    return () => { cancelled = true }
+  }, [keyword, storeKeyword, loadReportByKeyword, startResearch])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -228,6 +238,18 @@ function ResultsContent() {
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
   }, [])
 
+  useEffect(() => {
+    const q = (keyword ?? storeKeyword ?? '').trim()
+    if (!q) return
+    fetch(`/api/news?keyword=${encodeURIComponent(q)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: RssNewsItem[] } | null) => {
+        if (Array.isArray(data?.items)) setRssNews(data.items)
+        else setRssNews([])
+      })
+      .catch(() => setRssNews([]))
+  }, [keyword, storeKeyword])
+
   const loading = status === 'loading'
   const currentKeyword = keyword ?? storeKeyword
 
@@ -240,9 +262,21 @@ function ResultsContent() {
         .filter(Boolean)
         .join('\n\n')
     : ''
+  const newsHeadlines = rssNews.length > 0 ? rssNews.map((i) => i.title).join('\n') : ''
 
   useEffect(() => {
-    if (status !== 'done' || !result?.reportId || reportFetchedForCacheRef.current === result.reportId) return
+    if (status !== 'done' || !result?.reportId) return
+    const cached = result.ai_responses
+    if (cached && (cached.logic ?? cached.creative ?? cached.fact)) {
+      setTabCache((prev) => ({
+        ...prev,
+        logic: cached.logic ?? prev.logic,
+        creative: cached.creative ?? prev.creative,
+        fact: cached.fact ?? prev.fact,
+      }))
+      return
+    }
+    if (reportFetchedForCacheRef.current === result.reportId) return
     reportFetchedForCacheRef.current = result.reportId
     fetch(`/api/reports/${result.reportId}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -256,7 +290,7 @@ function ResultsContent() {
         }))
       })
       .catch(() => {})
-  }, [status, result?.reportId])
+  }, [status, result?.reportId, result?.ai_responses])
 
   const fetchTabAnalysis = useCallback(
     async (tabId: AiTabId) => {
@@ -272,16 +306,27 @@ function ResultsContent() {
             summary: reportSummary,
             tab: tabId,
             reportId: result?.reportId ?? undefined,
+            newsHeadlines: newsHeadlines ?? undefined,
+            ...(tabId === 'fact' && {
+              logicText: tabCache.logic ?? undefined,
+              creativeText: tabCache.creative ?? undefined,
+            }),
           }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           const errMsg = (data as { error?: string }).error ?? '분석에 실패했습니다.'
-          setTabError((prev) => ({ ...prev, [tabId]: errMsg }))
-          showErrorToast(data, { fallbackMessage: errMsg })
+          const isQuota = res.status === 429 || (data as { code?: string }).code === 'QUOTA'
+          const message = isQuota ? '현재 구글 엔진의 요청이 많아 잠시 후 다시 시도해 주세요.' : errMsg
+          setTabError((prev) => ({ ...prev, [tabId]: message }))
+          showErrorToast(data, { fallbackMessage: message })
           return
         }
         const text = typeof (data as { text?: string }).text === 'string' ? (data as { text: string }).text : ''
+        const usedFallback = (data as { fallback?: boolean }).fallback === true
+        if (usedFallback && tabId === 'logic') {
+          toast.info('최적의 모델로 전환하여 분석 중입니다…')
+        }
         setTabCache((prev) => ({ ...prev, [tabId]: text }))
       } catch (err) {
         setTabError((prev) => ({ ...prev, [tabId]: '분석에 실패했습니다. 다시 시도해주세요.' }))
@@ -290,7 +335,7 @@ function ResultsContent() {
         setTabLoading((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, reportSummary, result?.reportId, tabCache, tabLoading]
+    [currentKeyword, reportSummary, result?.reportId, tabCache, tabLoading, newsHeadlines]
   )
 
   useEffect(() => {
@@ -362,7 +407,7 @@ function ResultsContent() {
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="p-6 md:p-8 min-h-screen bg-[#F9FAFB]">
+      <div className="p-6 md:p-8 min-h-screen bg-[#F9FAFB] rin-doc">
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main: col-span-8 */}
           <div className="lg:col-span-8 space-y-6">
@@ -374,7 +419,7 @@ function ResultsContent() {
           <p className="text-muted-foreground text-sm mt-1">
             {loading
               ? '린이 가져온 뉴스예요. 다른 페이지로 이동해도 분석은 계속돼요.'
-              : '탭을 전환해 종합 분석, 시장 분석, 인사이트, 데이터 팩트를 확인하세요.'}
+              : '탭을 전환해 시장 분석, 인사이트, 종합 리포트, 종합 분석을 확인하세요.'}
           </p>
         </header>
 
@@ -406,43 +451,53 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Section 1. 실시간 주요 뉴스: 가로형 카드 리스트 */}
-        {!error && newsList.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        {/* Section 1. 실시간 뉴스: 구글 뉴스 RSS — 제목, 언론사, 업로드 시간, 원문 링크 카드 */}
+        {!error && rssNews.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2 tracking-tight">
               <Newspaper className="h-4 w-4 text-primary" />
-              실시간 주요 뉴스
+              실시간 뉴스
             </h2>
-            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
-              {newsList.map((item, i) => (
-                <button
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rssNews.map((item, i) => (
+                <article
                   key={i}
-                  type="button"
-                  onClick={() => { setSelectedNews(item); setSelectedNewsIndex(i) }}
-                  className="flex-shrink-0 w-[280px] rounded-xl border border-border bg-card overflow-hidden hover:bg-muted/50 transition-colors text-left flex flex-col"
+                  className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:border-primary/20 transition-all text-left flex flex-col"
                 >
-                  <div className="h-32 bg-muted/50 flex items-center justify-center">
-                    {item.image ? (
-                      <img src={item.image} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <Newspaper className="h-10 w-10 text-muted-foreground/50" />
+                  <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
+                    <h3 className="font-medium text-foreground text-[15px] leading-snug line-clamp-2">
+                      {item.title || '제목 없음'}
+                    </h3>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{item.source || '언론사'}</span>
+                      <span>{item.pubDate ? formatTimeAgo(item.pubDate) : '최신'}</span>
+                    </div>
+                    {item.link && (
+                      <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mt-auto"
+                      >
+                        원문 링크
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      </a>
                     )}
                   </div>
-                  <div className="p-3 flex flex-col gap-1">
-                    <span className="font-medium text-foreground text-sm line-clamp-2">{item.title || '제목 없음'}</span>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{item.publisher || '출처'}</span>
-                      <span>{item.publishedAt ? formatTimeAgo(item.publishedAt) : '최신'}</span>
-                    </div>
-                  </div>
-                </button>
+                </article>
               ))}
             </div>
           </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId | 'summary')} className="w-full">
           <TabsList className="grid w-full max-w-3xl grid-cols-4 h-12 p-1 gap-1 bg-muted/60">
+            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
+              <TabsTrigger key={id} value={id} className={cn('gap-2 border border-transparent', theme)}>
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
+              </TabsTrigger>
+            ))}
             <TabsTrigger
               value="summary"
               className="gap-2 data-[state=active]:bg-violet-100 data-[state=active]:text-violet-800 data-[state=active]:border data-[state=active]:border-violet-200"
@@ -450,12 +505,6 @@ function ResultsContent() {
               <FileText className="w-4 h-4 shrink-0" />
               종합 분석
             </TabsTrigger>
-            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
-              <TabsTrigger key={id} value={id} className={cn('gap-2 border border-transparent', theme)}>
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </TabsTrigger>
-            ))}
           </TabsList>
 
           <TabsContent value="summary" className="mt-6">
@@ -552,7 +601,7 @@ function ResultsContent() {
               {tabError[id] ? (
                 <div className="rounded-xl border border-border bg-card p-8 text-center">
                   <p className="text-destructive text-sm">{tabError[id]}</p>
-                  <p className="text-muted-foreground text-xs mt-1">다시 시도해주세요.</p>
+                  <p className="text-muted-foreground text-xs mt-1">잠시 후 아래 버튼으로 다시 시도해 주세요.</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -563,7 +612,7 @@ function ResultsContent() {
                       fetchTabAnalysis(id)
                     }}
                   >
-                    재시도
+                    다시 시도
                   </Button>
                 </div>
               ) : tabLoading[id] ? (
@@ -572,15 +621,15 @@ function ResultsContent() {
                   <p className="mt-4 text-muted-foreground text-sm">분석 중...</p>
                 </div>
               ) : tabCache[id] ? (
-                <div className="space-y-6">
+                <div className={cn('space-y-6', id === 'fact' && 'rounded-xl border border-border bg-white shadow-sm p-8 md:p-10 max-w-4xl mx-auto text-[15px] leading-[1.65]')}>
                   {id === 'logic' && result?.chartData && (
                     <div className="rounded-xl border border-border bg-card p-6">
                       <h3 className="text-sm font-semibold text-foreground mb-3">24시간 검색량·감성 추이</h3>
                       <ResearchCharts chartData={result.chartData} />
                     </div>
                   )}
-                  <div className="rounded-xl border border-border bg-card p-6">
-                    <div className="prose prose-sm max-w-none text-foreground">
+                  <div className={id === 'fact' ? '' : 'rounded-xl border border-border bg-card p-6'}>
+                    <div className={cn('max-w-none text-foreground', id === 'fact' ? 'prose prose-lg leading-relaxed' : 'prose prose-sm')}>
                       <MarkdownWithSearchLinks text={tabCache[id]!} />
                     </div>
                   </div>

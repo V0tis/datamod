@@ -157,6 +157,32 @@
   }
 }
 
+/* Notion/Slab 스타일: 리서치 결과·리포트 읽기용 타이포그래피 */
+.rin-doc {
+  --rin-doc-line-height: 1.65;
+  --rin-doc-heading-spacing: 0.02em;
+}
+.rin-doc h1,
+.rin-doc h2,
+.rin-doc h3,
+.rin-doc h4 {
+  letter-spacing: var(--rin-doc-heading-spacing);
+  line-height: 1.35;
+}
+.rin-doc p {
+  line-height: var(--rin-doc-line-height);
+}
+.rin-doc ul,
+.rin-doc ol {
+  line-height: var(--rin-doc-line-height);
+}
+.rin-doc .prose {
+  max-width: 72ch;
+}
+.rin-doc .prose p + p {
+  margin-top: 0.875em;
+}
+
 /* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */
 @media print {
   body * {

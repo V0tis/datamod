@@ -21,21 +21,24 @@ type SettingsData = {
   nickname: string
   hasGeminiKey: boolean
   hasOpenAIKey?: boolean
+  hasAnthropicKey?: boolean
   hasServerGemini?: boolean
   hasServerOpenAI?: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; openai?: LicenseOrigin | null }
+  hasServerAnthropic?: boolean
+  licenseOrigin?: { gemini: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
 }
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
 
 const LICENSE_ROWS: Array<{
-  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasOpenAIKey'>
+  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasOpenAIKey' | 'hasAnthropicKey'>
   label: string
-  stateKey: 'geminiApiKey' | 'openaiApiKey'
-  showKey: 'showGeminiKey' | 'showOpenAIKey'
+  stateKey: 'geminiApiKey' | 'openaiApiKey' | 'anthropicApiKey'
+  showKey: 'showGeminiKey' | 'showOpenAIKey' | 'showAnthropicKey'
 }> = [
-  { id: 'hasGeminiKey', label: 'Gemini — 종합 분석', stateKey: 'geminiApiKey', showKey: 'showGeminiKey' },
-  { id: 'hasOpenAIKey', label: 'OpenAI — Fallback (인사이트 탭)', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
+  { id: 'hasGeminiKey', label: 'Gemini — 시장 분석', stateKey: 'geminiApiKey', showKey: 'showGeminiKey' },
+  { id: 'hasAnthropicKey', label: 'Claude — 인사이트', stateKey: 'anthropicApiKey', showKey: 'showAnthropicKey' },
+  { id: 'hasOpenAIKey', label: 'OpenAI — 분석 리포트·Fallback', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
 ]
 
 export default function SettingsPage() {
@@ -47,8 +50,10 @@ export default function SettingsPage() {
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
+  const [anthropicApiKey, setAnthropicApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -78,6 +83,7 @@ export default function SettingsPage() {
           setNickname(json.nickname ?? '')
           setGeminiApiKey('')
           setOpenaiApiKey('')
+          setAnthropicApiKey('')
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했어요.' }))
@@ -114,6 +120,7 @@ export default function SettingsPage() {
       const body: Record<string, string> = {}
       if (geminiApiKey !== '') body.gemini_api_key = geminiApiKey
       if (openaiApiKey !== '') body.openai_api_key = openaiApiKey
+      if (anthropicApiKey !== '') body.anthropic_api_key = anthropicApiKey
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,6 +133,7 @@ export default function SettingsPage() {
       }
       setGeminiApiKey('')
       setOpenaiApiKey('')
+      setAnthropicApiKey('')
       const nextRes = await fetch('/api/settings')
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
@@ -138,19 +146,19 @@ export default function SettingsPage() {
   }
 
   const getKeyState = (row: typeof LICENSE_ROWS[0]) => {
-    const value = { geminiApiKey, openaiApiKey }[row.stateKey] as string
+    const value = { geminiApiKey, openaiApiKey, anthropicApiKey }[row.stateKey] as string
     const hasUser = !!data?.[row.id]
-    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : data?.hasServerOpenAI
-    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : data?.licenseOrigin?.openai
+    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : row.id === 'hasOpenAIKey' ? data?.hasServerOpenAI : data?.hasServerAnthropic
+    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : row.id === 'hasOpenAIKey' ? data?.licenseOrigin?.openai : data?.licenseOrigin?.anthropic
     const isUserTyped = value.length > 0
     const placeholder =
       hasServer && !hasUser ? MASKED_PLACEHOLDER
       : hasUser ? MASKED_PLACEHOLDER
       : '키를 입력하세요'
     const canReveal = isUserTyped
-    const show = { showGeminiKey, showOpenAIKey }[row.showKey] as boolean
-    const setShow = { showGeminiKey: setShowGeminiKey, showOpenAIKey: setShowOpenAIKey }[row.showKey]
-    const setValue = { geminiApiKey: setGeminiApiKey, openaiApiKey: setOpenaiApiKey }[row.stateKey]
+    const show = { showGeminiKey, showOpenAIKey, showAnthropicKey }[row.showKey] as boolean
+    const setShow = { showGeminiKey: setShowGeminiKey, showOpenAIKey: setShowOpenAIKey, showAnthropicKey: setShowAnthropicKey }[row.showKey]
+    const setValue = { geminiApiKey: setGeminiApiKey, openaiApiKey: setOpenaiApiKey, anthropicApiKey: setAnthropicApiKey }[row.stateKey]
     return { value, hasUser, hasServer, origin, isUserTyped, placeholder, canReveal, show, setShow, setValue }
   }
 

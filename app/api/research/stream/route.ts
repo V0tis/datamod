@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export const runtime = 'nodejs'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
 const USER_PROMPT_TEMPLATE = (keyword: string) =>
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
         })
 
         const prompt = USER_PROMPT_TEMPLATE(keyword)
-        const maxRetries = 3
+        const maxRetries = 3 // 최대 3번 재시도 (총 4회 시도)
         let responseText: string | null = null
         let responseObj: Awaited<ReturnType<typeof model.generateContent>> | null = null
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
               step: 'error',
               error:
                 msg.includes('429') || msg.includes('quota')
-                  ? '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
+                  ? '현재 구글 엔진의 요청이 많아 잠시 후 다시 시도해 주세요.'
                   : '린이 분석하는 중 오류가 났어요. 잠시 후 다시 시도해 주세요.',
               retryDelay: retryDelaySec,
             })
@@ -159,7 +159,8 @@ export async function POST(req: Request) {
         }
 
         const collectedAt = new Date().toISOString()
-        const candidate = (responseObj?.response as { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } } })?.candidates?.[0]
+        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
+        const candidate = (responseObj?.response as GroundingResp)?.candidates?.[0]
         const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
         const news = chunks.map((c) => {
           const url = c.web?.uri ?? ''

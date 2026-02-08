@@ -34,6 +34,8 @@ export interface ResearchResponse {
   error?: string
   /** 핵심 결론 3가지 (하단 Badge용) */
   keyConclusions?: string[]
+  /** DB 캐시 복원 시 탭 분석 결과 (logic, creative, fact) */
+  ai_responses?: Record<string, string>
 }
 
 type StreamPayload =
@@ -68,6 +70,8 @@ let retryScheduledForStream = false
 
 interface ResearchStore extends ResearchState {
   startResearch: (keyword: string, options?: { fromRetry?: boolean }) => void
+  /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
+  loadReportByKeyword: (keyword: string) => Promise<boolean>
   setInsights: (value: string | null) => void
   setGeminiQuota: (quota: GeminiQuota | null) => void
   fetchGeminiQuota: () => Promise<void>
@@ -117,6 +121,32 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
       reset: () => set(initialState),
+
+      loadReportByKeyword: async (keyword: string) => {
+        const k = keyword?.trim()
+        if (!k) return false
+        try {
+          const res = await fetch(`/api/reports?keyword=${encodeURIComponent(k)}`)
+          const data = (await res.json()) as { report?: { id: string; keyword: string; content: Record<string, unknown>; ai_responses?: Record<string, string> } }
+          const report = data.report
+          if (!report?.id) return false
+          const content = report.content ?? {}
+          set({
+            keyword: k,
+            status: 'done',
+            result: {
+              ...content,
+              reportId: report.id,
+              ai_responses: report.ai_responses ?? {},
+            } as ResearchResponse,
+            error: null,
+            newsList: get().newsList,
+          })
+          return true
+        } catch {
+          return false
+        }
+      },
 
       startResearch: (keyword: string, options?: { fromRetry?: boolean }) => {
     const { status, keyword: currentKeyword } = get()

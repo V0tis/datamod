@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
-const MAX_RETRIES = 2
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
+const MAX_RETRIES = 3
 
 const INSIGHTS_SYSTEM =
   "당신은 시장 리서치와 대중 반응 분석 전문가 '린'입니다. 주어진 **리포트 요약본**만 바탕으로, 해당 이슈에 대한 **대중의 예상 반응**과 **SNS·커뮤니티 트렌드**를 2~4문단으로 분석해주세요. 감정·논란·기대·우려·해시태그 트렌드 등을 포함하면 좋습니다. 자연스러운 문단 형태로만 답변하세요."
@@ -68,9 +68,11 @@ export async function POST(req: Request) {
         msg.includes('resource exhausted') ||
         msg.includes('rate limit')
       if (is429 && attempt < MAX_RETRIES) {
-        const waitSec = getRetryDelaySeconds(err)
-        console.warn('[Research Insights API] 429, waiting', waitSec, 's before retry', attempt + 1)
-        await new Promise((r) => setTimeout(r, waitSec * 1000))
+        const fromHeader = getRetryDelaySeconds(err)
+        const waitSec = fromHeader > 0 ? fromHeader : Math.min(2 * Math.pow(2, attempt), 60)
+        const waitMs = waitSec * 1000
+        console.warn('[Research Insights API] 429, exponential backoff', waitSec, 's before retry', attempt + 1)
+        await new Promise((r) => setTimeout(r, waitMs))
         continue
       }
       console.error('[Research Insights API]', err)

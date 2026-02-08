@@ -50,8 +50,8 @@ EMAIL_FROM="Rin-AI <onboarding@resend.dev>"
 # 리서치 (필수)
 GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 
-# 선택 (기본값 사용 가능)
-GEMINI_MODEL=gemini-2.0-flash
+# 선택 (기본값: gemini-1.5-flash-latest, 404 시 GEMINI_MODEL=gemini-2.0-flash 시도)
+GEMINI_MODEL=gemini-1.5-flash-latest
 
 # OpenAI — 인사이트 탭 Fallback (선택)
 OPENAI_API_KEY=your_openai_api_key

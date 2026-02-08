@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { getEffectiveLicenseKeys } from '@/lib/license'
+import OpenAI from 'openai'
+import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 
-/** 현재 안정적인 무료 모델 (404 시 gemini-2.0-flash-001 또는 gemini-1.5-flash-latest 로 변경 가능) */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+/** 안정적인 기본 모델 (env로 오버라이드 가능) */
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -44,18 +45,22 @@ export async function POST(req: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     let userGemini: string | null = null
+    let userOpenAI: string | null = null
     if (user?.id) {
       const { data: row } = await supabase
         .from('user_settings')
-        .select('gemini_api_key')
+        .select('gemini_api_key, openai_api_key')
         .eq('user_id', user.id)
         .maybeSingle()
       userGemini = row?.gemini_api_key ?? null
+      userOpenAI = (row as { openai_api_key?: string })?.openai_api_key ?? null
     }
     const effective = getEffectiveLicenseKeys(userGemini)
-    if (!effective.canSearch || !effective.gemini) {
+    const openaiKey = getEffectiveOpenAIKey(userOpenAI)
+    const hasGemini = !!(effective.canSearch && effective.gemini)
+    if (!hasGemini && !openaiKey) {
       return NextResponse.json(
-        { error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.' },
+        { error: '키를 등록해 주세요. 설정에서 Gemini 또는 OpenAI API 키를 등록하면 분석을 사용할 수 있어요.' },
         { status: 400 }
       )
     }
@@ -69,107 +74,79 @@ export async function POST(req: Request) {
       )
     }
 
-    // Gemini 분석 + Google Search 도구로 최신 웹 정보 참고
-    const genAI = new GoogleGenerativeAI(effective.gemini)
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      generationConfig: { maxOutputTokens: 1500 },
-      tools: [{ googleSearchRetrieval: {} }],
-    })
-
     const prompt = USER_PROMPT_TEMPLATE(keyword.trim())
-    const maxRetries = 2
-    let lastError: unknown = null
     let responseText: string | null = null
     let sourceLinks: Array<{ title: string; url: string }> = []
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (hasGemini) {
+      const genAI = new GoogleGenerativeAI(effective.gemini)
+      const model = genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+        systemInstruction: SYSTEM_INSTRUCTION,
+        generationConfig: { maxOutputTokens: 1500 },
+        tools: [{ googleSearchRetrieval: {} }],
+      })
+      const maxRetries = 3
+      let lastError: unknown = null
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await model.generateContent(prompt)
+          const resp = result.response
+          responseText = resp.text()
+          type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
+          const candidate = (resp as GroundingResp).candidates?.[0]
+          const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
+          sourceLinks = chunks
+            .map((c) => ({
+              title: (c.web?.title ?? '제목 없음').slice(0, 200),
+              url: c.web?.uri ?? '',
+            }))
+            .filter((l) => l.url)
+          break
+        } catch (geminiError: unknown) {
+          lastError = geminiError
+          const msg = String((geminiError as { message?: string })?.message ?? geminiError)
+          console.warn('[Research API] Gemini error (attempt', attempt + 1, '):', msg)
+
+          const is404 = /404|not found|invalid model/i.test(msg)
+          if (is404) {
+            logAvailableModels(effective.gemini)
+            console.warn('[Research API] Gemini 404/모델 오류 → GPT Fallback 시도')
+            break
+          }
+          const is429 = /429|quota|resource exhausted|rate limit/i.test(msg)
+          if (is429 && attempt < maxRetries) {
+            const waitMs = Math.min(2000 * Math.pow(2, attempt), 60_000)
+            await new Promise((r) => setTimeout(r, waitMs))
+            continue
+          }
+          break
+        }
+      }
+    }
+
+    if (responseText == null && openaiKey) {
       try {
-        const result = await model.generateContent(prompt)
-        const resp = result.response
-        responseText = resp.text()
-        lastError = null
-        // Google Search grounding 출처를 source_links로 사용
-        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
-        const candidate = (resp as GroundingResp).candidates?.[0]
-        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
-        sourceLinks = chunks
-          .map((c) => ({
-            title: (c.web?.title ?? '제목 없음').slice(0, 200),
-            url: c.web?.uri ?? '',
-          }))
-          .filter((l) => l.url)
-        break
-      } catch (geminiError: unknown) {
-        lastError = geminiError
-        const err = geminiError as { message?: string; status?: number }
-        const msg = err?.message ?? String(geminiError)
-        console.error('[Research API] Gemini API error (attempt', attempt + 1, '):', msg)
-
-        const is429 =
-          msg.includes('429') ||
-          msg.includes('quota') ||
-          msg.includes('resource exhausted') ||
-          msg.includes('rate limit')
-
-        if (is429 && attempt < maxRetries) {
-          const retrySec =
-            (msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1] &&
-              parseInt(msg.match(/retry[- ]after[:\s]+(\d+)/i)![1], 10)) ||
-            (msg.match(/(\d+)\s*초/i)?.[1] && parseInt(msg.match(/(\d+)\s*초/i)![1], 10)) ||
-            60
-          const waitMs = Math.min(retrySec * 1000, 120_000)
-          console.info('[Research API] 429 감지.', waitMs / 1000, '초 후 재시도...')
-          await new Promise((r) => setTimeout(r, waitMs))
-          continue
-        }
-
-        const isModelNotFound =
-          msg.includes('404') ||
-          msg.includes('not found') ||
-          /models\/[\w.-]+ is not found/i.test(msg)
-
-        if (isModelNotFound) {
-          await logAvailableModels(effective.gemini)
-          return NextResponse.json(
-            {
-              error: `선택한 모델(${GEMINI_MODEL})을 사용할 수 없어요. 서버 로그에 사용 가능한 모델 목록이 출력되었으니, .env에 GEMINI_MODEL=모델명 을 설정해 주세요.`,
-            },
-            { status: 500 }
-          )
-        }
-
-        if (msg.includes('API key') || msg.includes('invalid') || msg.includes('401')) {
-          return NextResponse.json(
-            { error: '린이 사용하는 API 키가 올바르지 않아요. 관리자에게 문의해 주세요.' },
-            { status: 500 }
-          )
-        }
-        if (msg.includes('429') || msg.includes('quota') || msg.includes('resource exhausted')) {
-          return NextResponse.json(
-            { error: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.' },
-            { status: 429 }
-          )
-        }
-        if (msg.includes('blocked') || msg.includes('safety')) {
-          return NextResponse.json(
-            { error: '안전 설정으로 인해 분석 결과를 만들 수 없어요. 다른 검색어로 시도해 주세요.' },
-            { status: 400 }
-          )
-        }
-        return NextResponse.json(
-          { error: '린이 분석하는 중 오류가 났어요. 잠시 후 다시 시도해 주세요.' },
-          { status: 500 }
-        )
+        const openai = new OpenAI({ apiKey: openaiKey })
+        const completion = await openai.chat.completions.create({
+          model: process.env.OPENAI_FALLBACK_MODEL ?? 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: SYSTEM_INSTRUCTION },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 1500,
+        })
+        responseText = completion.choices[0]?.message?.content ?? null
+        if (responseText) console.info('[Research API] GPT Fallback 사용')
+      } catch (e) {
+        console.error('[Research API] GPT Fallback 실패:', e)
       }
     }
 
     if (responseText == null) {
-      console.error('[Research API] Gemini 재시도 후에도 실패:', lastError)
       return NextResponse.json(
-        { error: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.' },
-        { status: 429 }
+        { error: '린이 분석하는 중 오류가 났어요. Gemini·OpenAI 키를 확인하거나 잠시 후 다시 시도해 주세요.' },
+        { status: 500 }
       )
     }
 

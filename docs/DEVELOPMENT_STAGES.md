@@ -62,8 +62,7 @@
 | 변수 | 용도 |
 |------|------|
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini (서버 기본값) |
-| `GEMINI_MODEL` | 사용 모델 (기본 gemini-2.0-flash) |
-| `FIRECRAWL_API_KEY` | 검색 (서버 기본값) |
+| `GEMINI_MODEL` | 사용 모델 (기본 gemini-1.5-flash-latest) |
 | `OPENAI_API_KEY` | 탭 Fallback (서버 기본값) |
 | `OPENAI_FALLBACK_MODEL` | Fallback 모델 (기본 gpt-4o-mini) |
 | `NEXT_PUBLIC_SUPABASE_*` | Supabase 클라이언트 |
