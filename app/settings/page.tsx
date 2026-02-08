@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { Eye, EyeOff } from 'lucide-react'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
 
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [firecrawlApiKey, setFirecrawlApiKey] = useState('')
+  const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [showFirecrawlKey, setShowFirecrawlKey] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -228,15 +231,25 @@ export default function SettingsPage() {
                         </Badge>
                       )}
                     </div>
-                    <Input
-                      id="gemini"
-                      type="password"
-                      placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      className="bg-white"
-                      autoComplete="off"
-                    />
+                    <div className="relative flex items-center">
+                      <Input
+                        id="gemini"
+                        type={showGeminiKey ? 'text' : 'password'}
+                        placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
+                        value={geminiApiKey}
+                        onChange={(e) => setGeminiApiKey(e.target.value)}
+                        className="bg-white pr-10"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey((v) => !v)}
+                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
+                        aria-label={showGeminiKey ? '숨기기' : '보기'}
+                      >
+                        {showGeminiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     {data?.hasGeminiKey && !geminiApiKey && (
                       <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요.</p>
                     )}
@@ -250,15 +263,25 @@ export default function SettingsPage() {
                         </Badge>
                       )}
                     </div>
-                    <Input
-                      id="firecrawl"
-                      type="password"
-                      placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
-                      value={firecrawlApiKey}
-                      onChange={(e) => setFirecrawlApiKey(e.target.value)}
-                      className="bg-white"
-                      autoComplete="off"
-                    />
+                    <div className="relative flex items-center">
+                      <Input
+                        id="firecrawl"
+                        type={showFirecrawlKey ? 'text' : 'password'}
+                        placeholder="키를 입력하거나 변경하려면 새 키를 입력하세요"
+                        value={firecrawlApiKey}
+                        onChange={(e) => setFirecrawlApiKey(e.target.value)}
+                        className="bg-white pr-10"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowFirecrawlKey((v) => !v)}
+                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
+                        aria-label={showFirecrawlKey ? '숨기기' : '보기'}
+                      >
+                        {showFirecrawlKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     {data?.hasFirecrawlKey && !firecrawlApiKey && (
                       <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요.</p>
                     )}

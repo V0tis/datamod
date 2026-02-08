@@ -141,10 +141,15 @@ export const useResearchStore = create<ResearchStore>()(
         if (checkRes.ok) {
           const checkData = (await checkRes.json()) as { canSearch?: boolean }
           if (checkData.canSearch === false) {
-            toast.error('라이선스 키가 필요합니다.')
+            toast.error('설정에서 라이선스 키를 등록해주세요.', {
+              action: {
+                label: '설정 가기',
+                onClick: () => { window.location.href = '/settings' },
+              },
+            })
             set({
               status: 'error',
-              error: '라이선스 키가 필요합니다.',
+              error: '설정에서 라이선스 키를 등록해주세요.',
             })
             return
           }

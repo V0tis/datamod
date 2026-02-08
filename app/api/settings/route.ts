@@ -89,5 +89,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '설정 저장에 실패했습니다.' }, { status: 500 })
   }
 
+  if (nickname !== undefined && user.email) {
+    await supabase
+      .from('profiles')
+      .upsert(
+        { id: user.id, email: user.email, nickname: merged.nickname },
+        { onConflict: 'id' }
+      )
+  }
+
   return NextResponse.json({ success: true })
 }

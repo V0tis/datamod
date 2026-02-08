@@ -13,6 +13,7 @@ import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimat
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
+import { cn } from '@/lib/utils'
 import {
   PieChart,
   Pie,
@@ -47,6 +48,7 @@ export default function RinAISearch() {
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
   const [recentKeywords, setRecentKeywords] = useState<string[]>([])
+  const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const { geminiQuota, fetchGeminiQuota } = useResearchStore()
 
   useEffect(() => {
@@ -61,6 +63,22 @@ export default function RinAISearch() {
   useEffect(() => {
     fetchGeminiQuota()
   }, [fetchGeminiQuota])
+
+  useEffect(() => {
+    if (!user) {
+      setLicenseOrigin(null)
+      return
+    }
+    fetch('/api/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { licenseOrigin?: { gemini: string; firecrawl: string } } | null) => {
+        if (!data?.licenseOrigin) return
+        const { gemini, firecrawl } = data.licenseOrigin
+        if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
+        else setLicenseOrigin('SYSTEM')
+      })
+      .catch(() => setLicenseOrigin(null))
+  }, [user])
 
   useEffect(() => {
     if (!user) {
@@ -96,11 +114,25 @@ export default function RinAISearch() {
     <div className="min-h-screen bg-[#F8F9FA]">
       {/* Header: 로고 + 검색창 (상단 작게) */}
       <header className="sticky top-0 z-20 border-b border-border bg-white px-4 py-3 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <RinLogo size={28} className="shrink-0 opacity-95" />
-            <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
-          </Link>
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              <RinLogo size={28} className="shrink-0 opacity-95" />
+              <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
+            </Link>
+            {user && licenseOrigin && (
+              <span
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-medium',
+                  licenseOrigin === 'USER'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {licenseOrigin === 'USER' ? '개인 자원 사용 중' : '서버 자원 사용 중'}
+              </span>
+            )}
+          </div>
           <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 max-w-xl">
             <div className="relative flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20">
               <Search className="h-4 w-4 text-muted-foreground shrink-0" />

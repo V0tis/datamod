@@ -326,8 +326,11 @@ function ResultsContent() {
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="p-6 md:p-8 max-w-6xl mx-auto">
-        <div className="rounded-2xl border border-border bg-white shadow-sm p-6 md:p-8">
+      <div className="p-6 md:p-8 min-h-screen bg-[#F8F9FA]">
+        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Main: col-span-8 */}
+          <div className="lg:col-span-8 space-y-6">
+        <div className="rounded-xl border border-border bg-white shadow-sm p-6 md:p-8">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">
             &quot;{currentKeyword}&quot; 검색 결과
@@ -555,6 +558,82 @@ function ResultsContent() {
             }}
           />
         )}
+        </div>
+          </div>
+
+          {/* Side widgets: col-span-4 */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* 관련 뉴스 피드 */}
+            <div className="rounded-xl border border-border bg-white shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">관련 뉴스 피드</h3>
+              {newsList.length === 0 ? (
+                <p className="text-muted-foreground text-xs">뉴스를 불러오는 중이에요.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {newsList.slice(0, 5).map((item, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedNews(item); setSelectedNewsIndex(i) }}
+                        className="w-full text-left text-xs font-medium text-foreground hover:text-primary truncate block"
+                      >
+                        {item.title || '제목 없음'}
+                      </button>
+                      {item.url && (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:underline truncate block" onClick={(e) => e.stopPropagation()}>
+                          출처
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* 핵심 수치 요약 */}
+            <div className="rounded-xl border border-border bg-white shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">핵심 수치 요약</h3>
+              {result ? (
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">감성 지수</dt>
+                    <dd className="font-semibold text-foreground">{result.sentiment ?? 0}%</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">시장 뉴스</dt>
+                    <dd className="font-semibold text-foreground">{result.marketNews?.length ?? 0}건</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">페인포인트</dt>
+                    <dd className="font-semibold text-foreground">{result.painPoints?.length ?? 0}건</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-muted-foreground text-xs">분석 완료 후 표시돼요.</p>
+              )}
+            </div>
+            {/* 인용된 출처 리스트 */}
+            <div className="rounded-xl border border-border bg-white shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">인용된 출처</h3>
+              {newsList.length === 0 ? (
+                <p className="text-muted-foreground text-xs">출처가 없어요.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {newsList.map((item, i) => (
+                    <li key={i}>
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline truncate block"
+                      >
+                        {item.title || item.url || `출처 ${i + 1}`}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     )

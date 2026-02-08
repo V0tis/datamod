@@ -25,10 +25,12 @@ export async function POST() {
     .eq('user_id', user.id)
     .maybeSingle()
 
+  const finalNickname = nickname ?? existing?.nickname ?? null
+
   const { error } = await supabase.from('user_settings').upsert(
     {
       user_id: user.id,
-      nickname: nickname ?? existing?.nickname ?? null,
+      nickname: finalNickname,
       gemini_api_key: existing?.gemini_api_key ?? null,
       firecrawl_api_key: existing?.firecrawl_api_key ?? null,
       updated_at: new Date().toISOString(),
@@ -40,6 +42,13 @@ export async function POST() {
     console.error('[sync-profile]', error)
     return NextResponse.json({ error: '프로필 동기화에 실패했습니다.' }, { status: 500 })
   }
+
+  await supabase
+    .from('profiles')
+    .upsert(
+      { id: user.id, email: user.email ?? '', nickname: finalNickname },
+      { onConflict: 'id' }
+    )
 
   return NextResponse.json({ success: true })
 }

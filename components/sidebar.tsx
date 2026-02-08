@@ -97,7 +97,15 @@ export function Sidebar() {
         </Link>
         {user ? (
           <>
-            <p className="mt-2 mb-2 truncate px-3 text-xs text-muted-foreground" title={user.email ?? ''}>
+            <p
+              className={cn(
+                'mt-2 mb-2 truncate px-3',
+                displayName && displayName !== (user.email ?? '')
+                  ? 'text-sm font-semibold text-foreground'
+                  : 'text-xs text-muted-foreground'
+              )}
+              title={user.email ?? ''}
+            >
               {displayName || user.email || '사용자'}
             </p>
             <button
