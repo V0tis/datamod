@@ -7,15 +7,9 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 const isDev = process.env.NODE_ENV === 'development'
 const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
 
-/** POST: 공유 캐시 수동 갱신 (Firecrawl 크롤링 후 global_trends에 저장, 저장된 데이터 전체 반환) */
+/** POST: 공유 캐시 수동 갱신 (RSS 피드 수집 후 global_trends에 저장, 저장된 데이터 전체 반환) */
 export async function POST() {
   try {
-    if (!process.env.FIRECRAWL_API_KEY?.trim()) {
-      return NextResponse.json(
-        { error: 'FIRECRAWL_API_KEY가 설정되지 않았습니다.' },
-        { status: 500, headers: JSON_HEADERS }
-      )
-    }
     await refreshGlobalTrends()
 
     const supabase = await createClient()

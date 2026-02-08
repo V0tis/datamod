@@ -31,7 +31,7 @@ function formatErrorPayload(err: unknown): Record<string, unknown> {
   return { ...summary, message: String(err) }
 }
 
-/** GET: 공유 캐시(global_trends) 우선 조회. 없거나 오래됐으면 Firecrawl 갱신 후 반환. */
+/** GET: 공유 캐시(global_trends) 우선 조회. 없거나 오래됐으면 RSS 갱신 후 반환. */
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -51,7 +51,7 @@ export async function GET() {
     }
 
     const needRefresh = isTrendsStale(rows ?? [], [...COUNTRY_CODES])
-    if (needRefresh && process.env.FIRECRAWL_API_KEY?.trim()) {
+    if (needRefresh) {
       await refreshGlobalTrends()
       const { data: fresh, error: freshError } = await supabase
         .from('global_trends')
