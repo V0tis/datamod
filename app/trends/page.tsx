@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,6 +12,9 @@ import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
+
+const trendsFetcher = (url: string) =>
+  fetch(url).then((res) => parseJsonResponse<TrendsResponse>(res))
 
 const COUNTRY_LABELS: Record<string, string> = {
   KR: '한국',
@@ -49,46 +53,38 @@ export default function TrendsPage() {
   const router = useRouter()
   const startResearch = useResearchStore((s) => s.startResearch)
   const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
-  const [trends, setTrends] = useState<Record<string, TrendItem[]>>({ KR: [], US: [], JP: [] })
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
-  const applyData = (data: TrendsResponse) => {
-    setTrends({
-      KR: normalizeTrendItems(data.KR),
-      US: normalizeTrendItems(data.US),
-      JP: normalizeTrendItems(data.JP),
-    })
-    setUpdatedAt(data.updatedAt ?? null)
-  }
+  const { data, error, isLoading, mutate } = useSWR<TrendsResponse>('/api/trends', trendsFetcher, {
+    revalidateOnFocus: false,
+  })
 
-  const loadTrends = () => {
-    setLoading(true)
-    fetch('/api/trends')
-      .then((res) => parseJsonResponse<TrendsResponse>(res))
-      .then(applyData)
-      .catch((err) => {
-        showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
-        setTrends({ KR: [], US: [], JP: [] })
-        setUpdatedAt(null)
-      })
-      .finally(() => setLoading(false))
-  }
+  const trends: Record<string, TrendItem[]> = data
+    ? {
+        KR: normalizeTrendItems(data.KR),
+        US: normalizeTrendItems(data.US),
+        JP: normalizeTrendItems(data.JP),
+      }
+    : { KR: [], US: [], JP: [] }
+  const updatedAt = data?.updatedAt ?? null
+  const loading = isLoading
 
   useEffect(() => {
-    loadTrends()
-  }, [])
+    if (error) showErrorToast(error, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
+  }, [error])
 
   const handleRefresh = () => {
     setUpdating(true)
     fetch('/api/trends/update', { method: 'POST' })
-      .then((res) => parseJsonResponse<{ success?: boolean; data?: TrendsResponse }>(res))
+      .then((res) => {
+        if (!res.ok) return res.json().then((body) => Promise.reject(new Error(body?.error ?? '갱신 실패')))
+        return parseJsonResponse<{ success?: boolean; data?: TrendsResponse }>(res)
+      })
       .then((payload) => {
-        if (payload.data) {
-          applyData(payload.data)
+        if (payload?.data) {
+          mutate(payload.data, false)
         } else {
-          loadTrends()
+          mutate()
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 갱신에 실패했어요.' }))
