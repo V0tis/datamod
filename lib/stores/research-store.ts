@@ -150,15 +150,15 @@ export const useResearchStore = create<ResearchStore>()(
         if (checkRes.ok) {
           const checkData = (await checkRes.json()) as { canSearch?: boolean }
           if (checkData.canSearch === false) {
-            toast.error('설정에서 라이선스 키를 등록해주세요.', {
+            toast.error('키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.', {
               action: {
-                label: '설정 가기',
+                label: '키 등록하러 가기',
                 onClick: () => { window.location.href = '/settings' },
               },
             })
             set({
               status: 'error',
-              error: '설정에서 라이선스 키를 등록해주세요.',
+              error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.',
             })
             return
           }

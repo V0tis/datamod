@@ -38,7 +38,11 @@ export async function POST() {
       message?: string
       failedCountryCode?: string
       attemptedUrls?: string[]
-    } = { error: '트렌드 갱신 중 오류가 발생했습니다.' }
+    } = {
+      error: err instanceof TrendsFetchError
+        ? '현재 구글 트렌드 데이터를 불러올 수 없습니다.'
+        : '트렌드 갱신 중 오류가 발생했습니다.',
+    }
     if (isDev && err) {
       payload.message = err instanceof Error ? err.message : String(err)
     }

@@ -9,14 +9,14 @@
 **목표:** 사용자가 직접 API 키를 입력하고 저장할 수 있는 기반 마련.
 
 **핵심:**
-- `user_settings` 테이블 연동 (Gemini, Firecrawl, OpenAI)
+- `user_settings` 테이블 연동 (Gemini, OpenAI)
 - 키 원문은 절대 클라이언트에 노출하지 않고, 등록 여부만 표시
 - 마스킹된 키 노출 UI: 등록 시 placeholder `•••••••••••• (등록됨)` 및 "직접 입력 / 서버 제공" Badge
 
 **현재 상태:**
-- [x] `user_settings` (gemini_api_key, firecrawl_api_key, openai_api_key) 연동
+- [x] `user_settings` (gemini_api_key, openai_api_key) 연동
 - [x] GET/POST `/api/settings` — 키 원문 미반환, hasXxxKey·licenseOrigin 반환
-- [x] 설정 페이지: 내 정보 탭, 라이선스 탭 (Gemini, Firecrawl, OpenAI Fallback)
+- [x] 설정 페이지: 내 정보 탭, 라이선스 탭 (Gemini, OpenAI Fallback)
 - [x] 사용자 입력 키 우선: `lib/license.ts` — getEffectiveLicenseKeys, getEffectiveOpenAIKey
 
 **마이그레이션:** `supabase/migrations/013_user_settings_openai.sql` 실행 후 OpenAI 키 저장 가능.
@@ -42,7 +42,7 @@
 
 ## 3단계: 리서치 결과 AI 탭 시스템 연동
 
-**목표:** GPT, Gemini, Claude를 활용한 다각도 분석 제공.
+**목표:** Gemini·OpenAI Fallback을 활용한 다각도 분석 제공.
 
 **핵심:**
 - Lazy Loading: 탭 클릭 시 해당 탭 API 호출

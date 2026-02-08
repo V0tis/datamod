@@ -6,81 +6,12 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 export const runtime = 'nodejs'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
-const MAX_CHARS_PER_SOURCE = 2000
 const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. 반드시 JSON 형식으로만 답변하세요."
-const USER_PROMPT_PREFIX = '다음 데이터를 분석해 JSON으로 출력해: '
-const USER_PROMPT_SUFFIX =
-  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. keyConclusions에는 이 이슈의 핵심 결론을 정확히 3개 문장으로 넣어줘(배열 길이 3). 위에서 제시한 소스 순서대로 articleSummaries 1문단씩, positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.'
-
-function normalizeText(text: string): string {
-  if (!text || typeof text !== 'string') return ''
-  return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-/** 마크다운 링크 패턴 [text](url) 개수 */
-function countMarkdownLinks(line: string): number {
-  return (line.match(/\]\s*\(\s*https?:\/\/[^\s)]+/gi) ?? []).length
-}
-
-/** 한 줄이 링크만 있는지 (네비/사이드바용) */
-function isLinkOnlyLine(line: string): boolean {
-  const t = line.trim()
-  if (!t) return true
-  const linkCount = countMarkdownLinks(t)
-  const approxLinkLength = (t.match(/\]\s*\(\s*[^)]+\)/g) ?? []).join('').length
-  return linkCount >= 1 && approxLinkLength >= t.length * 0.5
-}
-
-/**
- * 스크래핑된 본문에서 네비/사이드바(링크 나열)를 제거하고 기사 본문에 가까운 부분만 반환.
- * 링크 비율이 높으면 fallback(메타 설명 등)을 우선 사용.
- */
-function cleanArticleContent(
-  raw: string,
-  fallback: string,
-  maxLen: number
-): string {
-  if (!raw || typeof raw !== 'string') return fallback.trim().slice(0, maxLen) || ''
-  const normalizedFallback = normalizeText(fallback).trim()
-
-  const lines = raw
-    .replace(/\r\n/g, '\n')
-    .split(/\n|\s+-\s+/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-
-  const contentLines = lines.filter((l) => !isLinkOnlyLine(l))
-  let cleaned = normalizeText(contentLines.join('\n')).trim()
-
-  const linkCount = (cleaned.match(/\]\s*\(\s*https?:\/\/[^\s)]+/gi) ?? []).length
-  const linkChars = (cleaned.match(/\]\s*\(\s*[^)]+\)/g) ?? []).join('').length
-  const linkDensity = cleaned.length > 0 ? linkChars / cleaned.length : 0
-
-  if (linkDensity > 0.35 || (cleaned.length < 120 && normalizedFallback.length >= 50)) {
-    cleaned = normalizedFallback
-  }
-
-  return (cleaned || normalizedFallback).slice(0, maxLen)
-}
-
-function buildSourceSummary(
-  item: {
-    metadata?: { title?: string; description?: string }
-    description?: string
-    snippet?: string
-    markdown?: string
-    content?: string
-  },
-  maxChars: number
-): string {
-  const preferred =
-    item.metadata?.description ?? item.metadata?.title ?? item.description ?? item.snippet ?? ''
-  const preferredNorm = normalizeText(preferred)
-  if (preferredNorm.length >= 50) return preferredNorm.slice(0, maxChars)
-  const full = item.markdown ?? item.content ?? ''
-  return normalizeText(full).slice(0, maxChars)
-}
+  "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
+const USER_PROMPT_TEMPLATE = (keyword: string) =>
+  `"${keyword}"에 대한 최신 트렌드·뉴스·유저 반응을 Google Search로 검색한 뒤 분석해서, 아래 JSON만 출력해줘. ` +
+  `JSON: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. ` +
+  `keyConclusions 3개 문장, articleSummaries는 검색된 소스 순서대로 1문단씩, positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.`
 
 function extractJsonFromText(text: string): string {
   const trimmed = text.trim()
@@ -119,23 +50,20 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser()
   let userGemini: string | null = null
-  let userFirecrawl: string | null = null
   if (user?.id) {
     const { data: row } = await supabase
       .from('user_settings')
-      .select('gemini_api_key, firecrawl_api_key')
+      .select('gemini_api_key')
       .eq('user_id', user.id)
       .maybeSingle()
     userGemini = row?.gemini_api_key ?? null
-    userFirecrawl = row?.firecrawl_api_key ?? null
   }
-  const effective = getEffectiveLicenseKeys(userGemini, userFirecrawl)
+  const effective = getEffectiveLicenseKeys(userGemini)
   const apiKey = effective.gemini
-  const firecrawlApiKey = effective.firecrawl
   if (!effective.canSearch) {
     return new Response(
       JSON.stringify({
-        error: '라이선스 키가 필요합니다.',
+        error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.',
       }),
       { status: 400 }
     )
@@ -182,131 +110,22 @@ export async function POST(req: Request) {
       try {
         send('progress', { step: 'firecrawl_start' })
 
-        const firecrawlBody = JSON.stringify({
-          query: `${keyword} 최신 트렌드 유저 반응`,
-          searchOptions: { limit: 5 },
-        })
-
-        const maxFirecrawlRetries = 2
-        let searchRes: Response | null = null
-        for (let attempt = 0; attempt <= maxFirecrawlRetries; attempt++) {
-          try {
-            searchRes = await fetch('https://api.firecrawl.dev/v0/search', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${firecrawlApiKey}`,
-                'User-Agent': 'RinAI-Research/1.0',
-              },
-              body: firecrawlBody,
-              keepalive: true,
-              signal: AbortSignal.timeout(30_000),
-            })
-            break
-          } catch (fetchErr: unknown) {
-            const errMsg = String((fetchErr as { message?: string })?.message ?? fetchErr)
-            const isSocketError =
-              errMsg.includes('UND_ERR_SOCKET') ||
-              errMsg.includes('other side closed') ||
-              errMsg.includes('ECONNRESET') ||
-              errMsg.includes('ETIMEDOUT') ||
-              errMsg.includes('socket hang up')
-            if (isSocketError && attempt < maxFirecrawlRetries) {
-              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)))
-              continue
-            }
-            console.error('[Research Stream] Firecrawl fetch error:', errMsg)
-            send('progress', {
-              step: 'error',
-              error: '검색 서버 연결에 실패했어요. 잠시 후 다시 시도해 주세요.',
-            })
-            safeClose()
-            return
-          }
-        }
-
-        if (searchRes == null) {
-          send('progress', { step: 'error', error: '검색 요청에 실패했어요.' })
-          safeClose()
-          return
-        }
-
-        if (isClosed) {
-          safeClose()
-          return
-        }
-        if (!searchRes.ok) {
-          const errText = await searchRes.text()
-          console.error('[Research Stream] Firecrawl failed:', searchRes.status, errText)
-          send('progress', {
-            step: 'error',
-            error: '검색 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.',
-          })
-          safeClose()
-          return
-        }
-
-        const searchData = (await searchRes.json()) as {
-          data?: Array<{
-            url?: string
-            markdown?: string
-            content?: string
-            metadata?: { title?: string; description?: string; language?: string; sourceURL?: string }
-          }>
-        }
-        const rawItems = (searchData.data ?? []).slice(0, 10)
-        await trackUsage('firecrawl')
-        const MAX_CONTENT_LENGTH = 3500
-        const collectedAt = new Date().toISOString()
-        const news = rawItems.map((d) => {
-          const title =
-            d.metadata?.title ?? d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? '제목 없음'
-          const rawContent = d.markdown ?? d.content ?? ''
-          const fallback =
-            d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? ''
-          const content = cleanArticleContent(rawContent, fallback, MAX_CONTENT_LENGTH)
-          const url = typeof d.url === 'string' ? d.url : ''
-          let publisher = ''
-          try {
-            if (url) publisher = new URL(url).hostname.replace(/^www\./, '')
-          } catch {
-            /* ignore */
-          }
-          return {
-            title: normalizeText(title).slice(0, 200),
-            url,
-            content: content.length > 0 ? content : undefined,
-            publisher: publisher || undefined,
-            publishedAt: collectedAt,
-          }
-        })
-
-        send('progress', { step: 'firecrawl_done', news })
-        if (isClosed) {
-          safeClose()
-          return
-        }
-        send('progress', { step: 'gemini_start' })
-
-        const sourceTexts = rawItems
-          .map((d) => buildSourceSummary(d, MAX_CHARS_PER_SOURCE))
-          .filter((s) => s.length > 0)
-        const context = sourceTexts.length > 0 ? sourceTexts.join('\n\n') : '데이터 없음'
-        const prompt = USER_PROMPT_PREFIX + context + USER_PROMPT_SUFFIX
-
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
           systemInstruction: SYSTEM_INSTRUCTION,
           generationConfig: { maxOutputTokens: 3500 },
+          tools: [{ googleSearchRetrieval: {} }],
         })
 
+        const prompt = USER_PROMPT_TEMPLATE(keyword)
         const maxRetries = 3
         let responseText: string | null = null
+        let responseObj: Awaited<ReturnType<typeof model.generateContent>> | null = null
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
-            const result = await model.generateContent(prompt)
-            responseText = result.response.text()
+            responseObj = await model.generateContent(prompt)
+            responseText = responseObj.response.text()
             break
           } catch (geminiError: unknown) {
             const msg = String((geminiError as { message?: string })?.message ?? geminiError)
@@ -339,6 +158,35 @@ export async function POST(req: Request) {
           }
         }
 
+        const collectedAt = new Date().toISOString()
+        const candidate = (responseObj?.response as { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } } })?.candidates?.[0]
+        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
+        const news = chunks.map((c) => {
+          const url = c.web?.uri ?? ''
+          let publisher = ''
+          try {
+            if (url) publisher = new URL(url).hostname.replace(/^www\./, '')
+          } catch {
+            /* ignore */
+          }
+          return {
+            title: (c.web?.title ?? '제목 없음').slice(0, 200),
+            url,
+            publisher: publisher || undefined,
+            publishedAt: collectedAt,
+          }
+        })
+
+        send('progress', { step: 'firecrawl_done', news })
+        if (isClosed) {
+          safeClose()
+          return
+        }
+        send('progress', { step: 'gemini_start' })
+        if (isClosed) {
+          safeClose()
+          return
+        }
         send('progress', { step: 'gemini_done' })
         if (isClosed) {
           safeClose()
@@ -413,7 +261,7 @@ export async function POST(req: Request) {
         const chartData = { sentiment: chartSentiment, impact: chartImpact }
 
         const articleSummaries = Array.isArray(parsed.articleSummaries)
-          ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string').slice(0, rawItems.length)
+          ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string').slice(0, news.length)
           : []
         const keyConclusions = Array.isArray(parsed.keyConclusions)
           ? parsed.keyConclusions.filter((s): s is string => typeof s === 'string').slice(0, 3)

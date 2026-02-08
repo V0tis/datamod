@@ -1,51 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getEffectiveLicenseKeys } from '@/lib/license'
 
 /** 현재 안정적인 무료 모델 (404 시 gemini-2.0-flash-001 또는 gemini-1.5-flash-latest 로 변경 가능) */
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
 
-/** 소스당 최대 문자 수 (토큰 절약) */
-const MAX_CHARS_PER_SOURCE = 2000
-
 const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. 반드시 JSON 형식으로만 답변하세요."
+  "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
 
-const USER_PROMPT_PREFIX =
-  '다음 데이터를 분석해 JSON으로 출력해: '
-const USER_PROMPT_SUFFIX =
-  '. JSON 구조는 반드시 다음을 포함해: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] } }. positive+neutral+negative 합계는 100이 되게 하고, impact에는 경제/사회/기술/정치/환경 등 관련 분야 5개 정도의 subject와 0~10 점수 score를 넣어줘. publicReactionTrends에는 이 이슈에 대한 대중 예상 반응과 온라인 트렌드 분석을 1~2문단으로 작성해줘.'
-
-/** HTML 태그 제거, 연속 공백/줄바꿈을 하나로 (토큰 절약) */
-function normalizeText(text: string): string {
-  if (!text || typeof text !== 'string') return ''
-  return text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** metadata.description/title 또는 description/snippet 우선, 없으면 content를 최대 N자로 슬라이스 후 정규화 */
-function buildSourceSummary(
-  item: {
-    metadata?: { title?: string; description?: string }
-    description?: string
-    snippet?: string
-    markdown?: string
-    content?: string
-  },
-  maxChars: number
-): string {
-  const preferred =
-    item.metadata?.description ?? item.metadata?.title ?? item.description ?? item.snippet ?? ''
-  const preferredNorm = normalizeText(preferred)
-  if (preferredNorm.length >= 50) {
-    return preferredNorm.slice(0, maxChars)
-  }
-  const full = item.markdown ?? item.content ?? ''
-  const normalized = normalizeText(full)
-  return normalized.slice(0, maxChars)
-}
+const USER_PROMPT_TEMPLATE = (keyword: string) =>
+  `"${keyword}"에 대한 최신 트렌드·뉴스·유저 반응을 검색해서 분석한 뒤, 아래 JSON 구조로만 출력해줘. ` +
+  `JSON: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] } }. ` +
+  `positive+neutral+negative 합계 100, impact는 경제/사회/기술/정치/환경 등 5개 정도, publicReactionTrends는 1~2문단으로.`
 
 /** 디버깅: API 키로 사용 가능한 모델 목록을 콘솔에 출력 (404/모델 없음 시 호출) */
 async function logAvailableModels(apiKey: string): Promise<void> {
@@ -74,17 +41,24 @@ function extractJsonFromText(text: string): string {
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-    if (!apiKey) {
-      console.error('[Research API] GOOGLE_GENERATIVE_AI_API_KEY is not set')
-      return NextResponse.json(
-        { error: '린이 분석할 수 있도록 API 설정이 필요해요. 관리자에게 문의해 주세요.' },
-        { status: 500 }
-      )
-    }
-
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+    let userGemini: string | null = null
+    if (user?.id) {
+      const { data: row } = await supabase
+        .from('user_settings')
+        .select('gemini_api_key')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      userGemini = row?.gemini_api_key ?? null
+    }
+    const effective = getEffectiveLicenseKeys(userGemini)
+    if (!effective.canSearch || !effective.gemini) {
+      return NextResponse.json(
+        { error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.' },
+        { status: 400 }
+      )
+    }
 
     const body = await req.json()
     const keyword = body?.keyword ?? body?.query
@@ -95,68 +69,37 @@ export async function POST(req: Request) {
       )
     }
 
-    // 1. Firecrawl Search
-    const searchRes = await fetch('https://api.firecrawl.dev/v0/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}`,
-      },
-      body: JSON.stringify({
-        query: `${keyword} 최신 트렌드 유저 반응`,
-        searchOptions: { limit: 5 },
-      }),
-    })
-
-    if (!searchRes.ok) {
-      const errText = await searchRes.text()
-      console.error('[Research API] Firecrawl search failed:', searchRes.status, errText)
-      return NextResponse.json(
-        { error: '검색 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.' },
-        { status: 502 }
-      )
-    }
-
-    const searchData = (await searchRes.json()) as {
-      data?: Array<{
-        url?: string
-        markdown?: string
-        content?: string
-        metadata?: { title?: string; description?: string; language?: string; sourceURL?: string }
-      }>
-    }
-    const rawItems = (searchData.data ?? []).slice(0, 5)
-    const sourceLinks = rawItems.map((d) => {
-      const title =
-        d.metadata?.title ?? d.metadata?.description ?? (d as { description?: string }).description ?? (d as { snippet?: string }).snippet ?? '제목 없음'
-      return {
-        title: normalizeText(title).slice(0, 200),
-        url: typeof d.url === 'string' ? d.url : '',
-      }
-    })
-    const sourceTexts = rawItems
-      .map((d) => buildSourceSummary(d, MAX_CHARS_PER_SOURCE))
-      .filter((s) => s.length > 0)
-    const context = sourceTexts.length > 0 ? sourceTexts.join('\n\n') : '데이터 없음'
-
-    // 2. Gemini 분석 (429 시 Retry-After 대기 후 재시도)
-    const genAI = new GoogleGenerativeAI(apiKey)
+    // Gemini 분석 + Google Search 도구로 최신 웹 정보 참고
+    const genAI = new GoogleGenerativeAI(effective.gemini)
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
       systemInstruction: SYSTEM_INSTRUCTION,
       generationConfig: { maxOutputTokens: 1500 },
+      tools: [{ googleSearchRetrieval: {} }],
     })
 
-    const prompt = USER_PROMPT_PREFIX + context + USER_PROMPT_SUFFIX
+    const prompt = USER_PROMPT_TEMPLATE(keyword.trim())
     const maxRetries = 2
     let lastError: unknown = null
     let responseText: string | null = null
+    let sourceLinks: Array<{ title: string; url: string }> = []
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const result = await model.generateContent(prompt)
-        responseText = result.response.text()
+        const resp = result.response
+        responseText = resp.text()
         lastError = null
+        // Google Search grounding 출처를 source_links로 사용
+        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
+        const candidate = (resp as GroundingResp).candidates?.[0]
+        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
+        sourceLinks = chunks
+          .map((c) => ({
+            title: (c.web?.title ?? '제목 없음').slice(0, 200),
+            url: c.web?.uri ?? '',
+          }))
+          .filter((l) => l.url)
         break
       } catch (geminiError: unknown) {
         lastError = geminiError
@@ -188,7 +131,7 @@ export async function POST(req: Request) {
           /models\/[\w.-]+ is not found/i.test(msg)
 
         if (isModelNotFound) {
-          await logAvailableModels(apiKey)
+          await logAvailableModels(effective.gemini)
           return NextResponse.json(
             {
               error: `선택한 모델(${GEMINI_MODEL})을 사용할 수 없어요. 서버 로그에 사용 가능한 모델 목록이 출력되었으니, .env에 GEMINI_MODEL=모델명 을 설정해 주세요.`,

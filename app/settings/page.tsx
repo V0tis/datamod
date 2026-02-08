@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2 } from 'lucide-react'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
 
@@ -20,10 +20,23 @@ type SettingsData = {
   email: string
   nickname: string
   hasGeminiKey: boolean
-  hasFirecrawlKey: boolean
   hasOpenAIKey?: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; firecrawl: LicenseOrigin; openai?: LicenseOrigin | null }
+  hasServerGemini?: boolean
+  hasServerOpenAI?: boolean
+  licenseOrigin?: { gemini: LicenseOrigin; openai?: LicenseOrigin | null }
 }
+
+const MASKED_PLACEHOLDER = '••••••••••••••••'
+
+const LICENSE_ROWS: Array<{
+  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasOpenAIKey'>
+  label: string
+  stateKey: 'geminiApiKey' | 'openaiApiKey'
+  showKey: 'showGeminiKey' | 'showOpenAIKey'
+}> = [
+  { id: 'hasGeminiKey', label: 'Gemini — 종합 분석', stateKey: 'geminiApiKey', showKey: 'showGeminiKey' },
+  { id: 'hasOpenAIKey', label: 'OpenAI — Fallback (인사이트 탭)', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
+]
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -33,10 +46,8 @@ export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null)
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [firecrawlApiKey, setFirecrawlApiKey] = useState('')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
-  const [showFirecrawlKey, setShowFirecrawlKey] = useState(false)
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
 
   useEffect(() => {
@@ -64,9 +75,8 @@ export default function SettingsPage() {
       .then((json: SettingsData | null) => {
         if (json) {
           setData(json)
-          setNickname(json.nickname)
+          setNickname(json.nickname ?? '')
           setGeminiApiKey('')
-          setFirecrawlApiKey('')
           setOpenaiApiKey('')
         }
       })
@@ -101,9 +111,8 @@ export default function SettingsPage() {
     if (!user) return
     setSaving(true)
     try {
-      const body: { gemini_api_key?: string; firecrawl_api_key?: string; openai_api_key?: string } = {}
+      const body: Record<string, string> = {}
       if (geminiApiKey !== '') body.gemini_api_key = geminiApiKey
-      if (firecrawlApiKey !== '') body.firecrawl_api_key = firecrawlApiKey
       if (openaiApiKey !== '') body.openai_api_key = openaiApiKey
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -116,26 +125,39 @@ export default function SettingsPage() {
         return
       }
       setGeminiApiKey('')
-      setFirecrawlApiKey('')
       setOpenaiApiKey('')
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              hasGeminiKey: prev.hasGeminiKey || !!body.gemini_api_key,
-              hasFirecrawlKey: prev.hasFirecrawlKey || !!body.firecrawl_api_key,
-              hasOpenAIKey: prev.hasOpenAIKey || !!body.openai_api_key,
-            }
-          : null
-      )
       const nextRes = await fetch('/api/settings')
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
-        setData((prev) => (prev ? { ...prev, licenseOrigin: nextJson.licenseOrigin, hasOpenAIKey: nextJson.hasOpenAIKey } : null))
+        setData(nextJson)
       }
       toast.success('라이선스 설정이 저장되었어요.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const getKeyState = (row: typeof LICENSE_ROWS[0]) => {
+    const value = { geminiApiKey, openaiApiKey }[row.stateKey] as string
+    const hasUser = !!data?.[row.id]
+    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : data?.hasServerOpenAI
+    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : data?.licenseOrigin?.openai
+    const isUserTyped = value.length > 0
+    const placeholder =
+      hasServer && !hasUser ? MASKED_PLACEHOLDER
+      : hasUser ? MASKED_PLACEHOLDER
+      : '키를 입력하세요'
+    const canReveal = isUserTyped
+    const show = { showGeminiKey, showOpenAIKey }[row.showKey] as boolean
+    const setShow = { showGeminiKey: setShowGeminiKey, showOpenAIKey: setShowOpenAIKey }[row.showKey]
+    const setValue = { geminiApiKey: setGeminiApiKey, openaiApiKey: setOpenaiApiKey }[row.stateKey]
+    return { value, hasUser, hasServer, origin, isUserTyped, placeholder, canReveal, show, setShow, setValue }
+  }
+
+  const handleKeyFocus = (row: typeof LICENSE_ROWS[0]) => {
+    const s = getKeyState(row)
+    if (s.hasServer && !s.hasUser && !s.value) {
+      s.setValue('')
     }
   }
 
@@ -153,188 +175,145 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8">
-        <Card className="mx-auto max-w-2xl border border-border bg-white shadow-sm">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            설정을 불러오는 중...
-          </CardContent>
-        </Card>
+      <div className="p-6 md:p-8 flex items-center justify-center min-h-[40vh]">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">설정을 불러오는 중...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6 md:p-8">
-      <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-1">설정</h1>
-        <p className="text-muted-foreground text-sm mb-6">
-          내 정보와 분석용 라이선스 키를 관리하세요.
-        </p>
+    <div className="p-6 md:p-8 w-full max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold text-foreground mb-1">설정</h1>
+      <p className="text-muted-foreground text-sm mb-6">
+        내 정보와 분석용 API 키를 관리하세요.
+      </p>
 
-        <Card className="border border-border bg-white shadow-sm overflow-hidden">
-          <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="w-full grid grid-cols-2 h-12 rounded-none border-b border-border bg-muted/30 p-0">
-              <TabsTrigger
-                value="profile"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-background data-[state=active]:shadow-none"
-              >
-                내 정보
-              </TabsTrigger>
-              <TabsTrigger
-                value="license"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-background data-[state=active]:shadow-none"
-              >
-                라이선스
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="profile" className="m-0 p-6">
-              <CardHeader className="p-0 pb-4">
-                <CardTitle className="text-lg">내 정보</CardTitle>
-                <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있어요.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <form onSubmit={handleSaveProfile} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">이메일</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={data?.email ?? ''}
-                      readOnly
-                      className="bg-muted/50 cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nickname">닉네임</Label>
-                    <Input
-                      id="nickname"
-                      type="text"
-                      placeholder="닉네임을 입력하세요"
-                      value={nickname}
-                      onChange={(e) => setNickname(e.target.value)}
-                      className="bg-white"
-                    />
-                  </div>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? '저장 중...' : '저장'}
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="w-full max-w-md grid grid-cols-2 h-11 rounded-lg bg-muted/50 p-1 mb-6">
+          <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <User className="h-4 w-4" />
+            내 정보
+          </TabsTrigger>
+          <TabsTrigger value="license" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <KeyRound className="h-4 w-4" />
+            라이선스
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile" className="m-0">
+          <Card className="border border-border bg-white shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">내 정보</CardTitle>
+              <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있어요.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveProfile} className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label htmlFor="email">이메일</Label>
+                  <Input id="email" type="email" value={data?.email ?? ''} readOnly className="bg-muted/50 cursor-not-allowed" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nickname">닉네임</Label>
+                  <Input
+                    id="nickname"
+                    type="text"
+                    placeholder="닉네임을 입력하세요"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+                <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      저장 중...
+                    </>
+                  ) : (
+                    '저장'
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="license" className="m-0">
+          <Card className="border border-border bg-white shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg text-foreground">API 키</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                별도 입력이 없는 경우 시스템 기본 라이선스가 적용됩니다. 직접 입력한 키만 눈 아이콘으로 확인할 수 있으며, 서버 키는 보안상 노출하지 않습니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <form onSubmit={handleSaveLicense} className="space-y-4">
+                {LICENSE_ROWS.map((row) => {
+                  const s = getKeyState(row)
+                  const badgeLabel = s.origin === 'USER' ? 'User' : (s.hasServer || s.origin === 'SYSTEM') ? 'System' : null
+                  return (
+                    <div
+                      key={row.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center py-2 border-b border-border/80 last:border-0 last:pb-0 first:pt-0"
+                    >
+                      <div className="md:col-span-4">
+                        <Label className="text-sm font-medium text-foreground">{row.label}</Label>
+                      </div>
+                      <div className="md:col-span-8 relative">
+                        <div className="relative flex items-center">
+                          <Input
+                            type={s.show && s.canReveal ? 'text' : 'password'}
+                            placeholder={s.placeholder}
+                            value={s.value}
+                            onChange={(e) => s.setValue(e.target.value)}
+                            onFocus={() => handleKeyFocus(row)}
+                            className="bg-gray-50 border-gray-200 pr-16 h-9 text-sm placeholder:text-gray-400 focus:bg-white"
+                            autoComplete="off"
+                          />
+                          <div className="absolute right-2 flex items-center gap-1.5">
+                            {badgeLabel && (
+                              <Badge
+                                variant={badgeLabel === 'User' ? 'default' : 'secondary'}
+                                className="text-[10px] px-1.5 py-0 font-normal bg-gray-100 text-gray-600 border-0 data-[variant=default]:bg-primary/10 data-[variant=default]:text-primary"
+                              >
+                                {badgeLabel}
+                              </Badge>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => s.canReveal && s.setShow(!s.show)}
+                              title={s.canReveal ? (s.show ? '숨기기' : '보기') : '서버 키는 보안상 표시하지 않습니다'}
+                              className={`p-1 rounded ${s.canReveal ? 'text-gray-500 hover:text-foreground' : 'text-gray-300 cursor-default'}`}
+                              aria-label={s.show ? '숨기기' : '보기'}
+                            >
+                              {s.show && s.canReveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="pt-4">
+                  <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        저장 중...
+                      </>
+                    ) : (
+                      '저장'
+                    )}
                   </Button>
-                </form>
-              </CardContent>
-            </TabsContent>
-            <TabsContent value="license" className="m-0 p-6">
-              <CardHeader className="p-0 pb-4">
-                <CardTitle className="text-lg">라이선스</CardTitle>
-                <CardDescription>
-                  분석에 사용할 API 키를 입력하세요. 저장 후 검색 시 사용됩니다.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <form onSubmit={handleSaveLicense} className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Label htmlFor="gemini">Gemini API Key</Label>
-                      {data?.licenseOrigin?.gemini && (
-                        <Badge variant={data.licenseOrigin.gemini === 'USER' ? 'default' : 'secondary'} className="text-xs">
-                          {data.licenseOrigin.gemini === 'USER' ? '직접 입력' : '서버 제공'}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="relative flex items-center">
-                      <Input
-                        id="gemini"
-                        type={showGeminiKey ? 'text' : 'password'}
-                        placeholder={data?.hasGeminiKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : '키를 입력하거나 변경하려면 새 키를 입력하세요'}
-                        value={geminiApiKey}
-                        onChange={(e) => setGeminiApiKey(e.target.value)}
-                        className="bg-white pr-10"
-                        autoComplete="off"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowGeminiKey((v) => !v)}
-                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
-                        aria-label={showGeminiKey ? '숨기기' : '보기'}
-                      >
-                        {showGeminiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {data?.hasGeminiKey && !geminiApiKey && (
-                      <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요.</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Label htmlFor="firecrawl">Firecrawl API Key</Label>
-                      {data?.licenseOrigin?.firecrawl && (
-                        <Badge variant={data.licenseOrigin.firecrawl === 'USER' ? 'default' : 'secondary'} className="text-xs">
-                          {data.licenseOrigin.firecrawl === 'USER' ? '직접 입력' : '서버 제공'}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="relative flex items-center">
-                      <Input
-                        id="firecrawl"
-                        type={showFirecrawlKey ? 'text' : 'password'}
-                        placeholder={data?.hasFirecrawlKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : '키를 입력하거나 변경하려면 새 키를 입력하세요'}
-                        value={firecrawlApiKey}
-                        onChange={(e) => setFirecrawlApiKey(e.target.value)}
-                        className="bg-white pr-10"
-                        autoComplete="off"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowFirecrawlKey((v) => !v)}
-                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
-                        aria-label={showFirecrawlKey ? '숨기기' : '보기'}
-                      >
-                        {showFirecrawlKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {data?.hasFirecrawlKey && !firecrawlApiKey && (
-                      <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요.</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Label htmlFor="openai">OpenAI API Key (Fallback)</Label>
-                      {data?.licenseOrigin?.openai && (
-                        <Badge variant={data.licenseOrigin.openai === 'USER' ? 'default' : 'secondary'} className="text-xs">
-                          {data.licenseOrigin.openai === 'USER' ? '직접 입력' : '서버 제공'}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="relative flex items-center">
-                      <Input
-                        id="openai"
-                        type={showOpenAIKey ? 'text' : 'password'}
-                        placeholder={data?.hasOpenAIKey ? '•••••••••••• (등록됨. 변경 시 새 키 입력)' : 'Gemini 실패 시 Fallback용 (선택)'}
-                        value={openaiApiKey}
-                        onChange={(e) => setOpenaiApiKey(e.target.value)}
-                        className="bg-white pr-10"
-                        autoComplete="off"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowOpenAIKey((v) => !v)}
-                        className="absolute right-2 text-muted-foreground hover:text-foreground p-1"
-                        aria-label={showOpenAIKey ? '숨기기' : '보기'}
-                      >
-                        {showOpenAIKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {data?.hasOpenAIKey && !openaiApiKey && (
-                      <p className="text-xs text-muted-foreground">현재 키가 등록되어 있어요. (탭 분석 Fallback 시 사용)</p>
-                    )}
-                  </div>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? '저장 중...' : '저장'}
-                  </Button>
-                </form>
-              </CardContent>
-            </TabsContent>
-          </Tabs>
-        </Card>
-      </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

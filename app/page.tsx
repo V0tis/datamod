@@ -32,7 +32,8 @@ export default function RinAISearch() {
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
-  const [apiStatus, setApiStatus] = useState<{ gemini: boolean; firecrawl: boolean; supabase: boolean } | null>(null)
+  const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
+  const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const { status: researchStatus } = useResearchStore()
   const engineActive = researchStatus === 'loading'
 
@@ -48,8 +49,8 @@ export default function RinAISearch() {
   useEffect(() => {
     fetch('/api/health')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { gemini?: boolean; firecrawl?: boolean; supabase?: boolean } | null) => {
-        if (data) setApiStatus({ gemini: !!data.gemini, firecrawl: !!data.firecrawl, supabase: !!data.supabase })
+      .then((data: { gemini?: boolean; supabase?: boolean } | null) => {
+        if (data) setApiStatus({ gemini: !!data.gemini, supabase: !!data.supabase })
         else setApiStatus(null)
       })
       .catch(() => setApiStatus(null))
@@ -58,19 +59,22 @@ export default function RinAISearch() {
   useEffect(() => {
     if (!user) {
       setLicenseOrigin(null)
+      setCanSearch(null)
       return
     }
     fetch('/api/settings')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { licenseOrigin?: { gemini: string; firecrawl: string } } | null) => {
-        if (!data?.licenseOrigin) return
-        const { gemini, firecrawl } = data.licenseOrigin
-        if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
-        else setLicenseOrigin('SYSTEM')
+      .then((data: { licenseOrigin?: { gemini: string }; canSearch?: boolean } | null) => {
+        if (!data) return
+        if (data.licenseOrigin?.gemini) {
+          setLicenseOrigin(data.licenseOrigin.gemini === 'USER' ? 'USER' : 'SYSTEM')
+        }
+        setCanSearch(typeof data.canSearch === 'boolean' ? data.canSearch : null)
       })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했어요.' })
         setLicenseOrigin(null)
+        setCanSearch(null)
       })
   }, [user])
 
@@ -137,7 +141,7 @@ export default function RinAISearch() {
                       : 'bg-muted text-muted-foreground'
                 )}
               >
-                {engineActive ? 'AI 분석 엔진 가동 중' : licenseOrigin === 'USER' ? '개인 자원 사용 중' : '시스템 자원 사용 중'}
+                {engineActive ? 'AI 분석 엔진 가동 중' : licenseOrigin === 'USER' ? '개인 API 사용 중' : '서버 제공 API 사용 중'}
               </span>
             )}
           </div>
@@ -192,6 +196,17 @@ export default function RinAISearch() {
             {error && (
               <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm">
                 {error}
+              </div>
+            )}
+
+            {user && canSearch === false && (
+              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <p className="text-amber-800 dark:text-amber-200 text-sm">키를 등록해 주세요. 분석을 사용하려면 설정에서 Gemini API 키를 등록해야 해요.</p>
+                <Link href="/settings" className="shrink-0">
+                  <Button variant="outline" size="sm" className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/50">
+                    키 등록하러 가기
+                  </Button>
+                </Link>
               </div>
             )}
 
@@ -290,14 +305,6 @@ export default function RinAISearch() {
                       <li className="flex items-center justify-between gap-2 text-sm">
                         <span className="text-muted-foreground">Gemini</span>
                         {apiStatus.gemini ? (
-                          <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-4 w-4" /> 연결됨</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
-                        )}
-                      </li>
-                      <li className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-muted-foreground">Firecrawl</span>
-                        {apiStatus.firecrawl ? (
                           <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-4 w-4" /> 연결됨</span>
                         ) : (
                           <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>

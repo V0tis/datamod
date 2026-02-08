@@ -1,11 +1,11 @@
 /**
- * 리소스 사용량 기록 (Gemini / Firecrawl)
+ * 리소스 사용량 기록 (Gemini)
  * usage_stats 테이블에 used_date, service_type별로 count를 1씩 증가시킵니다.
  */
 
 import { createClient } from '@/lib/supabase/server'
 
-export type ServiceType = 'gemini' | 'firecrawl'
+export type ServiceType = 'gemini'
 
 /**
  * 해당 서비스의 오늘 사용량을 1 증가시킵니다.

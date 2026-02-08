@@ -381,7 +381,14 @@ function ResultsContent() {
         {error && (
           <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-destructive text-sm text-center sm:text-left flex-1">{error}</p>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 shrink-0 justify-center sm:justify-end">
+              {(/라이선스|등록해주세요|키가 필요|키를 등록/i).test(error) && (
+                <Link href="/settings">
+                  <Button variant="outline" size="sm" className="border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/30">
+                    키 등록하러 가기
+                  </Button>
+                </Link>
+              )}
               <Button
                 type="button"
                 variant="outline"

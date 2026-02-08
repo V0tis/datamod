@@ -8,8 +8,12 @@ const isDev = process.env.NODE_ENV === 'development'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 
+const RSS_ERROR_MESSAGE = '현재 구글 트렌드 데이터를 불러올 수 없습니다.'
+
 function formatErrorPayload(err: unknown): Record<string, unknown> {
-  const summary = { error: '트렌드 데이터를 불러오지 못했습니다.' }
+  const summary = {
+    error: err instanceof TrendsFetchError ? RSS_ERROR_MESSAGE : '트렌드 데이터를 불러오지 못했습니다.',
+  }
   if (!isDev) return summary
   if (err instanceof Error) {
     return {

@@ -4,8 +4,8 @@
 최신 뉴스를 수집·분석해 리포트 요약, 감성/영향력 차트, 유저 반응 예측을 한 번에 제공합니다.
 
 - **UI**: Next.js (App Router), Tailwind CSS, shadcn/ui, recharts  
-- **AI**: Google Gemini (통합 원샷 분석)  
-- **수집**: Firecrawl  
+- **AI**: Google Gemini (통합 원샷 분석, Google Search 도구로 실시간 웹 참고)  
+- **수집**: 구글 트렌드 RSS (국가별 트렌드), Gemini Google Search (뉴스·분석)  
 - **배포**: Vercel
 
 ---
@@ -17,8 +17,7 @@
 | **통합 분석** | 뉴스 수집 후 Gemini 한 번 호출로 리포트·차트 데이터·유저 반응·기사 요약을 동시에 생성 |
 | **실시간 트렌드** | 한국(KR) / 미국(US) / 일본(JP) 국가별 인기 검색어 페이지 (`/trends`), 클릭 시 즉시 분석 실행 |
 | **에너지 바** | 상단 QuotaBar로 Gemini 일일 잔여 쿼터(%) 표시 (Green → Orange → Red) |
-| **리소스 대시보드** | Gemini·Firecrawl·Supabase 사용량 시각화 (`/dashboard/usage`) |
-| **결과 탭** | 리포트 / 데이터 분석(감성 파이·영향력 레이더) / 유저 반응 / 뉴스 |
+| **결과 탭** | 리포트 / 데이터 분석(감성 파이·영향력 레이더) / 유저 반응 / 뉴스 / 인사이트 |
 | **인증** | 이메일 OTP (Resend), Supabase Auth |
 
 ---
@@ -50,10 +49,12 @@ EMAIL_FROM="Rin-AI <onboarding@resend.dev>"
 
 # 리서치 (필수)
 GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
-FIRECRAWL_API_KEY=your_firecrawl_api_key
 
 # 선택 (기본값 사용 가능)
 GEMINI_MODEL=gemini-2.0-flash
+
+# OpenAI — 인사이트 탭 Fallback (선택)
+OPENAI_API_KEY=your_openai_api_key
 ```
 
 ---
@@ -68,7 +69,7 @@ Supabase 대시보드 → SQL Editor에서 아래 순서대로 실행하세요.
 4. `supabase/migrations/004_reports_rls.sql` — RLS 정책  
 5. `supabase/migrations/005_reports_source_links.sql`  
 6. `supabase/migrations/006_reports_share_token.sql`  
-7. `supabase/migrations/007_usage_stats.sql` — `usage_stats` (Gemini/Firecrawl 사용량)
+7. `supabase/migrations/007_usage_stats.sql` — `usage_stats` (Gemini 사용량)
 
 ---
 
@@ -76,20 +77,25 @@ Supabase 대시보드 → SQL Editor에서 아래 순서대로 실행하세요.
 
 ```
 app/
-  page.tsx              # 메인 검색
-  trends/page.tsx        # 실시간 트렌드 (국가별 키워드)
-  results/page.tsx       # 분석 결과 (리포트·차트·유저반응·뉴스 탭)
-  dashboard/             # 대시보드
-  dashboard/usage/       # 리소스 사용량
-  api/research/stream/   # 스트리밍 통합 분석 API
-  api/usage/             # 사용량 조회 API
+  page.tsx                 # 메인 검색
+  trends/page.tsx          # 실시간 트렌드 (국가별 키워드)
+  results/page.tsx         # 분석 결과 (리포트·차트·유저반응·뉴스·인사이트 탭)
+  history/page.tsx         # 내 리서치 기록
+  settings/page.tsx        # 설정 (닉네임, Gemini·OpenAI API 키)
+  auth/                    # 로그인·회원가입·OTP 검증
+  api/
+    research/              # POST 분석, stream 스트리밍, insights 인사이트
+    trends/                 # 트렌드 캐시 조회·갱신
+    usage/                  # 사용량 조회 (Gemini 일일)
 components/
-  quota-bar.tsx          # 상단 에너지(쿼터) 바
-  sidebar.tsx            # 네비게이션 + 트렌드 링크
-  research-charts.tsx    # 감성 파이 / 영향력 레이더 (recharts)
+  sidebar.tsx              # 네비게이션 + 트렌드 링크
+  research-charts.tsx      # 감성 파이 / 영향력 레이더 (recharts)
+  research-report-view.tsx # 리포트·뉴스 뷰
 lib/
-  stores/research-store.ts  # 검색·결과·쿼터 상태
-  usage.ts                  # 사용량 기록 (trackUsage)
+  stores/research-store.ts # 검색·결과·쿼터 상태
+  license.ts               # API 키 결정 (Gemini, OpenAI)
+  usage.ts                 # 사용량 기록 (trackUsage)
+  trends-cache.ts          # 구글 트렌드 RSS 수집
 ```
 
 ---

@@ -14,7 +14,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, firecrawl_api_key, openai_api_key')
+    .select('nickname, gemini_api_key, openai_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -23,24 +23,26 @@ export async function GET() {
     return NextResponse.json({ error: '설정을 불러오지 못했습니다.' }, { status: 500 })
   }
 
-  const effective = getEffectiveLicenseKeys(row?.gemini_api_key, row?.firecrawl_api_key)
+  const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
   const hasGeminiKey = !!(row?.gemini_api_key && row.gemini_api_key.trim().length > 0)
-  const hasFirecrawlKey = !!(row?.firecrawl_api_key && row.firecrawl_api_key.trim().length > 0)
   const hasOpenAIKey = !!(row?.openai_api_key && row.openai_api_key.trim().length > 0)
   const effectiveOpenAI = getEffectiveOpenAIKey(row?.openai_api_key)
   const openaiOrigin =
     hasOpenAIKey ? 'USER' : (process.env.OPENAI_API_KEY?.trim() ? 'SYSTEM' : null)
 
+  const systemGemini = !!(process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '').trim()
+  const systemOpenAI = !!(process.env.OPENAI_API_KEY ?? '').trim()
+
   return NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
     hasGeminiKey,
-    hasFirecrawlKey,
     hasOpenAIKey,
+    hasServerGemini: systemGemini,
+    hasServerOpenAI: systemOpenAI,
     canSearch: effective.canSearch,
     licenseOrigin: {
       gemini: effective.geminiOrigin,
-      firecrawl: effective.firecrawlOrigin,
       openai: openaiOrigin ?? (effectiveOpenAI ? 'SYSTEM' : null),
     },
   })
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: { nickname?: string; gemini_api_key?: string; firecrawl_api_key?: string; openai_api_key?: string }
+  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string }
   try {
     body = await req.json()
   } catch {
@@ -67,14 +69,12 @@ export async function POST(req: Request) {
     typeof body.nickname === 'string' ? body.nickname.trim() || null : undefined
   const gemini_api_key =
     typeof body.gemini_api_key === 'string' ? body.gemini_api_key.trim() || null : undefined
-  const firecrawl_api_key =
-    typeof body.firecrawl_api_key === 'string' ? body.firecrawl_api_key.trim() || null : undefined
   const openai_api_key =
     typeof body.openai_api_key === 'string' ? body.openai_api_key.trim() || null : undefined
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, firecrawl_api_key, openai_api_key')
+    .select('nickname, gemini_api_key, openai_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -83,8 +83,6 @@ export async function POST(req: Request) {
     nickname: nickname !== undefined ? nickname : existing?.nickname ?? null,
     gemini_api_key:
       gemini_api_key !== undefined ? gemini_api_key : existing?.gemini_api_key ?? null,
-    firecrawl_api_key:
-      firecrawl_api_key !== undefined ? firecrawl_api_key : existing?.firecrawl_api_key ?? null,
     openai_api_key:
       openai_api_key !== undefined ? openai_api_key : existing?.openai_api_key ?? null,
     updated_at: new Date().toISOString(),

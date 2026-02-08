@@ -26,7 +26,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<{ KR: TrendsResponse['KR']; updatedAt: string | null }>({ KR: [], updatedAt: null })
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
-  const [licenseKeySource, setLicenseKeySource] = useState<{ gemini: string; firecrawl: string } | null>(null)
+  const [licenseKeySource, setLicenseKeySource] = useState<{ gemini: string } | null>(null)
   const [systemModalOpen, setSystemModalOpen] = useState(false)
   const [systemInfo, setSystemInfo] = useState<{ model?: string } | null>(null)
 
@@ -64,12 +64,11 @@ export function Sidebar() {
     }
     fetch('/api/settings')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { licenseOrigin?: { gemini: string; firecrawl: string } } | null) => {
+      .then((data: { licenseOrigin?: { gemini: string } } | null) => {
         if (!data?.licenseOrigin) return
-        const { gemini, firecrawl } = data.licenseOrigin
-        setLicenseKeySource({ gemini, firecrawl })
-        if (gemini === 'USER' && firecrawl === 'USER') setLicenseOrigin('USER')
-        else setLicenseOrigin('SYSTEM')
+        const { gemini } = data.licenseOrigin
+        setLicenseKeySource({ gemini })
+        setLicenseOrigin(gemini === 'USER' ? 'USER' : 'SYSTEM')
       })
       .catch(() => {
         setLicenseOrigin(null)
@@ -129,7 +128,7 @@ export function Sidebar() {
             className="mt-2 text-xs cursor-help"
             title={
               licenseKeySource
-                ? `키 출처: Gemini ${licenseKeySource.gemini === 'USER' ? 'DB' : 'env'}, Firecrawl ${licenseKeySource.firecrawl === 'USER' ? 'DB' : 'env'}`
+                ? `키 출처: Gemini ${licenseKeySource.gemini === 'USER' ? 'DB' : 'env'}`
                 : undefined
             }
           >

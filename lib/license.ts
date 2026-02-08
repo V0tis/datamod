@@ -8,36 +8,25 @@ export type LicenseOrigin = 'USER' | 'SYSTEM'
 
 export interface EffectiveLicense {
   gemini: string
-  firecrawl: string
   geminiOrigin: LicenseOrigin
-  firecrawlOrigin: LicenseOrigin
   canSearch: boolean
 }
 
-export function getEffectiveLicenseKeys(
-  userGemini: string | null | undefined,
-  userFirecrawl: string | null | undefined
-): EffectiveLicense {
+export function getEffectiveLicenseKeys(userGemini: string | null | undefined): EffectiveLicense {
   const systemGemini =
     (process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '').trim()
-  const systemFirecrawl = (process.env.FIRECRAWL_API_KEY ?? '').trim()
 
   const hasUserGemini = !!(userGemini && userGemini.trim())
-  const hasUserFirecrawl = !!(userFirecrawl && userFirecrawl.trim())
-
   const gemini = hasUserGemini ? userGemini!.trim() : systemGemini
-  const firecrawl = hasUserFirecrawl ? userFirecrawl!.trim() : systemFirecrawl
 
   return {
     gemini,
-    firecrawl,
     geminiOrigin: hasUserGemini ? 'USER' : 'SYSTEM',
-    firecrawlOrigin: hasUserFirecrawl ? 'USER' : 'SYSTEM',
-    canSearch: gemini.length > 0 && firecrawl.length > 0,
+    canSearch: gemini.length > 0,
   }
 }
 
-/** OpenAI 키: 사용자 입력 키 우선, 없으면 env. (탭 Fallback 등) */
+/** OpenAI 키: 사용자 입력 키 우선, 없으면 env. (인사이트 탭 Fallback) */
 export function getEffectiveOpenAIKey(userOpenAI: string | null | undefined): string {
   const systemOpenAI = (process.env.OPENAI_API_KEY ?? '').trim()
   const hasUser = !!(userOpenAI && userOpenAI.trim())

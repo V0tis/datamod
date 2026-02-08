@@ -21,7 +21,7 @@ export async function POST() {
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, firecrawl_api_key')
+    .select('nickname, gemini_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -32,7 +32,6 @@ export async function POST() {
       user_id: user.id,
       nickname: finalNickname,
       gemini_api_key: existing?.gemini_api_key ?? null,
-      firecrawl_api_key: existing?.firecrawl_api_key ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' }
