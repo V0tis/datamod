@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
-import { useRouter } from 'next/navigation'
-import { Drawer } from 'vaul'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, RefreshCw, Loader2, BarChart3, Newspaper, Tag, X } from 'lucide-react'
-import { cn, formatTimeAgo } from '@/lib/utils'
+import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
+import { formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
+import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
+import { TrendDetailPanel } from '@/components/trend-detail-panel'
 
 function showTrendsErrorToast(err: unknown): void {
   const e = err as Error & { failedCountryCode?: string; attemptedUrls?: string[] }
@@ -53,13 +54,9 @@ async function trendsFetcher(url: string, refresh?: boolean): Promise<TrendsResp
   return JSON.parse(text) as TrendsResponse
 }
 
-const COUNTRY_LABELS: Record<string, string> = {
-  KR: '한국',
-  US: '미국',
-  JP: '일본',
-}
-
-const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
+const COUNTRY_CODES = [...COUNTRY_CHIP_CODES] as const
+const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
+const CHIP_LOADING_MS = 280
 
 const SKELETON_ROWS = 8
 
@@ -88,14 +85,53 @@ function TrendsSkeleton() {
 
 export default function TrendsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const startResearch = useResearchStore((s) => s.startResearch)
-  const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
-  const [trendHours, setTrendHours] = useState<24 | 4>(24)
+  const [country, setCountryState] = useState<CountryChipCode>(() => {
+    if (typeof window === 'undefined') return 'KR'
+    const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
+    return saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)
+      ? (saved as CountryChipCode)
+      : 'KR'
+  })
+  const [chipChanging, setChipChanging] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<TrendItem | null>(null)
 
-  const trendsUrl = `/api/trends?hours=${trendHours}`
+  useEffect(() => {
+    const c = searchParams.get('country')
+    if (c && (COUNTRY_CHIP_CODES as readonly string[]).includes(c)) {
+      setCountryState(c as CountryChipCode)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!searchParams.get('country') && typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
+      if (saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)) {
+        router.replace(`/trends?country=${saved}`)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TRENDS_COUNTRY_STORAGE_KEY, country)
+    } catch {
+      /* ignore */
+    }
+  }, [country])
+
+  const setCountry = (code: CountryChipCode) => {
+    if (code === country) return
+    setChipChanging(true)
+    setCountryState(code)
+    router.replace(`/trends?country=${code}`)
+    setTimeout(() => setChipChanging(false), CHIP_LOADING_MS)
+  }
+
+  const trendsUrl = '/api/trends'
   const { data, error, isLoading, mutate } = useSWR<TrendsResponse>(trendsUrl, (u: string) => trendsFetcher(u), {
     revalidateOnFocus: false,
   })
@@ -105,8 +141,12 @@ export default function TrendsPage() {
         KR: normalizeTrendItems(data.KR),
         US: normalizeTrendItems(data.US),
         JP: normalizeTrendItems(data.JP),
+        TW: normalizeTrendItems(data.TW),
+        HK: normalizeTrendItems(data.HK),
+        GB: normalizeTrendItems(data.GB),
+        DE: normalizeTrendItems(data.DE),
       }
-    : { KR: [], US: [], JP: [] }
+    : { KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [] }
   const updatedAt = data?.updatedAt ?? null
   const loading = isLoading
 
@@ -129,12 +169,10 @@ export default function TrendsPage() {
     setDrawerOpen(true)
   }
 
-  const handleAnalyzeFromDrawer = () => {
-    if (!selectedItem) return
-    startResearch(selectedItem.keyword)
-    setDrawerOpen(false)
+  const handleAnalyzeFromPanel = (keyword: string) => {
+    startResearch(keyword)
     setSelectedItem(null)
-    router.push(`/results?keyword=${encodeURIComponent(selectedItem.keyword)}`)
+    router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
   }
 
   const items = trends[country] ?? []
@@ -152,83 +190,52 @@ export default function TrendsPage() {
       </header>
 
       <Card className="border border-border bg-white shadow-sm w-full">
-        <div className="p-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2 flex-wrap items-center">
-            {COUNTRY_CODES.map((code) => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setCountry(code)}
-                className={cn(
-                  'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                  country === code
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
-                )}
-              >
-                {COUNTRY_LABELS[code] ?? code} ({code})
-              </button>
-            ))}
-            <span className="text-muted-foreground text-xs mx-1">|</span>
-            <div className="flex rounded-lg overflow-hidden border border-border">
-              <button
-                type="button"
-                onClick={() => setTrendHours(24)}
-                disabled={updating}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
-                  trendHours === 24
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                24시간
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendHours(4)}
-                disabled={updating}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
-                  trendHours === 4
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                4시간
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-sm whitespace-nowrap">
-              마지막 업데이트: {updatedAt ? formatTimeAgo(updatedAt) : '—'}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={updating}
-              title="새로고침"
-              aria-label="새로고침"
-            >
-              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-          </div>
+        <div className="p-4 border-b border-border space-y-3">
+          <CountryChips
+            value={country}
+            onChange={setCountry}
+            updatedAt={updatedAt}
+            rightElement={
+              <>
+                <span
+                  className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                  title="구글 트렌드 RSS 피드"
+                >
+                  출처: 구글 트렌드 (RSS)
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleRefresh}
+                  disabled={updating}
+                  title="새로고침"
+                  aria-label="새로고침"
+                >
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                </Button>
+              </>
+            }
+          />
         </div>
         <CardHeader>
           <CardTitle className="text-lg">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
           <CardDescription>키워드를 클릭하면 우측 상세 패널이 열려요. 패널에서 &quot;이 키워드로 분석하기&quot;를 누르면 리서치가 시작돼요.</CardDescription>
+          <p className="text-amber-700/90 dark:text-amber-300/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative">
+          {chipChanging && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 rounded-b-lg" aria-hidden>
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
           {loading ? (
             <TrendsSkeleton />
           ) : items.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-8 text-center">
-              아직 캐시된 트렌드가 없어요. &quot;트렌드 갱신&quot;을 눌러 주세요.
+            <p className="text-muted-foreground text-sm py-12 text-center px-4">
+              현재 해당 국가의 데이터를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.
             </p>
           ) : (
             <>
-              {/* 테이블 헤더: 순위 | 키워드 | 검색량 | n시간 전 | 분석 키워드 */}
               <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1">
                 <span className="col-span-1">순위</span>
                 <span className="col-span-4">키워드</span>
@@ -236,122 +243,83 @@ export default function TrendsPage() {
                 <span className="col-span-2">등록</span>
                 <span className="col-span-3">연관 키워드</span>
               </div>
-              <ul className="space-y-1">
-                {items.map((item, i) => (
-                  <li key={`${item.keyword}-${i}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleRowClick(item)}
-                      className="w-full text-left grid grid-cols-12 gap-3 items-center rounded-xl border border-border bg-muted/30 px-4 py-3 hover:bg-primary/5 hover:border-primary/30 transition-all"
-                    >
-                      <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
-                        {item.rank}
-                      </span>
-                      <span className="col-span-4 text-foreground font-medium truncate">
-                        {item.keyword}
-                      </span>
-                      <span className="col-span-2">
-                        {item.search_volume ? (
-                          <Badge variant="secondary" className="text-xs">{item.search_volume}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </span>
-                      <span className="col-span-2 text-muted-foreground text-xs">
-                        {formatTimeAgo(item.started_at)}
-                      </span>
-                      <span className="col-span-3 flex flex-wrap gap-1">
-                        {(item.analysis_keywords?.length ?? 0) > 0
-                          ? item.analysis_keywords.slice(0, 6).map((kw, j) => (
-                              <Badge
-                                key={j}
-                                variant="outline"
-                                className="text-xs font-normal cursor-pointer hover:bg-primary/10"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedItem({ ...item, keyword: kw })
-                                  setDrawerOpen(true)
-                                }}
-                              >
-                                {kw}
-                              </Badge>
-                            ))
-                          : (
+              <ul className="space-y-2">
+                {items.map((item, i) => {
+                  const newsPreview = (item.news_items_ko?.length ? item.news_items_ko : item.news_items) ?? []
+                  const previewHeadlines = newsPreview.slice(0, 2).map((n) => ('title_ko' in n ? n.title_ko : n.title))
+                  return (
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 overflow-hidden hover:bg-primary/5 hover:border-primary/30 transition-all">
+                      <button
+                        type="button"
+                        onClick={() => handleRowClick(item)}
+                        className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
+                      >
+                        <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
+                          {item.rank}
+                        </span>
+                        <div className="col-span-4 min-w-0">
+                          <p className="text-foreground font-semibold truncate">
+                            {item.title_ko ?? item.keyword}
+                          </p>
+                          {item.title_ko != null && item.keyword !== item.title_ko ? (
+                            <p className="text-xs text-muted-foreground/80 truncate mt-0.5">{item.keyword}</p>
+                          ) : null}
+                        </div>
+                        <span className="col-span-2 flex items-center justify-end">
+                          {item.search_volume ? (
+                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
+                              {item.search_volume}
+                            </span>
+                          ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                        </span>
+                        <span className="col-span-2 text-muted-foreground text-xs">
+                          {formatTimeAgo(item.started_at)}
+                        </span>
+                        <span className="col-span-3 flex flex-wrap gap-1">
+                          {(item.analysis_keywords?.length ?? 0) > 0
+                            ? item.analysis_keywords.slice(0, 6).map((kw, j) => (
+                                <Badge
+                                  key={j}
+                                  variant="outline"
+                                  className="text-xs font-normal cursor-pointer hover:bg-primary/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedItem({ ...item, keyword: kw })
+                                    setDrawerOpen(true)
+                                  }}
+                                >
+                                  {kw}
+                                </Badge>
+                              ))
+                            : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                        </span>
+                      </button>
+                      {previewHeadlines.length > 0 && (
+                        <div className="px-4 pb-3 pt-0 border-t border-border/50 mt-0">
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {previewHeadlines.join(' · ')}
+                          </p>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* 우측 상세 Drawer */}
-      <Drawer.Root open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
-        <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/20 z-40" />
-          <Drawer.Content className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white shadow-xl flex flex-col border-l border-border">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <Drawer.Title className="text-lg font-semibold text-foreground truncate pr-2">
-                {selectedItem?.keyword ?? '트렌드 상세'}
-              </Drawer.Title>
-              <Drawer.Close asChild>
-                <button type="button" className="p-1 rounded hover:bg-muted" aria-label="닫기">
-                  <X className="h-5 w-5" />
-                </button>
-              </Drawer.Close>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {selectedItem && (
-                <>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                      <BarChart3 className="h-3.5 w-3.5" /> 지난 {trendHours}시간 검색 추이
-                    </p>
-                    <div className="rounded-lg border border-border bg-muted/20 h-32 flex items-center justify-center text-muted-foreground text-sm">
-                      그래프 이미지 (Google Trends 연동 시 표시)
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                      <Newspaper className="h-3.5 w-3.5" /> 관련 뉴스
-                    </p>
-                    <ul className="space-y-2">
-                      <li className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                        관련 뉴스는 &quot;이 키워드로 분석하기&quot; 실행 후 리서치 결과에서 확인할 수 있어요.
-                      </li>
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                      <Tag className="h-3.5 w-3.5" /> 연관 키워드
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(selectedItem.analysis_keywords?.length ?? 0) > 0
-                        ? selectedItem.analysis_keywords.map((kw, j) => (
-                            <Badge key={j} variant="outline" className="text-xs font-normal">
-                              {kw}
-                            </Badge>
-                          ))
-                        : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
-                    </div>
-                  </div>
-                  <div className="pt-2">
-                    <Button className="w-full" onClick={handleAnalyzeFromDrawer}>
-                      이 키워드로 분석하기
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
+      <TrendDetailPanel
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        selectedItem={selectedItem}
+        onAnalyze={handleAnalyzeFromPanel}
+      />
     </div>
   )
 }

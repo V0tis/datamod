@@ -20,3 +20,15 @@ export function formatTimeAgo(isoString: string | null | undefined): string {
   if (diffD < 7) return `${diffD}일 전`
   return new Date(isoString).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
 }
+
+/** 데이터 기준 타임스탬프: "2026. 02. 10 08:14 (실시간)" */
+export function formatDataTimestamp(isoString: string | null | undefined): string {
+  if (!isoString) return '—'
+  const d = new Date(isoString)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${y}. ${m}. ${day} ${h}:${min} (실시간)`
+}

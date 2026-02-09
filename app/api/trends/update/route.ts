@@ -3,10 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
+/** 트렌드 캐시 저장 테이블: global_trends (테이블명 통일) */
+const TRENDS_TABLE = 'global_trends'
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 const DEFAULT_HOURS = 24
 const isDev = process.env.NODE_ENV === 'development'
-const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
+const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
 
 function parseHours(value: unknown): number {
   if (value == null) return DEFAULT_HOURS
@@ -28,8 +31,8 @@ export async function POST(req: Request) {
 
     const supabase = await createClient()
     const { data: rows, error } = await supabase
-      .from('global_trends')
-      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
+      .from(TRENDS_TABLE)
+      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, picture_url, news_items, title_ko, news_items_ko, created_at')
       .in('country_code', COUNTRY_CODES)
       .order('rank', { ascending: true })
 

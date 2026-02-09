@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
@@ -14,12 +14,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
-import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
+import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
-import { cn, formatTimeAgo } from '@/lib/utils'
-const COUNTRY_LABELS: Record<string, string> = { KR: '한국', US: '미국', JP: '일본' }
-const COUNTRY_ORDER = ['KR', 'US', 'JP'] as const
-const TRENDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+import { cn } from '@/lib/utils'
+import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
+import { TrendDetailPanel } from '@/components/trend-detail-panel'
+
+const MAIN_TRENDS_TOP_N = 10
+const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
 export default function RinAISearch() {
   const router = useRouter()
@@ -31,14 +33,60 @@ export default function RinAISearch() {
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null }[]>([])
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
-    KR: [], US: [], JP: [], updatedAt: null,
+    KR: [],
+    US: [],
+    JP: [],
+    TW: [],
+    HK: [],
+    GB: [],
+    DE: [],
+    updatedAt: null,
   })
   const [trendStatus, setTrendStatus] = useState<TrendsResponse['trendStatus']>(undefined)
-  const [trendHours, setTrendHours] = useState<24 | 4>(24)
   const [trendsLoading, setTrendsLoading] = useState(false)
+  const searchParams = useSearchParams()
+  const [trendCountry, setTrendCountryState] = useState<CountryChipCode>(() => {
+    if (typeof window === 'undefined') return 'KR'
+    const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
+    return saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)
+      ? (saved as CountryChipCode)
+      : 'KR'
+  })
+  const [trendPanelOpen, setTrendPanelOpen] = useState(false)
+  const [selectedTrendItem, setSelectedTrendItem] = useState<TrendItem | null>(null)
+
+  useEffect(() => {
+    const c = searchParams.get('country')
+    if (c && (COUNTRY_CHIP_CODES as readonly string[]).includes(c)) {
+      setTrendCountryState(c as CountryChipCode)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TRENDS_COUNTRY_STORAGE_KEY, trendCountry)
+    } catch {
+      /* ignore */
+    }
+  }, [trendCountry])
+
+  useEffect(() => {
+    if (!searchParams.get('country') && typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
+      if (saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)) {
+        router.replace(`/?country=${saved}`)
+      }
+    }
+  }, [])
+
+  const setTrendCountry = (code: CountryChipCode) => {
+    setTrendCountryState(code)
+    router.replace(`/?country=${code}`)
+  }
   const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const { status: researchStatus } = useResearchStore()
+  const startResearch = useResearchStore((s) => s.startResearch)
   const engineActive = researchStatus === 'loading'
 
   useEffect(() => {
@@ -99,8 +147,8 @@ export default function RinAISearch() {
       })
   }, [user])
 
-  const fetchTrends = (hours: 24 | 4, forceRefresh = false) => {
-    const url = forceRefresh ? `/api/trends?hours=${hours}&refresh=1` : `/api/trends?hours=${hours}`
+  const fetchTrends = (forceRefresh = false) => {
+    const url = forceRefresh ? '/api/trends?refresh=1' : '/api/trends'
     setTrendsLoading(true)
     fetch(url)
       .then((res) => parseJsonResponse<TrendsResponse>(res))
@@ -109,6 +157,10 @@ export default function RinAISearch() {
           KR: normalizeTrendItems(data.KR),
           US: normalizeTrendItems(data.US),
           JP: normalizeTrendItems(data.JP),
+          TW: normalizeTrendItems(data.TW),
+          HK: normalizeTrendItems(data.HK),
+          GB: normalizeTrendItems(data.GB),
+          DE: normalizeTrendItems(data.DE),
           updatedAt: data.updatedAt ?? null,
         })
         setTrendStatus(data.trendStatus)
@@ -118,14 +170,8 @@ export default function RinAISearch() {
   }
 
   useEffect(() => {
-    fetchTrends(trendHours, false)
+    fetchTrends(false)
   }, [])
-
-  const onTrendHoursChange = (hours: 24 | 4) => {
-    if (hours === trendHours) return
-    setTrendHours(hours)
-    fetchTrends(hours, true)
-  }
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -243,73 +289,60 @@ export default function RinAISearch() {
 
             {/* 대시보드 그리드: 3열 카드 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* 카드 1: 실시간 트렌드 분석 - 24h/4h 토글 + KR/US/JP Top 5 */}
+              {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역본 위주) */}
               <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
                     실시간 트렌드 분석
                   </h2>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onTrendHoursChange(24)}
-                      disabled={trendsLoading}
-                      className={cn(
-                        'px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1',
-                        trendHours === 24
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      )}
-                    >
-                      {trendsLoading && trendHours === 24 ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      24시간
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onTrendHoursChange(4)}
-                      disabled={trendsLoading}
-                      className={cn(
-                        'px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1',
-                        trendHours === 4
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      )}
-                    >
-                      {trendsLoading && trendHours === 4 ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                      4시간
-                    </button>
-                    <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 ml-1">
-                      전체 <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </div>
+                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
+                    전체 <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </div>
-                <div className="space-y-4">
-                  {COUNTRY_ORDER.map((code) => {
-                    const list = sharedTrends[code].slice(0, 5)
-                    return (
-                      <div key={code} className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">{COUNTRY_LABELS[code]} Top 5</p>
-                        <ul className="space-y-1">
-                          {list.length === 0 ? (
-                            <li className="text-xs text-muted-foreground">데이터 없음</li>
-                          ) : (
-                            list.map((item, i) => (
-                              <li key={`${code}-${i}`} className="flex items-center justify-between gap-2 text-sm">
-                                <span className="font-medium text-foreground truncate">{item.keyword}</span>
-                                {item.search_volume != null && (
-                                  <span className="text-muted-foreground text-xs shrink-0">{item.search_volume}</span>
-                                )}
-                              </li>
-                            ))
-                          )}
-                        </ul>
-                      </div>
-                    )
-                  })}
+                <CountryChips
+                  value={trendCountry}
+                  onChange={setTrendCountry}
+                  updatedAt={sharedTrends.updatedAt}
+                  className="mb-4"
+                />
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  {trendsLoading ? (
+                    <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" /> 불러오는 중...
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
+                        <li className="text-xs text-muted-foreground py-2">데이터 없음</li>
+                      ) : (
+                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => (
+                          <li key={`${trendCountry}-${i}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTrendItem(item)
+                                setTrendPanelOpen(true)
+                              }}
+                              className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 transition-colors"
+                            >
+                              <span className="font-medium text-foreground truncate">
+                                {item.title_ko ?? item.keyword}
+                              </span>
+                              {item.search_volume != null && (
+                                <span className="text-muted-foreground text-xs shrink-0 tabular-nums">
+                                  {item.search_volume}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
                 </div>
-                <p className="text-muted-foreground text-xs mt-3 text-center">
-                  최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+                <p className="text-muted-foreground text-xs mt-2 text-center text-amber-700/90 dark:text-amber-300/90">
+                  RSS 데이터는 실시간 업데이트 주기를 따릅니다.
                 </p>
               </div>
 
@@ -386,6 +419,16 @@ export default function RinAISearch() {
                 </ul>
               </div>
             </div>
+
+            <TrendDetailPanel
+              open={trendPanelOpen}
+              onOpenChange={setTrendPanelOpen}
+              selectedItem={selectedTrendItem}
+              onAnalyze={(keyword) => {
+                startResearch(keyword)
+                router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

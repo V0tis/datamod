@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server'
 import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
-const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
+/** 트렌드 캐시 저장 테이블: global_trends (테이블명 통일) */
+const TRENDS_TABLE = 'global_trends'
+
+const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
 const DEFAULT_HOURS = 24
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24시간
 const isDev = process.env.NODE_ENV === 'development'
@@ -43,7 +46,7 @@ function formatErrorPayload(err: unknown): Record<string, unknown> {
   return { ...summary, message: String(err) }
 }
 
-/** global_trends 행에서 마지막 갱신 시각(created_at 최대값) 반환. 없으면 null */
+/** global_trends 테이블 행에서 마지막 갱신 시각(created_at 최대값) 반환. 없으면 null */
 function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null {
   let latest: string | null = null
   for (const r of rows) {
@@ -61,8 +64,8 @@ export async function GET(req: Request) {
 
     const supabase = await createClient()
     const { data: rows, error } = await supabase
-      .from('global_trends')
-      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
+      .from(TRENDS_TABLE)
+      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, picture_url, news_items, title_ko, news_items_ko, created_at')
       .in('country_code', COUNTRY_CODES)
       .order('rank', { ascending: true })
 
@@ -94,8 +97,8 @@ export async function GET(req: Request) {
       if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 만료', { hours, lastUpdatedAt, isStale })
       await refreshGlobalTrends(hours)
       const { data: freshRows, error: selectError } = await supabase
-        .from('global_trends')
-        .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, created_at')
+        .from(TRENDS_TABLE)
+        .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, picture_url, news_items, title_ko, news_items_ko, created_at')
         .in('country_code', COUNTRY_CODES)
         .order('rank', { ascending: true })
       if (selectError) {
