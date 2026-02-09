@@ -28,8 +28,10 @@ function showTrendsErrorToast(err: unknown): void {
   showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
 }
 
-async function trendsFetcher(url: string): Promise<TrendsResponse> {
-  const res = await fetch(url)
+async function trendsFetcher(url: string, refresh?: boolean): Promise<TrendsResponse> {
+  const sep = url.includes('?') ? '&' : '?'
+  const target = refresh ? `${url}${sep}refresh=1` : url
+  const res = await fetch(target)
   const text = await res.text()
   if (!res.ok) {
     let body: { error?: string; failedCountryCode?: string; attemptedUrls?: string[] } = {}
@@ -88,11 +90,13 @@ export default function TrendsPage() {
   const router = useRouter()
   const startResearch = useResearchStore((s) => s.startResearch)
   const [country, setCountry] = useState<'KR' | 'US' | 'JP'>('KR')
+  const [trendHours, setTrendHours] = useState<24 | 4>(24)
   const [updating, setUpdating] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<TrendItem | null>(null)
 
-  const { data, error, isLoading, mutate } = useSWR<TrendsResponse>('/api/trends', trendsFetcher, {
+  const trendsUrl = `/api/trends?hours=${trendHours}`
+  const { data, error, isLoading, mutate } = useSWR<TrendsResponse>(trendsUrl, (u: string) => trendsFetcher(u), {
     revalidateOnFocus: false,
   })
 
@@ -112,31 +116,9 @@ export default function TrendsPage() {
 
   const handleRefresh = () => {
     setUpdating(true)
-    fetch('/api/trends/update', { method: 'POST' })
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({})) as {
-          error?: string
-          failedCountryCode?: string
-          attemptedUrls?: string[]
-          data?: TrendsResponse
-        }
-        if (!res.ok) {
-          const err = new Error(body?.error ?? '갱신 실패') as Error & {
-            failedCountryCode?: string
-            attemptedUrls?: string[]
-          }
-          err.failedCountryCode = body.failedCountryCode
-          err.attemptedUrls = body.attemptedUrls
-          return Promise.reject(err)
-        }
-        return body
-      })
-      .then((payload) => {
-        if (payload?.data) {
-          mutate(payload.data, false)
-        } else {
-          mutate()
-        }
+    trendsFetcher(trendsUrl, true)
+      .then((fresh) => {
+        mutate(fresh, false)
       })
       .catch((err) => showTrendsErrorToast(err))
       .finally(() => setUpdating(false))
@@ -171,7 +153,7 @@ export default function TrendsPage() {
 
       <Card className="border border-border bg-white shadow-sm w-full">
         <div className="p-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             {COUNTRY_CODES.map((code) => (
               <button
                 key={code}
@@ -187,17 +169,51 @@ export default function TrendsPage() {
                 {COUNTRY_LABELS[code] ?? code} ({code})
               </button>
             ))}
+            <span className="text-muted-foreground text-xs mx-1">|</span>
+            <div className="flex rounded-lg overflow-hidden border border-border">
+              <button
+                type="button"
+                onClick={() => setTrendHours(24)}
+                disabled={updating}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  trendHours === 24
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                24시간
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrendHours(4)}
+                disabled={updating}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  trendHours === 4
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                4시간
+              </button>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={updating}
-            className="gap-1.5"
-          >
-            {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            트렌드 갱신
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm whitespace-nowrap">
+              마지막 업데이트: {updatedAt ? formatTimeAgo(updatedAt) : '—'}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={updating}
+              title="새로고침"
+              aria-label="새로고침"
+            >
+              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
         <CardHeader>
           <CardTitle className="text-lg">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
@@ -271,11 +287,6 @@ export default function TrendsPage() {
             </>
           )}
         </CardContent>
-        <div className="px-6 pb-4 pt-0">
-          <p className="text-muted-foreground text-xs">
-            최근 업데이트: {formatTimeAgo(updatedAt)}
-          </p>
-        </div>
       </Card>
 
       {/* 우측 상세 Drawer */}
@@ -298,7 +309,7 @@ export default function TrendsPage() {
                 <>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                      <BarChart3 className="h-3.5 w-3.5" /> 지난 24시간 검색 추이
+                      <BarChart3 className="h-3.5 w-3.5" /> 지난 {trendHours}시간 검색 추이
                     </p>
                     <div className="rounded-lg border border-border bg-muted/20 h-32 flex items-center justify-center text-muted-foreground text-sm">
                       그래프 이미지 (Google Trends 연동 시 표시)

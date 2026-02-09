@@ -4,13 +4,27 @@ import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
+const DEFAULT_HOURS = 24
 const isDev = process.env.NODE_ENV === 'development'
 const COUNTRY_CODES = ['KR', 'US', 'JP'] as const
 
-/** POST: 공유 캐시 수동 갱신 (RSS 피드 수집 후 global_trends에 저장, 저장된 데이터 전체 반환) */
-export async function POST() {
+function parseHours(value: unknown): number {
+  if (value == null) return DEFAULT_HOURS
+  const n = typeof value === 'string' ? parseInt(value, 10) : Number(value)
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_HOURS
+}
+
+/** POST: 공유 캐시 수동 갱신. body { hours?: number } 지원, 기본 24. */
+export async function POST(req: Request) {
   try {
-    await refreshGlobalTrends()
+    let hours = DEFAULT_HOURS
+    try {
+      const body = await req.json().catch(() => ({}))
+      hours = parseHours(body?.hours)
+    } catch {
+      /* ignore */
+    }
+    await refreshGlobalTrends(hours)
 
     const supabase = await createClient()
     const { data: rows, error } = await supabase

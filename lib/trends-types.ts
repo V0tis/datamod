@@ -7,11 +7,21 @@ export interface TrendItem {
   analysis_keywords: string[]
 }
 
+/** 국가별 트렌드 출처 상태 (trend_status 테이블) */
+export interface TrendStatusRow {
+  country_code: string
+  source_type: 'WEB' | 'RSS'
+  last_updated_at: string | null
+  target_hours: number | null
+}
+
 export interface TrendsResponse {
   KR: TrendItem[]
   US: TrendItem[]
   JP: TrendItem[]
   updatedAt: string | null
+  /** 출처 배지용. 키: country_code, 값: WEB | RSS */
+  trendStatus?: Record<string, TrendStatusRow>
 }
 
 /** DB 행 타입 (API 공용) */
@@ -37,8 +47,8 @@ function rowToItem(r: TrendRow): TrendItem {
   }
 }
 
-/** DB 행 배열을 TrendsResponse로 변환 (GET/update 공용) */
-export function buildTrendsResponse(rows: TrendRow[]): TrendsResponse {
+/** DB 행 배열 + trend_status를 TrendsResponse로 변환 (GET/update 공용) */
+export function buildTrendsResponse(rows: TrendRow[], trendStatusRows?: TrendStatusRow[]): TrendsResponse {
   const map: Record<string, TrendItem[]> = { KR: [], US: [], JP: [] }
   let latestAt: string | null = null
   for (const row of rows) {
@@ -51,11 +61,18 @@ export function buildTrendsResponse(rows: TrendRow[]): TrendsResponse {
   for (const code of COUNTRY_CODES) {
     map[code].sort((a, b) => a.rank - b.rank)
   }
+  const trendStatus: Record<string, TrendStatusRow> = {}
+  if (Array.isArray(trendStatusRows)) {
+    for (const s of trendStatusRows) {
+      trendStatus[s.country_code] = s
+    }
+  }
   return {
     KR: map.KR,
     US: map.US,
     JP: map.JP,
     updatedAt: latestAt,
+    trendStatus: Object.keys(trendStatus).length > 0 ? trendStatus : undefined,
   }
 }
 

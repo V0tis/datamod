@@ -162,21 +162,22 @@ export const useResearchStore = create<ResearchStore>()(
       startResearch: (keyword: string, options?: { fromRetry?: boolean }) => {
     const { status, keyword: currentKeyword } = get()
     if (!options?.fromRetry) retryScheduledForStream = false
-    if (!keyword?.trim()) {
+    const k = keyword?.trim()
+    if (!k) {
       toast.error('검색어가 없습니다.')
       set({ status: 'error', error: '검색어가 없습니다.' })
       return
     }
-    if (status === 'loading') {
+    if (status === 'loading' && currentKeyword === k) {
       toast.info('린이 이미 열심히 분석 중이에요!')
       return
     }
-    if (status === 'done' && currentKeyword === keyword.trim()) {
+    if (status === 'done' && currentKeyword === k) {
       return
     }
 
     set({
-      keyword: keyword.trim(),
+      keyword: k,
       status: 'loading',
       newsList: [],
       result: null,
@@ -185,7 +186,6 @@ export const useResearchStore = create<ResearchStore>()(
     })
 
     const run = async () => {
-      const k = keyword.trim()
       try {
         const checkRes = await fetch('/api/settings')
         if (checkRes.ok) {

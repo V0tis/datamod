@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle } from 'lucide-react'
+import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -19,6 +19,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { cn, formatTimeAgo } from '@/lib/utils'
 const COUNTRY_LABELS: Record<string, string> = { KR: '한국', US: '미국', JP: '일본' }
 const COUNTRY_ORDER = ['KR', 'US', 'JP'] as const
+const TRENDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 export default function RinAISearch() {
   const router = useRouter()
@@ -32,6 +33,9 @@ export default function RinAISearch() {
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
+  const [trendStatus, setTrendStatus] = useState<TrendsResponse['trendStatus']>(undefined)
+  const [trendHours, setTrendHours] = useState<24 | 4>(24)
+  const [trendsLoading, setTrendsLoading] = useState(false)
   const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const { status: researchStatus } = useResearchStore()
@@ -95,8 +99,10 @@ export default function RinAISearch() {
       })
   }, [user])
 
-  useEffect(() => {
-    fetch('/api/trends')
+  const fetchTrends = (hours: 24 | 4, forceRefresh = false) => {
+    const url = forceRefresh ? `/api/trends?hours=${hours}&refresh=1` : `/api/trends?hours=${hours}`
+    setTrendsLoading(true)
+    fetch(url)
       .then((res) => parseJsonResponse<TrendsResponse>(res))
       .then((data) => {
         setSharedTrends({
@@ -105,68 +111,91 @@ export default function RinAISearch() {
           JP: normalizeTrendItems(data.JP),
           updatedAt: data.updatedAt ?? null,
         })
+        setTrendStatus(data.trendStatus)
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 데이터를 불러오지 못했어요.' }))
+      .finally(() => setTrendsLoading(false))
+  }
+
+  useEffect(() => {
+    fetchTrends(trendHours, false)
   }, [])
 
-  const handleSearch = (e: React.FormEvent) => {
+  const onTrendHoursChange = (hours: 24 | 4) => {
+    if (hours === trendHours) return
+    setTrendHours(hours)
+    fetchTrends(hours, true)
+  }
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!query.trim()) return
+    const k = query.trim()
+    if (!k) return
     if (useResearchStore.getState().status === 'loading') {
       toast.info('린이 이미 열심히 분석 중이에요!')
       return
     }
     setSearching(true)
-    router.push(`/results?keyword=${encodeURIComponent(query.trim())}`)
+    if (user) {
+      try {
+        const reportRes = await fetch('/api/reports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword: k }),
+        })
+        if (reportRes.ok) {
+          const listRes = await fetch('/api/reports')
+          const listData = await listRes.json().catch(() => ({}))
+          const list = listData?.reports ?? []
+          setRecentReports(list.slice(0, 5).map((r: { keyword: string; created_at?: string | null }) => ({ keyword: r.keyword, created_at: r.created_at ?? null })))
+        } else {
+          const err = await reportRes.json().catch(() => ({}))
+          toast.error(err?.error ?? '검색 기록 저장에 실패했어요.')
+        }
+      } catch {
+        toast.error('검색 기록 저장에 실패했어요.')
+      }
+    }
+    router.push(`/results?keyword=${encodeURIComponent(k)}`)
   }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
-      {/* Header: 로고 + 검색창 (상단 작게) */}
+      {/* Header: 로고 | 검색창(중앙) | 로그인 */}
       <header className="sticky top-0 z-20 border-b border-border bg-white px-4 py-3 shadow-sm">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Link href="/" className="flex items-center gap-2 shrink-0">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div className="flex items-center shrink-0">
+            <Link href="/" className="flex items-center gap-2">
               <RinLogo size={28} className="shrink-0 opacity-95" />
               <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
             </Link>
-            {user && licenseOrigin && (
-              <span
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-medium',
-                  engineActive
-                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                    : licenseOrigin === 'USER'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-muted text-muted-foreground'
-                )}
-              >
-                {engineActive ? 'AI 분석 엔진 가동 중' : licenseOrigin === 'USER' ? '개인 API 사용 중' : '서버 제공 API 사용 중'}
-              </span>
-            )}
           </div>
-          <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 max-w-xl">
-            <div className="relative flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20">
-              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <form onSubmit={handleSearch} className="flex flex-1 max-w-xl mx-auto items-center gap-2 min-w-0 justify-center">
+            <div className="relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 h-12 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20 overflow-hidden">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground">
+                <Search className="h-4 w-4 shrink-0" />
+              </span>
               <Input
                 type="text"
                 placeholder="키워드 검색..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="border-0 bg-transparent p-0 h-8 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="border-0 bg-transparent pl-9 pr-3 h-full py-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
               />
             </div>
-            <Button type="submit" size="sm" className="shrink-0 h-8 px-4">
+            <Button type="submit" size="sm" className="shrink-0 h-12 px-4">
               검색
             </Button>
           </form>
-          {!user && (
-            <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`} className="shrink-0">
-              <Button variant="outline" size="sm" className="h-8 text-sm">
-                로그인
-              </Button>
-            </Link>
-          )}
+          <div className="w-[72px] sm:w-20 shrink-0 flex justify-end">
+            {!user && (
+              <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`}>
+                <Button variant="outline" size="sm" className="h-8 text-sm">
+                  로그인
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
@@ -212,16 +241,46 @@ export default function RinAISearch() {
 
             {/* 대시보드 그리드: 3열 카드 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* 카드 1: 실시간 트렌드 분석 - KR / US / JP 각 Top 5 */}
+              {/* 카드 1: 실시간 트렌드 분석 - 24h/4h 토글 + KR/US/JP Top 5 */}
               <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
                     실시간 트렌드 분석
                   </h2>
-                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
-                    전체 <ChevronRight className="h-4 w-4" />
-                  </Link>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onTrendHoursChange(24)}
+                      disabled={trendsLoading}
+                      className={cn(
+                        'px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1',
+                        trendHours === 24
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      {trendsLoading && trendHours === 24 ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      24시간
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onTrendHoursChange(4)}
+                      disabled={trendsLoading}
+                      className={cn(
+                        'px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1',
+                        trendHours === 4
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      {trendsLoading && trendHours === 4 ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      4시간
+                    </button>
+                    <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 ml-1">
+                      전체 <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   {COUNTRY_ORDER.map((code) => {
@@ -247,9 +306,26 @@ export default function RinAISearch() {
                     )
                   })}
                 </div>
-                <p className="text-muted-foreground text-xs text-center mt-3">
-                  최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
-                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
+                  {trendStatus && (() => {
+                    const statuses = COUNTRY_ORDER.map((c) => trendStatus[c]?.source_type).filter(Boolean)
+                    const isRss = statuses.some((s) => s === 'RSS')
+                    return (
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                          isRss ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
+                        )}
+                        title={isRss ? '상세 시간 필터링이 제한될 수 있습니다' : undefined}
+                      >
+                        {isRss ? '백업 데이터 가동 중' : '실시간 데이터 가동 중'}
+                      </span>
+                    )
+                  })()}
+                  <p className="text-muted-foreground text-xs">
+                    최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+                  </p>
+                </div>
               </div>
 
               {/* 카드 2: 나의 리서치 활동 */}

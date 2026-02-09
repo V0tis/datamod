@@ -1,6 +1,52 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
+
+// POST: 검색 시 즉시 기록 (키워드 + 날짜). 본인만 insert.
+export async function POST(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401, headers: JSON_HEADERS })
+    }
+    let body: { keyword?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: JSON_HEADERS })
+    }
+    const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
+    if (!keyword) {
+      return NextResponse.json({ error: 'keyword required' }, { status: 400, headers: JSON_HEADERS })
+    }
+    const { error } = await supabase
+      .from('reports')
+      .insert({
+        user_id: user.id,
+        keyword,
+        content: {},
+        source_links: [],
+        ai_responses: {},
+      })
+    if (error) {
+      console.error('[Reports API] POST insert error:', error)
+      return NextResponse.json(
+        { error: '리포트 기록에 실패했습니다.' },
+        { status: 500, headers: JSON_HEADERS }
+      )
+    }
+    return NextResponse.json({ success: true }, { status: 201, headers: JSON_HEADERS })
+  } catch (e) {
+    console.error('[Reports API] POST:', e)
+    return NextResponse.json(
+      { error: '리포트 기록에 실패했습니다.' },
+      { status: 500, headers: JSON_HEADERS }
+    )
+  }
+}
+
 // 본인 데이터만 조회: supabase.auth.getUser() 후 user_id로 필터
 // GET ?keyword=xxx → 해당 키워드 최신 리포트 1건 반환 (캐시 복원용, content + ai_responses 포함)
 export async function GET(req: Request) {

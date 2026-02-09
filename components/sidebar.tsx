@@ -11,7 +11,6 @@ import { cn, formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
-import { Badge } from '@/components/ui/badge'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
@@ -25,8 +24,6 @@ export function Sidebar() {
   const [displayName, setDisplayName] = useState<string>('')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<{ KR: TrendsResponse['KR']; updatedAt: string | null }>({ KR: [], updatedAt: null })
-  const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
-  const [licenseKeySource, setLicenseKeySource] = useState<{ gemini: string } | null>(null)
   const [systemModalOpen, setSystemModalOpen] = useState(false)
   const [systemInfo, setSystemInfo] = useState<{ model?: string } | null>(null)
 
@@ -53,26 +50,6 @@ export function Sidebar() {
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '프로필을 불러오지 못했어요.' })
         setDisplayName(user.email ?? '')
-      })
-  }, [user])
-
-  useEffect(() => {
-    if (!user) {
-      setLicenseOrigin(null)
-      setLicenseKeySource(null)
-      return
-    }
-    fetch('/api/settings')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { licenseOrigin?: { gemini: string } } | null) => {
-        if (!data?.licenseOrigin) return
-        const { gemini } = data.licenseOrigin
-        setLicenseKeySource({ gemini })
-        setLicenseOrigin(gemini === 'USER' ? 'USER' : 'SYSTEM')
-      })
-      .catch(() => {
-        setLicenseOrigin(null)
-        setLicenseKeySource(null)
       })
   }, [user])
 
@@ -116,25 +93,12 @@ export function Sidebar() {
 
   const sidebarContent = (
     <>
-      {/* 상단: 로고 + 라이선스 배지 */}
+      {/* 상단: 로고 */}
       <div className="border-b border-border px-5 py-3">
         <Link href="/" className="flex h-12 items-center gap-2 hover:opacity-90 transition-opacity">
           <RinLogo size={28} className="shrink-0 opacity-95" />
           <span className="font-semibold text-lg tracking-tight text-foreground">린(Rin)</span>
         </Link>
-        {user && licenseOrigin && (
-          <Badge
-            variant={licenseOrigin === 'USER' ? 'default' : 'secondary'}
-            className="mt-2 text-xs cursor-help"
-            title={
-              licenseKeySource
-                ? `키 출처: Gemini ${licenseKeySource.gemini === 'USER' ? 'DB' : 'env'}`
-                : undefined
-            }
-          >
-            {licenseOrigin === 'USER' ? 'Personal' : 'System'}
-          </Badge>
-        )}
       </div>
 
       {/* 중간: 네비게이션 */}

@@ -219,16 +219,17 @@ function ResultsContent() {
   const reportFetchedForCacheRef = useRef<string | null>(null)
   const tabAbortControllerRef = useRef<AbortController | null>(null)
 
+  // URL keyword 기준: 캐시 있으면 복원, 없으면 /api/research/stream 호출 (storeKeyword 의존 제거로 재수화 시 취소 방지)
   useEffect(() => {
-    const k = keyword ?? storeKeyword
-    if (!k?.trim()) return
+    const k = (keyword ?? storeKeyword)?.trim()
+    if (!k) return
     let cancelled = false
     loadReportByKeyword(k).then((fromCache) => {
       if (cancelled) return
       if (!fromCache) startResearch(k)
     })
     return () => { cancelled = true }
-  }, [keyword, storeKeyword, loadReportByKeyword, startResearch])
+  }, [keyword, loadReportByKeyword, startResearch])
 
   useEffect(() => {
     fetch('/api/trends')
