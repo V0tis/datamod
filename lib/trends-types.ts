@@ -10,7 +10,7 @@ export interface TrendItem {
 /** 국가별 트렌드 출처 상태 (trend_status 테이블) */
 export interface TrendStatusRow {
   country_code: string
-  source_type: 'WEB' | 'RSS'
+  source_type: 'API' | 'RSS'
   last_updated_at: string | null
   target_hours: number | null
 }
@@ -20,7 +20,7 @@ export interface TrendsResponse {
   US: TrendItem[]
   JP: TrendItem[]
   updatedAt: string | null
-  /** 출처 배지용. 키: country_code, 값: WEB | RSS */
+  /** 출처 배지용. 키: country_code, 값: API | RSS */
   trendStatus?: Record<string, TrendStatusRow>
 }
 

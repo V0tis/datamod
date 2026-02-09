@@ -81,13 +81,13 @@ export async function GET(req: Request) {
     const lastMs = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0
     const isStale = list.length === 0 || now - lastMs > CACHE_TTL_MS
 
-    const selectTrendStatus = async (): Promise<{ country_code: string; source_type: 'WEB' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]> => {
+    const selectTrendStatus = async (): Promise<{ country_code: string; source_type: 'API' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]> => {
       const { data: statusRows, error: statusErr } = await supabase
         .from('trend_status')
         .select('country_code, source_type, last_updated_at, target_hours')
         .in('country_code', COUNTRY_CODES)
       if (statusErr) return []
-      return (statusRows ?? []) as { country_code: string; source_type: 'WEB' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]
+      return (statusRows ?? []) as { country_code: string; source_type: 'API' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]
     }
 
     if (forceRefresh || isStale) {

@@ -1,18 +1,19 @@
 import Parser from 'rss-parser'
+import googleTrends from 'google-trends-api'
 import { getSupabase } from '@/lib/supabase'
 import type { TrendItem } from '@/lib/trends-types'
 
 const COUNTRY_GEO: Record<string, string> = { KR: 'KR', US: 'US', JP: 'JP' }
 
-/** 웹 우선: 구글 트렌드 트렌딩 페이지 (hours 적용) */
-const WEB_TRENDING_BASE = 'https://trends.google.co.kr/trending'
-
-/** RSS 폴백: 구글 트렌드 RSS (geo만, hours 미지원) */
+/** RSS 폴백: 구글 트렌드 RSS (geo만) */
 const RSS_BASE = 'https://trends.google.com/trending/rss'
+
+/** API 응답 앞에 붙는 XSS 방지 접두어 (라이브러리 raw 응답 시) */
+const JSON_PREFIX = ")]}'\n"
 
 const STALE_MINUTES = 60
 
-export type TrendSourceType = 'WEB' | 'RSS'
+export type TrendSourceType = 'API' | 'RSS'
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -97,6 +98,16 @@ function getAcceptLanguage(countryCode: string): string {
   return ACCEPT_LANGUAGE_BY_COUNTRY[countryCode] ?? 'en-US,en;q=0.9'
 }
 
+/** hl = 응답 언어(인터페이스/라벨). geo는 트렌드 지역, hl은 결과 텍스트 언어. 나라별로 맞춤. */
+const HL_BY_COUNTRY: Record<string, string> = {
+  KR: 'ko',
+  US: 'en',
+  JP: 'ja',
+}
+function getHlForCountry(countryCode: string): string {
+  return HL_BY_COUNTRY[countryCode.toUpperCase()] ?? 'en'
+}
+
 /** 헤더를 붙여 RSS URL fetch 후 XML 문자열 반환. 404 등이면 throw. */
 async function fetchRssXml(url: string, countryCode: string): Promise<string> {
   const res = await fetch(url, {
@@ -117,11 +128,6 @@ async function fetchRssXml(url: string, countryCode: string): Promise<string> {
 
 const DEFAULT_HOURS = 24
 
-/** 웹 트렌딩 페이지 URL (geo, hours 적용) */
-function getWebTrendingUrl(countryCode: string, hours: number = DEFAULT_HOURS): string {
-  return `${WEB_TRENDING_BASE}?geo=${countryCode}&hours=${hours}`
-}
-
 /** RSS 시도 URL 목록 (폴백용, geo만) */
 function getRssUrlsForCountry(countryCode: string): string[] {
   const upper = countryCode.toUpperCase()
@@ -132,74 +138,111 @@ function getRssUrlsForCountry(countryCode: string): string[] {
   ]
 }
 
-/** 웹 페이지에서 트렌드 목록 추출 시도. 실패 또는 비어 있으면 null 반환. */
-async function fetchTrendsFromWeb(countryCode: string, hours: number = DEFAULT_HOURS): Promise<TrendItem[] | null> {
-  const url = getWebTrendingUrl(countryCode, hours)
+/** 라이브러리 응답이 문자열이면 )]}'\n 제거 후 파싱 */
+function parseGoogleTrendsResponse(res: string | unknown): Record<string, unknown> | null {
+  if (typeof res === 'object' && res !== null) return res as Record<string, unknown>
+  if (typeof res !== 'string') return null
+  let raw = res.trim()
+  if (raw.startsWith(JSON_PREFIX)) raw = raw.slice(JSON_PREFIX.length).trim()
+  if (!raw) return null
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept-Language': getAcceptLanguage(countryCode),
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-      signal: AbortSignal.timeout(12000),
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+/** realTimeTrends 응답에서 storySummaries.trendingStories → TrendItem[] */
+function mapRealTimeStoriesToItems(data: Record<string, unknown>): TrendItem[] {
+  const items: TrendItem[] = []
+  const storySummaries = data.storySummaries as Record<string, unknown> | undefined
+  const stories = storySummaries?.trendingStories as Array<Record<string, unknown>> | undefined
+  if (!Array.isArray(stories)) return items
+  for (let i = 0; i < stories.length && i < 50; i++) {
+    const s = stories[i]
+    const firstArticle = Array.isArray(s.articles) ? (s.articles as Record<string, unknown>[])[0] : undefined
+    const title = (s.title ?? s.entityTitle ?? s.name ?? (firstArticle?.title as string | undefined)) as string | undefined
+    const keyword = typeof title === 'string' ? title.trim().replace(/\s+/g, ' ') : ''
+    if (keyword.length < 2 || isBlacklistedKeyword(keyword)) continue
+    items.push({
+      keyword,
+      rank: items.length + 1,
+      search_volume: (s.formattedTraffic ?? s.approximateTraffic) != null ? String(s.formattedTraffic ?? s.approximateTraffic) : null,
+      started_at: (s.time ?? s.publishedTime) != null ? String(s.time ?? s.publishedTime) : null,
+      analysis_keywords: [],
     })
-    if (!res.ok) return null
-    const html = await res.text()
-    const items: TrendItem[] = []
-    const arrayLike = html.match(/\[[\s\S]*?"(?:title|query|keyword|name)"\s*:\s*"[^"]+"[\s\S]*?\]/g)
-    if (arrayLike) {
-      for (const block of arrayLike) {
-        try {
-          const parsed = JSON.parse(block) as Array<{ title?: string; query?: string; keyword?: string; name?: string; formattedTraffic?: string; approxTraffic?: string }>
-          if (Array.isArray(parsed) && parsed.length >= 3) {
-            parsed.forEach((o, i) => {
-              const keyword = (o.title ?? o.query ?? o.keyword ?? o.name ?? '').trim().replace(/\s+/g, ' ')
-              if (keyword.length >= 2 && !isBlacklistedKeyword(keyword)) {
-                const raw = o.formattedTraffic ?? o.approxTraffic
-                items.push({
-                  keyword,
-                  rank: items.length + 1,
-                  search_volume: raw != null ? String(raw) : null,
-                  started_at: null,
-                  analysis_keywords: [],
-                })
-              }
-            })
-            if (items.length > 0) return items
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    const windowData = html.match(/window\.(?:__INITIAL|__STATE|__DATA)\s*=\s*(\{[\s\S]*?\});?\s*(?:<\/script>|$)/m)
-    if (windowData) {
-      try {
-        const data = JSON.parse(windowData[1]) as Record<string, unknown>
-        const list = (data.trendingList ?? data.dailyTrends ?? data.trends ?? data.list) as Array<Record<string, unknown>> | undefined
-        if (Array.isArray(list) && list.length >= 3) {
-          list.forEach((o) => {
-            const keyword = String(o.title ?? o.query ?? o.keyword ?? o.name ?? '').trim().replace(/\s+/g, ' ')
-            if (keyword.length >= 2 && !isBlacklistedKeyword(keyword)) {
-              items.push({
-                keyword,
-                rank: items.length + 1,
-                search_volume: o.formattedTraffic ?? o.approxTraffic != null ? String(o.approxTraffic) : null,
-                started_at: null,
-                analysis_keywords: [],
-              })
-            }
-          })
-          if (items.length > 0) return items
-        }
-      } catch {
-        /* ignore */
-      }
+  }
+  return items
+}
+
+/** dailyTrends 응답: default.trendingSearchesDays[0].trendingSearches → TrendItem[] */
+function mapDailyTrendsToItems(data: Record<string, unknown>): TrendItem[] {
+  const items: TrendItem[] = []
+  const def = data.default as Record<string, unknown> | undefined
+  const days = def?.trendingSearchesDays as Array<{ trendingSearches?: Array<Record<string, unknown>> }> | undefined
+  const firstDay = Array.isArray(days) ? days[0] : undefined
+  const list = firstDay?.trendingSearches
+  if (!Array.isArray(list)) return items
+  for (let i = 0; i < list.length && i < 50; i++) {
+    const o = list[i]
+    const title = o.title as Record<string, string> | string | undefined
+    const keyword = typeof title === 'string'
+      ? title
+      : (title && typeof title === 'object' && typeof title.query === 'string')
+        ? title.query
+        : (o.query as string) ?? (o.name as string) ?? ''
+    const cleaned = keyword.trim().replace(/\s+/g, ' ')
+    if (cleaned.length < 2 || isBlacklistedKeyword(cleaned)) continue
+    const relatedQueries = o.relatedQueries as Array<{ query?: string }> | undefined
+    const analysis_keywords = Array.isArray(relatedQueries)
+      ? relatedQueries.map((q) => String(q?.query ?? '').trim()).filter(Boolean).slice(0, 10)
+      : []
+    items.push({
+      keyword: cleaned,
+      rank: items.length + 1,
+      search_volume: (o.formattedTraffic ?? o.approximateTraffic) != null ? String(o.formattedTraffic ?? o.approximateTraffic) : null,
+      started_at: (o.time ?? o.publishedTime) != null ? String(o.time ?? o.publishedTime) : null,
+      analysis_keywords,
+    })
+  }
+  return items
+}
+
+/**
+ * google-trends-api: realTimeTrends 우선 → 실패/빈 데이터 시 dailyTrends → 둘 다 실패 시 null (RSS 폴백).
+ */
+async function fetchTrendsFromApi(countryCode: string): Promise<TrendItem[] | null> {
+  const geo = countryCode.toUpperCase()
+  const hl = getHlForCountry(countryCode)
+
+  try {
+    const res = await Promise.race([
+      googleTrends.realTimeTrends({ geo, hl, timezone: -540 }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000)),
+    ])
+    const data = parseGoogleTrendsResponse(res)
+    if (data) {
+      const items = mapRealTimeStoriesToItems(data)
+      if (items.length >= 1) return items
     }
   } catch {
-    /* timeout or network */
+    /* fall through to dailyTrends */
   }
+
+  try {
+    const res = await Promise.race([
+      googleTrends.dailyTrends({ geo, hl, timezone: -540 }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000)),
+    ])
+    const data = parseGoogleTrendsResponse(res)
+    if (data) {
+      const items = mapDailyTrendsToItems(data)
+      if (items.length >= 1) return items
+    }
+  } catch {
+    /* fall through to null → RSS */
+  }
+
   return null
 }
 
@@ -278,25 +321,24 @@ async function upsertTrendStatus(
 }
 
 /**
- * 웹 우선 수집 후 실패 시 RSS 폴백. 동일 국가 기존 데이터는 upsert_country_trends 내부에서 DELETE 후 INSERT.
- * trend_status에 출처(WEB/RSS) 및 target_hours 기록.
+ * API(realTime → daily) 우선 수집, 둘 다 실패 시 RSS 폴백.
+ * trend_status에 출처(API/RSS) 및 target_hours 기록.
  */
 export async function refreshGlobalTrends(hours: number = DEFAULT_HOURS): Promise<{ KR: TrendItem[]; US: TrendItem[]; JP: TrendItem[] }> {
   const results: Record<string, TrendItem[]> = { KR: [], US: [], JP: [] }
   const supabase = getSupabase()
 
-  console.log('[Trends] 수집 시작. 웹 우선, hours=', hours)
+  console.log('[Trends] 수집 시작. API(realTime→daily) 우선, hours=', hours)
   for (const [countryCode] of Object.entries(COUNTRY_GEO)) {
-    const webUrl = getWebTrendingUrl(countryCode, hours)
     let items: TrendItem[]
     let sourceType: TrendSourceType
 
     try {
-      const webItems = await fetchTrendsFromWeb(countryCode, hours)
-      if (webItems && webItems.length > 0) {
-        items = webItems
-        sourceType = 'WEB'
-        console.log('[Trends] 웹 수집 완료:', countryCode, '→', items.length, '개')
+      const apiItems = await fetchTrendsFromApi(countryCode)
+      if (apiItems && apiItems.length > 0) {
+        items = apiItems
+        sourceType = 'API'
+        console.log('[Trends] API 수집 완료:', countryCode, '→', items.length, '개')
       } else {
         items = await fetchTrendsFromRss(countryCode)
         sourceType = 'RSS'
@@ -306,13 +348,13 @@ export async function refreshGlobalTrends(hours: number = DEFAULT_HOURS): Promis
       try {
         items = await fetchTrendsFromRss(countryCode)
         sourceType = 'RSS'
-        console.log('[Trends] 웹 실패 후 RSS 폴백:', countryCode, '→', items.length, '개')
-      } catch (rssErr) {
+        console.log('[Trends] API 실패 후 RSS 폴백:', countryCode, '→', items.length, '개')
+      } catch {
         if (e instanceof TrendsFetchError) throw e
         throw new TrendsFetchError(
           e instanceof Error ? e.message : String(e),
           countryCode,
-          [webUrl, ...getRssUrlsForCountry(countryCode)]
+          getRssUrlsForCountry(countryCode)
         )
       }
     }

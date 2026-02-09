@@ -144,6 +144,8 @@ export default function RinAISearch() {
           body: JSON.stringify({ keyword: k }),
         })
         if (reportRes.ok) {
+          const now = new Date().toISOString()
+          setRecentReports((prev) => [{ keyword: k, created_at: now }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
           const listRes = await fetch('/api/reports')
           const listData = await listRes.json().catch(() => ({}))
           const list = listData?.reports ?? []
@@ -161,7 +163,7 @@ export default function RinAISearch() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
-      {/* Header: 로고 | 검색창(중앙) | 로그인 */}
+      {/* Header: 로고 | 검색창(중앙, 수평 정렬) | 로그인 */}
       <header className="sticky top-0 z-20 border-b border-border bg-white px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div className="flex items-center shrink-0">
@@ -170,8 +172,8 @@ export default function RinAISearch() {
               <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
             </Link>
           </div>
-          <form onSubmit={handleSearch} className="flex flex-1 max-w-xl mx-auto items-center gap-2 min-w-0 justify-center">
-            <div className="relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 h-12 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20 overflow-hidden">
+          <form onSubmit={handleSearch} className="flex flex-1 max-w-xl mx-auto items-stretch gap-2 min-w-0 justify-center h-12">
+            <div className="relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 h-full focus-within:bg-white focus-within:ring-2 focus-within:ring-primary/20 overflow-hidden min-h-[2.75rem]">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground">
                 <Search className="h-4 w-4 shrink-0" />
               </span>
@@ -180,10 +182,10 @@ export default function RinAISearch() {
                 placeholder="키워드 검색..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="border-0 bg-transparent pl-9 pr-3 h-full py-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                className="border-0 bg-transparent pl-9 pr-3 h-full py-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
               />
             </div>
-            <Button type="submit" size="sm" className="shrink-0 h-12 px-4">
+            <Button type="submit" size="sm" className="shrink-0 h-full min-h-[2.75rem] px-4">
               검색
             </Button>
           </form>
@@ -306,26 +308,9 @@ export default function RinAISearch() {
                     )
                   })}
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
-                  {trendStatus && (() => {
-                    const statuses = COUNTRY_ORDER.map((c) => trendStatus[c]?.source_type).filter(Boolean)
-                    const isRss = statuses.some((s) => s === 'RSS')
-                    return (
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium',
-                          isRss ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
-                        )}
-                        title={isRss ? '상세 시간 필터링이 제한될 수 있습니다' : undefined}
-                      >
-                        {isRss ? '백업 데이터 가동 중' : '실시간 데이터 가동 중'}
-                      </span>
-                    )
-                  })()}
-                  <p className="text-muted-foreground text-xs">
-                    최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
-                  </p>
-                </div>
+                <p className="text-muted-foreground text-xs mt-3 text-center">
+                  최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+                </p>
               </div>
 
               {/* 카드 2: 나의 리서치 활동 */}
