@@ -231,11 +231,11 @@ export default function TrendsPage() {
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1">
+              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1 items-center">
                 <span className="col-span-1">순위</span>
                 <span className="col-span-7">키워드</span>
-                <span className="col-span-2">검색량</span>
-                <span className="col-span-2">등록</span>
+                <span className="col-span-2 text-right">검색량</span>
+                <span className="col-span-2 text-right">등록</span>
               </div>
               <ul className="space-y-2">
                 {items.map((item, i) => {
@@ -251,16 +251,14 @@ export default function TrendsPage() {
                         <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
                           {item.rank}
                         </span>
-                        <div className="col-span-7 min-w-0">
+                        <div className="col-span-7 min-w-0 flex flex-col gap-0.5">
                           {item.title_ko != null && item.keyword !== item.title_ko ? (
-                            <p className="truncate flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                              <span className="text-foreground font-semibold text-[15px]">{item.keyword}</span>
-                              <span className="text-muted-foreground text-sm">
-                                번역: <span className="text-foreground/80">{item.title_ko}</span>
-                              </span>
-                            </p>
+                            <>
+                              <p className="text-lg font-bold text-foreground truncate">{item.title_ko}</p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{item.keyword}</p>
+                            </>
                           ) : (
-                            <p className="text-foreground font-semibold truncate">{item.keyword}</p>
+                            <p className="text-lg font-bold text-foreground truncate">{item.keyword}</p>
                           )}
                         </div>
                         <span className="col-span-2 flex items-center justify-end">
@@ -272,10 +270,12 @@ export default function TrendsPage() {
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
                         </span>
-                        <TimeAgo
-                          isoString={item.started_at}
-                          className="col-span-2 text-muted-foreground text-xs"
-                        />
+                        <span className="col-span-2 flex justify-end">
+                          <TimeAgo
+                            isoString={item.started_at}
+                            className="text-muted-foreground text-xs"
+                          />
+                        </span>
                       </button>
                     </li>
                   )

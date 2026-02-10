@@ -30,5 +30,5 @@ export function formatDataTimestamp(isoString: string | null | undefined): strin
   const day = String(d.getDate()).padStart(2, '0')
   const h = String(d.getHours()).padStart(2, '0')
   const min = String(d.getMinutes()).padStart(2, '0')
-  return `${y}. ${m}. ${day} ${h}:${min} (실시간)`
+  return `${y}. ${m}. ${day} ${h}:${min}`
 }

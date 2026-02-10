@@ -21,7 +21,7 @@ const PANEL_MAX_W = '28rem'
 /**
  * 트렌드 키워드 상세 패널 (우측 슬라이딩).
  * 헤더 고정, 관련 뉴스 영역 스크롤.
- * 뉴스 링크는 TrendNewsList에서 구글 번역 프록시로 열림.
+ * 뉴스 링크는 TrendNewsList에서 원문 URL로 새 탭.
  */
 export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }: TrendDetailPanelProps) {
   const [mounted, setMounted] = useState(false)
@@ -65,30 +65,35 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
             exit={{ x: '100%' }}
             transition={{ type: 'tween', duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
           >
-            {/* 고정: 헤더 */}
-            <div className="shrink-0 p-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground truncate pr-2">
-                {selectedItem ? (selectedItem.title_ko ?? selectedItem.keyword) : '트렌드 상세'}
+            {/* 고정: 헤더 — 번역 키워드 */}
+            <div className="shrink-0 p-4 border-b border-border flex items-start justify-between gap-3">
+              <h2 className="text-2xl font-bold text-foreground leading-tight min-w-0 flex-1">
+                {selectedItem ? (
+                  <span className="break-words">{selectedItem.title_ko ?? selectedItem.keyword}</span>
+                ) : (
+                  '트렌드 상세'
+                )}
               </h2>
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="p-1 rounded hover:bg-muted"
+                className="p-1 rounded hover:bg-muted shrink-0"
                 aria-label="닫기"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* 스크롤: 관련 뉴스 (news_items 원문, 남은 공간 채움) */}
+            {/* 스크롤: 관련 뉴스 최상단 배치 */}
             {selectedItem && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <p className="shrink-0 px-4 pt-3 pb-1 text-xs text-muted-foreground">관련 뉴스</p>
+                <p className="shrink-0 px-4 pt-3 pb-1.5 text-xs font-medium text-muted-foreground">관련 뉴스</p>
                 <div className="px-4 pb-4 min-h-0 flex-1 overflow-hidden flex flex-col">
                   <TrendNewsList
                     items={selectedItem.news_items ?? []}
                     emptyMessage="현재 관련 뉴스가 없습니다."
-                    listClassName="overflow-y-auto overscroll-behavior-y-auto flex-1 min-h-0 rounded-lg border border-border pr-1"
+                    listClassName="overflow-y-auto overscroll-behavior-y-auto flex-1 min-h-0 rounded-lg pr-1"
+                    highlightFirst
                   />
                 </div>
               </div>
