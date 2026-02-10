@@ -205,19 +205,15 @@ function ResultsContent() {
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  /** 탭별 Groq / Gemini / HF 3엔진 결과 */
+  /** 탭별 Groq / Gemini 2엔진 결과 */
   const [tabCacheGroq, setTabCacheGroq] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [tabCacheGemini, setTabCacheGemini] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
-  const [tabCacheHf, setTabCacheHf] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [tabLoadingGroq, setTabLoadingGroq] = useState<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
   const [tabLoadingGemini, setTabLoadingGemini] = useState<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
-  const [tabLoadingHf, setTabLoadingHf] = useState<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
   const [tabErrorGroq, setTabErrorGroq] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [tabErrorGemini, setTabErrorGemini] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
-  const [tabErrorHf, setTabErrorHf] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [retryCountTabGroq, setRetryCountTabGroq] = useState<Record<AiTabId, number>>({ logic: 0, creative: 0, fact: 0 })
   const [retryCountTabGemini, setRetryCountTabGemini] = useState<Record<AiTabId, number>>({ logic: 0, creative: 0, fact: 0 })
-  const [retryCountTabHf, setRetryCountTabHf] = useState<Record<AiTabId, number>>({ logic: 0, creative: 0, fact: 0 })
   const [quotaExceeded, setQuotaExceeded] = useState(false)
   /** Gemini 무료 쿼터 초과 시 세션 동안 더 이상 Gemini 요청 안 함 */
   const [geminiQuotaExceeded, setGeminiQuotaExceeded] = useState(false)
@@ -297,11 +293,10 @@ function ResultsContent() {
     : ''
   const newsHeadlines = rssNews.length > 0 ? rssNews.map((i) => i.title).join('\n') : ''
 
-  // DB 캐시(result.analysis_groq / analysis_hf / analysis_gemini) → 탭 캐시 동기화
+  // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화 (HF 제거)
   useEffect(() => {
     if (!result?.reportId) return
     const groq = result.analysis_groq as Record<string, string> | undefined
-    const hf = result.analysis_hf as Record<string, string> | undefined
     const gemini = result.analysis_gemini as Record<string, string> | undefined
     if (groq && typeof groq === 'object' && ('logic' in groq || 'creative' in groq || 'fact' in groq)) {
       setTabCacheGroq((prev) => ({
@@ -309,14 +304,6 @@ function ResultsContent() {
         logic: typeof groq.logic === 'string' ? groq.logic : prev.logic,
         creative: typeof groq.creative === 'string' ? groq.creative : prev.creative,
         fact: typeof groq.fact === 'string' ? groq.fact : prev.fact,
-      }))
-    }
-    if (hf && typeof hf === 'object' && ('logic' in hf || 'creative' in hf || 'fact' in hf)) {
-      setTabCacheHf((prev) => ({
-        ...prev,
-        logic: typeof hf.logic === 'string' ? hf.logic : prev.logic,
-        creative: typeof hf.creative === 'string' ? hf.creative : prev.creative,
-        fact: typeof hf.fact === 'string' ? hf.fact : prev.fact,
       }))
     }
     if (gemini && typeof gemini === 'object' && ('logic' in gemini || 'creative' in gemini || 'fact' in gemini)) {
@@ -327,29 +314,25 @@ function ResultsContent() {
         fact: typeof gemini.fact === 'string' ? gemini.fact : prev.fact,
       }))
     }
-  }, [result?.reportId, result?.analysis_groq, result?.analysis_hf, result?.analysis_gemini])
+  }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
 
   const fetchTabAnalysis = useCallback(
-    async (tabId: AiTabId, provider: 'groq' | 'hf' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean }) => {
+    async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean }) => {
       if (quotaExceeded) return
       if (provider === 'gemini' && geminiQuotaExceeded) return
       if (provider === 'all' && geminiQuotaExceeded) return
-      if (provider !== 'hf' && provider !== 'gemini' && retryCountTabGroq[tabId] >= 3) return
-      if (provider !== 'groq' && provider !== 'gemini' && retryCountTabHf[tabId] >= 3) return
-      if (provider !== 'groq' && provider !== 'hf' && retryCountTabGemini[tabId] >= 3) return
+      if (provider !== 'gemini' && retryCountTabGroq[tabId] >= 3) return
+      if (provider !== 'groq' && retryCountTabGemini[tabId] >= 3) return
       const ac = new AbortController()
       tabAbortControllerRef.current = ac
-      const doGroq = provider === 'groq' || (provider === 'all' && !geminiQuotaExceeded)
+      const doGroq = provider === 'groq' || provider === 'all'
       const doGemini = (provider === 'all' || provider === 'gemini') && !geminiQuotaExceeded
-      const doHf = provider === 'hf' || (provider === 'all' && !geminiQuotaExceeded)
       if (doGroq) setTabLoadingGroq((prev) => ({ ...prev, [tabId]: true }))
       if (doGemini) setTabLoadingGemini((prev) => ({ ...prev, [tabId]: true }))
-      if (doHf) setTabLoadingHf((prev) => ({ ...prev, [tabId]: true }))
       setTabErrorGroq((prev) => ({ ...prev, [tabId]: null }))
       setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
-      setTabErrorHf((prev) => ({ ...prev, [tabId]: null }))
-      const logicText = tabCacheGroq.logic ?? tabCacheGemini.logic ?? tabCacheHf.logic ?? ''
-      const creativeText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? tabCacheHf.creative ?? ''
+      const logicText = tabCacheGroq.logic ?? tabCacheGemini.logic ?? ''
+      const creativeText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
       try {
         const res = await fetch('/api/research/insights/tab', {
           method: 'POST',
@@ -376,10 +359,8 @@ function ResultsContent() {
             setQuotaExceeded(true)
             setTabErrorGroq({ logic: QUOTA_UNIFIED_MESSAGE, creative: QUOTA_UNIFIED_MESSAGE, fact: QUOTA_UNIFIED_MESSAGE })
             setTabErrorGemini({ logic: QUOTA_UNIFIED_MESSAGE, creative: QUOTA_UNIFIED_MESSAGE, fact: QUOTA_UNIFIED_MESSAGE })
-            setTabErrorHf({ logic: QUOTA_UNIFIED_MESSAGE, creative: QUOTA_UNIFIED_MESSAGE, fact: QUOTA_UNIFIED_MESSAGE })
             setTabLoadingGroq({ logic: false, creative: false, fact: false })
             setTabLoadingGemini({ logic: false, creative: false, fact: false })
-            setTabLoadingHf({ logic: false, creative: false, fact: false })
             toast.error('API 쿼터/요청 한도 초과', {
               id: QUOTA_TOAST_ID,
               description: '잠시 후 다시 시도해 주세요.',
@@ -394,10 +375,6 @@ function ResultsContent() {
               setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
               setTabErrorGemini((prev) => ({ ...prev, [tabId]: errMsg }))
             }
-            if (provider === 'all' || provider === 'hf') {
-              setRetryCountTabHf((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
-              setTabErrorHf((prev) => ({ ...prev, [tabId]: errMsg }))
-            }
             toast.error(errMsg, { id: TAB_ERROR_TOAST_ID, duration: 5000 })
             showErrorToast(data, { fallbackMessage: errMsg })
           }
@@ -405,7 +382,6 @@ function ResultsContent() {
         }
         const groqText = typeof (data as { groq?: { text?: string } }).groq?.text === 'string' ? (data as { groq: { text: string } }).groq.text : null
         const geminiText = typeof (data as { gemini?: { text?: string } }).gemini?.text === 'string' ? (data as { gemini: { text: string } }).gemini.text : null
-        const hfText = typeof (data as { hf?: { text?: string } }).hf?.text === 'string' ? (data as { hf: { text: string } }).hf.text : null
         const groqErrorMsg = typeof (data as { groqError?: string }).groqError === 'string' ? (data as { groqError: string }).groqError : null
         const geminiQuotaExceeded = (data as { geminiQuotaExceeded?: boolean }).geminiQuotaExceeded === true
         if (groqText !== null) {
@@ -429,14 +405,6 @@ function ResultsContent() {
             setTabErrorGemini((prev) => ({ ...prev, [tabId]: '분석에 실패했습니다.' }))
           }
         }
-        if (hfText !== null) {
-          setTabCacheHf((prev) => ({ ...prev, [tabId]: hfText }))
-          setRetryCountTabHf((prev) => ({ ...prev, [tabId]: 0 }))
-          setTabErrorHf((prev) => ({ ...prev, [tabId]: null }))
-        } else if (provider === 'all' || provider === 'hf') {
-          setRetryCountTabHf((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
-          setTabErrorHf((prev) => ({ ...prev, [tabId]: '분석에 실패했습니다.' }))
-        }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         const fallback = '분석을 불러오지 못했어요. 다시 시도해 주세요.'
@@ -448,19 +416,14 @@ function ResultsContent() {
           setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
           setTabErrorGemini((prev) => ({ ...prev, [tabId]: fallback }))
         }
-        if (provider === 'all' || provider === 'hf') {
-          setRetryCountTabHf((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
-          setTabErrorHf((prev) => ({ ...prev, [tabId]: fallback }))
-        }
         toast.error(fallback, { id: TAB_ERROR_TOAST_ID, duration: 5000 })
         showErrorToast(err, { fallbackMessage: fallback })
       } finally {
         setTabLoadingGroq((prev) => ({ ...prev, [tabId]: false }))
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
-        setTabLoadingHf((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, tabCacheHf, newsHeadlines, quotaExceeded, geminiQuotaExceeded, retryCountTabGroq, retryCountTabGemini, retryCountTabHf]
+    [currentKeyword, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, retryCountTabGroq, retryCountTabGemini]
   )
 
   useEffect(() => {
@@ -469,25 +432,19 @@ function ResultsContent() {
     if (t !== 'logic' && t !== 'creative' && t !== 'fact') return
     if (status === 'loading') return
     if (status !== 'done' && status !== 'error') return
-    if (tabLoadingGroq[t] || tabLoadingGemini[t] || tabLoadingHf[t]) return
-    if ((retryCountTabGroq[t] ?? 0) >= 3 && (retryCountTabGemini[t] ?? 0) >= 3 && (retryCountTabHf[t] ?? 0) >= 3) return
+    if (tabLoadingGroq[t] || tabLoadingGemini[t]) return
+    if ((retryCountTabGroq[t] ?? 0) >= 3 && (retryCountTabGemini[t] ?? 0) >= 3) return
     const needGroq = !tabCacheGroq[t] && (retryCountTabGroq[t] ?? 0) < 3 && !tabLoadingGroq[t]
     const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && (retryCountTabGemini[t] ?? 0) < 3 && !tabLoadingGemini[t]
-    const needHf = !tabCacheHf[t] && (retryCountTabHf[t] ?? 0) < 3 && !tabLoadingHf[t]
-    if (!needGroq && !needGemini && !needHf) return
-    if (needGroq && needGemini && needHf) {
+    if (!needGroq && !needGemini) return
+    if (needGroq && needGemini) {
       fetchTabAnalysis(t, 'all')
-    } else if (needGroq && needHf) {
-      fetchTabAnalysis(t, 'groq')
-      fetchTabAnalysis(t, 'hf')
     } else if (needGroq) {
       fetchTabAnalysis(t, 'groq')
-    } else if (needHf) {
-      fetchTabAnalysis(t, 'hf')
     } else if (needGemini) {
       fetchTabAnalysis(t, 'gemini')
     }
-  }, [activeTab, status, tabCacheGroq, tabCacheGemini, tabCacheHf, tabLoadingGroq, tabLoadingGemini, tabLoadingHf, retryCountTabGroq, retryCountTabGemini, retryCountTabHf, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
+  }, [activeTab, status, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, retryCountTabGroq, retryCountTabGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
 
   const handleShare = useCallback(async () => {
     const reportId = result?.reportId
@@ -519,7 +476,7 @@ function ResultsContent() {
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
-    const previousInsights = result?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? tabCacheHf.creative ?? ''
+    const previousInsights = result?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
     if (!previousInsights) return
     setFollowUpLoading(true)
     setFollowUpQuestion('')
@@ -546,7 +503,7 @@ function ResultsContent() {
     } finally {
       setFollowUpLoading(false)
     }
-  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative, tabCacheHf.creative])
+  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
 
   const showTabs = !!currentKeyword
   if (showTabs) {
@@ -634,19 +591,17 @@ function ResultsContent() {
                 size="sm"
                 className="gap-2 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
                 disabled={
-                  tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] || tabLoadingHf[activeTab]
+                  tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]
                 }
                 onClick={() => {
                   setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
                   setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabCacheHf((prev) => ({ ...prev, [activeTab]: null }))
                   setTabErrorGroq((prev) => ({ ...prev, [activeTab]: null }))
                   setTabErrorGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabErrorHf((prev) => ({ ...prev, [activeTab]: null }))
                   fetchTabAnalysis(activeTab as AiTabId, 'all', { isReanalyze: true })
                 }}
               >
-                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] || tabLoadingHf[activeTab] ? (
+                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     탭 분석 재실행 중...
@@ -730,10 +685,8 @@ function ResultsContent() {
                     setQuotaExceeded(false)
                     setTabErrorGroq({ logic: null, creative: null, fact: null })
                     setTabErrorGemini({ logic: null, creative: null, fact: null })
-                    setTabErrorHf({ logic: null, creative: null, fact: null })
                     setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
                     setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                    setTabCacheHf((prev) => ({ ...prev, [activeTab]: null }))
                     fetchTabAnalysis(activeTab as AiTabId, 'all')
                   }}
                 >
@@ -757,7 +710,7 @@ function ResultsContent() {
                       <ResearchCharts chartData={result.chartData} />
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Groq */}
                     <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
                       <CardHeader className="pb-2">
@@ -871,61 +824,6 @@ function ResultsContent() {
                             <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
                             <Button variant="outline" size="sm" className="gap-1.5 mt-auto" disabled={tabLoadingGemini[id] || geminiQuotaExceeded}
                               onClick={() => { if (!geminiQuotaExceeded) { setTabCacheGemini((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'gemini') } }}
-                            >재시도</Button>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                    {/* Hugging Face */}
-                    <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="secondary">Hugging Face (Qwen)</Badge>
-                          {tabLoadingHf[id] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col gap-4">
-                        {tabErrorHf[id] ? (
-                          <div className="rounded-lg border border-border dark:bg-[#15171a] dark:border-[#00d19a] p-3 flex flex-col gap-2">
-                            <p className="text-destructive text-sm dark:text-[#00d19a]">
-                              {(retryCountTabHf[id] ?? 0) >= 3
-                                ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
-                                : tabErrorHf[id]}
-                            </p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10" disabled={tabLoadingHf[id]}
-                              onClick={() => {
-                                if ((retryCountTabHf[id] ?? 0) >= 3) {
-                                  setRetryCountTabHf((prev) => ({ ...prev, [id]: 0 }))
-                                  setTabErrorHf((prev) => ({ ...prev, [id]: null }))
-                                }
-                                setTabCacheHf((prev) => ({ ...prev, [id]: null }))
-                                fetchTabAnalysis(id, 'hf')
-                              }}
-                            >재시도</Button>
-                          </div>
-                        ) : tabLoadingHf[id] ? (
-                          <div className="flex items-center justify-center min-h-[200px]">
-                            <RinAnimation variant="loading" size={120} className="shrink-0" />
-                          </div>
-                        ) : tabCacheHf[id] ? (
-                          <>
-                            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', id === 'fact' && 'prose-lg')}>
-                              <MarkdownWithSearchLinks text={tabCacheHf[id]!} />
-                            </div>
-                            <div className="mt-auto pt-2 flex items-center justify-between gap-2">
-                              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground dark:text-slate-400"
-                                onClick={() => { const t = tabCacheHf[id]; if (t) navigator.clipboard.writeText(t).then(() => toast.success('텍스트가 복사되었어요.')) }}
-                              ><Copy className="w-3.5 h-3.5" /> 복사</Button>
-                              <Button variant="outline" size="sm" className="gap-1.5" disabled={tabLoadingHf[id]}
-                                onClick={() => { setTabCacheHf((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'hf') }}
-                              ><RefreshCw className="w-4 h-4" /> 재시도</Button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto" disabled={tabLoadingHf[id]}
-                              onClick={() => { setTabCacheHf((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'hf') }}
                             >재시도</Button>
                           </>
                         )}

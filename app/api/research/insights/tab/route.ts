@@ -9,14 +9,11 @@ const GEMINI_MODEL_PRIMARY = process.env.GEMINI_TAB_MODEL ?? 'gemini-3-flash-pre
 const GEMINI_BASE_URL_V1BETA = 'https://generativelanguage.googleapis.com/v1beta/models'
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
 const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash'
-const HF_CHAT_URL = 'https://router.huggingface.co/hf/v1/chat/completions'
-const HF_MODEL = 'Qwen/Qwen2.5-72B-Instruct'
-const HF_MAX_RETRIES = 3
-const HF_RETRY_DELAYS_MS = [2000, 4000, 6000]
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
+const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
 
-/** 세 엔진 공통: 시장 분석 및 인사이트를 마크다운 형식으로 요약 */
+/** Gemini·Groq 공통: 시장 분석 및 인사이트를 마크다운 형식으로 요약 */
 const UNIFIED_SYSTEM_PROMPT =
   '시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.'
 
@@ -69,7 +66,7 @@ export async function POST(req: Request) {
     newsHeadlines?: string
     logicText?: string
     creativeText?: string
-    provider?: 'groq' | 'hf' | 'gemini' | 'all'
+    provider?: 'groq' | 'gemini' | 'all'
     isReanalyze?: boolean
     countryCode?: string
   }
@@ -88,7 +85,7 @@ export async function POST(req: Request) {
   const isReanalyze = body?.isReanalyze === true
   const countryCode = (typeof body?.countryCode === 'string' ? body.countryCode.trim() : '') || 'KR'
   const provider =
-    body?.provider === 'groq' || body?.provider === 'hf' || body?.provider === 'gemini'
+    body?.provider === 'groq' || body?.provider === 'gemini'
       ? body.provider
       : 'all'
 
@@ -99,15 +96,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'keyword required' }, { status: 400 })
   }
 
-  // 엔진별 캐시: keyword → reportId 순으로 병합. 전부 있을 때만 즉시 반환, 하나라도 없으면 해당 엔진만 API 호출
+  // Read-through 캐시: isReanalyze false면 DB만 조회 후 반환. true일 때만 API 호출
   let mergedGroq: string | null = null
-  let mergedHf: string | null = null
   let mergedGemini: string | null = null
 
   if (!isReanalyze && keyword) {
     const { data: cachedData } = await supabase
       .from('research_history')
-      .select('analysis_groq, analysis_hf, analysis_gemini')
+      .select('analysis_groq, analysis_gemini')
       .eq('user_id', user.id)
       .eq('keyword', keyword)
       .eq('country_code', countryCode)
@@ -115,21 +111,17 @@ export async function POST(req: Request) {
 
     if (cachedData) {
       const groqTab = (cachedData.analysis_groq ?? null) as Record<string, string> | null
-      const hfTab = (cachedData.analysis_hf ?? null) as Record<string, string> | null
       const geminiTab = (cachedData.analysis_gemini ?? null) as Record<string, string> | null
       mergedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
-      mergedHf = typeof hfTab?.[tab] === 'string' && hfTab[tab].trim().length > 0 ? hfTab[tab].trim() : null
       mergedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
       const allCached =
-        (provider === 'all' && mergedGroq != null && mergedHf != null && mergedGemini != null) ||
+        (provider === 'all' && mergedGroq != null && mergedGemini != null) ||
         (provider === 'groq' && mergedGroq != null) ||
-        (provider === 'hf' && mergedHf != null) ||
         (provider === 'gemini' && mergedGemini != null)
       if (allCached) {
         return NextResponse.json({
           groq: mergedGroq != null ? { text: mergedGroq } : null,
           gemini: mergedGemini != null ? { text: mergedGemini } : null,
-          hf: mergedHf != null ? { text: mergedHf } : null,
         })
       }
     }
@@ -138,7 +130,7 @@ export async function POST(req: Request) {
   if (reportId && !isReanalyze) {
     const { data: historyRow } = await supabase
       .from('research_history')
-      .select('analysis_groq, analysis_hf, analysis_gemini, updated_at')
+      .select('analysis_groq, analysis_gemini, updated_at')
       .eq('report_id', reportId)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -147,32 +139,33 @@ export async function POST(req: Request) {
       !!historyRow?.updated_at && Date.now() - new Date(historyRow.updated_at).getTime() <= CACHE_TTL_MS
     if (cacheValid && historyRow) {
       const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
-      const hfTab = (historyRow.analysis_hf ?? null) as Record<string, string> | null
       const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
       const reportCachedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
-      const reportCachedHf = typeof hfTab?.[tab] === 'string' && hfTab[tab].trim().length > 0 ? hfTab[tab].trim() : null
       const reportCachedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
       mergedGroq = mergedGroq ?? reportCachedGroq
-      mergedHf = mergedHf ?? reportCachedHf
       mergedGemini = mergedGemini ?? reportCachedGemini
     }
   }
 
   const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
-  const needHf = (provider === 'all' || provider === 'hf') && mergedHf == null
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
-  if (!needGroq && !needHf && !needGemini) {
+  if (!needGroq && !needGemini) {
     return NextResponse.json({
       groq: mergedGroq != null ? { text: mergedGroq } : null,
       gemini: mergedGemini != null ? { text: mergedGemini } : null,
-      hf: mergedHf != null ? { text: mergedHf } : null,
+    })
+  }
+
+  if (!isReanalyze) {
+    return NextResponse.json({
+      groq: mergedGroq != null ? { text: mergedGroq } : null,
+      gemini: mergedGemini != null ? { text: mergedGemini } : null,
     })
   }
 
   const groqKey = process.env.GROQ_API_KEY?.trim()
   const geminiKey = process.env.GOOGLE_GENAI_API_KEY?.trim()
-  const hfKey = (process.env.HF_ACCESS_TOKEN ?? process.env.HUGGINGFACE_API_KEY ?? process.env.HF_TOKEN ?? '').trim()
 
   if ((provider === 'all' || provider === 'groq') && !groqKey) {
     return NextResponse.json(
@@ -183,12 +176,6 @@ export async function POST(req: Request) {
   if ((provider === 'all' || provider === 'gemini') && !geminiKey) {
     return NextResponse.json(
       { error: 'Gemini API 키가 설정되지 않았습니다. GOOGLE_GENAI_API_KEY를 설정해 주세요.' },
-      { status: 400 }
-    )
-  }
-  if ((provider === 'all' || provider === 'hf') && !hfKey) {
-    return NextResponse.json(
-      { error: 'Hugging Face API 키가 설정되지 않았습니다. HF_ACCESS_TOKEN 또는 HUGGINGFACE_API_KEY를 설정해 주세요.' },
       { status: 400 }
     )
   }
@@ -283,62 +270,10 @@ export async function POST(req: Request) {
     }
   }
 
-  /** HF router chat completions: https://router.huggingface.co/hf/v1/chat/completions, model Qwen/Qwen2.5-72B-Instruct */
-  async function callHf(): Promise<string | null> {
-    if (provider !== 'all' && provider !== 'hf') return null
-    for (let attempt = 0; attempt < HF_MAX_RETRIES; attempt++) {
-      try {
-        const res = await fetch(HF_CHAT_URL, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${hfKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: HF_MODEL,
-            messages: [
-              { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
-              { role: 'user', content: userPrompt },
-            ],
-            max_tokens: 2048,
-          }),
-        })
-        const raw = await res.text()
-        const isRetryable =
-          res.status === 503 ||
-          /loading|overloaded|traffic|트래픽|rate limit|try again/i.test(raw)
-        if (!res.ok && isRetryable && attempt < HF_MAX_RETRIES - 1) {
-          console.warn('[Research Tab] HF', res.status, '재시도', attempt + 1, '/', HF_MAX_RETRIES, raw.slice(0, 150))
-          await new Promise((r) => setTimeout(r, HF_RETRY_DELAYS_MS[attempt]))
-          continue
-        }
-        if (!res.ok) {
-          console.warn('[Research Tab] HF', res.status, raw.slice(0, 200))
-          return null
-        }
-        let generatedText = ''
-        try {
-          const data = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> }
-          generatedText = (data?.choices?.[0]?.message?.content ?? '').trim()
-        } catch {
-          generatedText = raw.slice(0, 4000).trim()
-        }
-        return generatedText || null
-      } catch (e) {
-        console.warn('[Research Tab] HF', attempt + 1, e)
-        if (attempt < HF_MAX_RETRIES - 1) await new Promise((r) => setTimeout(r, HF_RETRY_DELAYS_MS[attempt]))
-        else return null
-      }
-    }
-    return null
-  }
-
-
-  // 캐시 있는 엔진은 API 호출 생략, 없는 엔진만 호출
-  const [groqSettled, geminiSettled, hfSettled] = await Promise.allSettled([
+  // 캐시 있는 엔진은 API 호출 생략, 없는 엔진만 호출 (Gemini·Groq만)
+  const [groqSettled, geminiSettled] = await Promise.allSettled([
     needGroq ? callGroq() : Promise.resolve({ text: mergedGroq, quotaError: false as const }),
     needGemini ? callGemini() : Promise.resolve({ text: mergedGemini, quotaExceeded: false as const }),
-    needHf ? callHf() : Promise.resolve(mergedHf),
   ])
   const groqPayload = groqSettled.status === 'fulfilled' ? groqSettled.value : { text: null, quotaError: false }
   const groqText = groqPayload.text
@@ -346,24 +281,31 @@ export async function POST(req: Request) {
   const geminiPayload = geminiSettled.status === 'fulfilled' ? geminiSettled.value : { text: null, quotaExceeded: false }
   const geminiText = geminiPayload.text
   const geminiQuotaExceeded = geminiPayload.quotaExceeded === true
-  const hfText = hfSettled.status === 'fulfilled' ? hfSettled.value : null
 
-  const groqResult = (provider === 'all' || provider === 'groq') ? (groqText ?? mergedGroq ?? '') : null
-  const geminiResult = (provider === 'all' || provider === 'gemini') ? (geminiText ?? mergedGemini ?? '') : null
-  const hfResult = (provider === 'all' || provider === 'hf') ? (hfText ?? mergedHf ?? '') : null
+  const resultG = (provider === 'all' || provider === 'gemini') ? (geminiText ?? mergedGemini ?? '') : null
+  const resultGr = (provider === 'all' || provider === 'groq') ? (groqText ?? mergedGroq ?? '') : null
 
-  if (groqResult !== null || hfResult !== null || geminiResult !== null) {
+  const groqResult = resultGr
+  const geminiResult = resultG
+
+  // analysis_results JSONB: gemini·groq만 저장 (HF 제거)
+  const analysisResults = {
+    gemini: resultG ?? ANALYSIS_FAILED_PLACEHOLDER,
+    groq: resultGr ?? ANALYSIS_FAILED_PLACEHOLDER,
+  }
+
+  const hasAnyResult = groqResult !== null || geminiResult !== null
+  if (hasAnyResult) {
     try {
       const { data: historyRow } = await supabase
         .from('research_history')
-        .select('analysis_groq, analysis_hf, analysis_gemini')
+        .select('analysis_groq, analysis_gemini')
         .eq('user_id', user.id)
         .eq('keyword', keyword)
         .eq('country_code', countryCode)
         .maybeSingle()
 
       const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
-      const prevHf = (historyRow?.analysis_hf as Record<string, string>) ?? {}
       const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
       const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
         const next = { ...prev }
@@ -371,7 +313,6 @@ export async function POST(req: Request) {
         return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as Record<string, string>
       }
       const nextGroq = withTab(prevGroq, groqResult, tab)
-      const nextHf = withTab(prevHf, hfResult, tab)
       const nextGemini = withTab(prevGemini, geminiResult, tab)
 
       await supabase.from('research_history').upsert(
@@ -381,8 +322,8 @@ export async function POST(req: Request) {
           country_code: countryCode,
           report_id: reportId ?? null,
           analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
-          analysis_hf: Object.keys(nextHf).length > 0 ? nextHf : null,
           analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
+          analysis_results: analysisResults,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,keyword,country_code' }
@@ -394,12 +335,10 @@ export async function POST(req: Request) {
 
   const hasAny =
     (groqResult != null && groqResult.length > 0) ||
-    (geminiResult != null && geminiResult.length > 0) ||
-    (hfResult != null && hfResult.length > 0)
+    (geminiResult != null && geminiResult.length > 0)
   return NextResponse.json({
     groq: groqResult != null && groqResult.length > 0 ? { text: groqResult } : null,
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,
-    hf: hfResult != null && hfResult.length > 0 ? { text: hfResult } : null,
     ...(groqQuotaError ? { groqError: GROQ_QUOTA_MESSAGE } : {}),
     ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true } : {}),
     ...(!hasAny ? { error: UNIFIED_ERROR_MESSAGE } : {}),
