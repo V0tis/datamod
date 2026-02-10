@@ -168,7 +168,7 @@ function NewsDetailModal({
                 <button
                   type="button"
                   onClick={() => setShowRawBody((v) => !v)}
-                  className="text-xs text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-white underline"
+                  className="text-xs text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-[#e1e3e6] underline"
                 >
                   {showRawBody ? '수집된 텍스트 접기' : '수집된 텍스트 보기'}
                 </button>
@@ -215,16 +215,6 @@ function ResultsContent() {
   const [retryCountTabGroq, setRetryCountTabGroq] = useState<Record<AiTabId, number>>({ logic: 0, creative: 0, fact: 0 })
   const [retryCountTabHf, setRetryCountTabHf] = useState<Record<AiTabId, number>>({ logic: 0, creative: 0, fact: 0 })
   const [quotaExceeded, setQuotaExceeded] = useState(false)
-  /** Groq / Hugging Face 듀얼 분석 결과 (별도 상태) */
-  const [analysisGroq, setAnalysisGroq] = useState<{ summary: string; modelName: string } | null>(null)
-  const [analysisHf, setAnalysisHf] = useState<{ summary: string; modelName: string } | null>(null)
-  const [loadingGroq, setLoadingGroq] = useState(false)
-  const [loadingHf, setLoadingHf] = useState(false)
-  const [errorGroq, setErrorGroq] = useState<string | null>(null)
-  const [errorHf, setErrorHf] = useState<string | null>(null)
-  const [retryCountGroq, setRetryCountGroq] = useState(0)
-  const [retryCountHf, setRetryCountHf] = useState(0)
-  const dualAnalysisFetchedRef = useRef<string | null>(null)
   const [followUps, setFollowUps] = useState<Array<{ question: string; answer: string }>>([])
   const [followUpQuestion, setFollowUpQuestion] = useState('')
   const [followUpLoading, setFollowUpLoading] = useState(false)
@@ -300,134 +290,6 @@ function ResultsContent() {
         .join('\n\n')
     : ''
   const newsHeadlines = rssNews.length > 0 ? rssNews.map((i) => i.title).join('\n') : ''
-
-  // 캐시에서 복원된 result에 듀얼 분석(요약용 summary/modelName)이 있으면 상태에 반영; report 바뀌면 초기화
-  useEffect(() => {
-    if (!result) {
-      setAnalysisGroq(null)
-      setAnalysisHf(null)
-      return
-    }
-    const groq = result.analysis_groq as { summary?: string; modelName?: string } | undefined
-    const hf = result.analysis_hf as { summary?: string; modelName?: string } | undefined
-    setAnalysisGroq(groq?.summary != null ? { summary: groq.summary, modelName: groq.modelName ?? 'Llama-3' } : null)
-    setAnalysisHf(hf?.summary != null ? { summary: hf.summary, modelName: hf.modelName ?? 'Mistral' } : null)
-  }, [result?.reportId, result?.analysis_groq, result?.analysis_hf])
-
-  const fetchDualAnalysis = useCallback(
-    (which: 'groq' | 'hf' | 'both') => {
-      const reportId = result?.reportId ?? undefined
-      const payload = {
-        keyword: currentKeyword ?? '',
-        summary: reportSummary,
-        reportId,
-        newsHeadlines,
-      }
-
-      const doGroq = async () => {
-        if (retryCountGroq >= 3) return
-        setLoadingGroq(true)
-        setErrorGroq(null)
-        try {
-          const res = await fetch('/api/research/analysis/groq', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            setRetryCountGroq((prev) => {
-              const next = Math.min(prev + 1, 3)
-              if (typeof console !== 'undefined') console.warn(`[듀얼 분석 Groq] 재시도 ${next}회차...`)
-              return next
-            })
-            setErrorGroq((data as { error?: string }).error ?? 'Groq 분석에 실패했어요.')
-            return
-          }
-          setRetryCountGroq(0)
-          setAnalysisGroq({ summary: (data as { summary?: string }).summary ?? '', modelName: (data as { modelName?: string }).modelName ?? 'Llama-3' })
-        } catch (err) {
-          setRetryCountGroq((prev) => {
-            const next = Math.min(prev + 1, 3)
-            if (typeof console !== 'undefined') console.warn(`[듀얼 분석 Groq] 재시도 ${next}회차...`)
-            return next
-          })
-          setErrorGroq('요청 중 오류가 발생했어요.')
-          showErrorToast(err, { fallbackMessage: 'Groq 분석에 실패했어요.' })
-        } finally {
-          setLoadingGroq(false)
-        }
-      }
-
-      const doHf = async () => {
-        if (retryCountHf >= 3) return
-        setLoadingHf(true)
-        setErrorHf(null)
-        try {
-          const res = await fetch('/api/research/analysis/hf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            setRetryCountHf((prev) => {
-              const next = Math.min(prev + 1, 3)
-              if (typeof console !== 'undefined') console.warn(`[듀얼 분석 HF] 재시도 ${next}회차...`)
-              return next
-            })
-            setErrorHf((data as { error?: string }).error ?? 'Hugging Face 분석에 실패했어요.')
-            return
-          }
-          setRetryCountHf(0)
-          setAnalysisHf({ summary: (data as { summary?: string }).summary ?? '', modelName: (data as { modelName?: string }).modelName ?? 'Mistral' })
-        } catch (err) {
-          setRetryCountHf((prev) => {
-            const next = Math.min(prev + 1, 3)
-            if (typeof console !== 'undefined') console.warn(`[듀얼 분석 HF] 재시도 ${next}회차...`)
-            return next
-          })
-          setErrorHf('요청 중 오류가 발생했어요.')
-          showErrorToast(err, { fallbackMessage: 'Hugging Face 분석에 실패했어요.' })
-        } finally {
-          setLoadingHf(false)
-        }
-      }
-
-      if (which === 'groq') doGroq()
-      else if (which === 'hf') doHf()
-      else {
-        doGroq()
-        doHf()
-      }
-    },
-    [currentKeyword, reportSummary, result?.reportId, newsHeadlines, retryCountGroq, retryCountHf]
-  )
-
-  // 분석 완료 시 Groq/HF 병렬 호출 (캐시 없을 때만, 1회)
-  useEffect(() => {
-    const k = (currentKeyword ?? '').trim()
-    if (!k || status !== 'done' || !result?.reportId) return
-    if (dualAnalysisFetchedRef.current === result.reportId) return
-    // DB 캐시(result)에 이미 있으면 호출하지 않음
-    const hasGroqFromCache = !!result.analysis_groq
-    const hasHfFromCache = !!result.analysis_hf
-    if (hasGroqFromCache && hasHfFromCache) {
-      dualAnalysisFetchedRef.current = result.reportId
-      return
-    }
-    const shouldFetchGroq = !analysisGroq && !hasGroqFromCache && retryCountGroq < 3 && !loadingGroq
-    const shouldFetchHf = !analysisHf && !hasHfFromCache && retryCountHf < 3 && !loadingHf
-    if (!shouldFetchGroq && !shouldFetchHf) return
-    dualAnalysisFetchedRef.current = result.reportId
-    if (shouldFetchGroq && shouldFetchHf) {
-      fetchDualAnalysis('both')
-    } else if (shouldFetchGroq) {
-      fetchDualAnalysis('groq')
-    } else {
-      fetchDualAnalysis('hf')
-    }
-  }, [status, result?.reportId, result?.analysis_groq, result?.analysis_hf, currentKeyword, analysisGroq, analysisHf, retryCountGroq, retryCountHf, loadingGroq, loadingHf, fetchDualAnalysis])
 
   // DB 캐시(result.analysis_groq / analysis_hf) → 탭 듀얼 캐시 동기화 (per-tab 객체)
   useEffect(() => {
@@ -833,7 +695,7 @@ function ResultsContent() {
                           </div>
                         ) : tabCacheGroq[id] ? (
                           <>
-                            <div className={cn('prose prose-sm max-w-none text-foreground flex-1', id === 'fact' && 'prose-lg')}>
+                            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', id === 'fact' && 'prose-lg')}>
                               <MarkdownWithSearchLinks text={tabCacheGroq[id]!} />
                             </div>
                             <div className="mt-auto pt-2 flex items-center justify-between gap-2">
@@ -902,7 +764,7 @@ function ResultsContent() {
                           </div>
                         ) : tabCacheHf[id] ? (
                           <>
-                            <div className={cn('prose prose-sm max-w-none text-foreground flex-1', id === 'fact' && 'prose-lg')}>
+                            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', id === 'fact' && 'prose-lg')}>
                               <MarkdownWithSearchLinks text={tabCacheHf[id]!} />
                             </div>
                             <div className="mt-auto pt-2 flex items-center justify-between gap-2">
@@ -964,7 +826,7 @@ function ResultsContent() {
                           {followUps.map((item, i) => (
                             <div key={i} className="rounded-lg border border-border bg-muted/30 p-4 space-y-1">
                               <p className="text-sm text-muted-foreground dark:text-slate-400 font-medium">Q. {item.question}</p>
-                              <p className="text-foreground whitespace-pre-wrap text-sm">{item.answer}</p>
+                              <p className="text-foreground dark:text-[#e1e3e6] whitespace-pre-wrap text-sm">{item.answer}</p>
                             </div>
                           ))}
                         </div>
@@ -980,149 +842,13 @@ function ResultsContent() {
         {/* Section 3. 핵심 요약: 결론 3가지 Badge */}
         {status === 'done' && result && (result.keyConclusions?.length ?? 0) > 0 && (
           <div className="mt-8 pt-6 border-t border-border dark:border-[#2d2f34]">
-            <h2 className="text-sm font-semibold text-foreground mb-3">핵심 요약</h2>
+            <h2 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 요약</h2>
             <div className="flex flex-wrap gap-2">
               {result.keyConclusions!.slice(0, 3).map((line, i) => (
                 <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
                   {line}
                 </Badge>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Section 4. 듀얼 AI 분석 (Groq / Hugging Face) */}
-        {status === 'done' && result?.reportId && currentKeyword && (
-          <div className="mt-8 pt-6 border-t border-border dark:border-[#2d2f34] no-print">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-semibold text-foreground">듀얼 AI 분석</h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={loadingGroq || loadingHf}
-                onClick={() => {
-                  setAnalysisGroq(null)
-                  setAnalysisHf(null)
-                  setErrorGroq(null)
-                  setErrorHf(null)
-                  setRetryCountGroq(0)
-                  setRetryCountHf(0)
-                  dualAnalysisFetchedRef.current = null
-                  fetchDualAnalysis('both')
-                }}
-              >
-                {(loadingGroq || loadingHf) ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    전체 재분석
-                  </>
-                )}
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Groq 카드 */}
-              <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant="secondary" className="font-medium">
-                      {analysisGroq?.modelName ?? 'Llama-3'}
-                    </Badge>
-                    {loadingGroq && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col gap-4">
-                  {errorGroq && retryCountGroq >= 3 ? (
-                    <p className="text-destructive text-sm">분석에 실패했습니다. 아래 버튼으로 다시 시도하세요.</p>
-                  ) : errorGroq ? (
-                    <p className="text-destructive text-sm">{errorGroq}</p>
-                  ) : analysisGroq?.summary ? (
-                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap flex-1">
-                      {analysisGroq.summary}
-                    </div>
-                  ) : loadingGroq ? (
-                    <div className="flex items-center justify-center py-8">
-                      <RinAnimation variant="loading" size={100} className="shrink-0" />
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground dark:text-slate-400 text-sm">분석 결과가 없어요.</p>
-                  )}
-                  <div className="mt-auto pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={loadingGroq}
-                      onClick={() => {
-                        if (retryCountGroq >= 3) {
-                          setRetryCountGroq(0)
-                          setErrorGroq(null)
-                        }
-                        setAnalysisGroq(null)
-                        fetchDualAnalysis('groq')
-                      }}
-                    >
-                      {loadingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      이 모델로 다시 분석
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              {/* Hugging Face 카드 */}
-              <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant="secondary" className="font-medium">
-                      {analysisHf?.modelName ?? 'Mistral'}
-                    </Badge>
-                    {loadingHf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col gap-4">
-                  {errorHf && retryCountHf >= 3 ? (
-                    <p className="text-destructive text-sm">분석에 실패했습니다. 아래 버튼으로 다시 시도하세요.</p>
-                  ) : errorHf ? (
-                    <p className="text-destructive text-sm">{errorHf}</p>
-                  ) : analysisHf?.summary ? (
-                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap flex-1">
-                      {analysisHf.summary}
-                    </div>
-                  ) : loadingHf ? (
-                    <div className="flex items-center justify-center py-8">
-                      <RinAnimation variant="loading" size={100} className="shrink-0" />
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground dark:text-slate-400 text-sm">분석 결과가 없어요.</p>
-                  )}
-                  <div className="mt-auto pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={loadingHf}
-                      onClick={() => {
-                        if (retryCountHf >= 3) {
-                          setRetryCountHf(0)
-                          setErrorHf(null)
-                        }
-                        setAnalysisHf(null)
-                        fetchDualAnalysis('hf')
-                      }}
-                    >
-                      {loadingHf ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      이 모델로 다시 분석
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
         )}

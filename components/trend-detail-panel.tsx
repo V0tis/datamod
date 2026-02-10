@@ -77,7 +77,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="p-1 rounded hover:bg-muted dark:hover:bg-slate-600/50 shrink-0 text-foreground dark:text-slate-300"
+                className="p-1 rounded hover:bg-muted dark:hover:bg-[#2a2d32] shrink-0 text-foreground dark:text-[#e1e3e6]"
                 aria-label="닫기"
               >
                 <X className="h-5 w-5" />

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama3-70b-8192'
+const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
 const HF_MODEL = process.env.HF_TAB_MODEL ?? 'mistralai/Mistral-7B-Instruct-v0.3'
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 
@@ -19,12 +19,12 @@ function buildUserPrompt(
   const newsBlock = newsHeadlines ? `\n\n실시간 뉴스 헤드라인 (news_items_ko):\n${newsHeadlines}\n\n` : ''
   const baseSummary = summary ? `리포트 요약:\n${summary}\n\n` : ''
 
+  // 시장 분석: 뉴스 정보만으로 AI 분석. 리포트 요약은 넣지 않고 뉴스 헤드라인만 사용.
   if (tab === 'logic') {
-    return newsBlock
-      ? `키워드: "${keyword}"${newsBlock}${baseSummary}위 실시간 뉴스(제목)와 요약을 바탕으로 뉴스 기반 실시간 상황 요약문을 2~4문단으로 작성해 주세요. 시장성·타겟·검색량 추이를 포함하고, 마크다운으로 중요 키워드는 **강조**하세요.`
-      : baseSummary
-        ? `키워드: "${keyword}"\n\n${baseSummary}위 요약을 바탕으로 시장 분석(실시간 상황 요약)을 2~4문단으로 해 주세요. 마크다운으로 중요 키워드는 **강조**하세요.`
-        : `키워드: "${keyword}"\n\n이 키워드에 대한 시장 분석(실시간 상황 요약)을 2~4문단으로 해 주세요. 마크다운으로 중요 키워드는 **강조**하세요.`
+    if (newsBlock) {
+      return `키워드: "${keyword}"${newsBlock}위 실시간 뉴스(헤드라인)만 바탕으로, 이 뉴스들이 시사하는 내용을 정리해 주세요. 뉴스 요약과 뉴스가 말해 주는 시장·이슈 관점을 2~4문단으로 작성하고, 마크다운으로 중요 키워드는 **강조**하세요. (리포트 요약이나 종합 결론은 이 탭에서 다루지 마세요.)`
+    }
+    return `키워드: "${keyword}"\n\n수집된 뉴스가 없습니다. 시장 분석은 실시간 뉴스가 있을 때 표시됩니다. 다른 탭(인사이트, 종합 리포트)을 확인해 주세요.`
   }
   if (tab === 'creative') {
     return `키워드: "${keyword}"${newsBlock}${baseSummary}위 내용을 바탕으로 향후 전망과 투자/행동 아이디어를 도출해 주세요. 실행 가능한 제안을 2~4문단으로 답하고, 마크다운으로 중요 키워드는 **강조**하세요.`
@@ -158,39 +158,56 @@ export async function POST(req: Request) {
 
   async function callHf(): Promise<string | null> {
     if (provider === 'groq') return null
-    try {
-      const res = await fetch(`https://api-inference.huggingface.co/models/${HF_MODEL}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${hfKey}`,
-        },
-        body: JSON.stringify({
-          inputs: userPrompt,
-          parameters: { max_new_tokens: 2048, return_full_text: false },
-        }),
-      })
-      const raw = await res.text()
-      if (!res.ok) {
-        console.warn('[Research Tab] HF', res.status, raw.slice(0, 200))
-        return null
-      }
-      let generatedText = ''
+    const maxRetries = 3
+    const delays = [2000, 4000, 6000]
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const parsed = JSON.parse(raw) as Array<{ generated_text?: string }> | { generated_text?: string }
-        if (Array.isArray(parsed) && parsed[0]?.generated_text) {
-          generatedText = parsed[0].generated_text.trim()
-        } else if (!Array.isArray(parsed) && typeof (parsed as { generated_text?: string }).generated_text === 'string') {
-          generatedText = (parsed as { generated_text: string }).generated_text.trim()
+        const res = await fetch('https://router.huggingface.co/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${hfKey}`,
+          },
+          body: JSON.stringify({
+            model: HF_MODEL,
+            instructions: '당신은 시장 리서치·비즈니스 전략·리포트 작성 전문가입니다. 요청에 맞게 마크다운으로 답변하세요. 중요 키워드는 **강조**하세요.',
+            input: userPrompt,
+            max_output_tokens: 2048,
+          }),
+        })
+        const raw = await res.text()
+        const isRetryable =
+          res.status === 503 ||
+          res.status === 410 ||
+          /loading|overloaded|traffic|트래픽|rate limit|try again/i.test(raw)
+        if (!res.ok && isRetryable && attempt < maxRetries - 1) {
+          console.warn('[Research Tab] HF', res.status, '재시도', attempt + 1, '/', maxRetries, raw.slice(0, 150))
+          await new Promise((r) => setTimeout(r, delays[attempt]))
+          continue
         }
-      } catch {
-        generatedText = raw.slice(0, 4000).trim()
+        if (!res.ok) {
+          console.warn('[Research Tab] HF', res.status, raw.slice(0, 200))
+          return null
+        }
+        let generatedText = ''
+        try {
+          const data = JSON.parse(raw) as {
+            output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>
+          }
+          const msg = data.output?.find((o) => o.type === 'message')
+          const textBlock = msg?.content?.find((c) => c.type === 'output_text')
+          generatedText = (textBlock?.text ?? '').trim()
+        } catch {
+          generatedText = raw.slice(0, 4000).trim()
+        }
+        return generatedText || null
+      } catch (e) {
+        console.warn('[Research Tab] HF', attempt + 1, e)
+        if (attempt < maxRetries - 1) await new Promise((r) => setTimeout(r, delays[attempt]))
+        else return null
       }
-      return generatedText || null
-    } catch (e) {
-      console.warn('[Research Tab] HF', e)
-      return null
     }
+    return null
   }
 
   const [groqText, hfText] = await Promise.all([callGroq(), callHf()])

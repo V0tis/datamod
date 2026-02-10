@@ -8,7 +8,7 @@ import Link from 'next/link'
 export function MarkdownWithSearchLinks({ text }: { text: string }) {
   const parts = text.split(/\*\*([^*]+)\*\*/)
   return (
-    <span className="whitespace-pre-wrap">
+    <span className="whitespace-pre-wrap text-foreground dark:text-[#e1e3e6]">
       {parts.map((segment, i) =>
         i % 2 === 1 ? (
           <Link

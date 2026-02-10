@@ -211,6 +211,21 @@
 .rin-doc .prose {
   max-width: 72ch;
 }
+.dark .prose,
+.dark .prose p,
+.dark .prose li,
+.dark .prose strong,
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4,
+.dark .prose span,
+.dark .prose div {
+  color: #e1e3e6;
+}
+.dark .prose a {
+  color: var(--primary);
+}
 .rin-doc .prose p + p {
   margin-top: 0.875em;
 }

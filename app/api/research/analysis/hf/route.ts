@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const HF_MODEL = process.env.HF_ANALYSIS_MODEL ?? 'mistralai/Mistral-7B-Instruct-v0.2'
+const HF_MODEL = process.env.HF_ANALYSIS_MODEL ?? 'mistralai/Mistral-7B-Instruct-v0.3'
 const HF_MODEL_LABEL = process.env.HF_MODEL_LABEL ?? 'Mistral'
 
 function buildPrompt(keyword: string, summary: string, newsHeadlines: string): string {
@@ -47,67 +47,93 @@ export async function POST(req: Request) {
 
   const prompt = buildPrompt(keyword, summary, newsHeadlines)
 
+  const maxRetries = 3
+  const delays = [2000, 4000, 6000]
+  let lastStatus = 500
+  let lastError = 'Hugging Face 요청 실패'
+
   try {
-    const res = await fetch(`https://api-inference.huggingface.co/models/${HF_MODEL}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: { max_new_tokens: 1024, return_full_text: false },
-      }),
-    })
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const res = await fetch('https://router.huggingface.co/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: HF_MODEL,
+          instructions: '시장 리서치 요약을 간결하고 마크다운 형식으로 작성해 주세요.',
+          input: prompt,
+          max_output_tokens: 1024,
+        }),
+      })
 
-    const raw = await res.text()
-    let generatedText = ''
+      const raw = await res.text()
+      lastStatus = res.status
+      const isRetryable =
+        res.status === 503 ||
+        res.status === 410 ||
+        /loading|overloaded|traffic|트래픽|rate limit|try again/i.test(raw)
 
-    if (res.ok) {
-      try {
-        const parsed = JSON.parse(raw) as Array<{ generated_text?: string }> | { generated_text?: string }
-        if (Array.isArray(parsed) && parsed[0]?.generated_text) {
-          generatedText = parsed[0].generated_text.trim()
-        } else if (!Array.isArray(parsed) && typeof (parsed as { generated_text?: string }).generated_text === 'string') {
-          generatedText = (parsed as { generated_text: string }).generated_text.trim()
+      if (!res.ok && isRetryable && attempt < maxRetries - 1) {
+        lastError = raw.slice(0, 200) || '일시적 오류'
+        console.warn('[Research Analysis HF]', res.status, '재시도', attempt + 1, '/', maxRetries, lastError)
+        await new Promise((r) => setTimeout(r, delays[attempt]))
+        continue
+      }
+
+      let generatedText = ''
+      if (res.ok) {
+        try {
+          const data = JSON.parse(raw) as {
+            output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>
+          }
+          const msg = data.output?.find((o) => o.type === 'message')
+          const textBlock = msg?.content?.find((c) => c.type === 'output_text')
+          generatedText = (textBlock?.text ?? '').trim()
+        } catch {
+          generatedText = raw.slice(0, 2000).trim()
         }
-      } catch {
-        generatedText = raw.slice(0, 2000).trim()
       }
-    }
 
-    if (!res.ok) {
-      const errMsg = raw.slice(0, 200) || 'Hugging Face 요청 실패'
-      console.warn('[Research Analysis HF]', res.status, errMsg)
-      return NextResponse.json(
-        { error: errMsg, code: res.status === 429 ? 'QUOTA' : undefined },
-        { status: res.status >= 400 ? res.status : 500 }
-      )
-    }
-
-    const payload = {
-      summary: generatedText || '분석 결과를 생성하지 못했어요.',
-      modelName: HF_MODEL_LABEL,
-    }
-
-    if (reportId) {
-      const { data: report } = await supabase
-        .from('reports')
-        .select('user_id')
-        .eq('id', reportId)
-        .single()
-      if (report?.user_id === user.id) {
-        await supabase
-          .from('research_history')
-          .update({
-            analysis_hf: payload,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('report_id', reportId)
+      if (!res.ok) {
+        lastError = raw.slice(0, 200) || 'Hugging Face 요청 실패'
+        console.warn('[Research Analysis HF]', res.status, lastError)
+        return NextResponse.json(
+          { error: lastError, code: res.status === 429 ? 'QUOTA' : res.status === 503 ? 'TRAFFIC' : undefined },
+          { status: res.status >= 400 ? res.status : 500 }
+        )
       }
+
+      const payload = {
+        summary: generatedText || '분석 결과를 생성하지 못했어요.',
+        modelName: HF_MODEL_LABEL,
+      }
+
+      if (reportId) {
+        const { data: report } = await supabase
+          .from('reports')
+          .select('user_id')
+          .eq('id', reportId)
+          .single()
+        if (report?.user_id === user.id) {
+          await supabase
+            .from('research_history')
+            .update({
+              analysis_hf: payload,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('report_id', reportId)
+        }
+      }
+
+      return NextResponse.json(payload)
     }
 
-    return NextResponse.json(payload)
+    return NextResponse.json(
+      { error: lastError, code: lastStatus === 503 ? 'TRAFFIC' : undefined },
+      { status: lastStatus >= 400 ? lastStatus : 500 }
+    )
   } catch (e) {
     console.warn('[Research Analysis HF]', e)
     return NextResponse.json(
