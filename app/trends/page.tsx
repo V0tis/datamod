@@ -11,7 +11,6 @@ import { formatTimeAgo } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
-import { Badge } from '@/components/ui/badge'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
 
@@ -69,14 +68,9 @@ function TrendsSkeleton() {
           className="grid grid-cols-12 gap-3 items-center rounded-xl border border-border bg-muted/20 px-4 py-3 min-h-[52px]"
         >
           <div className="col-span-1 h-4 w-6 rounded bg-muted animate-pulse" />
-          <div className="col-span-3 h-4 rounded bg-muted animate-pulse" />
+          <div className="col-span-7 h-4 rounded bg-muted animate-pulse" />
           <div className="col-span-2 h-5 w-14 rounded-full bg-muted animate-pulse" />
           <div className="col-span-2 h-4 w-20 rounded bg-muted animate-pulse" />
-          <div className="col-span-4 flex gap-1.5">
-            {[1, 2, 3].map((j) => (
-              <div key={j} className="h-5 w-16 rounded-full bg-muted animate-pulse" />
-            ))}
-          </div>
         </div>
       ))}
     </div>
@@ -238,10 +232,9 @@ export default function TrendsPage() {
             <>
               <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1">
                 <span className="col-span-1">순위</span>
-                <span className="col-span-4">키워드</span>
+                <span className="col-span-7">키워드</span>
                 <span className="col-span-2">검색량</span>
                 <span className="col-span-2">등록</span>
-                <span className="col-span-3">연관 키워드</span>
               </div>
               <ul className="space-y-2">
                 {items.map((item, i) => {
@@ -257,7 +250,7 @@ export default function TrendsPage() {
                         <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
                           {item.rank}
                         </span>
-                        <div className="col-span-4 min-w-0">
+                        <div className="col-span-7 min-w-0">
                           <p className="text-foreground font-semibold truncate">
                             {item.title_ko ?? item.keyword}
                           </p>
@@ -276,26 +269,6 @@ export default function TrendsPage() {
                         </span>
                         <span className="col-span-2 text-muted-foreground text-xs">
                           {formatTimeAgo(item.started_at)}
-                        </span>
-                        <span className="col-span-3 flex flex-wrap gap-1">
-                          {(item.analysis_keywords?.length ?? 0) > 0
-                            ? item.analysis_keywords.slice(0, 6).map((kw, j) => (
-                                <Badge
-                                  key={j}
-                                  variant="outline"
-                                  className="text-xs font-normal cursor-pointer hover:bg-primary/10"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setSelectedItem({ ...item, keyword: kw })
-                                    setDrawerOpen(true)
-                                  }}
-                                >
-                                  {kw}
-                                </Badge>
-                              ))
-                            : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
                         </span>
                       </button>
                       {previewHeadlines.length > 0 && (

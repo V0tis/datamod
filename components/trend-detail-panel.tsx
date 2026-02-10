@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { BarChart3, Tag, X } from 'lucide-react'
+import { BarChart3, X } from 'lucide-react'
 import type { TrendItem } from '@/lib/trends-types'
 import { TrendNewsList } from '@/components/trend-news-list'
 
@@ -17,7 +17,7 @@ export interface TrendDetailPanelProps {
 }
 
 const PANEL_MAX_W = '28rem'
-const NEWS_LIST_MAX_H_CLASS = 'max-h-[min(50vh,320px)]'
+const NEWS_LIST_MAX_H_CLASS = 'max-h-[min(70vh,480px)]'
 
 /**
  * 트렌드 키워드 상세 패널 (우측 슬라이딩).
@@ -25,15 +25,23 @@ const NEWS_LIST_MAX_H_CLASS = 'max-h-[min(50vh,320px)]'
  * 뉴스 링크는 TrendNewsList에서 구글 번역 프록시로 열림.
  */
 export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }: TrendDetailPanelProps) {
+  const [mounted, setMounted] = useState(false)
   useEffect(() => {
-    if (open) {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted && open && typeof document !== 'undefined') {
       const prev = document.body.style.overflow
       document.body.style.overflow = 'hidden'
       return () => {
         document.body.style.overflow = prev
       }
     }
-  }, [open])
+  }, [mounted, open])
+
+  const isClient = mounted && typeof window !== 'undefined'
+  if (!isClient) return null
 
   return createPortal(
     <AnimatePresence>
@@ -93,7 +101,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
               </div>
             )}
 
-            {/* 스크롤: 뉴스만 (헤더·그래프는 고정) */}
+            {/* 스크롤: 뉴스 (헤더·그래프 고정, 뉴스 영역 확대) */}
             {selectedItem && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <p className="shrink-0 px-4 pt-3 pb-1 text-xs text-muted-foreground">관련 뉴스</p>
@@ -111,28 +119,9 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
               </div>
             )}
 
-            {/* 고정: 연관 키워드 + 버튼 */}
+            {/* 고정: 분석 버튼 */}
             {selectedItem && (
-              <div className="shrink-0 p-4 border-t border-border bg-white space-y-3">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                    <Tag className="h-3.5 w-3.5" /> 연관 키워드
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(selectedItem.analysis_keywords?.length ?? 0) > 0
-                      ? selectedItem.analysis_keywords.map((kw, j) => (
-                          <span
-                            key={j}
-                            className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs font-normal"
-                          >
-                            {kw}
-                          </span>
-                        ))
-                      : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                  </div>
-                </div>
+              <div className="shrink-0 p-4 border-t border-border bg-white">
                 <Button
                   className="w-full"
                   onClick={() => {
