@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,8 +41,21 @@ const LICENSE_ROWS: Array<{
   { id: 'hasOpenAIKey', label: 'OpenAI — 분석 리포트·Fallback', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
 ]
 
+const SETTINGS_TAB_PARAM = 'tab'
+const TAB_LICENSE = 'license'
+const TAB_PROFILE = 'profile'
+
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get(SETTINGS_TAB_PARAM)
+  const activeTab = tabFromUrl === TAB_LICENSE ? TAB_LICENSE : TAB_PROFILE
+
+  const setActiveTab = (value: string) => {
+    const query = value === TAB_PROFILE ? '' : `?${SETTINGS_TAB_PARAM}=${value}`
+    router.replace(`/settings${query}`)
+  }
+
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -199,7 +212,7 @@ export default function SettingsPage() {
         내 정보와 분석용 API 키를 관리하세요.
       </p>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="w-full max-w-md grid grid-cols-2 h-11 rounded-lg bg-muted/50 p-1 mb-6">
           <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <User className="h-4 w-4" />

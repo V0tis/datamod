@@ -67,9 +67,9 @@ export function TrendNewsList({ items, className, listClassName, emptyMessage, l
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`flex gap-3 rounded-lg border bg-card hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors text-left shadow-sm ${
+                className={`flex gap-3 rounded-lg border bg-card hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:bg-slate-600/80 transition-colors duration-300 text-left shadow-sm ${
                   first
-                    ? 'border-primary/30 p-4 ring-1 ring-primary/10'
+                    ? 'border-primary/30 p-4 ring-1 ring-primary/10 dark:ring-primary/20'
                     : 'border-border p-3'
                 }`}
               >
@@ -83,7 +83,7 @@ export function TrendNewsList({ items, className, listClassName, emptyMessage, l
                   />
                 ) : (
                   <div
-                    className={`shrink-0 rounded-md border border-border bg-muted/50 flex items-center justify-center text-muted-foreground ${
+                    className={`shrink-0 rounded-md border border-border dark:border-slate-600/50 bg-muted/50 dark:bg-slate-700/50 flex items-center justify-center text-muted-foreground dark:text-slate-400 ${
                       first ? 'w-24 h-24' : 'w-20 h-20'
                     }`}
                   >
@@ -91,13 +91,13 @@ export function TrendNewsList({ items, className, listClassName, emptyMessage, l
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className={`font-medium text-foreground line-clamp-2 ${first ? 'text-base' : 'text-sm'}`}>
+                  <p className={`font-medium text-foreground dark:text-slate-100 line-clamp-2 ${first ? 'text-base' : 'text-sm'}`}>
                     {news.title}
                   </p>
                   {news.source ? (
                     <span className="inline-flex items-center gap-1.5 mt-1.5">
-                      <Globe className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden />
-                      <span className="text-xs font-medium text-muted-foreground bg-muted/70 dark:bg-muted/50 px-2 py-0.5 rounded">
+                      <Globe className="h-3 w-3 text-muted-foreground dark:text-slate-400 shrink-0" aria-hidden />
+                      <span className="text-xs font-medium text-muted-foreground dark:text-slate-400 bg-muted/70 dark:bg-slate-700/60 px-2 py-0.5 rounded">
                         {news.source}
                       </span>
                       <ExternalLink className="h-3 w-3 text-muted-foreground/80 shrink-0" aria-hidden />

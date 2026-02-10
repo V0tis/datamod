@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 
 /** 안정적인 기본 모델 (env로 오버라이드 가능) */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."

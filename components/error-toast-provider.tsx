@@ -9,8 +9,9 @@ export function ErrorToastProvider() {
       <Toaster
         position="bottom-right"
         closeButton
+        richColors
         toastOptions={{
-          className: 'shadow-lg border border-border rounded-xl bg-white text-foreground',
+          className: 'shadow-lg rounded-xl border',
         }}
       />
       <ErrorDetailModal />

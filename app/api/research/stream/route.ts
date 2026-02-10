@@ -2,16 +2,67 @@ import { createClient } from '@/lib/supabase/server'
 import { trackUsage } from '@/lib/usage'
 import { getEffectiveLicenseKeys } from '@/lib/license'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import Parser from 'rss-parser'
 
 export const runtime = 'nodejs'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.0-flash'
+/** 무료 티어: Gemini 1.5 Flash */
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
+
+const RSS_BASE = 'https://news.google.com/rss/search'
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
 const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
-const USER_PROMPT_TEMPLATE = (keyword: string) =>
-  `"${keyword}"에 대한 최신 트렌드·뉴스·유저 반응을 Google Search로 검색한 뒤 분석해서, 아래 JSON만 출력해줘. ` +
-  `JSON: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. ` +
-  `keyConclusions 3개 문장, articleSummaries는 검색된 소스 순서대로 1문단씩, positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.`
+  "당신은 시장 리서치 전문가 '린'입니다. 제공된 실시간 뉴스 제목들만 참고하여 분석한 뒤, 반드시 JSON 형식으로만 답변하세요."
+
+function buildUserPrompt(keyword: string, newsTitles: string[]): string {
+  const newsBlock =
+    newsTitles.length > 0
+      ? `\n\n[실시간 뉴스 제목 (news_items_ko)]\n${newsTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
+      : '\n\n'
+  return (
+    `"${keyword}"에 대해 위 실시간 뉴스 제목들을 참고하여 분석한 뒤, 아래 JSON만 출력해줘.` +
+    newsBlock +
+    `JSON 형식: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. ` +
+    `규칙: keyConclusions 3개 문장, articleSummaries는 뉴스 순서대로 1문단씩(없으면 빈 배열), positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.`
+  )
+}
+
+type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
+const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
+
+/** 키워드로 구글 뉴스 RSS 조회 후 제목·URL 반환 (한국어 헤드라인 = news_items_ko) */
+async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>> {
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+  const res = await fetch(url, {
+    headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
+  })
+  if (!res.ok) return []
+  try {
+    const xml = await res.text()
+    const feed = await rssParser.parseString(xml)
+    const items = (feed.items ?? []).slice(0, 15).map((it) => {
+      const title = (it.title ?? '').trim().slice(0, 300)
+      const link = typeof it.link === 'string' ? it.link : ''
+      let publisher = ''
+      try {
+        if (link) publisher = new URL(link).hostname.replace(/^www\./, '')
+      } catch {
+        /* ignore */
+      }
+      return {
+        title,
+        url: link,
+        publisher: publisher || undefined,
+        publishedAt: new Date().toISOString(),
+      }
+    })
+    return items.filter((i) => i.title.length > 0)
+  } catch {
+    return []
+  }
+}
 
 function extractJsonFromText(text: string): string {
   const trimmed = text.trim()
@@ -34,13 +85,14 @@ function sseMessage(event: string, data: StreamEvent): string {
 }
 
 export async function POST(req: Request) {
-  let body: { keyword?: string; query?: string }
+  let body: { keyword?: string; query?: string; country_code?: string }
   try {
     body = await req.json()
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 })
   }
   const keyword = body?.keyword ?? body?.query
+  const countryCode = typeof body?.country_code === 'string' ? body.country_code.trim() || 'KR' : 'KR'
   if (!keyword || typeof keyword !== 'string') {
     return new Response(JSON.stringify({ error: 'keyword required' }), { status: 400 })
   }
@@ -110,22 +162,32 @@ export async function POST(req: Request) {
       try {
         send('progress', { step: 'firecrawl_start' })
 
+        const news = await fetchNewsTitles(keyword)
+        send('progress', { step: 'firecrawl_done', news: news.map((n) => ({ title: n.title, url: n.url })) })
+        if (isClosed) {
+          safeClose()
+          return
+        }
+        send('progress', { step: 'gemini_start' })
+        if (isClosed) {
+          safeClose()
+          return
+        }
+
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
           systemInstruction: SYSTEM_INSTRUCTION,
           generationConfig: { maxOutputTokens: 3500 },
-          tools: [{ googleSearchRetrieval: {} }],
         })
-
-        const prompt = USER_PROMPT_TEMPLATE(keyword)
-        const maxRetries = 3 // 최대 3번 재시도 (총 4회 시도)
+        const newsTitles = news.map((n) => n.title)
+        const prompt = buildUserPrompt(keyword, newsTitles)
+        const maxRetries = 3
         let responseText: string | null = null
-        let responseObj: Awaited<ReturnType<typeof model.generateContent>> | null = null
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
-            responseObj = await model.generateContent(prompt)
-            responseText = responseObj.response.text()
+            const result = await model.generateContent(prompt)
+            responseText = result.response.text()
             break
           } catch (geminiError: unknown) {
             const msg = String((geminiError as { message?: string })?.message ?? geminiError)
@@ -138,56 +200,22 @@ export async function POST(req: Request) {
               const retryAfterSec = msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1]
               const baseWaitMs = retryAfterSec ? parseInt(retryAfterSec, 10) * 1000 : 2000 * Math.pow(2, attempt)
               const waitMs = Math.min(baseWaitMs, 60_000)
-              console.warn('[Research Stream] 429, exponential backoff wait', waitMs, 'ms attempt', attempt + 1)
               await new Promise((r) => setTimeout(r, waitMs))
               continue
             }
-            console.error('[Research Stream] Gemini error:', msg)
-            const retryAfterSec = msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1]
-            const retryDelaySec = retryAfterSec ? Math.min(parseInt(retryAfterSec, 10), 60) : 13
             send('progress', {
               step: 'error',
               error:
                 msg.includes('429') || msg.includes('quota')
                   ? '현재 요청이 많아 잠시 후 다시 시도해 주세요.'
                   : '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
-              retryDelay: retryDelaySec,
+              retryDelay: 13,
             })
             safeClose()
             return
           }
         }
 
-        const collectedAt = new Date().toISOString()
-        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
-        const candidate = (responseObj?.response as GroundingResp)?.candidates?.[0]
-        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
-        const news = chunks.map((c) => {
-          const url = c.web?.uri ?? ''
-          let publisher = ''
-          try {
-            if (url) publisher = new URL(url).hostname.replace(/^www\./, '')
-          } catch {
-            /* ignore */
-          }
-          return {
-            title: (c.web?.title ?? '제목 없음').slice(0, 200),
-            url,
-            publisher: publisher || undefined,
-            publishedAt: collectedAt,
-          }
-        })
-
-        send('progress', { step: 'firecrawl_done', news })
-        if (isClosed) {
-          safeClose()
-          return
-        }
-        send('progress', { step: 'gemini_start' })
-        if (isClosed) {
-          safeClose()
-          return
-        }
         send('progress', { step: 'gemini_done' })
         if (isClosed) {
           safeClose()
@@ -297,8 +325,25 @@ export async function POST(req: Request) {
               })
               .select('id')
               .single()
-            if (!insertError && report?.id) reportId = report.id
-            else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)
+            if (!insertError && report?.id) {
+              reportId = report.id
+              const keyMetrics = {
+                chartData: summary.chartData,
+                keyConclusions: summary.keyConclusions,
+                sentiment: summary.sentiment,
+              }
+              await supabase.from('research_history').upsert(
+                {
+                  user_id: user.id,
+                  keyword: keyword.trim(),
+                  country_code: countryCode,
+                  report_id: report.id,
+                  key_metrics: keyMetrics,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: ['user_id', 'keyword', 'country_code'] }
+              )
+            } else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)
           } catch (insertErr) {
             console.warn('[Research Stream] Report insert:', insertErr)
           }

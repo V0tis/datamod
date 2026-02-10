@@ -58,7 +58,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
           />
           <motion.div
             key="panel"
-            className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white shadow-xl flex flex-col border-l border-border"
+            className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-slate-800 shadow-xl flex flex-col border-l border-border dark:border-slate-600/50 transition-colors duration-300"
             style={{ maxWidth: PANEL_MAX_W }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -66,8 +66,8 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
             transition={{ type: 'tween', duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
           >
             {/* 고정: 헤더 — 번역 키워드 */}
-            <div className="shrink-0 p-4 border-b border-border flex items-start justify-between gap-3">
-              <h2 className="text-2xl font-bold text-foreground leading-tight min-w-0 flex-1">
+            <div className="shrink-0 p-4 border-b border-border dark:border-slate-600/50 flex items-start justify-between gap-3 transition-colors duration-300">
+              <h2 className="text-2xl font-bold text-foreground dark:text-slate-100 leading-tight min-w-0 flex-1 transition-colors duration-300">
                 {selectedItem ? (
                   <span className="break-words">{selectedItem.title_ko ?? selectedItem.keyword}</span>
                 ) : (
@@ -77,7 +77,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="p-1 rounded hover:bg-muted shrink-0"
+                className="p-1 rounded hover:bg-muted dark:hover:bg-slate-600/50 shrink-0 text-foreground dark:text-slate-300"
                 aria-label="닫기"
               >
                 <X className="h-5 w-5" />
@@ -87,7 +87,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
             {/* 스크롤: 관련 뉴스 최상단 배치 */}
             {selectedItem && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <p className="shrink-0 px-4 pt-3 pb-1.5 text-xs font-medium text-muted-foreground">관련 뉴스</p>
+                <p className="shrink-0 px-4 pt-3 pb-1.5 text-xs font-medium text-muted-foreground dark:text-slate-400">관련 뉴스</p>
                 <div className="px-4 pb-4 min-h-0 flex-1 overflow-hidden flex flex-col">
                   <TrendNewsList
                     items={selectedItem.news_items ?? []}
@@ -101,7 +101,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
 
             {/* 고정: 분석 버튼 */}
             {selectedItem && (
-              <div className="shrink-0 p-4 border-t border-border bg-white">
+              <div className="shrink-0 p-4 border-t border-border dark:border-slate-600/50 bg-white dark:bg-slate-800 transition-colors duration-300">
                 <Button
                   className="w-full"
                   onClick={() => {

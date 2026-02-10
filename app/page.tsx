@@ -280,7 +280,7 @@ export default function RinAISearch() {
             {user && canSearch === false && (
               <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <p className="text-amber-800 dark:text-amber-200 text-sm">키를 등록해 주세요. 분석을 사용하려면 설정에서 Gemini API 키를 등록해야 해요.</p>
-                <Link href="/settings" className="shrink-0">
+                <Link href="/settings?tab=license" className="shrink-0">
                   <Button variant="outline" size="sm" className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/50">
                     키 등록하러 가기
                   </Button>
@@ -288,10 +288,10 @@ export default function RinAISearch() {
               </div>
             )}
 
-            {/* 대시보드 그리드: 3열 카드 */}
-            <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역본 위주) */}
-              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+            {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
+            <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
+              {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역 후 / 번역 전 함께 표시) */}
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm lg:col-span-5">
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
@@ -317,27 +317,43 @@ export default function RinAISearch() {
                       {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
                         <li className="text-xs text-muted-foreground py-2">데이터 없음</li>
                       ) : (
-                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => (
-                          <li key={`${trendCountry}-${i}`}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedTrendItem(item)
-                                setTrendPanelOpen(true)
-                              }}
-                              className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 transition-colors"
-                            >
-                              <span className="font-medium text-foreground truncate">
-                                {item.title_ko ?? item.keyword}
-                              </span>
-                              {item.search_volume != null && (
-                                <span className="text-muted-foreground text-xs shrink-0 tabular-nums">
-                                  {item.search_volume}
+                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => {
+                          const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
+                          return (
+                            <li key={`${trendCountry}-${i}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTrendItem(item)
+                                  setTrendPanelOpen(true)
+                                }}
+                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 transition-colors"
+                              >
+                                <span className="min-w-0 flex-1">
+                                  {hasTranslation ? (
+                                    <>
+                                      <span className="font-medium text-foreground block truncate">
+                                        {item.title_ko}
+                                      </span>
+                                      <span className="text-muted-foreground text-xs block truncate">
+                                        {item.keyword}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="font-medium text-foreground truncate">
+                                      {item.keyword}
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                            </button>
-                          </li>
-                        ))
+                                {item.search_volume != null && (
+                                  <span className="text-muted-foreground text-xs shrink-0 tabular-nums">
+                                    {item.search_volume}
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          )
+                        })
                       )}
                     </ul>
                   )}
@@ -348,7 +364,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 2: 나의 리서치 활동 */}
-              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm lg:col-span-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <History className="h-5 w-5 text-primary" />
@@ -389,7 +405,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 3: API 키 연결 상태 */}
-              <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+              <div className="rounded-xl border border-border bg-white p-5 shadow-sm lg:col-span-3">
                 <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
                   <KeyRound className="h-5 w-5 text-primary" />
                   API 연결 상태

@@ -38,6 +38,8 @@ export interface ResearchResponse {
   ai_responses?: Record<string, string>
   /** 참고 문헌 (뉴스/소스 링크) */
   source_links?: Array<{ title?: string; url?: string }>
+  /** research_history.updated_at (마지막 분석 시간) */
+  updated_at?: string
 }
 
 type StreamPayload =
@@ -70,8 +72,13 @@ interface ResearchState {
 /** 429 등 retryDelay 응답 후 한 번만 재시도하기 위한 플래그 */
 let retryScheduledForStream = false
 
+/** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음(최초 분석 필요), 'none' = 기록 없음 */
+export type LoadHistoryResult = 'cached' | 'empty' | 'none'
+
 interface ResearchStore extends ResearchState {
-  startResearch: (keyword: string, options?: { fromRetry?: boolean }) => void
+  startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
+  /** research_history 캐시 조회. 캐시 있으면 복원 후 'cached', 비어있으면 'empty', 없으면 'none'. */
+  loadFromHistory: (keyword: string, countryCode?: string) => Promise<LoadHistoryResult>
   /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
   loadReportByKeyword: (keyword: string) => Promise<boolean>
   setInsights: (value: string | null) => void
@@ -123,6 +130,47 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
       reset: () => set(initialState),
+
+      loadFromHistory: async (keyword: string, countryCode = 'KR') => {
+        const k = keyword?.trim()
+        if (!k) return 'none'
+        try {
+          const res = await fetch(`/api/research/history?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryCode)}`)
+          const data = (await res.json()) as {
+            cached?: boolean
+            emptyAnalysis?: boolean
+            reportId?: string
+            keyword?: string
+            content?: Record<string, unknown>
+            source_links?: Array<{ title?: string; url?: string }>
+            ai_responses?: Record<string, string>
+            key_metrics?: unknown
+            updated_at?: string
+          }
+          if (!data.cached) return 'none'
+          if (data.emptyAnalysis && !data.reportId) return 'empty'
+          if (data.emptyAnalysis && data.reportId) return 'empty'
+          if (data.reportId && (data.content != null || data.ai_responses)) {
+            set({
+              keyword: k,
+              status: 'done',
+              result: {
+                ...(data.content ?? {}),
+                reportId: data.reportId,
+                ai_responses: data.ai_responses ?? {},
+                source_links: data.source_links ?? [],
+                updated_at: data.updated_at,
+              } as ResearchResponse,
+              error: null,
+              newsList: get().newsList,
+            })
+            return 'cached'
+          }
+          return data.emptyAnalysis ? 'empty' : 'none'
+        } catch {
+          return 'none'
+        }
+      },
 
       loadReportByKeyword: async (keyword: string) => {
         const k = keyword?.trim()
@@ -194,7 +242,7 @@ export const useResearchStore = create<ResearchStore>()(
             toast.error('키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.', {
               action: {
                 label: '키 등록하러 가기',
-                onClick: () => { window.location.href = '/settings' },
+                onClick: () => { window.location.href = '/settings?tab=license' },
               },
             })
             set({
@@ -204,10 +252,11 @@ export const useResearchStore = create<ResearchStore>()(
             return
           }
         }
+        const countryCode = options?.country_code ?? 'KR'
         const res = await fetch('/api/research/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword: k }),
+          body: JSON.stringify({ keyword: k, country_code: countryCode }),
           keepalive: true,
         })
 
@@ -262,7 +311,7 @@ export const useResearchStore = create<ResearchStore>()(
                 const data = payload.data as ResearchResponse
                 set({
                   status: 'done',
-                  result: data,
+                  result: { ...data, updated_at: new Date().toISOString() },
                   insights: data.publicReactionTrends ?? get().insights,
                   keyword: get().keyword,
                 })

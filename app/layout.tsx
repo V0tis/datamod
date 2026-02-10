@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Sidebar } from "@/components/sidebar";
 import { PageTransition } from "@/components/common/PageTransition";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -24,19 +25,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body
-        className={`${inter.variable} font-sans antialiased text-foreground`}
+        className={`${inter.variable} font-sans antialiased text-foreground bg-background transition-colors duration-300`}
       >
-        <AuthProvider>
-          <Sidebar />
-          <main className="min-h-screen bg-[#F8F9FA] pl-0 lg:pl-[240px] overflow-auto transition-[padding]">
-            <ErrorBoundary>
-              <PageTransition>{children}</PageTransition>
-            </ErrorBoundary>
-          </main>
-          <ErrorToastProvider />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Sidebar />
+            <main className="min-h-screen bg-[#F8F9FA] dark:bg-background pl-0 lg:pl-[240px] overflow-auto transition-[padding] transition-colors duration-300">
+              <ErrorBoundary>
+                <PageTransition>{children}</PageTransition>
+              </ErrorBoundary>
+            </main>
+            <ErrorToastProvider />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight, Cpu } from 'lucide-react'
+import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
@@ -88,18 +89,19 @@ export function Sidebar() {
     cn(
       'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
       isActive
-        ? 'bg-primary/10 text-primary'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        ? 'bg-primary/10 text-primary dark:bg-[var(--sidebar-active)] dark:text-[var(--sidebar-primary)]'
+        : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]'
     )
 
   const sidebarContent = (
     <>
-      {/* 상단: 로고 */}
-      <div className="border-b border-border px-5 py-3">
-        <Link href="/" className="flex h-12 items-center gap-2 hover:opacity-90 transition-opacity">
+      {/* 상단: 로고 + 테마 스위처(우측) */}
+      <div className="border-b border-border px-5 py-3 flex h-12 items-center justify-between gap-2">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity min-w-0">
           <RinLogo size={28} className="shrink-0 opacity-95" />
-          <span className="font-semibold text-lg tracking-tight text-foreground">린(Rin)</span>
+          <span className="font-semibold text-lg tracking-tight text-foreground truncate">린(Rin)</span>
         </Link>
+        <ThemeSwitcher className="shrink-0" />
       </div>
 
       {/* 중간: 네비게이션 */}
@@ -119,7 +121,7 @@ export function Sidebar() {
       <div className="px-3 py-2 border-t border-border">
         <Link
           href="/trends"
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]"
         >
           <span className="flex items-center gap-2">
             <Globe className="h-4 w-4 shrink-0" />
@@ -131,14 +133,14 @@ export function Sidebar() {
           <ul className="mt-1.5 space-y-0.5 px-3">
             {sharedTrends.KR.map((item, i) => (
               <li key={`${item.keyword}-${i}`}>
-                <Link href={`/results?keyword=${encodeURIComponent(item.keyword)}`} className="text-xs text-foreground hover:text-primary truncate block">
+                <Link href={`/results?keyword=${encodeURIComponent(item.keyword)}`} className="text-xs text-foreground dark:text-[var(--sidebar-foreground)] hover:text-primary dark:hover:text-[var(--sidebar-primary)] truncate block">
                   {item.keyword}
                 </Link>
               </li>
             ))}
           </ul>
         ) : null}
-        <p className="mt-1.5 px-3 text-xs text-muted-foreground">
+        <p className="mt-1.5 px-3 text-xs text-muted-foreground dark:text-[var(--sidebar-fg-muted)]">
           최근 업데이트: <TimeAgo isoString={sharedTrends.updatedAt} />
         </p>
       </div>
@@ -150,7 +152,7 @@ export function Sidebar() {
           onClick={openSystemModal}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground'
+            'text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]'
           )}
           title="연결된 AI 모델 정보"
         >
@@ -170,8 +172,8 @@ export function Sidebar() {
               className={cn(
                 'mt-2 mb-2 truncate px-3',
                 displayName && displayName !== (user.email ?? '')
-                  ? 'text-sm font-bold text-foreground'
-                  : 'text-xs text-muted-foreground'
+                  ? 'text-sm font-bold text-foreground dark:text-[var(--sidebar-foreground)]'
+                  : 'text-xs text-muted-foreground dark:text-[var(--sidebar-fg-muted)]'
               )}
               title={user.email ?? ''}
             >
@@ -180,7 +182,7 @@ export function Sidebar() {
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]"
             >
               <LogOut className="h-5 w-5 shrink-0" />
               로그아웃
@@ -189,7 +191,7 @@ export function Sidebar() {
         ) : (
           <Link
             href="/auth/login"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground mt-2"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)] mt-2"
           >
             <LogIn className="h-5 w-5 shrink-0" />
             로그인
@@ -204,7 +206,7 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white text-foreground shadow-sm lg:hidden"
+        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-white dark:bg-sidebar text-foreground dark:text-sidebar-foreground shadow-sm lg:hidden"
         aria-label="메뉴 열기"
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -212,7 +214,7 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-screen w-[240px] flex-col border-r-2 border-border bg-white text-foreground transition-transform duration-200 ease-out',
+          'fixed left-0 top-0 z-40 flex h-screen w-[240px] flex-col border-r-2 border-border bg-white dark:bg-sidebar text-foreground dark:text-sidebar-foreground transition-transform duration-200 ease-out',
           'lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
@@ -238,9 +240,9 @@ export function Sidebar() {
             className="fixed inset-0 z-50 bg-black/30"
             onClick={() => setSystemModalOpen(false)}
           />
-          <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-white p-5 shadow-xl">
+          <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border dark:border-slate-600 bg-white dark:bg-card p-5 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <h3 className="font-semibold text-foreground dark:text-card-foreground flex items-center gap-2">
                 <Cpu className="h-5 w-5 text-primary" />
                 시스템 정보
               </h3>
@@ -253,8 +255,8 @@ export function Sidebar() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <p className="text-sm text-muted-foreground mb-1">연결된 AI 모델</p>
-            <p className="font-mono text-sm text-foreground mb-4">
+            <p className="text-sm text-muted-foreground dark:text-slate-400 mb-1">연결된 AI 모델</p>
+            <p className="font-mono text-sm text-foreground dark:text-slate-200 mb-4">
               {systemInfo?.model ?? '확인 중...'}
             </p>
             <Link

@@ -14,7 +14,7 @@ import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
 import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
-import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy } from 'lucide-react'
+import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
@@ -199,6 +199,7 @@ function ResultsContent() {
     result,
     error,
     startResearch,
+    loadFromHistory,
     loadReportByKeyword,
   } = useResearchStore()
 
@@ -220,17 +221,26 @@ function ResultsContent() {
   const reportFetchedForCacheRef = useRef<string | null>(null)
   const tabAbortControllerRef = useRef<AbortController | null>(null)
 
-  // URL keyword 기준: 캐시 있으면 복원, 없으면 /api/research/stream 호출 (storeKeyword 의존 제거로 재수화 시 취소 방지)
+  // URL keyword 기준: research_history 캐시 우선 → 없거나 비어있으면 reports 복원 → 없으면 stream 호출
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
     let cancelled = false
-    loadReportByKeyword(k).then((fromCache) => {
+    const countryCode = 'KR'
+    loadFromHistory(k, countryCode).then((historyStatus) => {
       if (cancelled) return
-      if (!fromCache) startResearch(k)
+      if (historyStatus === 'cached') return
+      if (historyStatus === 'empty') {
+        startResearch(k, { country_code: countryCode })
+        return
+      }
+      loadReportByKeyword(k).then((fromReport) => {
+        if (cancelled) return
+        if (!fromReport) startResearch(k, { country_code: countryCode })
+      })
     })
     return () => { cancelled = true }
-  }, [keyword, loadReportByKeyword, startResearch])
+  }, [keyword, loadFromHistory, loadReportByKeyword, startResearch])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -259,6 +269,7 @@ function ResultsContent() {
   }, [keyword, storeKeyword])
 
   const loading = status === 'loading'
+  const showAnalyzing = loading && !quotaExceeded && !error
   const currentKeyword = keyword ?? storeKeyword
 
   const reportSummary = result
@@ -333,9 +344,9 @@ function ResultsContent() {
             setQuotaExceeded(true)
             setTabError({ logic: QUOTA_UNIFIED_MESSAGE, creative: QUOTA_UNIFIED_MESSAGE, fact: QUOTA_UNIFIED_MESSAGE })
             setTabLoading({ logic: false, creative: false, fact: false })
-            toast.error('OpenAI 잔액/쿼터 부족', {
+            toast.error('Gemini 쿼터/요청 한도 초과', {
               id: QUOTA_TOAST_ID,
-              description: '잠시 후 다시 시도하거나 OpenAI 결제·사용량 설정을 확인해 주세요.',
+              description: '잠시 후 다시 시도해 주세요.',
               duration: 6000,
             })
           } else {
@@ -445,18 +456,12 @@ function ResultsContent() {
             &quot;{currentKeyword}&quot; 검색 결과
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {loading
+            {showAnalyzing
               ? '린이 가져온 뉴스예요. 다른 페이지로 이동해도 분석은 계속돼요.'
               : '탭을 전환해 시장 분석, 인사이트, 종합 리포트를 확인하세요.'}
           </p>
         </header>
 
-        {status === 'loading' && (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <RinAnimation variant="loading" size={140} className="shrink-0" />
-            <p className="mt-3 text-muted-foreground text-sm">린이 분석하는 중...</p>
-          </div>
-        )}
 
         {status === 'done' && result && (
           <div className="no-print flex flex-wrap items-center gap-2 mb-4">
@@ -493,6 +498,37 @@ function ResultsContent() {
             </Button>
           </div>
         )}
+
+        {/* 재분석 버튼: 완료 시 표시, 로딩 시에도 스피너와 메시지 유지 */}
+        {(status === 'done' && result) || (status === 'loading' && currentKeyword) ? (
+          <div className="no-print w-full flex flex-wrap items-center gap-3 mb-4 pb-2 border-b border-border">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+              disabled={loading}
+              onClick={() => startResearch(currentKeyword ?? '', { country_code: 'KR' })}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI가 최신 정보를 분석 중입니다...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  새로운 데이터로 다시 분석하기
+                </>
+              )}
+            </Button>
+            {result?.updated_at && !loading && (
+              <span className="text-xs text-muted-foreground">
+                마지막 업데이트: <TimeAgo isoString={result.updated_at} />
+              </span>
+            )}
+          </div>
+        ) : null}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full">
           <TabsList className="grid w-full max-w-3xl grid-cols-3 h-12 p-1 gap-1 bg-muted/60">
@@ -589,6 +625,11 @@ function ResultsContent() {
                   <RinAnimation variant="loading" size={180} className="shrink-0" />
                   <p className="mt-4 text-muted-foreground text-sm">분석 중...</p>
                 </div>
+              ) : showAnalyzing ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                <RinAnimation variant="loading" size={140} className="shrink-0" />
+                <p className="mt-3 text-muted-foreground text-sm">린이 분석하는 중...</p>
+              </div>
               ) : tabCache[id] ? (
                 <div className={cn('space-y-6', id === 'fact' && 'rounded-xl border border-border bg-white shadow-sm p-8 md:p-10 max-w-4xl mx-auto text-[15px] leading-[1.65]')}>
                   <div className="flex items-center justify-end">

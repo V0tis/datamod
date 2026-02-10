@@ -39,15 +39,23 @@ export function CountryFlagIcon({
   const displayW = size === 'header' ? 32 : 20
   const displayH = size === 'header' ? 24 : 15
   return (
-    <img
-      src={src}
-      alt=""
-      role="presentation"
-      className={cn('shrink-0 object-cover rounded-sm', className)}
-      width={displayW}
-      height={displayH}
+    <span
+      className={cn(
+        'inline-flex shrink-0 rounded-sm overflow-hidden',
+        'dark:ring-1 dark:ring-white/20 dark:shadow-sm dark:bg-white/5',
+        className
+      )}
       style={{ width: displayW, height: displayH, minWidth: displayW, minHeight: displayH }}
-    />
+    >
+      <img
+        src={src}
+        alt=""
+        role="presentation"
+        className="w-full h-full object-cover"
+        width={displayW}
+        height={displayH}
+      />
+    </span>
   )
 }
 
@@ -69,10 +77,10 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
             type="button"
             onClick={() => onChange(code)}
             className={cn(
-              'rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-2',
+              'rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-colors duration-300 inline-flex items-center gap-2',
               value === code
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                ? 'bg-primary text-primary-foreground shadow-sm dark:bg-blue-950/60 dark:text-blue-400 dark:font-semibold dark:border dark:border-blue-500/30'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:text-slate-400 dark:hover:text-slate-300'
             )}
           >
             <CountryFlagIcon code={code} size="chip" />

@@ -242,7 +242,7 @@ export default function TrendsPage() {
                   const newsPreview = (item.news_items ?? []).slice(0, 2)
                   const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
-                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 overflow-hidden hover:bg-primary/5 hover:border-primary/30 transition-all">
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 dark:bg-slate-900 overflow-hidden hover:bg-primary/5 dark:hover:bg-slate-800 hover:border-primary/30 transition-all transition-colors duration-300">
                       <button
                         type="button"
                         onClick={() => handleRowClick(item)}
