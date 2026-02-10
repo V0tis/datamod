@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const GROQ_MODEL = process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant'
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
+const GROQ_MODEL = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile'
 const GROQ_MODEL_LABEL = process.env.GROQ_MODEL_LABEL ?? 'Llama-3'
+const GROQ_429_RETRY_DELAY_MS = 3000
+const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
 
 function buildPrompt(keyword: string, summary: string, newsHeadlines: string): string {
   const parts: string[] = [
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
   const prompt = buildPrompt(keyword, summary, newsHeadlines)
 
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    let res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,14 +63,31 @@ export async function POST(req: Request) {
         max_tokens: 2048,
       }),
     })
-
-    const data = (await res.json()) as {
+    let data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>
       error?: { message?: string }
     }
 
+    if (res.status === 429) {
+      console.warn('[Research Analysis Groq] 429, 3초 후 1회 재시도')
+      await new Promise((r) => setTimeout(r, GROQ_429_RETRY_DELAY_MS))
+      res = await fetch(GROQ_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 2048,
+        }),
+      })
+      data = (await res.json()) as typeof data
+    }
+
     if (!res.ok) {
-      const errMsg = data?.error?.message ?? data ? String(data) : 'Groq 요청 실패'
+      const errMsg = res.status === 429 ? GROQ_QUOTA_MESSAGE : (data?.error?.message ?? data ? String(data) : 'Groq 요청 실패')
       console.warn('[Research Analysis Groq]', res.status, errMsg)
       return NextResponse.json(
         { error: errMsg, code: res.status === 429 ? 'QUOTA' : undefined },

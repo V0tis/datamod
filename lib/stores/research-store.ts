@@ -44,6 +44,8 @@ export interface ResearchResponse {
   analysis_groq?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
   /** Hugging Face 듀얼 분석 결과 (research_history.analysis_hf). 동일 구조 */
   analysis_hf?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
+  /** Gemini 탭 분석 결과 (research_history.analysis_gemini). 탭별 텍스트 Record<tabId, string> */
+  analysis_gemini?: Record<string, string>
 }
 
 type StreamPayload =
@@ -152,6 +154,7 @@ export const useResearchStore = create<ResearchStore>()(
             updated_at?: string
             analysis_groq?: { summary: string; modelName: string }
             analysis_hf?: { summary: string; modelName: string }
+            analysis_gemini?: Record<string, string>
           }
           if (!data.cached) return 'none'
           if (data.emptyAnalysis && !data.reportId) return 'empty'
@@ -168,6 +171,7 @@ export const useResearchStore = create<ResearchStore>()(
                 updated_at: data.updated_at,
                 analysis_groq: data.analysis_groq,
                 analysis_hf: data.analysis_hf,
+                analysis_gemini: data.analysis_gemini,
               } as ResearchResponse,
               error: null,
               newsList: get().newsList,
