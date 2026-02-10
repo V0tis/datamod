@@ -17,6 +17,7 @@ import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
+import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
 
@@ -368,7 +369,7 @@ export default function RinAISearch() {
                           >
                             <span className="font-medium text-foreground truncate">{r.keyword}</span>
                             <span className="flex items-center gap-1 shrink-0">
-                              <span className="text-muted-foreground text-xs">{formatTimeAgo(r.created_at)}</span>
+                              <TimeAgo isoString={r.created_at} className="text-muted-foreground text-xs" />
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </span>
                           </Link>

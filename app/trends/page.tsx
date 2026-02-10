@@ -7,7 +7,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
-import { formatTimeAgo } from '@/lib/utils'
+import { TimeAgo } from '@/components/time-ago'
 import { showErrorToast } from '@/lib/error-toast'
 import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
@@ -252,12 +252,16 @@ export default function TrendsPage() {
                           {item.rank}
                         </span>
                         <div className="col-span-7 min-w-0">
-                          <p className="text-foreground font-semibold truncate">
-                            {item.title_ko ?? item.keyword}
-                          </p>
                           {item.title_ko != null && item.keyword !== item.title_ko ? (
-                            <p className="text-xs text-muted-foreground/80 truncate mt-0.5">{item.keyword}</p>
-                          ) : null}
+                            <p className="truncate flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="text-foreground font-semibold text-[15px]">{item.keyword}</span>
+                              <span className="text-muted-foreground text-sm">
+                                번역: <span className="text-foreground/80">{item.title_ko}</span>
+                              </span>
+                            </p>
+                          ) : (
+                            <p className="text-foreground font-semibold truncate">{item.keyword}</p>
+                          )}
                         </div>
                         <span className="col-span-2 flex items-center justify-end">
                           {item.search_volume ? (
@@ -268,9 +272,10 @@ export default function TrendsPage() {
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
                         </span>
-                        <span className="col-span-2 text-muted-foreground text-xs">
-                          {formatTimeAgo(item.started_at)}
-                        </span>
+                        <TimeAgo
+                          isoString={item.started_at}
+                          className="col-span-2 text-muted-foreground text-xs"
+                        />
                       </button>
                     </li>
                   )

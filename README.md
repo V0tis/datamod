@@ -61,15 +61,15 @@ OPENAI_API_KEY=your_openai_api_key
 
 ## Supabase 마이그레이션
 
-Supabase 대시보드 → SQL Editor에서 아래 순서대로 실행하세요.
+**권장:** 프로젝트 연결 후 CLI로 한 번에 적용합니다.
 
-1. `supabase/migrations/001_auth_tables.sql` — 인증 관련 테이블  
-2. `supabase/migrations/002_reports_table.sql` — `reports` (리포트 저장)  
-3. `supabase/migrations/003_profiles_simplify_for_supabase_auth.sql`  
-4. `supabase/migrations/004_reports_rls.sql` — RLS 정책  
-5. `supabase/migrations/005_reports_source_links.sql`  
-6. `supabase/migrations/006_reports_share_token.sql`  
-7. `supabase/migrations/007_usage_stats.sql` — `usage_stats` (Gemini 사용량)
+```bash
+npx supabase login   # 최초 1회
+npx supabase link --project-ref <프로젝트_Reference_ID>
+npx supabase db push
+```
+
+마이그레이션 파일은 `supabase/migrations/` 에 있으며, 인증·reports·RLS·usage_stats·global_trends·trend_status 등이 순서대로 정의되어 있습니다. CLI 사용이 어려우면 Supabase 대시보드 → SQL Editor에서 `001_` 부터 순서대로 실행하면 됩니다.
 
 ---
 
@@ -95,7 +95,7 @@ lib/
   stores/research-store.ts # 검색·결과·쿼터 상태
   license.ts               # API 키 결정 (Gemini, OpenAI)
   usage.ts                 # 사용량 기록 (trackUsage)
-  trends-cache.ts          # 구글 트렌드 RSS 수집
+  trends-cache.ts          # 구글 트렌드 RSS 수집 (국가별 키워드·뉴스·title_ko)
 ```
 
 ---

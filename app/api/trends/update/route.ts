@@ -18,7 +18,7 @@ export async function POST() {
     const supabase = await createClient()
     const { data: rows, error } = await supabase
       .from(TRENDS_TABLE)
-      .select('country_code, keyword, rank, search_volume, started_at, picture_url, news_items, title_ko, created_at')
+      .select('country_code, keyword, rank, search_volume, started_at, news_items, title_ko, created_at')
       .in('country_code', COUNTRY_CODES)
       .order('rank', { ascending: true })
 

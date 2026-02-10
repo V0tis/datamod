@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Home, History, LogOut, LogIn, Menu, X, Globe, Settings, ChevronRight, Cpu } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
-import { cn, formatTimeAgo } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { TimeAgo } from '@/components/time-ago'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
@@ -138,7 +139,7 @@ export function Sidebar() {
           </ul>
         ) : null}
         <p className="mt-1.5 px-3 text-xs text-muted-foreground">
-          최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}
+          최근 업데이트: <TimeAgo isoString={sharedTrends.updatedAt} />
         </p>
       </div>
 

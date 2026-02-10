@@ -46,7 +46,7 @@ export class TrendsFetchError extends Error {
 
 export type { TrendItem }
 
-/** RSS item: title, ht:picture, ht:approx_traffic, ht:news_item_* 등. xml2js는 동일 태그 여러 개 시 배열로 옴. */
+/** RSS item: title, ht:approx_traffic, ht:news_item_* 등. xml2js는 동일 태그 여러 개 시 배열로 옴. */
 type RssParserItem = {
   title?: string
   link?: string
@@ -56,7 +56,6 @@ type RssParserItem = {
   description?: string
   isoDate?: string
   approxTraffic?: string
-  picture?: string
   newsItemTitle?: string
   newsItemUrl?: string
   newsItemSource?: string
@@ -73,7 +72,6 @@ const parser = new Parser<RssParserItem>({
   customFields: {
     item: [
       ['ht:approx_traffic', 'approxTraffic'],
-      ['ht:picture', 'picture'],
       ['ht:news_item_title', 'newsItemTitle'],
       ['ht:news_item_url', 'newsItemUrl'],
       ['ht:news_item_source', 'newsItemSource'],
@@ -234,6 +232,7 @@ async function translateTrendsToKo(items: TrendItem[], countryCode: string): Pro
   }
 
   const keywordTexts = items.map((i) => i.keyword).filter(Boolean)
+
   if (keywordTexts.length === 0) {
     return items.map((t) => ({ ...t, title_ko: t.keyword }))
   }
@@ -246,7 +245,7 @@ async function translateTrendsToKo(items: TrendItem[], countryCode: string): Pro
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('translate_timeout')), TRANSLATE_TIMEOUT_MS)),
     ])
     translated = Array.isArray(result) ? result : [result]
-  } catch {
+  } catch (e) {
     translated = keywordTexts.map((text) => ({ text }))
   }
 
@@ -279,7 +278,6 @@ async function fetchTrendsFromRss(countryCode: string): Promise<TrendItem[]> {
 
       const started_at = it.pubDate?.trim() || it.isoDate?.trim() || null
 
-      const picture_url = (it.picture && String(it.picture).trim()) || null
       let news_items = collectNewsItems(it)
       if (news_items.length === 0 && itemBlocks[i]) {
         news_items = extractNewsItemsFromItemXml(itemBlocks[i])
@@ -290,7 +288,6 @@ async function fetchTrendsFromRss(countryCode: string): Promise<TrendItem[]> {
         rank: items.length + 1,
         search_volume,
         started_at,
-        picture_url,
         news_items,
       })
     }
@@ -340,7 +337,6 @@ export async function refreshGlobalTrends(): Promise<{ KR: TrendItem[]; US: Tren
       rank: t.rank,
       search_volume: t.search_volume,
       started_at: t.started_at,
-      picture_url: t.picture_url ?? null,
       news_items: t.news_items ?? [],
       title_ko: t.title_ko ?? null,
       created_at: new Date().toISOString(),

@@ -15,7 +15,8 @@ import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
 import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
 import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy } from 'lucide-react'
-import { cn, formatTimeAgo } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
@@ -522,7 +523,7 @@ function ResultsContent() {
                       </h3>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{item.source || '언론사'}</span>
-                        <span>{item.pubDate ? formatTimeAgo(item.pubDate) : '최신'}</span>
+                        <span>{item.pubDate ? <TimeAgo isoString={item.pubDate} /> : '최신'}</span>
                       </div>
                       {item.link && (
                         <a
@@ -721,7 +722,7 @@ function ResultsContent() {
                       </li>
                     ))}
                   </ul>
-                  <p className="text-xs text-muted-foreground">최근 업데이트: {formatTimeAgo(sharedTrends.updatedAt)}</p>
+                  <p className="text-xs text-muted-foreground">최근 업데이트: <TimeAgo isoString={sharedTrends.updatedAt} /></p>
                   <Link href="/trends" className="text-xs text-primary hover:underline mt-1 inline-block">전체 보기</Link>
                 </>
               ) : (

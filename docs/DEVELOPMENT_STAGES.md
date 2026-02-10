@@ -36,7 +36,7 @@
 - [x] GET `/api/trends`: 캐시만 반환, 수집 미호출
 - [x] POST `/api/trends/update`: [트렌드 갱신] 버튼에서만 호출
 - [x] `lib/trends-cache.ts`: RSS 파싱, 키워드 블랙리스트 적용
-- [x] search_volume, started_at, analysis_keywords 매핑 후 global_trends 저장
+- [x] search_volume, started_at, news_items, title_ko 매핑 후 global_trends 저장 (RSS 전용, picture_url·analysis_keywords 미사용)
 
 ---
 

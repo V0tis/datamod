@@ -12,8 +12,6 @@ export interface TrendItem {
   rank: number
   search_volume: string | null
   started_at: string | null
-  /** RSS ht:picture 그래프 이미지 URL */
-  picture_url?: string | null
   news_items?: TrendNewsItem[]
   /** 번역된 키워드(한국어). geo !== KR일 때 사용 */
   title_ko?: string | null
@@ -47,7 +45,6 @@ export type TrendRow = {
   rank: number
   search_volume: string | null
   started_at: string | null
-  picture_url: string | null
   news_items: TrendNewsItem[] | null
   title_ko: string | null
   created_at: string | null
@@ -61,7 +58,6 @@ function rowToItem(r: TrendRow): TrendItem {
     rank: r.rank,
     search_volume: r.search_volume ?? null,
     started_at: r.started_at ?? null,
-    picture_url: r.picture_url ?? null,
     news_items: Array.isArray(r.news_items) ? r.news_items : [],
     title_ko: r.title_ko ?? null,
   }
@@ -111,7 +107,6 @@ export function normalizeTrendItems(raw: TrendItem[] | string[] | undefined): Tr
       rank: i + 1,
       search_volume: null,
       started_at: null,
-      picture_url: null,
       news_items: [],
       title_ko: null,
     }))
