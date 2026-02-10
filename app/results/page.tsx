@@ -330,7 +330,7 @@ function ResultsContent() {
   }, [result?.reportId, result?.analysis_groq, result?.analysis_hf, result?.analysis_gemini])
 
   const fetchTabAnalysis = useCallback(
-    async (tabId: AiTabId, provider: 'groq' | 'hf' | 'gemini' | 'all' = 'all') => {
+    async (tabId: AiTabId, provider: 'groq' | 'hf' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean }) => {
       if (quotaExceeded) return
       if (provider === 'gemini' && geminiQuotaExceeded) return
       if (provider === 'all' && geminiQuotaExceeded) return
@@ -361,6 +361,8 @@ function ResultsContent() {
             reportId: result?.reportId ?? undefined,
             newsHeadlines: newsHeadlines ?? undefined,
             provider,
+            isReanalyze: options?.isReanalyze ?? false,
+            countryCode: 'KR',
             ...(tabId === 'fact' && { logicText, creativeText }),
           }),
           signal: ac.signal,
@@ -625,6 +627,38 @@ function ResultsContent() {
                 </>
               )}
             </Button>
+            {status === 'done' && result?.reportId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
+                disabled={
+                  tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] || tabLoadingHf[activeTab]
+                }
+                onClick={() => {
+                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabCacheHf((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabErrorGroq((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabErrorGemini((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabErrorHf((prev) => ({ ...prev, [activeTab]: null }))
+                  fetchTabAnalysis(activeTab as AiTabId, 'all', { isReanalyze: true })
+                }}
+              >
+                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] || tabLoadingHf[activeTab] ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    탭 분석 재실행 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    재분석 (캐시 무시)
+                  </>
+                )}
+              </Button>
+            )}
             {result?.updated_at && !loading && (
               <span className="text-xs text-muted-foreground dark:text-slate-400">
                 마지막 업데이트: <TimeAgo isoString={result.updated_at} />

@@ -70,6 +70,8 @@ export async function POST(req: Request) {
     logicText?: string
     creativeText?: string
     provider?: 'groq' | 'hf' | 'gemini' | 'all'
+    isReanalyze?: boolean
+    countryCode?: string
   }
   try {
     body = await req.json()
@@ -83,6 +85,8 @@ export async function POST(req: Request) {
   const newsHeadlines = typeof body?.newsHeadlines === 'string' ? body.newsHeadlines.trim() : ''
   const logicText = typeof body?.logicText === 'string' ? body.logicText.trim() : ''
   const creativeText = typeof body?.creativeText === 'string' ? body.creativeText.trim() : ''
+  const isReanalyze = body?.isReanalyze === true
+  const countryCode = (typeof body?.countryCode === 'string' ? body.countryCode.trim() : '') || 'KR'
   const provider =
     body?.provider === 'groq' || body?.provider === 'hf' || body?.provider === 'gemini'
       ? body.provider
@@ -95,8 +99,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'keyword required' }, { status: 400 })
   }
 
-  // DB 캐시 우선: updated_at 24시간 이내면 API 호출 생략, 저장된 값 반환 (쿼터 절약)
-  if (reportId) {
+  // 엔진별 캐시: keyword → reportId 순으로 병합. 전부 있을 때만 즉시 반환, 하나라도 없으면 해당 엔진만 API 호출
+  let mergedGroq: string | null = null
+  let mergedHf: string | null = null
+  let mergedGemini: string | null = null
+
+  if (!isReanalyze && keyword) {
+    const { data: cachedData } = await supabase
+      .from('research_history')
+      .select('analysis_groq, analysis_hf, analysis_gemini')
+      .eq('user_id', user.id)
+      .eq('keyword', keyword)
+      .eq('country_code', countryCode)
+      .maybeSingle()
+
+    if (cachedData) {
+      const groqTab = (cachedData.analysis_groq ?? null) as Record<string, string> | null
+      const hfTab = (cachedData.analysis_hf ?? null) as Record<string, string> | null
+      const geminiTab = (cachedData.analysis_gemini ?? null) as Record<string, string> | null
+      mergedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
+      mergedHf = typeof hfTab?.[tab] === 'string' && hfTab[tab].trim().length > 0 ? hfTab[tab].trim() : null
+      mergedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
+      const allCached =
+        (provider === 'all' && mergedGroq != null && mergedHf != null && mergedGemini != null) ||
+        (provider === 'groq' && mergedGroq != null) ||
+        (provider === 'hf' && mergedHf != null) ||
+        (provider === 'gemini' && mergedGemini != null)
+      if (allCached) {
+        return NextResponse.json({
+          groq: mergedGroq != null ? { text: mergedGroq } : null,
+          gemini: mergedGemini != null ? { text: mergedGemini } : null,
+          hf: mergedHf != null ? { text: mergedHf } : null,
+        })
+      }
+    }
+  }
+
+  if (reportId && !isReanalyze) {
     const { data: historyRow } = await supabase
       .from('research_history')
       .select('analysis_groq, analysis_hf, analysis_gemini, updated_at')
@@ -106,24 +145,29 @@ export async function POST(req: Request) {
 
     const cacheValid =
       !!historyRow?.updated_at && Date.now() - new Date(historyRow.updated_at).getTime() <= CACHE_TTL_MS
-    const groqTab = (cacheValid ? historyRow?.analysis_groq : null) as Record<string, string> | null
-    const hfTab = (cacheValid ? historyRow?.analysis_hf : null) as Record<string, string> | null
-    const geminiTab = (cacheValid ? historyRow?.analysis_gemini : null) as Record<string, string> | null
-    const cachedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
-    const cachedHf = typeof hfTab?.[tab] === 'string' && hfTab[tab].trim().length > 0 ? hfTab[tab].trim() : null
-    const cachedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
-
-    const needGroq = (provider === 'all' || provider === 'groq') && !cachedGroq
-    const needHf = (provider === 'all' || provider === 'hf') && !cachedHf
-    const needGemini = (provider === 'all' || provider === 'gemini') && !cachedGemini
-
-    if (!needGroq && !needHf && !needGemini) {
-      return NextResponse.json({
-        groq: cachedGroq != null ? { text: cachedGroq } : null,
-        gemini: cachedGemini != null ? { text: cachedGemini } : null,
-        hf: cachedHf != null ? { text: cachedHf } : null,
-      })
+    if (cacheValid && historyRow) {
+      const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
+      const hfTab = (historyRow.analysis_hf ?? null) as Record<string, string> | null
+      const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
+      const reportCachedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
+      const reportCachedHf = typeof hfTab?.[tab] === 'string' && hfTab[tab].trim().length > 0 ? hfTab[tab].trim() : null
+      const reportCachedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
+      mergedGroq = mergedGroq ?? reportCachedGroq
+      mergedHf = mergedHf ?? reportCachedHf
+      mergedGemini = mergedGemini ?? reportCachedGemini
     }
+  }
+
+  const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
+  const needHf = (provider === 'all' || provider === 'hf') && mergedHf == null
+  const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
+
+  if (!needGroq && !needHf && !needGemini) {
+    return NextResponse.json({
+      groq: mergedGroq != null ? { text: mergedGroq } : null,
+      gemini: mergedGemini != null ? { text: mergedGemini } : null,
+      hf: mergedHf != null ? { text: mergedHf } : null,
+    })
   }
 
   const groqKey = process.env.GROQ_API_KEY?.trim()
@@ -290,45 +334,59 @@ export async function POST(req: Request) {
   }
 
 
-  const [groqSettled, geminiSettled, hfSettled] = await Promise.allSettled([callGroq(), callGemini(), callHf()])
-  const groqPayload = groqSettled.status === 'fulfilled' ? groqSettled.value : { text: null }
+  // 캐시 있는 엔진은 API 호출 생략, 없는 엔진만 호출
+  const [groqSettled, geminiSettled, hfSettled] = await Promise.allSettled([
+    needGroq ? callGroq() : Promise.resolve({ text: mergedGroq, quotaError: false as const }),
+    needGemini ? callGemini() : Promise.resolve({ text: mergedGemini, quotaExceeded: false as const }),
+    needHf ? callHf() : Promise.resolve(mergedHf),
+  ])
+  const groqPayload = groqSettled.status === 'fulfilled' ? groqSettled.value : { text: null, quotaError: false }
   const groqText = groqPayload.text
   const groqQuotaError = groqPayload.quotaError === true
-  const geminiPayload = geminiSettled.status === 'fulfilled' ? geminiSettled.value : { text: null }
+  const geminiPayload = geminiSettled.status === 'fulfilled' ? geminiSettled.value : { text: null, quotaExceeded: false }
   const geminiText = geminiPayload.text
   const geminiQuotaExceeded = geminiPayload.quotaExceeded === true
   const hfText = hfSettled.status === 'fulfilled' ? hfSettled.value : null
 
-  const groqResult = (provider === 'all' || provider === 'groq') ? (groqText ?? '') : null
-  const geminiResult = (provider === 'all' || provider === 'gemini') ? (geminiText ?? '') : null
-  const hfResult = (provider === 'all' || provider === 'hf') ? (hfText ?? '') : null
+  const groqResult = (provider === 'all' || provider === 'groq') ? (groqText ?? mergedGroq ?? '') : null
+  const geminiResult = (provider === 'all' || provider === 'gemini') ? (geminiText ?? mergedGemini ?? '') : null
+  const hfResult = (provider === 'all' || provider === 'hf') ? (hfText ?? mergedHf ?? '') : null
 
-  if (reportId && (groqResult !== null || hfResult !== null || geminiResult !== null)) {
+  if (groqResult !== null || hfResult !== null || geminiResult !== null) {
     try {
       const { data: historyRow } = await supabase
         .from('research_history')
         .select('analysis_groq, analysis_hf, analysis_gemini')
-        .eq('report_id', reportId)
         .eq('user_id', user.id)
+        .eq('keyword', keyword)
+        .eq('country_code', countryCode)
         .maybeSingle()
 
       const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
       const prevHf = (historyRow?.analysis_hf as Record<string, string>) ?? {}
       const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
-      const nextGroq = groqResult !== null ? { ...prevGroq, [tab]: groqResult } : prevGroq
-      const nextHf = hfResult !== null ? { ...prevHf, [tab]: hfResult } : prevHf
-      const nextGemini = geminiResult !== null ? { ...prevGemini, [tab]: geminiResult } : prevGemini
+      const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
+        const next = { ...prev }
+        if (result != null && String(result).trim().length > 0) next[key] = String(result).trim()
+        return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as Record<string, string>
+      }
+      const nextGroq = withTab(prevGroq, groqResult, tab)
+      const nextHf = withTab(prevHf, hfResult, tab)
+      const nextGemini = withTab(prevGemini, geminiResult, tab)
 
-      await supabase
-        .from('research_history')
-        .update({
-          analysis_groq: Object.keys(nextGroq).length ? nextGroq : null,
-          analysis_hf: Object.keys(nextHf).length ? nextHf : null,
-          analysis_gemini: Object.keys(nextGemini).length ? nextGemini : null,
+      await supabase.from('research_history').upsert(
+        {
+          user_id: user.id,
+          keyword,
+          country_code: countryCode,
+          report_id: reportId ?? null,
+          analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
+          analysis_hf: Object.keys(nextHf).length > 0 ? nextHf : null,
+          analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
           updated_at: new Date().toISOString(),
-        })
-        .eq('report_id', reportId)
-        .eq('user_id', user.id)
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
     } catch (e) {
       console.warn('[Research Tab] DB save', e)
     }
