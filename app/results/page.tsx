@@ -717,17 +717,6 @@ function ResultsContent() {
                           {item.started_at && (
                             <p className="text-xs text-muted-foreground mt-1">{item.started_at}</p>
                           )}
-                          {item.analysis_keywords?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {item.analysis_keywords.slice(0, 4).map((kw, j) => (
-                                <Link key={j} href={`/results?keyword=${encodeURIComponent(kw)}`}>
-                                  <Badge variant="outline" className="text-xs font-normal cursor-pointer hover:bg-primary/10">
-                                    {kw}
-                                  </Badge>
-                                </Link>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </li>
                     ))}

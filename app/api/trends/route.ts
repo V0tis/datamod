@@ -7,15 +7,8 @@ import { buildTrendsResponse } from '@/lib/trends-types'
 const TRENDS_TABLE = 'global_trends'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
-const DEFAULT_HOURS = 24
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24시간
 const isDev = process.env.NODE_ENV === 'development'
-
-function parseHours(value: string | null): number {
-  if (value === null || value === '') return DEFAULT_HOURS
-  const n = parseInt(value, 10)
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_HOURS
-}
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 
@@ -55,17 +48,16 @@ function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null 
   return latest
 }
 
-/** GET: Cache-Aside. ?hours=24|4 는 구글 API 요청 파라미터로만 사용(DB에 hours 컬럼 없음). ?refresh=1 이면 강제 갱신. */
+/** GET: Cache-Aside. ?refresh=1 이면 강제 갱신 (RSS 전용). */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const forceRefresh = searchParams.get('refresh') === '1' || searchParams.get('refresh') === 'true'
-    const hours = parseHours(searchParams.get('hours'))
 
     const supabase = await createClient()
     const { data: rows, error } = await supabase
       .from(TRENDS_TABLE)
-      .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, picture_url, news_items, title_ko, news_items_ko, created_at')
+      .select('country_code, keyword, rank, search_volume, started_at, picture_url, news_items, title_ko, created_at')
       .in('country_code', COUNTRY_CODES)
       .order('rank', { ascending: true })
 
@@ -94,11 +86,11 @@ export async function GET(req: Request) {
     }
 
     if (forceRefresh || isStale) {
-      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 만료', { hours, lastUpdatedAt, isStale })
-      await refreshGlobalTrends(hours)
+      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 만료', { lastUpdatedAt, isStale })
+      await refreshGlobalTrends()
       const { data: freshRows, error: selectError } = await supabase
         .from(TRENDS_TABLE)
-        .select('country_code, keyword, rank, search_volume, started_at, analysis_keywords, picture_url, news_items, title_ko, news_items_ko, created_at')
+        .select('country_code, keyword, rank, search_volume, started_at, picture_url, news_items, title_ko, created_at')
         .in('country_code', COUNTRY_CODES)
         .order('rank', { ascending: true })
       if (selectError) {

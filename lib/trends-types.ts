@@ -6,28 +6,17 @@ export interface TrendNewsItem {
   image?: string
 }
 
-/** 번역된 뉴스 아이템 (원문 + title_ko) */
-export interface TrendNewsItemKo {
-  title: string
-  title_ko: string
-  url: string
-  source?: string
-  image?: string
-}
-
 /** 클라이언트/API 공용 트렌드 아이템 타입 */
 export interface TrendItem {
   keyword: string
   rank: number
   search_volume: string | null
   started_at: string | null
-  analysis_keywords: string[]
+  /** RSS ht:picture 그래프 이미지 URL */
   picture_url?: string | null
   news_items?: TrendNewsItem[]
   /** 번역된 키워드(한국어). geo !== KR일 때 사용 */
   title_ko?: string | null
-  /** 번역된 뉴스 배열 (원문+title_ko) */
-  news_items_ko?: TrendNewsItemKo[]
 }
 
 /** 국가별 트렌드 출처 상태 (trend_status 테이블) */
@@ -58,11 +47,9 @@ export type TrendRow = {
   rank: number
   search_volume: string | null
   started_at: string | null
-  analysis_keywords: string[] | null
   picture_url: string | null
   news_items: TrendNewsItem[] | null
   title_ko: string | null
-  news_items_ko: TrendNewsItemKo[] | null
   created_at: string | null
 }
 
@@ -74,11 +61,9 @@ function rowToItem(r: TrendRow): TrendItem {
     rank: r.rank,
     search_volume: r.search_volume ?? null,
     started_at: r.started_at ?? null,
-    analysis_keywords: Array.isArray(r.analysis_keywords) ? r.analysis_keywords : [],
     picture_url: r.picture_url ?? null,
     news_items: Array.isArray(r.news_items) ? r.news_items : [],
     title_ko: r.title_ko ?? null,
-    news_items_ko: Array.isArray(r.news_items_ko) ? r.news_items_ko : [],
   }
 }
 
@@ -126,11 +111,9 @@ export function normalizeTrendItems(raw: TrendItem[] | string[] | undefined): Tr
       rank: i + 1,
       search_volume: null,
       started_at: null,
-      analysis_keywords: [],
       picture_url: null,
       news_items: [],
       title_ko: null,
-      news_items_ko: [],
     }))
   }
   return raw as TrendItem[]

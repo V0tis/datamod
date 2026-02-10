@@ -153,6 +153,7 @@ export default function TrendsPage() {
     trendsFetcher(trendsUrl, true)
       .then((fresh) => {
         mutate(fresh, false)
+        toast.success('트렌드 데이터를 성공적으로 갱신했어요.')
       })
       .catch((err) => showTrendsErrorToast(err))
       .finally(() => setUpdating(false))
@@ -238,8 +239,8 @@ export default function TrendsPage() {
               </div>
               <ul className="space-y-2">
                 {items.map((item, i) => {
-                  const newsPreview = (item.news_items_ko?.length ? item.news_items_ko : item.news_items) ?? []
-                  const previewHeadlines = newsPreview.slice(0, 2).map((n) => ('title_ko' in n ? n.title_ko : n.title))
+                  const newsPreview = (item.news_items ?? []).slice(0, 2)
+                  const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
                     <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 overflow-hidden hover:bg-primary/5 hover:border-primary/30 transition-all">
                       <button
@@ -271,13 +272,6 @@ export default function TrendsPage() {
                           {formatTimeAgo(item.started_at)}
                         </span>
                       </button>
-                      {previewHeadlines.length > 0 && (
-                        <div className="px-4 pb-3 pt-0 border-t border-border/50 mt-0">
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {previewHeadlines.join(' · ')}
-                          </p>
-                        </div>
-                      )}
                     </li>
                   )
                 })}
