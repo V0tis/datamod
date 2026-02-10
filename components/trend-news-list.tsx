@@ -67,7 +67,7 @@ export function TrendNewsList({ items, className, listClassName, emptyMessage, l
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`flex gap-3 rounded-lg border bg-card hover:bg-gray-50 dark:bg-[#202226] dark:border-[#2d2f34] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-300 text-left shadow-sm ${
+                className={`flex gap-3 rounded-lg border bg-card hover:bg-gray-50 dark:bg-[#202226] dark:border-[#2d2f34] dark:hover:bg-[#1c1e21] transition-colors duration-300 text-left shadow-sm ${
                   first
                     ? 'border-primary/30 p-4 ring-1 ring-primary/10 dark:ring-[#00d19a]/20 dark:border-[#00d19a]/30'
                     : 'border-border dark:border-[#2d2f34] p-3'

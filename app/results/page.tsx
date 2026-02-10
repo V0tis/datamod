@@ -512,9 +512,9 @@ function ResultsContent() {
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-[#202226] */}
           <div className="lg:col-span-8 space-y-6 dark:bg-[#202226] rounded-xl p-1">
-        <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-6 md:p-8 transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-6 md:p-8 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] dark:drop-shadow-[0_0_1px_rgba(225,227,230,0.8)]">
+          <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] ">
             &quot;{currentKeyword}&quot; 검색 결과
           </h1>
           <p className="text-muted-foreground dark:text-slate-400 text-sm mt-1">
@@ -643,7 +643,7 @@ function ResultsContent() {
                 {rssNews.map((item, i) => (
                   <article
                     key={i}
-                    className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-all text-left flex flex-col"
+                    className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#1c1e21] transition-all text-left flex flex-col"
                   >
                     <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
                       <h3 className="font-medium text-foreground dark:text-[#e1e3e6] text-[15px] leading-snug line-clamp-2">
@@ -712,7 +712,7 @@ function ResultsContent() {
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Groq */}
-                    <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-[#202226] dark:hover:bg-[#1c1e21] transition-colors duration-200">
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="secondary">Groq (Llama)</Badge>
@@ -767,7 +767,7 @@ function ResultsContent() {
                       </CardContent>
                     </Card>
                     {/* Gemini */}
-                    <Card className="flex flex-col border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-[#202226] dark:hover:bg-[#1c1e21] transition-colors duration-200">
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="secondary">Gemini</Badge>
@@ -903,7 +903,7 @@ function ResultsContent() {
 
           {/* Side widgets: col-span-4 - 실시간 트렌드 위젯 (Viva Engage 스타일) */}
           <div className="lg:col-span-4 space-y-4 bg-[#F9FAFB] dark:bg-transparent rounded-xl p-1">
-            <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
                 실시간 트렌드
@@ -913,7 +913,7 @@ function ResultsContent() {
                   <ul className="space-y-3 mb-3">
                     {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
                       <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-lg border border-border dark:border-[#2d2f34] bg-[#F9FAFB] dark:bg-[#202226] p-3 hover:bg-muted/50 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors">
+                        <div className="rounded-lg border border-border dark:border-[#2d2f34] bg-[#F9FAFB] dark:bg-[#202226] p-3 hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Link
                               href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
@@ -930,8 +930,8 @@ function ResultsContent() {
                                   className={cn(
                                     'text-xs shrink-0 tabular-nums',
                                     isHigh
-                                      ? 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
-                                      : 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
+                                      ? 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50'
+                                      : 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50'
                                   )}
                                 >
                                   {item.search_volume}
@@ -954,7 +954,7 @@ function ResultsContent() {
               )}
             </div>
             {/* 관련 뉴스 피드 */}
-            <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">관련 뉴스 피드</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">뉴스를 불러오는 중이에요.</p>
@@ -980,21 +980,21 @@ function ResultsContent() {
               )}
             </div>
             {/* 핵심 수치 요약 */}
-            <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 수치 요약</h3>
               {result ? (
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground dark:text-slate-400">감성 지수</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">{result.sentiment ?? 0}%</dd>
+                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.sentiment ?? 0}%</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground dark:text-slate-400">시장 뉴스</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">{result.marketNews?.length ?? 0}건</dd>
+                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.marketNews?.length ?? 0}건</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground dark:text-slate-400">페인포인트</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">{result.painPoints?.length ?? 0}건</dd>
+                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.painPoints?.length ?? 0}건</dd>
                   </div>
                 </dl>
               ) : (
@@ -1002,7 +1002,7 @@ function ResultsContent() {
               )}
             </div>
             {/* 인용된 출처 리스트 */}
-            <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">인용된 출처</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">출처가 없어요.</p>

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey } from '@/lib/license'
+import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey, getSystemGeminiKey } from '@/lib/license'
 
 /** GET: 현재 사용자 설정 조회 (키 원문은 절대 노출하지 않음) + 검색 가능 여부 + 키 출처 */
 export async function GET() {
@@ -33,7 +33,7 @@ export async function GET() {
   const anthropicOrigin =
     hasAnthropicKey ? 'USER' : (process.env.ANTHROPIC_API_KEY?.trim() ? 'SYSTEM' : null)
 
-  const systemGemini = !!(process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '').trim()
+  const systemGemini = getSystemGeminiKey().length > 0
   const systemOpenAI = !!(process.env.OPENAI_API_KEY ?? '').trim()
   const systemAnthropic = !!(process.env.ANTHROPIC_API_KEY ?? '').trim()
 

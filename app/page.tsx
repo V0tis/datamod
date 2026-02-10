@@ -293,7 +293,7 @@ export default function RinAISearch() {
             {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
               {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역 후 / 번역 전 함께 표시) */}
-              <div className="rounded-xl border border-border bg-white dark:bg-[#202226] dark:border-[#2d2f34] p-5 shadow-sm lg:col-span-5 transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-5 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
@@ -332,11 +332,11 @@ export default function RinAISearch() {
                                   setSelectedTrendItem(item)
                                   setTrendPanelOpen(true)
                                 }}
-                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 dark:hover:bg-[#2a2d32] dark:hover:border-[#00d19a]/40 transition-colors border border-transparent dark:border-[#2d2f34]/80"
+                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 dark:hover:bg-[#1c1e21] transition-colors border border-transparent dark:border-[#2d2f34]/80"
                               >
                                 <span className="min-w-0 flex-1 flex items-center gap-2">
                                   {item.rank <= 3 && (
-                                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">
+                                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 ">
                                       급상승
                                     </span>
                                   )}
@@ -358,7 +358,7 @@ export default function RinAISearch() {
                                   </span>
                                 </span>
                                 {item.search_volume != null && (
-                                  <span className="text-muted-foreground dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)] text-xs shrink-0 tabular-nums font-medium">
+                                  <span className="text-muted-foreground dark:text-[#00d19a]  text-xs shrink-0 tabular-nums font-medium">
                                     {item.search_volume}
                                   </span>
                                 )}
@@ -376,7 +376,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 2: 나의 리서치 활동 */}
-              <div className="rounded-xl border border-border bg-white dark:bg-[#202226] dark:border-[#2d2f34] p-5 shadow-sm lg:col-span-4 transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-4 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
                     <History className="h-5 w-5 text-primary" />
@@ -393,7 +393,7 @@ export default function RinAISearch() {
                         <li key={r.keyword + (r.created_at ?? '') + i}>
                           <Link
                             href={`/results?keyword=${encodeURIComponent(r.keyword)}`}
-                            className="flex items-center justify-between rounded-lg border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] px-3 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-[#2a2d32] dark:hover:border-[#00d19a]/40 transition-colors"
+                            className="flex items-center justify-between rounded-lg border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] px-3 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors"
                           >
                             <span className="font-medium text-foreground dark:text-[#e1e3e6] truncate">{r.keyword}</span>
                             <span className="flex items-center gap-1 shrink-0">
@@ -417,7 +417,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 3: API 키 연결 상태 */}
-              <div className="rounded-xl border border-border bg-white dark:bg-[#202226] dark:border-[#2d2f34] p-5 shadow-sm lg:col-span-3 transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-3 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <h2 className="font-semibold text-foreground dark:text-white flex items-center gap-2 mb-4">
                   <KeyRound className="h-5 w-5 text-primary" />
                   API 연결 상태

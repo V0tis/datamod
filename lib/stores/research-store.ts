@@ -40,10 +40,8 @@ export interface ResearchResponse {
   source_links?: Array<{ title?: string; url?: string }>
   /** research_history.updated_at (마지막 분석 시간) */
   updated_at?: string
-  /** Groq 듀얼 분석 결과 (research_history.analysis_groq). summary/modelName 또는 탭별 logic/creative/fact */
+  /** Groq 분석 결과 (research_history.analysis_groq). 탭별 logic/creative/fact */
   analysis_groq?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
-  /** Hugging Face 듀얼 분석 결과 (research_history.analysis_hf). 동일 구조 */
-  analysis_hf?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
   /** Gemini 탭 분석 결과 (research_history.analysis_gemini). 탭별 텍스트 Record<tabId, string> */
   analysis_gemini?: Record<string, string>
 }
@@ -153,7 +151,6 @@ export const useResearchStore = create<ResearchStore>()(
             key_metrics?: unknown
             updated_at?: string
             analysis_groq?: { summary: string; modelName: string }
-            analysis_hf?: { summary: string; modelName: string }
             analysis_gemini?: Record<string, string>
           }
           if (!data.cached) return 'none'
@@ -170,7 +167,6 @@ export const useResearchStore = create<ResearchStore>()(
                 source_links: data.source_links ?? [],
                 updated_at: data.updated_at,
                 analysis_groq: data.analysis_groq,
-                analysis_hf: data.analysis_hf,
                 analysis_gemini: data.analysis_gemini,
               } as ResearchResponse,
               error: null,

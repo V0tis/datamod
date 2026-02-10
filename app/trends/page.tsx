@@ -207,7 +207,7 @@ export default function TrendsPage() {
         </p>
       </header>
 
-      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#1c1e21]">
         <div className="p-4 border-b border-border dark:border-[#2d2f34] space-y-3">
           <CountryChips
             value={country}
@@ -272,16 +272,16 @@ export default function TrendsPage() {
                   const newsPreview = (item.news_items ?? []).slice(0, 2)
                   const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
-                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-all transition-colors duration-300">
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#1c1e21] transition-all transition-colors duration-300">
                       <button
                         type="button"
                         onClick={() => handleRowClick(item)}
                         className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
                       >
-                        <span className="col-span-1 text-muted-foreground dark:text-slate-400 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)] text-sm font-medium tabular-nums flex items-center gap-1">
+                        <span className="col-span-1 text-muted-foreground dark:text-slate-400 dark:text-[#00d19a]  text-sm font-medium tabular-nums flex items-center gap-1">
                           {item.rank}
                           {item.rank <= 3 && (
-                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 ">
                               급상승
                             </span>
                           )}
@@ -305,8 +305,8 @@ export default function TrendsPage() {
                                 className={cn(
                                   'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums',
                                   isHigh
-                                    ? 'bg-primary/10 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
-                                    : 'bg-primary/10 text-primary dark:bg-[#00d19a]/10 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
+                                    ? 'bg-primary/10 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] '
+                                    : 'bg-primary/10 text-primary dark:bg-[#00d19a]/10 dark:text-[#00d19a] '
                                 )}
                               >
                                 {item.search_volume}

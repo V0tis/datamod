@@ -92,7 +92,7 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
       {updatedAt != null && (
         <p className="text-muted-foreground dark:text-slate-400 text-xs w-full sm:w-auto mt-1 sm:mt-0 flex items-center gap-1.5">
           데이터 기준: {formatDataTimestamp(updatedAt)}
-          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]" aria-label="실시간">
+          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50" aria-label="실시간">
             <span className="h-1.5 w-1.5 rounded-full bg-primary dark:bg-[#00d19a] animate-pulse" aria-hidden />
             실시간
           </span>
