@@ -13,6 +13,10 @@ function looksLikeHtml(str: string): boolean {
   return t.startsWith('<') || t.includes('<!DOCTYPE') || t.includes('<!doctype')
 }
 
+const sectionLabel = 'text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5'
+const preBlock =
+  'rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 p-3 text-zinc-800 dark:text-[#e1e3e6] font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words'
+
 export function ErrorDetailModal() {
   const { detail, errorId, closeDetail } = useErrorDetailStore()
 
@@ -36,13 +40,13 @@ export function ErrorDetailModal() {
       aria-labelledby="error-detail-title"
     >
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/60 dark:bg-black/70"
         onClick={closeDetail}
         aria-hidden
       />
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-white shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30 shrink-0">
-          <h2 id="error-detail-title" className="font-semibold text-foreground">
+      <div className="relative w-full max-w-lg rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#15171a] shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 shrink-0">
+          <h2 id="error-detail-title" className="font-semibold text-zinc-900 dark:text-[#e1e3e6]">
             {isDev ? '에러 상세 정보' : '오류 안내'}
           </h2>
           <Button
@@ -50,7 +54,7 @@ export function ErrorDetailModal() {
             variant="ghost"
             size="icon"
             onClick={closeDetail}
-            className="shrink-0"
+            className="shrink-0 text-zinc-600 dark:text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
@@ -60,18 +64,16 @@ export function ErrorDetailModal() {
           {isDev ? (
             <>
               <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Code
-                </h3>
-                <pre className="rounded-lg border border-border bg-muted/50 p-3 text-foreground font-mono text-xs overflow-x-auto">
+                <h3 className={sectionLabel}>Code</h3>
+                <pre className={`${preBlock} overflow-y-auto`}>
                   <code>{detail.code}</code>
                 </pre>
               </section>
               <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                <h3 className={sectionLabel}>
                   {looksLikeHtml(detail.message) ? '응답 본문 (일부)' : 'Message'}
                 </h3>
-                <pre className="rounded-lg border border-border bg-muted/50 p-3 text-foreground font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                <pre className={`${preBlock} max-h-48 overflow-y-auto`}>
                   <code>
                     {looksLikeHtml(detail.message)
                       ? detail.message.slice(0, HTML_PREVIEW_MAX) + (detail.message.length > HTML_PREVIEW_MAX ? '\n\n… (생략)' : '')
@@ -81,20 +83,16 @@ export function ErrorDetailModal() {
               </section>
               {detail.hint !== '—' && (
                 <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Hint
-                  </h3>
-                  <pre className="rounded-lg border border-border bg-muted/50 p-3 text-foreground font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words">
+                  <h3 className={sectionLabel}>Hint</h3>
+                  <pre className={preBlock}>
                     <code>{detail.hint}</code>
                   </pre>
                 </section>
               )}
               {detail.details !== '—' && (
                 <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Details
-                  </h3>
-                  <pre className="rounded-lg border border-border bg-muted/50 p-3 text-foreground font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words">
+                  <h3 className={sectionLabel}>Details</h3>
+                  <pre className={preBlock}>
                     <code>{detail.details}</code>
                   </pre>
                 </section>
@@ -102,18 +100,38 @@ export function ErrorDetailModal() {
             </>
           ) : (
             <>
-              <p className="text-foreground">
-                시스템 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.
+              <p className="text-zinc-700 dark:text-slate-300">
+                시스템 오류가 발생했습니다. 아래 메시지를 확인한 뒤 잠시 후 다시 시도해 주세요.
               </p>
+              <section>
+                <h3 className={sectionLabel}>발생한 오류 메시지</h3>
+                <pre className={`${preBlock} max-h-32 overflow-y-auto`}>
+                  <code>{detail.message}</code>
+                </pre>
+              </section>
+              {detail.code !== '—' && (
+                <section>
+                  <h3 className={sectionLabel}>코드</h3>
+                  <pre className={preBlock}>
+                    <code>{detail.code}</code>
+                  </pre>
+                </section>
+              )}
+              {detail.details !== '—' && (
+                <section>
+                  <h3 className={sectionLabel}>상세</h3>
+                  <pre className={`${preBlock} max-h-24 overflow-y-auto`}>
+                    <code>{detail.details}</code>
+                  </pre>
+                </section>
+              )}
               {errorId && (
                 <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    에러 ID
-                  </h3>
-                  <pre className="rounded-lg border border-border bg-muted/50 p-3 text-foreground font-mono text-xs">
+                  <h3 className={sectionLabel}>에러 ID</h3>
+                  <pre className={preBlock}>
                     <code>{errorId}</code>
                   </pre>
-                  <p className="text-muted-foreground text-xs mt-1">
+                  <p className="text-zinc-500 dark:text-slate-500 text-xs mt-1">
                     문의 시 위 ID를 알려주시면 도움이 됩니다.
                   </p>
                 </section>
@@ -121,8 +139,13 @@ export function ErrorDetailModal() {
             </>
           )}
         </div>
-        <div className="border-t border-border px-4 py-3 shrink-0">
-          <Button type="button" variant="outline" onClick={closeDetail} className="w-full">
+        <div className="border-t border-zinc-200 dark:border-zinc-800 px-4 py-3 shrink-0 bg-zinc-50 dark:bg-zinc-800/30">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={closeDetail}
+            className="w-full border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-slate-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+          >
             닫기
           </Button>
         </div>

@@ -18,7 +18,7 @@ import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
-import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
+import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
 
 const MAIN_TRENDS_TOP_N = 10
@@ -31,7 +31,7 @@ export default function RinAISearch() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
-  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null }[]>([])
+  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string }[]>([])
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [],
@@ -136,14 +136,14 @@ export default function RinAISearch() {
       setRecentReports([])
       return
     }
-    fetch('/api/reports')
+    fetch('/api/research/history')
       .then((res) => res.json())
-      .then((data: { reports?: { keyword: string; created_at?: string | null }[] }) => {
-        const list = data?.reports ?? []
-        setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.created_at ?? null })))
+      .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
+        const list = data?.list ?? []
+        setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
       })
       .catch((err) => {
-        showErrorToast(err, { fallbackMessage: '최근 검색어를 불러오지 못했어요.' })
+        showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했어요.' })
         setRecentReports([])
       })
   }, [user])
@@ -194,11 +194,14 @@ export default function RinAISearch() {
         })
         if (reportRes.ok) {
           const now = new Date().toISOString()
-          setRecentReports((prev) => [{ keyword: k, created_at: now }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
-          const listRes = await fetch('/api/reports')
-          const listData = await listRes.json().catch(() => ({}))
-          const list = listData?.reports ?? []
-          setRecentReports(list.slice(0, 5).map((r: { keyword: string; created_at?: string | null }) => ({ keyword: r.keyword, created_at: r.created_at ?? null })))
+          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
+          fetch('/api/research/history')
+            .then((res) => res.json())
+            .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
+              const list = data?.list ?? []
+              setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
+            })
+            .catch(() => {})
         } else {
           const err = await reportRes.json().catch(() => ({}))
           toast.error(err?.error ?? '검색 기록 저장에 실패했어요.')
@@ -207,13 +210,13 @@ export default function RinAISearch() {
         toast.error('검색 기록 저장에 실패했어요.')
       }
     }
-    router.push(`/results?keyword=${encodeURIComponent(k)}`)
+    router.push(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(trendCountry)}`)
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#15171a]">
+    <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#0f1113]">
       {/* Header: 로고 | 검색창(중앙, 수평 정렬) | 로그인 */}
-      <header className="sticky top-0 z-20 border-b border-border bg-white dark:bg-[#202226] dark:border-[#2d2f34] px-4 py-3 shadow-sm">
+      <header className="sticky top-0 z-20 border-b border-border bg-white dark:bg-card dark:border-[#2d2f34] px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div className="flex items-center shrink-0">
             <Link href="/" className="flex items-center gap-2">
@@ -234,7 +237,7 @@ export default function RinAISearch() {
                 className="border-0 bg-transparent dark:bg-transparent pl-9 pr-3 h-full py-0 text-sm text-foreground dark:text-[#e1e3e6] placeholder:dark:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
               />
             </div>
-            <Button type="submit" size="sm" className="shrink-0 h-full min-h-[2.75rem] px-4 dark:bg-[#202226] dark:text-[#e1e3e6] dark:hover:bg-[#2a2d32] dark:border-[#2d2f34]">
+            <Button type="submit" size="sm" className="shrink-0 h-full min-h-[2.75rem] px-4 dark:bg-card dark:text-[#e1e3e6] dark:hover:bg-[#2a2d32] dark:border-[#2d2f34]">
               검색
             </Button>
           </form>
@@ -259,7 +262,7 @@ export default function RinAISearch() {
             exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center min-h-[60vh] p-8"
           >
-            <div className="rounded-2xl border border-border bg-white dark:bg-[#202226] dark:border-[#2d2f34] p-8 shadow-sm">
+            <div className="rounded-2xl border border-border bg-white dark:bg-card dark:border-[#2d2f34] p-8 shadow-sm">
               <RinAnimation variant="loading" size={200} className="mx-auto block" />
               <p className="text-center font-medium text-foreground dark:text-[#e1e3e6] mt-4">{loadingMessage}</p>
               <p className="text-center text-muted-foreground dark:text-slate-400 text-sm mt-1">잠시만 기다려 주세요.</p>
@@ -293,7 +296,7 @@ export default function RinAISearch() {
             {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
               {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역 후 / 번역 전 함께 표시) */}
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-5 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card p-5 shadow-sm lg:col-span-5 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
@@ -335,11 +338,9 @@ export default function RinAISearch() {
                                 className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted/60 dark:hover:bg-[#1c1e21] transition-colors border border-transparent dark:border-[#2d2f34]/80"
                               >
                                 <span className="min-w-0 flex-1 flex items-center gap-2">
-                                  {item.rank <= 3 && (
-                                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 ">
-                                      급상승
-                                    </span>
-                                  )}
+                                  <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-muted dark:bg-[#2a2d32] text-xs font-medium text-muted-foreground dark:text-slate-400 tabular-nums">
+                                    {item.rank ?? i + 1}
+                                  </span>
                                   <span className="min-w-0 flex-1">
                                     {hasTranslation ? (
                                       <>
@@ -358,7 +359,7 @@ export default function RinAISearch() {
                                   </span>
                                 </span>
                                 {item.search_volume != null && (
-                                  <span className="text-muted-foreground dark:text-[#00d19a]  text-xs shrink-0 tabular-nums font-medium">
+                                  <span className="text-muted-foreground dark:text-slate-400 text-xs shrink-0 tabular-nums">
                                     {item.search_volume}
                                   </span>
                                 )}
@@ -376,7 +377,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 2: 나의 리서치 활동 */}
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-4 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card p-5 shadow-sm lg:col-span-4 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
                     <History className="h-5 w-5 text-primary" />
@@ -390,12 +391,17 @@ export default function RinAISearch() {
                   recentReports.length > 0 ? (
                     <ul className="space-y-2">
                       {recentReports.map((r, i) => (
-                        <li key={r.keyword + (r.created_at ?? '') + i}>
+                        <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
                           <Link
-                            href={`/results?keyword=${encodeURIComponent(r.keyword)}`}
-                            className="flex items-center justify-between rounded-lg border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] px-3 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors"
+                            href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
+                            className="flex items-center justify-between rounded-lg border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-card px-3 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors"
                           >
-                            <span className="font-medium text-foreground dark:text-[#e1e3e6] truncate">{r.keyword}</span>
+                            <span className="min-w-0 flex items-center gap-2">
+                              <span className="font-medium text-foreground dark:text-[#e1e3e6] truncate">{r.keyword}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground dark:text-slate-400" title="트렌드 채택 국가">
+                                {COUNTRY_LABELS[r.country_code] ?? r.country_code}
+                              </span>
+                            </span>
                             <span className="flex items-center gap-1 shrink-0">
                               <TimeAgo isoString={r.created_at} className="text-muted-foreground dark:text-slate-400 text-xs" />
                               <ChevronRight className="h-4 w-4 text-muted-foreground dark:text-slate-400" />
@@ -417,7 +423,7 @@ export default function RinAISearch() {
               </div>
 
               {/* 카드 3: API 키 연결 상태 */}
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] p-5 shadow-sm lg:col-span-3 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card p-5 shadow-sm lg:col-span-3 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
                 <h2 className="font-semibold text-foreground dark:text-white flex items-center gap-2 mb-4">
                   <KeyRound className="h-5 w-5 text-primary" />
                   API 연결 상태
@@ -454,8 +460,8 @@ export default function RinAISearch() {
               onOpenChange={setTrendPanelOpen}
               selectedItem={selectedTrendItem}
               onAnalyze={(keyword) => {
-                startResearch(keyword)
-                router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
+                startResearch(keyword, { country_code: trendCountry })
+                router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
               }}
             />
           </motion.div>

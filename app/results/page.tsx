@@ -13,9 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
+import { SentimentGauge } from '@/components/research/SentimentGauge'
 import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
 import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy, Loader2, RefreshCw } from 'lucide-react'
-import { cn, parseSearchVolumeNum } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
@@ -101,7 +102,7 @@ function NewsDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] shadow-lg flex flex-col">
+      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card shadow-lg flex flex-col">
         <div className="flex items-start justify-between gap-4 p-4 border-b border-border dark:border-[#2d2f34] shrink-0">
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-foreground dark:text-[#e1e3e6]">{item.title || '제목 없음'}</h3>
@@ -173,7 +174,7 @@ function NewsDetailModal({
                   {showRawBody ? '수집된 텍스트 접기' : '수집된 텍스트 보기'}
                 </button>
                 {showRawBody && (
-                  <div className="mt-2 text-xs text-muted-foreground dark:text-slate-400 whitespace-pre-wrap leading-relaxed rounded border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] p-3 max-h-48 overflow-y-auto">
+                  <div className="mt-2 text-xs text-muted-foreground dark:text-slate-400 whitespace-pre-wrap leading-relaxed rounded border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-card p-3 max-h-48 overflow-y-auto">
                     {item.content}
                   </div>
                 )}
@@ -228,27 +229,28 @@ function ResultsContent() {
   })
   const reportFetchedForCacheRef = useRef<string | null>(null)
   const tabAbortControllerRef = useRef<AbortController | null>(null)
+  const creativeFetchedForConsensusRef = useRef<string | null>(null)
 
-  // URL keyword 기준: research_history 캐시 우선 → 없거나 비어있으면 reports 복원 → 없으면 stream 호출
+  /** AI Insight Consensus: 2사 종합 요약·감성·키워드 (creative 탭 응답에서 옴) */
+  type ConsensusData = { summary: string; sentiment: number; positiveKeywords: string[]; negativeKeywords: string[] }
+  const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
+
+  // URL keyword·country 기준: research_history 캐시 우선 → 없으면 stream 호출 (report·research_history 생성)
+  const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
     let cancelled = false
-    const countryCode = 'KR'
+    const countryCode = countryFromUrl
     loadFromHistory(k, countryCode).then((historyStatus) => {
       if (cancelled) return
       if (historyStatus === 'cached') return
-      if (historyStatus === 'empty') {
+      if (historyStatus === 'empty' || historyStatus === 'none') {
         startResearch(k, { country_code: countryCode })
-        return
       }
-      loadReportByKeyword(k).then((fromReport) => {
-        if (cancelled) return
-        if (!fromReport) startResearch(k, { country_code: countryCode })
-      })
     })
     return () => { cancelled = true }
-  }, [keyword, loadFromHistory, loadReportByKeyword, startResearch])
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -316,6 +318,13 @@ function ResultsContent() {
     }
   }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
 
+  const prevReportIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = result?.reportId ?? null
+    if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) setConsensusData(null)
+    prevReportIdRef.current = id
+  }, [result?.reportId])
+
   const fetchTabAnalysis = useCallback(
     async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean }) => {
       if (quotaExceeded) return
@@ -345,7 +354,7 @@ function ResultsContent() {
             newsHeadlines: newsHeadlines ?? undefined,
             provider,
             isReanalyze: options?.isReanalyze ?? false,
-            countryCode: 'KR',
+            countryCode: countryFromUrl,
             ...(tabId === 'fact' && { logicText, creativeText }),
           }),
           signal: ac.signal,
@@ -396,7 +405,17 @@ function ResultsContent() {
           setTabCacheGemini((prev) => ({ ...prev, [tabId]: geminiText }))
           setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: 0 }))
           setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
-        } else if (provider === 'all' || provider === 'gemini') {
+        }
+        const rawConsensus = (data as { consensus?: ConsensusData }).consensus
+        if (rawConsensus && typeof rawConsensus === 'object' && typeof rawConsensus.summary === 'string' && typeof rawConsensus.sentiment === 'number') {
+          setConsensusData({
+            summary: String(rawConsensus.summary).slice(0, 200),
+            sentiment: Math.max(-100, Math.min(100, Number(rawConsensus.sentiment))),
+            positiveKeywords: Array.isArray(rawConsensus.positiveKeywords) ? rawConsensus.positiveKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : [],
+            negativeKeywords: Array.isArray(rawConsensus.negativeKeywords) ? rawConsensus.negativeKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : [],
+          })
+        }
+        if (geminiText === null && (provider === 'all' || provider === 'gemini')) {
           if (geminiQuotaExceeded) {
             setGeminiQuotaExceeded(true)
             setTabErrorGemini((prev) => ({ ...prev, [tabId]: '무료 쿼터 초과' }))
@@ -423,7 +442,7 @@ function ResultsContent() {
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, retryCountTabGroq, retryCountTabGemini]
+    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, retryCountTabGroq, retryCountTabGemini]
   )
 
   useEffect(() => {
@@ -445,6 +464,17 @@ function ResultsContent() {
       fetchTabAnalysis(t, 'gemini')
     }
   }, [activeTab, status, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, retryCountTabGroq, retryCountTabGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
+
+  // 트리거: 개별 분석(스트림) 완료 후에만 creative 요청. 0% 상태에서 Consensus API 선호출 금지.
+  useEffect(() => {
+    if (status !== 'done' || !result?.reportId || quotaExceeded || geminiQuotaExceeded) return
+    if (creativeFetchedForConsensusRef.current === result.reportId) return
+    if (tabLoadingGroq.creative || tabLoadingGemini.creative) return
+    const hasCreative = tabCacheGroq.creative ?? tabCacheGemini.creative
+    if (hasCreative && consensusData) return
+    creativeFetchedForConsensusRef.current = result.reportId
+    fetchTabAnalysis('creative', 'all')
+  }, [status, result?.reportId, quotaExceeded, geminiQuotaExceeded, tabCacheGroq.creative, tabCacheGemini.creative, tabLoadingGroq.creative, tabLoadingGemini.creative, consensusData, fetchTabAnalysis])
 
   const handleShare = useCallback(async () => {
     const reportId = result?.reportId
@@ -508,11 +538,11 @@ function ResultsContent() {
   const showTabs = !!currentKeyword
   if (showTabs) {
     return (
-      <div className="p-6 md:p-8 min-h-screen bg-[#F9FAFB] dark:bg-[#15171a] rin-doc">
+      <div className="p-6 md:p-8 min-h-screen bg-[#F9FAFB] dark:bg-[#0f1113] rin-doc">
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-[#202226] */}
-          <div className="lg:col-span-8 space-y-6 dark:bg-[#202226] rounded-xl p-1">
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-6 md:p-8 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
+          {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-card */}
+          <div className="lg:col-span-8 space-y-6 dark:bg-card rounded-xl p-1">
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-6 md:p-8 transition-colors duration-200 dark:hover:bg-[#1c1e21]">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] ">
             &quot;{currentKeyword}&quot; 검색 결과
@@ -524,6 +554,107 @@ function ResultsContent() {
           </p>
         </header>
 
+        {/* 최상단: AI Insight Consensus (감성 게이지·150자 요약·키워드). 키워드 있으면 항상 박스 표시 */}
+        <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+          <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
+          {!result ? (
+            status === 'error' && error ? (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
+                <p className="text-sm text-rose-400">{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50"
+                  onClick={() => currentKeyword && startResearch(currentKeyword, { country_code: countryFromUrl })}
+                >
+                  다시 분석하기
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 긍정/부정 키워드가 여기 표시됩니다.
+              </p>
+            )
+          ) : (tabLoadingGroq.creative || tabLoadingGemini.creative) && !consensusData ? (
+            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-[140px] h-[70px] rounded-t-full border border-zinc-700 border-b-0 bg-zinc-800/30 animate-pulse" />
+                <div className="h-5 w-12 bg-zinc-700/50 rounded animate-pulse" />
+                <div className="h-3 w-14 bg-zinc-700/50 rounded animate-pulse" />
+              </div>
+              <div className="flex flex-col gap-3 min-w-0">
+                <div className="space-y-2">
+                  <div className="h-3 w-full max-w-md bg-zinc-700/50 rounded animate-pulse" />
+                  <div className="h-3 w-full max-w-sm bg-zinc-700/50 rounded animate-pulse" />
+                  <div className="h-3 w-4/5 max-w-xs bg-zinc-700/50 rounded animate-pulse" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="h-5 w-14 bg-zinc-700/50 rounded animate-pulse" />
+                  <div className="h-5 w-16 bg-zinc-700/50 rounded animate-pulse" />
+                  <div className="h-5 w-20 bg-zinc-700/50 rounded animate-pulse" />
+                  <div className="h-5 w-14 bg-zinc-700/50 rounded animate-pulse ml-2" />
+                  <div className="h-5 w-16 bg-zinc-700/50 rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ) : consensusData ? (
+            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="flex justify-center md:justify-start">
+                <SentimentGauge value={consensusData.sentiment} />
+              </div>
+              <div className="flex flex-col gap-3 min-w-0">
+                <p className="text-sm text-slate-300 leading-relaxed">{consensusData.summary}</p>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-slate-500 shrink-0">Positive</span>
+                  {(consensusData.positiveKeywords ?? []).map((k, i) => (
+                    <span key={i} className="rounded px-2 py-0.5 text-xs bg-emerald-500/5 text-emerald-400">
+                      {k}
+                    </span>
+                  ))}
+                  <span className="text-xs text-slate-500 shrink-0 ml-2">Negative</span>
+                  {(consensusData.negativeKeywords ?? []).map((k, i) => (
+                    <span key={i} className="rounded px-2 py-0.5 text-xs bg-rose-500/5 text-rose-400">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (tabErrorGroq.creative || tabErrorGemini.creative) ? (
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
+              <p className="text-sm text-rose-400">
+                {tabErrorGroq.creative || tabErrorGemini.creative}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
+                disabled={tabLoadingGroq.creative || tabLoadingGemini.creative}
+                onClick={() => {
+                  setConsensusData(null)
+                  setTabErrorGroq((prev) => ({ ...prev, creative: null }))
+                  setTabErrorGemini((prev) => ({ ...prev, creative: null }))
+                  setTabCacheGroq((prev) => ({ ...prev, creative: null }))
+                  setTabCacheGemini((prev) => ({ ...prev, creative: null }))
+                  fetchTabAnalysis('creative', 'all', { isReanalyze: true })
+                }}
+              >
+                {tabLoadingGroq.creative || tabLoadingGemini.creative ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                2사 종합 다시 시도
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              2사 AI 요약·감성 점수는 인사이트 탭 분석 후 표시됩니다. 위에서 &quot;재분석 (캐시 무시)&quot;를 누르면 다시 계산됩니다.
+            </p>
+          )}
+        </div>
 
         {status === 'done' && result && (
           <div className="no-print flex flex-wrap items-center gap-2 mb-4">
@@ -570,7 +701,7 @@ function ResultsContent() {
               size="sm"
               className="gap-2"
               disabled={loading}
-              onClick={() => startResearch(currentKeyword ?? '', { country_code: 'KR' })}
+              onClick={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
             >
               {loading ? (
                 <>
@@ -643,7 +774,7 @@ function ResultsContent() {
                 {rssNews.map((item, i) => (
                   <article
                     key={i}
-                    className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#1c1e21] transition-all text-left flex flex-col"
+                    className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#1c1e21] transition-all text-left flex flex-col"
                   >
                     <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
                       <h3 className="font-medium text-foreground dark:text-[#e1e3e6] text-[15px] leading-snug line-clamp-2">
@@ -672,7 +803,7 @@ function ResultsContent() {
           )}
 
           {quotaExceeded ? (
-            <div className="mt-6 flex flex-col items-center justify-center min-h-[320px] text-center rounded-xl border border-border dark:bg-[#15171a] dark:border-[#00d19a] bg-card dark:border-[#00d19a] p-8">
+            <div className="mt-6 flex flex-col items-center justify-center min-h-[320px] text-center rounded-xl border border-border dark:bg-[#0f1113] dark:border-[#00d19a] bg-card dark:border-[#00d19a] p-8">
               <p className="text-destructive font-medium dark:text-[#00d19a]">{QUOTA_UNIFIED_MESSAGE}</p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
                 <Button variant="outline" size="sm" asChild>
@@ -705,14 +836,14 @@ function ResultsContent() {
               ) : (
                 <>
                   {id === 'logic' && result?.chartData && (
-                    <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] p-6 mb-6">
+                    <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-6 mb-6">
                       <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">24시간 검색량·감성 추이</h3>
                       <ResearchCharts chartData={result.chartData} />
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Groq */}
-                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-[#202226] dark:hover:bg-[#1c1e21] transition-colors duration-200">
+                    {/* Groq 시장 요약: 해당 AI 원본 분석 텍스트만 표시 (컨센서스 요약 미포함) */}
+                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200">
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="secondary">Groq (Llama)</Badge>
@@ -721,7 +852,7 @@ function ResultsContent() {
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col gap-4">
                         {tabErrorGroq[id] ? (
-                          <div className="rounded-lg border border-border dark:bg-[#15171a] dark:border-[#00d19a] p-3 flex flex-col gap-2">
+                          <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
                             <p className="text-destructive text-sm dark:text-[#00d19a]">
                               {(retryCountTabGroq[id] ?? 0) >= 3
                                 ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
@@ -766,8 +897,8 @@ function ResultsContent() {
                         )}
                       </CardContent>
                     </Card>
-                    {/* Gemini */}
-                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-[#202226] dark:hover:bg-[#1c1e21] transition-colors duration-200">
+                    {/* Gemini 시장 요약: 해당 AI 원본 분석 텍스트만 표시 (컨센서스 요약 미포함) */}
+                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200">
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="secondary">Gemini</Badge>
@@ -776,7 +907,7 @@ function ResultsContent() {
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col gap-4">
                         {tabErrorGemini[id] ? (
-                          <div className="rounded-lg border border-border dark:bg-[#15171a] dark:border-[#00d19a] p-3 flex flex-col gap-2">
+                          <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
                             <p className="text-destructive text-sm dark:text-[#00d19a]">
                               {tabErrorGemini[id] === '무료 쿼터 초과'
                                 ? '무료 쿼터 초과'
@@ -831,7 +962,7 @@ function ResultsContent() {
                     </Card>
                   </div>
                   {id === 'creative' && (
-                    <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-[#202226] p-6 mt-6">
+                    <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-6 mt-6">
                       <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6] mb-3">더 궁금한 점이 있나요?</p>
                       <div className="flex gap-2">
                         <input
@@ -903,7 +1034,7 @@ function ResultsContent() {
 
           {/* Side widgets: col-span-4 - 실시간 트렌드 위젯 (Viva Engage 스타일) */}
           <div className="lg:col-span-4 space-y-4 bg-[#F9FAFB] dark:bg-transparent rounded-xl p-1">
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
                 실시간 트렌드
@@ -913,7 +1044,7 @@ function ResultsContent() {
                   <ul className="space-y-3 mb-3">
                     {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
                       <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-lg border border-border dark:border-[#2d2f34] bg-[#F9FAFB] dark:bg-[#202226] p-3 hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors">
+                        <div className="rounded-lg border border-border dark:border-[#2d2f34] bg-[#F9FAFB] dark:bg-card p-3 hover:bg-muted/50 dark:hover:bg-[#1c1e21] transition-colors">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Link
                               href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
@@ -921,23 +1052,11 @@ function ResultsContent() {
                             >
                               {item.keyword}
                             </Link>
-                            {item.search_volume && (() => {
-                              const vol = parseSearchVolumeNum(item.search_volume)
-                              const isHigh = vol >= 1000
-                              return (
-                                <Badge
-                                  variant="secondary"
-                                  className={cn(
-                                    'text-xs shrink-0 tabular-nums',
-                                    isHigh
-                                      ? 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50'
-                                      : 'dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border-[#00d19a]/50'
-                                  )}
-                                >
-                                  {item.search_volume}
-                                </Badge>
-                              )
-                            })()}
+                            {item.search_volume != null && (
+                              <span className="text-xs shrink-0 tabular-nums text-muted-foreground dark:text-slate-400">
+                                {item.search_volume}
+                              </span>
+                            )}
                           </div>
                           {item.started_at && (
                             <p className="text-xs text-muted-foreground dark:text-slate-400 mt-1">{item.started_at}</p>
@@ -954,7 +1073,7 @@ function ResultsContent() {
               )}
             </div>
             {/* 관련 뉴스 피드 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">관련 뉴스 피드</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">뉴스를 불러오는 중이에요.</p>
@@ -980,7 +1099,7 @@ function ResultsContent() {
               )}
             </div>
             {/* 핵심 수치 요약 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 수치 요약</h3>
               {result ? (
                 <dl className="space-y-2 text-sm">
@@ -1002,7 +1121,7 @@ function ResultsContent() {
               )}
             </div>
             {/* 인용된 출처 리스트 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#202226] shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">인용된 출처</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">출처가 없어요.</p>
@@ -1031,8 +1150,8 @@ function ResultsContent() {
 
   if (!keyword) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-[#F9FAFB] dark:bg-[#15171a]">
-        <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-8 text-center max-w-md">
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-[#F9FAFB] dark:bg-[#0f1113]">
+        <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-sm p-8 text-center max-w-md">
           <p className="text-muted-foreground dark:text-slate-400 mb-4">검색어가 없습니다.</p>
           <Link href="/">
             <Button variant="outline">검색으로 돌아가기</Button>
@@ -1049,8 +1168,8 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-[#F9FAFB] dark:bg-[#15171a]">
-          <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm p-8">
+        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-[#F9FAFB] dark:bg-[#0f1113]">
+          <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-sm p-8">
             <RinAnimation variant="loading" size={200} />
             <p className="text-muted-foreground dark:text-slate-400 mt-4">{getRandomRinMessage()}</p>
           </div>

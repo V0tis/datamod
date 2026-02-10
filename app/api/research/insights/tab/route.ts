@@ -13,6 +13,72 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
 
+/** 2사(Gemini 3 + Groq) 종합 요약 → JSON. results 페이지는 Gemini 카드가 아닌 전용 "AI Insight Consensus" 블록에 표시 */
+const CONSENSUS_SYSTEM =
+  '두 분석 결과를 종합하여 150자 이내 요약, -100~100 사이의 감성 점수, 긍정 키워드 3개와 부정 키워드 3개를 추출해. 응답은 반드시 JSON 형식으로만 해. 키: summary(문자열), sentiment(숫자), positiveKeywords(문자열 배열 3개), negativeKeywords(문자열 배열 3개).'
+const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
+const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
+
+export type Consensus = {
+  summary: string
+  sentiment: number
+  positiveKeywords: string[]
+  negativeKeywords: string[]
+}
+
+/** 입력 부족 시 UI가 깨지지 않도록 반환하는 기본 컨센서스 */
+const FALLBACK_CONSENSUS: Consensus = {
+  summary: '분석 불가. 데이터가 부족합니다.',
+  sentiment: 0,
+  positiveKeywords: [],
+  negativeKeywords: [],
+}
+
+/** 두 분석이 모두 settled된 뒤에만 호출. 한쪽 실패 시에도 가능한 데이터로 요약 (일부 데이터만으로 종합). 항상 Consensus 객체 반환. */
+async function generateConsensus(
+  apiKey: string,
+  geminiAnalysis: string,
+  groqAnalysis: string
+): Promise<Consensus> {
+  const g = String(geminiAnalysis ?? '').trim()
+  const r = String(groqAnalysis ?? '').trim()
+  const bothEmpty = g.length < 20 && r.length < 20
+  if (bothEmpty) return FALLBACK_CONSENSUS
+
+  const partialNote = (g.length < 20 || r.length < 20)
+    ? '\n\n[참고: 한쪽 AI 분석만 사용되었거나 일부 데이터만으로 종합한 결과입니다.]'
+    : ''
+  const prompt = `${CONSENSUS_SYSTEM}${partialNote}\n\n${CONSENSUS_USER_PREFIX}${g.slice(0, 3000)}${CONSENSUS_USER_SUFFIX}${r.slice(0, 3000)}`
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      maxOutputTokens: 512,
+      responseMimeType: 'application/json' as const,
+    },
+  }
+  try {
+    const url = `${GEMINI_BASE_URL_V1BETA}/${GEMINI_MODEL_PRIMARY}:generateContent?key=${apiKey}`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) return FALLBACK_CONSENSUS
+    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+    if (!raw) return FALLBACK_CONSENSUS
+    const parsed = JSON.parse(raw) as { summary?: string; sentiment?: number; positiveKeywords?: string[]; negativeKeywords?: string[] }
+    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 200) : FALLBACK_CONSENSUS.summary
+    const sentiment = typeof parsed.sentiment === 'number' ? Math.max(-100, Math.min(100, parsed.sentiment)) : 0
+    const positiveKeywords = Array.isArray(parsed.positiveKeywords) ? parsed.positiveKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : []
+    const negativeKeywords = Array.isArray(parsed.negativeKeywords) ? parsed.negativeKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : []
+    return { summary, sentiment, positiveKeywords, negativeKeywords }
+  } catch (e) {
+    console.warn('[Research Tab] Consensus synthesis', e)
+    return FALLBACK_CONSENSUS
+  }
+}
+
 /** Gemini·Groq 공통: 시장 분석 및 인사이트를 마크다운 형식으로 요약 */
 const UNIFIED_SYSTEM_PROMPT =
   '시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.'
@@ -103,7 +169,7 @@ export async function POST(req: Request) {
   if (!isReanalyze && keyword) {
     const { data: cachedData } = await supabase
       .from('research_history')
-      .select('analysis_groq, analysis_gemini')
+      .select('analysis_groq, analysis_gemini, analysis_results')
       .eq('user_id', user.id)
       .eq('keyword', keyword)
       .eq('country_code', countryCode)
@@ -119,9 +185,33 @@ export async function POST(req: Request) {
         (provider === 'groq' && mergedGroq != null) ||
         (provider === 'gemini' && mergedGemini != null)
       if (allCached) {
+        const ar = (cachedData.analysis_results ?? null) as Record<string, unknown> | null
+        let cachedConsensus = ar && typeof ar.consensus === 'object' && ar.consensus != null ? ar.consensus : null
+        if (
+          tab === 'creative' &&
+          mergedGroq != null &&
+          mergedGemini != null &&
+          !cachedConsensus
+        ) {
+          const geminiKey = process.env.GOOGLE_GENAI_API_KEY?.trim()
+          if (geminiKey) {
+            const synthesized = await generateConsensus(geminiKey, mergedGemini, mergedGroq)
+            if (synthesized) {
+              cachedConsensus = synthesized
+              const nextResults = { ...(ar ?? {}), consensus: synthesized }
+              await supabase
+                .from('research_history')
+                .update({ analysis_results: nextResults, updated_at: new Date().toISOString() })
+                .eq('user_id', user.id)
+                .eq('keyword', keyword)
+                .eq('country_code', countryCode)
+            }
+          }
+        }
         return NextResponse.json({
           groq: mergedGroq != null ? { text: mergedGroq } : null,
           gemini: mergedGemini != null ? { text: mergedGemini } : null,
+          ...(cachedConsensus ? { consensus: cachedConsensus } : {}),
         })
       }
     }
@@ -130,7 +220,7 @@ export async function POST(req: Request) {
   if (reportId && !isReanalyze) {
     const { data: historyRow } = await supabase
       .from('research_history')
-      .select('analysis_groq, analysis_gemini, updated_at')
+      .select('analysis_groq, analysis_gemini, analysis_results, updated_at')
       .eq('report_id', reportId)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -151,16 +241,13 @@ export async function POST(req: Request) {
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
   if (!needGroq && !needGemini) {
+    const historyForConsensus = await supabase.from('research_history').select('analysis_results').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
+    const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
+    const c = ar && typeof ar.consensus === 'object' && ar.consensus != null ? ar.consensus : null
     return NextResponse.json({
       groq: mergedGroq != null ? { text: mergedGroq } : null,
       gemini: mergedGemini != null ? { text: mergedGemini } : null,
-    })
-  }
-
-  if (!isReanalyze) {
-    return NextResponse.json({
-      groq: mergedGroq != null ? { text: mergedGroq } : null,
-      gemini: mergedGemini != null ? { text: mergedGemini } : null,
+      ...(c ? { consensus: c } : {}),
     })
   }
 
@@ -183,6 +270,7 @@ export async function POST(req: Request) {
   const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
   const fullPromptForGeminiAndHf = `${UNIFIED_SYSTEM_PROMPT}\n\n${userPrompt}`
 
+  /** Groq / Gemini 각각 독립 호출. 서로의 결과를 참조하지 않음. */
   async function callGroq(): Promise<{ text: string | null; quotaError?: boolean }> {
     if (provider !== 'all' && provider !== 'groq') return { text: null }
     const doRequest = async (): Promise<{ res: Response; data: { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } } }> => {
@@ -288,18 +376,21 @@ export async function POST(req: Request) {
   const groqResult = resultGr
   const geminiResult = resultG
 
-  // analysis_results JSONB: gemini·groq만 저장 (HF 제거)
-  const analysisResults = {
-    gemini: resultG ?? ANALYSIS_FAILED_PLACEHOLDER,
-    groq: resultGr ?? ANALYSIS_FAILED_PLACEHOLDER,
+  /** AllSettled로 Groq·Gemini가 모두 끝난 뒤에만 컨센서스 생성. 한쪽 실패(null)여도 가능한 데이터로 요약. */
+  let consensus: Consensus | null = null
+  if (tab === 'creative' && geminiKey && !geminiQuotaExceeded) {
+    const geminiInput = (geminiResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
+    const groqInput = (groqResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
+    consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
   }
 
+  let existingConsensus: Consensus | null = null
   const hasAnyResult = groqResult !== null || geminiResult !== null
   if (hasAnyResult) {
     try {
       const { data: historyRow } = await supabase
         .from('research_history')
-        .select('analysis_groq, analysis_gemini')
+        .select('analysis_groq, analysis_gemini, analysis_results')
         .eq('user_id', user.id)
         .eq('keyword', keyword)
         .eq('country_code', countryCode)
@@ -307,6 +398,11 @@ export async function POST(req: Request) {
 
       const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
       const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
+      const existingResults = (historyRow?.analysis_results ?? null) as Record<string, unknown> | null
+      existingConsensus = existingResults && typeof existingResults.consensus === 'object' && existingResults.consensus != null
+        ? (existingResults.consensus as Consensus)
+        : null
+
       const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
         const next = { ...prev }
         if (result != null && String(result).trim().length > 0) next[key] = String(result).trim()
@@ -314,6 +410,12 @@ export async function POST(req: Request) {
       }
       const nextGroq = withTab(prevGroq, groqResult, tab)
       const nextGemini = withTab(prevGemini, geminiResult, tab)
+
+      const analysisResults: Record<string, unknown> = {
+        gemini: resultG ?? ANALYSIS_FAILED_PLACEHOLDER,
+        groq: resultGr ?? ANALYSIS_FAILED_PLACEHOLDER,
+        ...(consensus ? { consensus } : existingConsensus ? { consensus: existingConsensus } : {}),
+      }
 
       await supabase.from('research_history').upsert(
         {
@@ -336,9 +438,11 @@ export async function POST(req: Request) {
   const hasAny =
     (groqResult != null && groqResult.length > 0) ||
     (geminiResult != null && geminiResult.length > 0)
+  const finalConsensus = consensus ?? existingConsensus ?? (tab === 'creative' ? FALLBACK_CONSENSUS : null)
   return NextResponse.json({
     groq: groqResult != null && groqResult.length > 0 ? { text: groqResult } : null,
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,
+    ...(finalConsensus ? { consensus: finalConsensus } : {}),
     ...(groqQuotaError ? { groqError: GROQ_QUOTA_MESSAGE } : {}),
     ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true } : {}),
     ...(!hasAny ? { error: UNIFIED_ERROR_MESSAGE } : {}),

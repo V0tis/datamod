@@ -50,21 +50,21 @@
   --foreground: #1A1A1A;
 }
 
-/* 웨일 스타일 딥 차콜 다크 모드 */
+/* 전역 다크 모드: Dashlite 스타일 #0f1113 배경 */
 .dark {
-  --background: #15171a;
+  --background: #0f1113;
   --foreground: #e1e3e6;
-  --card: #202226;
+  --card: #181a1d;
   --card-foreground: #e1e3e6;
-  --popover: #202226;
+  --popover: #181a1d;
   --popover-foreground: #e1e3e6;
   --primary: #00d19a;
-  --primary-foreground: #15171a;
-  --secondary: #2a2d32;
+  --primary-foreground: #0f1113;
+  --secondary: #1c1e21;
   --secondary-foreground: #e1e3e6;
-  --muted: #202226;
+  --muted: #1c1e21;
   --muted-foreground: #9ca3af;
-  --accent: #2a2d32;
+  --accent: #1c1e21;
   --accent-foreground: #e1e3e6;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.637 0.237 25.331);
@@ -76,11 +76,11 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #15171a;
+  --sidebar: #0f1113;
   --sidebar-foreground: #e1e3e6;
   --sidebar-primary: #00d19a;
-  --sidebar-primary-foreground: #15171a;
-  --sidebar-accent: #2a2d32;
+  --sidebar-primary-foreground: #0f1113;
+  --sidebar-accent: #1c1e21;
   --sidebar-accent-foreground: #e1e3e6;
   --sidebar-border: #2d2f34;
   --sidebar-ring: #00d19a;

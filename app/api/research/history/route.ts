@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * GET ?keyword=xxx&country=KR
- * research_history + reports 조인하여 캐시된 분석 반환.
- * - 있으면: reportId, content, source_links, analysis_market, analysis_insight, analysis_report, key_metrics, updated_at
- * - 기록은 있지만 분석 텍스트가 모두 비어있으면: emptyAnalysis: true (최초 1회 분석 실행 유도)
+ * GET ?keyword=xxx&country=KR → 단일 캐시 조회 (기존)
+ * GET (no params) → 사용자 최근 research_history 목록 (리스트용)
  */
 export async function GET(req: Request) {
   try {
@@ -22,7 +20,29 @@ export async function GET(req: Request) {
     const countryCode = searchParams.get('country')?.trim() || 'KR'
 
     if (!keyword) {
-      return NextResponse.json({ error: 'keyword required' }, { status: 400 })
+      const { data: rows, error } = await supabase
+        .from('research_history')
+        .select('id, keyword, country_code, report_id, updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+
+      if (error) {
+        console.error('[Research History] list error:', error)
+        return NextResponse.json(
+          { error: '기록을 불러오지 못했습니다.' },
+          { status: 500 }
+        )
+      }
+
+      const list = (rows ?? []).map((r) => ({
+        id: r.id,
+        keyword: r.keyword,
+        country_code: r.country_code ?? 'KR',
+        report_id: r.report_id ?? null,
+        updated_at: r.updated_at ?? null,
+        date: (r.updated_at ?? '').slice(0, 10),
+      }))
+      return NextResponse.json({ list })
     }
 
     const { data: row, error } = await supabase
@@ -109,6 +129,66 @@ export async function GET(req: Request) {
     console.error('[Research History]', e)
     return NextResponse.json(
       { error: '캐시를 불러오지 못했습니다.' },
+      { status: 500 }
+    )
+  }
+}
+
+/** DELETE: research_history 행 삭제 (본인만). body: { id: string } */
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+    }
+
+    let body: { id?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+    const id = typeof body?.id === 'string' ? body.id.trim() : ''
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    const { data: row, error: fetchError } = await supabase
+      .from('research_history')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (fetchError || !row) {
+      return NextResponse.json(
+        { error: '해당 기록을 찾을 수 없습니다.' },
+        { status: 404 }
+      )
+    }
+
+    const { error: deleteError } = await supabase
+      .from('research_history')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (deleteError) {
+      console.error('[Research History] DELETE error:', deleteError)
+      return NextResponse.json(
+        { error: '삭제에 실패했습니다.' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    console.error('[Research History] DELETE:', e)
+    return NextResponse.json(
+      { error: '삭제에 실패했습니다.' },
       { status: 500 }
     )
   }

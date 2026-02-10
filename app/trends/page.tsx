@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
-import { cn, parseSearchVolumeNum } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 function showTrendsErrorToast(err: unknown): void {
   const e = err as Error & { failedCountryCode?: string; attemptedUrls?: string[] }
@@ -188,15 +188,15 @@ export default function TrendsPage() {
   }
 
   const handleAnalyzeFromPanel = (keyword: string) => {
-    startResearch(keyword)
+    startResearch(keyword, { country_code: country })
     setSelectedItem(null)
-    router.push(`/results?keyword=${encodeURIComponent(keyword)}`)
+    router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`)
   }
 
   const items = trends[country] ?? []
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] dark:bg-[#15171a] min-h-screen">
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] dark:bg-[#0f1113] min-h-screen">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />
@@ -207,7 +207,7 @@ export default function TrendsPage() {
         </p>
       </header>
 
-      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#1c1e21]">
+      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#1c1e21]">
         <div className="p-4 border-b border-border dark:border-[#2d2f34] space-y-3">
           <CountryChips
             value={country}
@@ -243,13 +243,13 @@ export default function TrendsPage() {
         </CardHeader>
         <CardContent className="relative">
           {showingStaleRefresh && (
-            <div className="flex items-center justify-center gap-2 py-3 px-4 mb-3 rounded-lg bg-muted/50 dark:bg-[#202226] dark:text-[#e1e3e6] text-muted-foreground text-sm border border-border dark:border-[#2d2f34]">
+            <div className="flex items-center justify-center gap-2 py-3 px-4 mb-3 rounded-lg bg-muted/50 dark:bg-card dark:text-[#e1e3e6] text-muted-foreground text-sm border border-border dark:border-[#2d2f34]">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               <span>정보가 오래되어 최신 트렌드를 불러오고 있습니다...</span>
             </div>
           )}
           {chipChanging && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 dark:bg-[#15171a]/80 rounded-b-lg" aria-hidden>
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 dark:bg-[#0f1113]/80 rounded-b-lg" aria-hidden>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           )}
@@ -272,19 +272,16 @@ export default function TrendsPage() {
                   const newsPreview = (item.news_items ?? []).slice(0, 2)
                   const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
-                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#1c1e21] transition-all transition-colors duration-300">
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-card overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#1c1e21] transition-all transition-colors duration-300">
                       <button
                         type="button"
                         onClick={() => handleRowClick(item)}
                         className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
                       >
-                        <span className="col-span-1 text-muted-foreground dark:text-slate-400 dark:text-[#00d19a]  text-sm font-medium tabular-nums flex items-center gap-1">
-                          {item.rank}
-                          {item.rank <= 3 && (
-                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 ">
-                              급상승
-                            </span>
-                          )}
+                        <span className="col-span-1 flex items-center">
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted dark:bg-[#2a2d32] text-xs font-medium text-muted-foreground dark:text-slate-400 tabular-nums">
+                            {item.rank}
+                          </span>
                         </span>
                         <div className="col-span-7 min-w-0 flex flex-col gap-0.5">
                           {item.title_ko != null && item.keyword !== item.title_ko ? (
@@ -296,25 +293,8 @@ export default function TrendsPage() {
                             <p className="text-lg font-bold text-foreground dark:text-[#e1e3e6] truncate">{item.keyword}</p>
                           )}
                         </div>
-                        <span className="col-span-2 flex items-center justify-end">
-                          {item.search_volume ? (() => {
-                            const vol = parseSearchVolumeNum(item.search_volume)
-                            const isHigh = vol >= 1000
-                            return (
-                              <span
-                                className={cn(
-                                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums',
-                                  isHigh
-                                    ? 'bg-primary/10 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] '
-                                    : 'bg-primary/10 text-primary dark:bg-[#00d19a]/10 dark:text-[#00d19a] '
-                                )}
-                              >
-                                {item.search_volume}
-                              </span>
-                            )
-                          })() : (
-                            <span className="text-muted-foreground dark:text-slate-400 text-xs">—</span>
-                          )}
+                        <span className="col-span-2 flex items-center justify-end text-muted-foreground dark:text-slate-400 text-xs tabular-nums">
+                          {item.search_volume ?? '—'}
                         </span>
                         <span className="col-span-2 flex justify-end">
                           <TimeAgo
