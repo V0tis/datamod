@@ -40,6 +40,10 @@ export interface ResearchResponse {
   source_links?: Array<{ title?: string; url?: string }>
   /** research_history.updated_at (마지막 분석 시간) */
   updated_at?: string
+  /** Groq 듀얼 분석 결과 (research_history.analysis_groq). summary/modelName 또는 탭별 logic/creative/fact */
+  analysis_groq?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
+  /** Hugging Face 듀얼 분석 결과 (research_history.analysis_hf). 동일 구조 */
+  analysis_hf?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
 }
 
 type StreamPayload =
@@ -146,6 +150,8 @@ export const useResearchStore = create<ResearchStore>()(
             ai_responses?: Record<string, string>
             key_metrics?: unknown
             updated_at?: string
+            analysis_groq?: { summary: string; modelName: string }
+            analysis_hf?: { summary: string; modelName: string }
           }
           if (!data.cached) return 'none'
           if (data.emptyAnalysis && !data.reportId) return 'empty'
@@ -160,6 +166,8 @@ export const useResearchStore = create<ResearchStore>()(
                 ai_responses: data.ai_responses ?? {},
                 source_links: data.source_links ?? [],
                 updated_at: data.updated_at,
+                analysis_groq: data.analysis_groq,
+                analysis_hf: data.analysis_hf,
               } as ResearchResponse,
               error: null,
               newsList: get().newsList,

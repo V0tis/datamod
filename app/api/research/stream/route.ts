@@ -7,7 +7,7 @@ import Parser from 'rss-parser'
 export const runtime = 'nodejs'
 
 /** 무료 티어: Gemini 1.5 Flash */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =

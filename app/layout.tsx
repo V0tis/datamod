@@ -27,12 +27,12 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body
-        className={`${inter.variable} font-sans antialiased text-foreground bg-background transition-colors duration-300`}
+        className={`${inter.variable} font-sans antialiased text-foreground bg-background dark:bg-[#15171a] dark:text-[#e1e3e6] transition-colors duration-300`}
       >
         <ThemeProvider>
           <AuthProvider>
             <Sidebar />
-            <main className="min-h-screen bg-[#F8F9FA] dark:bg-background pl-0 lg:pl-[240px] overflow-auto transition-[padding] transition-colors duration-300">
+            <main className="min-h-screen bg-[#F8F9FA] dark:bg-[#15171a] pl-0 lg:pl-[240px] overflow-auto transition-[padding] transition-colors duration-300">
               <ErrorBoundary>
                 <PageTransition>{children}</PageTransition>
               </ErrorBoundary>

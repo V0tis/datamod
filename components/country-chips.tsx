@@ -80,7 +80,7 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
               'rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-colors duration-300 inline-flex items-center gap-2',
               value === code
                 ? 'bg-primary text-primary-foreground shadow-sm dark:bg-blue-950/60 dark:text-blue-400 dark:font-semibold dark:border dark:border-blue-500/30'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:text-slate-400 dark:hover:text-slate-300'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:bg-[#202226] dark:text-[#9ca3af] dark:border dark:border-[#2d2f34] dark:hover:bg-[#2a2d32] dark:hover:text-[#e1e3e6]'
             )}
           >
             <CountryFlagIcon code={code} size="chip" />
@@ -90,10 +90,10 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
       </div>
       {rightElement != null && <div className="flex items-center gap-2">{rightElement}</div>}
       {updatedAt != null && (
-        <p className="text-muted-foreground text-xs w-full sm:w-auto mt-1 sm:mt-0 flex items-center gap-1.5">
+        <p className="text-muted-foreground dark:text-slate-400 text-xs w-full sm:w-auto mt-1 sm:mt-0 flex items-center gap-1.5">
           데이터 기준: {formatDataTimestamp(updatedAt)}
-          <span className="inline-flex items-center gap-1 text-primary" aria-label="실시간">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
+          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]" aria-label="실시간">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary dark:bg-[#00d19a] animate-pulse" aria-hidden />
             실시간
           </span>
         </p>

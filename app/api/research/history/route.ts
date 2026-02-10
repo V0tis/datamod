@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     const { data: row, error } = await supabase
       .from('research_history')
       .select(
-        'id, report_id, analysis_market, analysis_insight, analysis_report, key_metrics, updated_at, created_at'
+        'id, report_id, analysis_market, analysis_insight, analysis_report, key_metrics, analysis_groq, analysis_hf, updated_at, created_at'
       )
       .eq('user_id', user.id)
       .eq('keyword', keyword)
@@ -76,6 +76,8 @@ export async function GET(req: Request) {
         analysis_insight: row.analysis_insight ?? undefined,
         analysis_report: row.analysis_report ?? undefined,
         key_metrics: row.key_metrics ?? undefined,
+        analysis_groq: row.analysis_groq ?? undefined,
+        analysis_hf: row.analysis_hf ?? undefined,
         updated_at: row.updated_at,
       })
     }
@@ -99,6 +101,8 @@ export async function GET(req: Request) {
         fact: row.analysis_report ?? aiResponses.fact,
       },
       key_metrics: row.key_metrics ?? undefined,
+      analysis_groq: row.analysis_groq ?? undefined,
+      analysis_hf: row.analysis_hf ?? undefined,
       updated_at: row.updated_at,
     })
   } catch (e) {

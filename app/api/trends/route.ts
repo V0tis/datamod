@@ -7,10 +7,14 @@ import { buildTrendsResponse } from '@/lib/trends-types'
 const TRENDS_TABLE = 'global_trends'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24시간
+/** 데이터 기준 시각이 이 값(1시간)보다 오래되면 응답 전 자동 RSS 갱신 */
+const CACHE_TTL_MS = 3_600_000 // 1 * 60 * 60 * 1000
 const isDev = process.env.NODE_ENV === 'development'
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate',
+} as const
 
 const RSS_ERROR_MESSAGE = '현재 구글 트렌드 데이터를 불러올 수 없습니다.'
 
@@ -48,7 +52,7 @@ function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null 
   return latest
 }
 
-/** GET: Cache-Aside. ?refresh=1 이면 강제 갱신 (RSS 전용). */
+/** GET: Cache-Aside. 데이터 기준(created_at)이 1시간 초과 시 응답 전 자동 RSS 갱신. ?refresh=1 이면 강제 갱신. */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
@@ -86,19 +90,36 @@ export async function GET(req: Request) {
     }
 
     if (forceRefresh || isStale) {
-      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 만료', { lastUpdatedAt, isStale })
-      await refreshGlobalTrends()
-      const { data: freshRows, error: selectError } = await supabase
-        .from(TRENDS_TABLE)
-        .select('country_code, keyword, rank, search_volume, started_at, news_items, title_ko, created_at')
-        .in('country_code', COUNTRY_CODES)
-        .order('rank', { ascending: true })
-      if (selectError) {
-        console.error('[Trends GET] select after refresh', selectError)
-        return NextResponse.json(formatErrorPayload(selectError), { status: 500, headers: JSON_HEADERS })
+      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '1시간 경과로 자동 갱신', { lastUpdatedAt, isStale })
+      try {
+        await refreshGlobalTrends()
+        const { data: freshRows, error: selectError } = await supabase
+          .from(TRENDS_TABLE)
+          .select('country_code, keyword, rank, search_volume, started_at, news_items, title_ko, created_at')
+          .in('country_code', COUNTRY_CODES)
+          .order('rank', { ascending: true })
+        if (selectError) {
+          console.error('[Trends GET] select after refresh', selectError)
+          return NextResponse.json(formatErrorPayload(selectError), { status: 500, headers: JSON_HEADERS })
+        }
+        const trendStatusRows = await selectTrendStatus()
+        const body = buildTrendsResponse(freshRows ?? [], trendStatusRows)
+        return NextResponse.json({ ...body, refreshed: true }, { headers: JSON_HEADERS })
+      } catch (refreshErr) {
+        if (isDev) console.log('[Dev] Trends GET refresh failed, returning stale:', refreshErr)
+        console.warn('[Trends GET] RSS 갱신 실패, 기존 데이터 반환:', refreshErr)
+        if (list.length === 0) {
+          const payload = formatErrorPayload(refreshErr) as Record<string, unknown>
+          if (refreshErr instanceof TrendsFetchError) {
+            payload.failedCountryCode = refreshErr.countryCode
+            payload.attemptedUrls = refreshErr.attemptedUrls
+          }
+          return NextResponse.json(payload, { status: 500, headers: JSON_HEADERS })
+        }
+        const trendStatusRows = await selectTrendStatus()
+        const body = buildTrendsResponse(list, trendStatusRows)
+        return NextResponse.json({ ...body, refreshFailed: true }, { headers: JSON_HEADERS })
       }
-      const trendStatusRows = await selectTrendStatus()
-      return NextResponse.json(buildTrendsResponse(freshRows ?? [], trendStatusRows), { headers: JSON_HEADERS })
     }
 
     const trendStatusRows = await selectTrendStatus()

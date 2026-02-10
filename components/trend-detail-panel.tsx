@@ -58,7 +58,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
           />
           <motion.div
             key="panel"
-            className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-slate-800 shadow-xl flex flex-col border-l border-border dark:border-slate-600/50 transition-colors duration-300"
+            className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-[#202226] shadow-xl flex flex-col border-l border-border dark:border-[#2d2f34] transition-colors duration-300"
             style={{ maxWidth: PANEL_MAX_W }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -66,8 +66,8 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
             transition={{ type: 'tween', duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
           >
             {/* 고정: 헤더 — 번역 키워드 */}
-            <div className="shrink-0 p-4 border-b border-border dark:border-slate-600/50 flex items-start justify-between gap-3 transition-colors duration-300">
-              <h2 className="text-2xl font-bold text-foreground dark:text-slate-100 leading-tight min-w-0 flex-1 transition-colors duration-300">
+            <div className="shrink-0 p-4 border-b border-border dark:border-[#2d2f34] flex items-start justify-between gap-3 transition-colors duration-300">
+              <h2 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] leading-tight min-w-0 flex-1 transition-colors duration-300">
                 {selectedItem ? (
                   <span className="break-words">{selectedItem.title_ko ?? selectedItem.keyword}</span>
                 ) : (
@@ -101,7 +101,7 @@ export function TrendDetailPanel({ open, onOpenChange, selectedItem, onAnalyze }
 
             {/* 고정: 분석 버튼 */}
             {selectedItem && (
-              <div className="shrink-0 p-4 border-t border-border dark:border-slate-600/50 bg-white dark:bg-slate-800 transition-colors duration-300">
+              <div className="shrink-0 p-4 border-t border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] transition-colors duration-300">
                 <Button
                   className="w-full"
                   onClick={() => {

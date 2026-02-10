@@ -4,6 +4,6 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   const gemini = !!(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim())
   const supabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim())
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-1.5-flash'
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-1.5-flash-latest'
   return NextResponse.json({ gemini, supabase, model })
 }

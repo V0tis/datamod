@@ -36,6 +36,10 @@ export interface TrendsResponse {
   updatedAt: string | null
   /** 출처 배지용. 키: country_code, 값: API | RSS */
   trendStatus?: Record<string, TrendStatusRow>
+  /** 1시간 만료로 RSS 갱신 후 반환됐을 때 true */
+  refreshed?: boolean
+  /** 갱신 시도 후 실패했고, 기존(오래된) 데이터를 반환했을 때 true */
+  refreshFailed?: boolean
 }
 
 /** DB 행 타입 (API 공용) */

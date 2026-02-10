@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
+import { cn, parseSearchVolumeNum } from '@/lib/utils'
 
 function showTrendsErrorToast(err: unknown): void {
   const e = err as Error & { failedCountryCode?: string; attemptedUrls?: string[] }
@@ -126,8 +127,10 @@ export default function TrendsPage() {
   }
 
   const trendsUrl = '/api/trends'
-  const { data, error, isLoading, mutate } = useSWR<TrendsResponse>(trendsUrl, (u: string) => trendsFetcher(u), {
+  const { data, error, isLoading, isValidating, mutate } = useSWR<TrendsResponse>(trendsUrl, (u: string) => trendsFetcher(u), {
     revalidateOnFocus: false,
+    revalidateIfStale: true,
+    dedupingInterval: 0,
   })
 
   const trends: Record<string, TrendItem[]> = data
@@ -143,10 +146,30 @@ export default function TrendsPage() {
     : { KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [] }
   const updatedAt = data?.updatedAt ?? null
   const loading = isLoading
+  const requesting = loading || isValidating || updating
+  const showingStaleRefresh = isValidating && !!data && !!updatedAt
 
   useEffect(() => {
     if (error) showTrendsErrorToast(error)
   }, [error])
+
+  useEffect(() => {
+    if (requesting) {
+      toast.loading('트렌드 데이터를 불러오는 중...', { id: 'trends-loading' })
+    } else {
+      toast.dismiss('trends-loading')
+    }
+    return () => {
+      toast.dismiss('trends-loading')
+    }
+  }, [requesting])
+
+  useEffect(() => {
+    if (!data) return
+    const d = data as TrendsResponse & { refreshed?: boolean; refreshFailed?: boolean }
+    if (d.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
+    if (d.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
+  }, [data?.refreshed, data?.refreshFailed])
 
   const handleRefresh = () => {
     setUpdating(true)
@@ -173,19 +196,19 @@ export default function TrendsPage() {
   const items = trends[country] ?? []
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] min-h-screen">
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] dark:bg-[#15171a] min-h-screen">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />
           국가별 트렌드
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <p className="text-muted-foreground dark:text-slate-400 text-sm mt-1">
           DB에 캐시된 국가별 인기 검색어예요. 갱신 버튼으로 최신 트렌드를 불러올 수 있어요. 키워드를 클릭하면 상세 패널이 열려요.
         </p>
       </header>
 
-      <Card className="border border-border bg-white shadow-sm w-full">
-        <div className="p-4 border-b border-border space-y-3">
+      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-[#202226] shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34]">
+        <div className="p-4 border-b border-border dark:border-[#2d2f34] space-y-3">
           <CountryChips
             value={country}
             onChange={setCountry}
@@ -202,36 +225,43 @@ export default function TrendsPage() {
                   variant="outline"
                   size="icon"
                   onClick={handleRefresh}
-                  disabled={updating}
-                  title="새로고침"
-                  aria-label="새로고침"
+                  disabled={requesting}
+                  title={requesting ? '데이터 요청 중...' : '새로고침'}
+                  aria-label={requesting ? '새로고침 (요청 중)' : '새로고침'}
+                  aria-busy={requesting}
                 >
-                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 </Button>
               </>
             }
           />
         </div>
         <CardHeader>
-          <CardTitle className="text-lg">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
-          <CardDescription>키워드를 클릭하면 우측 상세 패널이 열려요. 패널에서 &quot;이 키워드로 분석하기&quot;를 누르면 리서치가 시작돼요.</CardDescription>
+          <CardTitle className="text-lg dark:text-[#e1e3e6]">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
+          <CardDescription className="dark:text-slate-400">키워드를 클릭하면 우측 상세 패널이 열려요. 패널에서 &quot;이 키워드로 분석하기&quot;를 누르면 리서치가 시작돼요.</CardDescription>
           <p className="text-amber-700/90 dark:text-amber-300/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
         </CardHeader>
         <CardContent className="relative">
+          {showingStaleRefresh && (
+            <div className="flex items-center justify-center gap-2 py-3 px-4 mb-3 rounded-lg bg-muted/50 dark:bg-[#202226] dark:text-[#e1e3e6] text-muted-foreground text-sm border border-border dark:border-[#2d2f34]">
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span>정보가 오래되어 최신 트렌드를 불러오고 있습니다...</span>
+            </div>
+          )}
           {chipChanging && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 rounded-b-lg" aria-hidden>
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 dark:bg-[#15171a]/80 rounded-b-lg" aria-hidden>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           )}
           {loading ? (
             <TrendsSkeleton />
           ) : items.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-12 text-center px-4">
+            <p className="text-muted-foreground dark:text-slate-400 text-sm py-12 text-center px-4">
               현재 해당 국가의 데이터를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1 items-center">
+              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground dark:text-slate-400 border-b border-border dark:border-[#2d2f34] mb-1 items-center">
                 <span className="col-span-1">순위</span>
                 <span className="col-span-7">키워드</span>
                 <span className="col-span-2 text-right">검색량</span>
@@ -242,38 +272,54 @@ export default function TrendsPage() {
                   const newsPreview = (item.news_items ?? []).slice(0, 2)
                   const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
-                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 dark:bg-slate-900 overflow-hidden hover:bg-primary/5 dark:hover:bg-slate-800 hover:border-primary/30 transition-all transition-colors duration-300">
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-[#202226] overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#2a2d32] dark:hover:border-[#2d2f34] transition-all transition-colors duration-300">
                       <button
                         type="button"
                         onClick={() => handleRowClick(item)}
                         className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
                       >
-                        <span className="col-span-1 text-muted-foreground text-sm font-medium tabular-nums">
+                        <span className="col-span-1 text-muted-foreground dark:text-slate-400 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)] text-sm font-medium tabular-nums flex items-center gap-1">
                           {item.rank}
+                          {item.rank <= 3 && (
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50 dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]">
+                              급상승
+                            </span>
+                          )}
                         </span>
                         <div className="col-span-7 min-w-0 flex flex-col gap-0.5">
                           {item.title_ko != null && item.keyword !== item.title_ko ? (
                             <>
-                              <p className="text-lg font-bold text-foreground truncate">{item.title_ko}</p>
-                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{item.keyword}</p>
+                              <p className="text-lg font-bold text-foreground dark:text-[#e1e3e6] truncate">{item.title_ko}</p>
+                              <p className="text-sm text-gray-500 dark:text-slate-400 truncate">{item.keyword}</p>
                             </>
                           ) : (
-                            <p className="text-lg font-bold text-foreground truncate">{item.keyword}</p>
+                            <p className="text-lg font-bold text-foreground dark:text-[#e1e3e6] truncate">{item.keyword}</p>
                           )}
                         </div>
                         <span className="col-span-2 flex items-center justify-end">
-                          {item.search_volume ? (
-                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
-                              {item.search_volume}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
+                          {item.search_volume ? (() => {
+                            const vol = parseSearchVolumeNum(item.search_volume)
+                            const isHigh = vol >= 1000
+                            return (
+                              <span
+                                className={cn(
+                                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums',
+                                  isHigh
+                                    ? 'bg-primary/10 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
+                                    : 'bg-primary/10 text-primary dark:bg-[#00d19a]/10 dark:text-[#00d19a] dark:drop-shadow-[0_0_5px_rgba(0,209,154,0.5)]'
+                                )}
+                              >
+                                {item.search_volume}
+                              </span>
+                            )
+                          })() : (
+                            <span className="text-muted-foreground dark:text-slate-400 text-xs">—</span>
                           )}
                         </span>
                         <span className="col-span-2 flex justify-end">
                           <TimeAgo
                             isoString={item.started_at}
-                            className="text-muted-foreground text-xs"
+                            className="text-muted-foreground dark:text-slate-400 text-xs"
                           />
                         </span>
                       </button>
