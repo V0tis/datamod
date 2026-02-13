@@ -14,8 +14,16 @@ const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠�
 const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
 
 /** 2사(Gemini 3 + Groq) 종합 요약 → JSON. results 페이지는 Gemini 카드가 아닌 전용 "AI Insight Consensus" 블록에 표시 */
-const CONSENSUS_SYSTEM =
-  '두 분석 결과를 종합하여 150자 이내 요약, -100~100 사이의 감성 점수, 긍정 키워드 3개와 부정 키워드 3개를 추출해. 응답은 반드시 JSON 형식으로만 해. 키: summary(문자열), sentiment(숫자), positiveKeywords(문자열 배열 3개), negativeKeywords(문자열 배열 3개).'
+const CONSENSUS_SYSTEM = `
+두 분석 결과를 종합하여 다음 형식의 JSON으로만 응답해:
+{
+  "summary": "150자 이내의 종합 요약",
+  "sentiment": -100~100 사이 점수,
+  "strategic_insight": "이 이슈가 시사하는 핵심 전략 한 줄",
+  "action_item": "사용자가 고려해야 할 다음 실행 단계",
+  "confidence": 0~100 사이의 두 AI 의견 일치도
+}
+`;
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
 const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 
@@ -56,6 +64,7 @@ async function generateConsensus(
       responseMimeType: 'application/json' as const,
     },
   }
+  console.log('[AI Insight Consensus] generateConsensus body', body)
   try {
     const url = `${GEMINI_BASE_URL_V1BETA}/${GEMINI_MODEL_PRIMARY}:generateContent?key=${apiKey}`
     const res = await fetch(url, {
@@ -187,6 +196,9 @@ export async function POST(req: Request) {
       if (allCached) {
         const ar = (cachedData.analysis_results ?? null) as Record<string, unknown> | null
         let cachedConsensus = ar && typeof ar.consensus === 'object' && ar.consensus != null ? ar.consensus : null
+        if (!cachedConsensus && ar && typeof ar.summary === 'string') {
+          cachedConsensus = ar as Consensus
+        }
         if (
           tab === 'creative' &&
           mergedGroq != null &&
@@ -198,10 +210,9 @@ export async function POST(req: Request) {
             const synthesized = await generateConsensus(geminiKey, mergedGemini, mergedGroq)
             if (synthesized) {
               cachedConsensus = synthesized
-              const nextResults = { ...(ar ?? {}), consensus: synthesized }
               await supabase
                 .from('research_history')
-                .update({ analysis_results: nextResults, updated_at: new Date().toISOString() })
+                .update({ analysis_results: synthesized, updated_at: new Date().toISOString() })
                 .eq('user_id', user.id)
                 .eq('keyword', keyword)
                 .eq('country_code', countryCode)
@@ -243,7 +254,11 @@ export async function POST(req: Request) {
   if (!needGroq && !needGemini) {
     const historyForConsensus = await supabase.from('research_history').select('analysis_results').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
-    const c = ar && typeof ar.consensus === 'object' && ar.consensus != null ? ar.consensus : null
+    let c: Consensus | null = null
+    if (ar) {
+      if (typeof ar.consensus === 'object' && ar.consensus != null) c = ar.consensus as Consensus
+      else if (typeof ar.summary === 'string') c = ar as Consensus
+    }
     return NextResponse.json({
       groq: mergedGroq != null ? { text: mergedGroq } : null,
       gemini: mergedGemini != null ? { text: mergedGemini } : null,
@@ -399,9 +414,13 @@ export async function POST(req: Request) {
       const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
       const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
       const existingResults = (historyRow?.analysis_results ?? null) as Record<string, unknown> | null
-      existingConsensus = existingResults && typeof existingResults.consensus === 'object' && existingResults.consensus != null
-        ? (existingResults.consensus as Consensus)
-        : null
+      if (existingResults) {
+        if (typeof existingResults.consensus === 'object' && existingResults.consensus != null) {
+          existingConsensus = existingResults.consensus as Consensus
+        } else if (typeof existingResults.summary === 'string') {
+          existingConsensus = existingResults as Consensus
+        }
+      }
 
       const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
         const next = { ...prev }
@@ -411,23 +430,20 @@ export async function POST(req: Request) {
       const nextGroq = withTab(prevGroq, groqResult, tab)
       const nextGemini = withTab(prevGemini, geminiResult, tab)
 
-      const analysisResults: Record<string, unknown> = {
-        gemini: resultG ?? ANALYSIS_FAILED_PLACEHOLDER,
-        groq: resultGr ?? ANALYSIS_FAILED_PLACEHOLDER,
-        ...(consensus ? { consensus } : existingConsensus ? { consensus: existingConsensus } : {}),
+      // analysis_results는 AI Insight Consensus 전용. groq/gemini는 analysis_groq, analysis_gemini에 저장.
+      // Consensus는 /api/research/insights/consensus에서 저장.
+      const upsertPayload: Record<string, unknown> = {
+        user_id: user.id,
+        keyword,
+        country_code: countryCode,
+        report_id: reportId ?? null,
+        analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
+        analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
+        updated_at: new Date().toISOString(),
       }
 
       await supabase.from('research_history').upsert(
-        {
-          user_id: user.id,
-          keyword,
-          country_code: countryCode,
-          report_id: reportId ?? null,
-          analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
-          analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
-          analysis_results: analysisResults,
-          updated_at: new Date().toISOString(),
-        },
+        upsertPayload,
         { onConflict: 'user_id,keyword,country_code' }
       )
     } catch (e) {
