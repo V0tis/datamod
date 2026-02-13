@@ -76,6 +76,60 @@ function extractJsonFromText(text: string): string {
   return trimmed
 }
 
+/**
+ * Gemini 응답이 잘려 "Unterminated string" 등으로 파싱 실패할 때,
+ * 잘린 위치에서 문자열/객체를 닫아 복구 시도.
+ */
+function tryRepairTruncatedJson(rawJson: string, parseError: Error): string | null {
+  const msg = parseError.message
+  const posMatch = msg.match(/position\s+(\d+)/i)
+  const pos = posMatch ? Math.min(parseInt(posMatch[1], 10), rawJson.length) : rawJson.length
+  if (pos <= 0) return null
+
+  let truncated = rawJson.slice(0, pos).trim()
+  if (!truncated) return null
+
+  const isUnterminatedString = /unterminated\s+string/i.test(msg) || msg.includes('Unterminated string')
+  if (isUnterminatedString) {
+    truncated += '"'
+  }
+
+  let openBraces = 0
+  let openBrackets = 0
+  let inString = false
+  let escape = false
+  let quoteChar = ''
+  for (let i = 0; i < truncated.length; i++) {
+    const c = truncated[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (inString) {
+      if (c === '\\') escape = true
+      else if (c === quoteChar) inString = false
+      continue
+    }
+    if (c === '"' || c === "'") {
+      inString = true
+      quoteChar = c
+      continue
+    }
+    if (c === '{') openBraces++
+    else if (c === '}') openBraces--
+    else if (c === '[') openBrackets++
+    else if (c === ']') openBrackets--
+  }
+
+  truncated += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces))
+  try {
+    JSON.parse(truncated)
+    return truncated
+  } catch {
+    return null
+  }
+}
+
 type StreamEvent =
   | { step: 'firecrawl_start' }
   | { step: 'firecrawl_done'; news: Array<{ title: string; url: string; content?: string }> }
@@ -262,15 +316,33 @@ export async function POST(req: Request) {
         try {
           parsed = JSON.parse(rawJson) as typeof parsed
         } catch (parseErr) {
-          const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
-          console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
-            parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
-            rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
-            rawJsonSnippet: snippet,
-          })
-          send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
-          safeClose()
-          return
+          const err = parseErr instanceof Error ? parseErr : new Error(String(parseErr))
+          const repaired = typeof rawJson === 'string' ? tryRepairTruncatedJson(rawJson, err) : null
+          if (repaired) {
+            try {
+              parsed = JSON.parse(repaired) as typeof parsed
+            } catch {
+              const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
+              console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
+                parseError: err.message,
+                rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
+                rawJsonSnippet: snippet,
+              })
+              send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
+              safeClose()
+              return
+            }
+          } else {
+            const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
+            console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
+              parseError: err.message,
+              rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
+              rawJsonSnippet: snippet,
+            })
+            send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
+            safeClose()
+            return
+          }
         }
 
         const sentiment =
