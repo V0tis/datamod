@@ -6,57 +6,20 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
-import { ResearchReportView } from '@/components/research-report-view'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { SentimentGauge } from '@/components/research/SentimentGauge'
-import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
-import { FileDown, Share2, X, ExternalLink, TrendingUp, FileText, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy, Loader2, RefreshCw } from 'lucide-react'
+import { FileDown, Share2, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
-
-function ReportSkeleton() {
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="h-4 w-full bg-muted rounded animate-pulse" />
-              <div className="h-4 w-4/5 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-3/5 bg-muted rounded animate-pulse" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground dark:text-slate-400 flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
-          린이 읽고 요약하는 중...
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function TabLoadingPlaceholder() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[320px] text-center">
-      <RinAnimation variant="loading" size={200} className="shrink-0" />
-      <p className="mt-4 text-muted-foreground dark:text-slate-400 text-sm">준비 중</p>
-    </div>
-  )
-}
+import { GroqAnalysis } from '@/components/research/GroqAnalysis'
+import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
+import { ConsensusInsight, type ConsensusData as ConsensusDataType } from '@/components/research/ConsensusInsight'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -70,22 +33,6 @@ const TAB_ERROR_TOAST_ID = 'tab-analysis-error'
 const QUOTA_UNIFIED_MESSAGE = 'API 쿼터가 부족하여 분석을 중단했습니다. 설정에서 키를 확인해 주세요.'
 
 type RssNewsItem = { title: string; link: string; pubDate: string; source: string }
-
-function ChartSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        <div className="h-6 w-40 bg-muted rounded mb-4" />
-        <div className="h-[280px] w-full bg-muted rounded" />
-      </div>
-      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        <div className="h-6 w-40 bg-muted rounded mb-4" />
-        <div className="h-[320px] w-full bg-muted rounded" />
-      </div>
-      <div className="h-4 w-full max-w-md bg-muted rounded" />
-    </div>
-  )
-}
 
 function NewsDetailModal({
   item,
@@ -201,7 +148,6 @@ function ResultsContent() {
     error,
     startResearch,
     loadFromHistory,
-    loadReportByKeyword,
   } = useResearchStore()
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
@@ -229,28 +175,36 @@ function ResultsContent() {
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
-  const reportFetchedForCacheRef = useRef<string | null>(null)
   const tabAbortControllerRef = useRef<AbortController | null>(null)
+  /** 탭별 API 중복 호출 방지 (React Strict Mode 대응) */
+  const tabHasFetchedRef = useRef<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
   const creativeFetchedForConsensusRef = useRef<string | null>(null)
+  const isConsensusStartedRef = useRef(false)
 
-  /** AI Insight Consensus: 2사 종합 요약·감성·키워드 (creative 탭 응답에서 옴) */
-  type ConsensusData = { summary: string; sentiment: number; positiveKeywords: string[]; negativeKeywords: string[] }
-  const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
+  /** AI Insight Consensus: PM 관점 JSON (summary, sentiment, strategic_insight, action_item, confidence) */
+  const [consensusData, setConsensusData] = useState<ConsensusDataType | null>(null)
+  /** 히스토리 조회가 끝난 뒤에만 "린이 분석하는 중" 표시 (캐시 있으면 카드 먼저 보여주기) */
+  const [historyCheckDone, setHistoryCheckDone] = useState(false)
 
   // URL keyword·country 기준: research_history 캐시 우선 → 없으면 stream 호출 (report·research_history 생성)
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
+    setHistoryCheckDone(false)
     let cancelled = false
     const countryCode = countryFromUrl
-    loadFromHistory(k, countryCode).then((historyStatus) => {
-      if (cancelled) return
-      if (historyStatus === 'cached') return
-      if (historyStatus === 'empty' || historyStatus === 'none') {
-        startResearch(k, { country_code: countryCode })
-      }
-    })
+    loadFromHistory(k, countryCode)
+      .then((historyStatus) => {
+        if (cancelled) return
+        if (historyStatus === 'cached') return
+        if (historyStatus === 'empty' || historyStatus === 'none') {
+          startResearch(k, { country_code: countryCode })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryCheckDone(true)
+      })
     return () => { cancelled = true }
   }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch])
 
@@ -293,7 +247,8 @@ function ResultsContent() {
   }, [keyword, storeKeyword])
 
   const loading = status === 'loading'
-  const showAnalyzing = loading && !quotaExceeded && !error
+  /** 히스토리 확인 후, 스트림 분석 중일 때만 "린이 분석하는 중" 표시. result 있으면(캐시 포함) 탭·카드 표시 */
+  const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !error && !result
   const currentKeyword = keyword ?? storeKeyword
 
   const reportSummary = result
@@ -307,7 +262,7 @@ function ResultsContent() {
     : ''
   const newsHeadlines = rssNews.length > 0 ? rssNews.map((i) => i.title).join('\n') : ''
 
-  // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화 (HF 제거)
+  // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화. DB에 있으면 탭 API 호출 방지용 ref 세팅.
   useEffect(() => {
     if (!result?.reportId) return
     const groq = result.analysis_groq as Record<string, string> | undefined
@@ -328,22 +283,45 @@ function ResultsContent() {
         fact: typeof gemini.fact === 'string' ? gemini.fact : prev.fact,
       }))
     }
+    // DB에 탭 데이터가 있으면 탭/consensus용 API 호출하지 않도록 표시
+    const tabs: AiTabId[] = ['logic', 'creative', 'fact']
+    tabs.forEach((t) => {
+      const hasGroq = typeof groq?.[t] === 'string' && groq[t].trim().length > 0
+      const hasGemini = typeof gemini?.[t] === 'string' && gemini[t].trim().length > 0
+      if (hasGroq && hasGemini) tabHasFetchedRef.current[t] = true
+    })
   }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
 
   const prevReportIdRef = useRef<string | null>(null)
   useEffect(() => {
     const id = result?.reportId ?? null
-    if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) setConsensusData(null)
+    if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) {
+      setConsensusData(null)
+      isConsensusStartedRef.current = false
+      tabHasFetchedRef.current = { logic: false, creative: false, fact: false }
+    }
     prevReportIdRef.current = id
   }, [result?.reportId])
 
+  /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 잘못된 JSON 예외 처리 */
+  useEffect(() => {
+    const ar = result?.analysis_results as Record<string, unknown> | undefined
+    if (!ar || typeof ar !== 'object') return
+    const summary = typeof ar.summary === 'string' ? ar.summary.trim() : ''
+    if (!summary) return
+    const sentiment = typeof ar.sentiment === 'number' ? Math.max(-100, Math.min(100, ar.sentiment)) : 0
+    const strategic_insight = typeof ar.strategic_insight === 'string' ? ar.strategic_insight.trim() : '—'
+    const action_item = typeof ar.action_item === 'string' ? ar.action_item.trim() : '—'
+    const confidence = typeof ar.confidence === 'number' ? Math.max(0, Math.min(100, ar.confidence)) : 0
+    setConsensusData({ summary, sentiment, strategic_insight, action_item, confidence })
+  }, [result?.reportId, result?.analysis_results])
+
   const fetchTabAnalysis = useCallback(
-    async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean }) => {
+    async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean; reportId?: string; summary?: string }) => {
       if (quotaExceeded) return
       if (provider === 'gemini' && geminiQuotaExceeded) return
       if (provider === 'all' && geminiQuotaExceeded) return
-      if (provider !== 'gemini' && retryCountTabGroq[tabId] >= 3) return
-      if (provider !== 'groq' && retryCountTabGemini[tabId] >= 3) return
+      tabAbortControllerRef.current?.abort()
       const ac = new AbortController()
       tabAbortControllerRef.current = ac
       const doGroq = provider === 'groq' || provider === 'all'
@@ -360,9 +338,9 @@ function ResultsContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             keyword: currentKeyword,
-            summary: reportSummary,
+            summary: options?.summary ?? reportSummary,
             tab: tabId,
-            reportId: result?.reportId ?? undefined,
+            reportId: options?.reportId ?? result?.reportId ?? undefined,
             newsHeadlines: newsHeadlines ?? undefined,
             provider,
             isReanalyze: options?.isReanalyze ?? false,
@@ -375,6 +353,7 @@ function ResultsContent() {
         if (!res.ok) {
           const errMsg = (data as { error?: string }).error ?? '분석에 실패했습니다.'
           const isQuota = res.status === 429 || (data as { code?: string }).code === 'QUOTA'
+          const errForModal = { ...(data as object), status: res.status, statusText: res.statusText }
           if (isQuota) {
             tabAbortControllerRef.current?.abort()
             setQuotaExceeded(true)
@@ -397,7 +376,7 @@ function ResultsContent() {
               setTabErrorGemini((prev) => ({ ...prev, [tabId]: errMsg }))
             }
             toast.error(errMsg, { id: TAB_ERROR_TOAST_ID, duration: 5000 })
-            showErrorToast(data, { fallbackMessage: errMsg })
+            showErrorToast(errForModal, { fallbackMessage: errMsg })
           }
           return
         }
@@ -418,13 +397,14 @@ function ResultsContent() {
           setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: 0 }))
           setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
         }
-        const rawConsensus = (data as { consensus?: ConsensusData }).consensus
+        const rawConsensus = (data as { consensus?: ConsensusDataType }).consensus
         if (rawConsensus && typeof rawConsensus === 'object' && typeof rawConsensus.summary === 'string' && typeof rawConsensus.sentiment === 'number') {
           setConsensusData({
             summary: String(rawConsensus.summary).slice(0, 200),
             sentiment: Math.max(-100, Math.min(100, Number(rawConsensus.sentiment))),
-            positiveKeywords: Array.isArray(rawConsensus.positiveKeywords) ? rawConsensus.positiveKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : [],
-            negativeKeywords: Array.isArray(rawConsensus.negativeKeywords) ? rawConsensus.negativeKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : [],
+            strategic_insight: typeof rawConsensus.strategic_insight === 'string' ? rawConsensus.strategic_insight.slice(0, 300) : '—',
+            action_item: typeof rawConsensus.action_item === 'string' ? rawConsensus.action_item.slice(0, 300) : '—',
+            confidence: typeof rawConsensus.confidence === 'number' ? Math.max(0, Math.min(100, rawConsensus.confidence)) : 0,
           })
         }
         if (geminiText === null && (provider === 'all' || provider === 'gemini')) {
@@ -454,9 +434,10 @@ function ResultsContent() {
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, retryCountTabGroq, retryCountTabGemini]
+    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded]
   )
 
+  // 탭 분석: research_history(analysis_groq/analysis_gemini)에 이미 있으면 API 호출 안 함. hasFetched로 중복 호출 차단.
   useEffect(() => {
     if (quotaExceeded) return
     const t = activeTab as AiTabId
@@ -464,10 +445,14 @@ function ResultsContent() {
     if (status === 'loading') return
     if (status !== 'done' && status !== 'error') return
     if (tabLoadingGroq[t] || tabLoadingGemini[t]) return
-    if ((retryCountTabGroq[t] ?? 0) >= 3 && (retryCountTabGemini[t] ?? 0) >= 3) return
-    const needGroq = !tabCacheGroq[t] && (retryCountTabGroq[t] ?? 0) < 3 && !tabLoadingGroq[t]
-    const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && (retryCountTabGemini[t] ?? 0) < 3 && !tabLoadingGemini[t]
+    if (tabErrorGroq[t] || tabErrorGemini[t]) return
+    if (tabHasFetchedRef.current[t]) return
+    const groqFromResult = result?.analysis_groq && typeof (result.analysis_groq as Record<string, string>)[t] === 'string' && (result.analysis_groq as Record<string, string>)[t].trim().length > 0
+    const geminiFromResult = result?.analysis_gemini && typeof (result.analysis_gemini as Record<string, string>)[t] === 'string' && (result.analysis_gemini as Record<string, string>)[t].trim().length > 0
+    const needGroq = !tabCacheGroq[t] && !tabLoadingGroq[t] && !groqFromResult
+    const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && !tabLoadingGemini[t] && !geminiFromResult
     if (!needGroq && !needGemini) return
+    tabHasFetchedRef.current[t] = true
     if (needGroq && needGemini) {
       fetchTabAnalysis(t, 'all')
     } else if (needGroq) {
@@ -475,18 +460,94 @@ function ResultsContent() {
     } else if (needGemini) {
       fetchTabAnalysis(t, 'gemini')
     }
-  }, [activeTab, status, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, retryCountTabGroq, retryCountTabGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
+  }, [activeTab, status, result?.analysis_groq, result?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
 
-  // 트리거: 개별 분석(스트림) 완료 후에만 creative 요청. 0% 상태에서 Consensus API 선호출 금지.
+  /** [1. 실행 조건] 각 AI 상태: idle | loading | success | error. 두 상태가 모두 loading·idle이 아닐 때만 consensus 실행 */
+  type CreativeAiState = 'idle' | 'loading' | 'success' | 'error'
+  const creativeGroqState: CreativeAiState = tabLoadingGroq.creative
+    ? 'loading'
+    : tabCacheGroq.creative != null
+      ? 'success'
+      : tabErrorGroq.creative != null
+        ? 'error'
+        : 'idle'
+  const creativeGeminiState: CreativeAiState = tabLoadingGemini.creative
+    ? 'loading'
+    : tabCacheGemini.creative != null
+      ? 'success'
+      : tabErrorGemini.creative != null
+        ? 'error'
+        : 'idle'
+  const bothSettledForConsensus =
+    creativeGroqState !== 'idle' &&
+    creativeGroqState !== 'loading' &&
+    creativeGeminiState !== 'idle' &&
+    creativeGeminiState !== 'loading'
+
   useEffect(() => {
     if (status !== 'done' || !result?.reportId || quotaExceeded || geminiQuotaExceeded) return
-    if (creativeFetchedForConsensusRef.current === result.reportId) return
-    if (tabLoadingGroq.creative || tabLoadingGemini.creative) return
-    const hasCreative = tabCacheGroq.creative ?? tabCacheGemini.creative
-    if (hasCreative && consensusData) return
+    if (consensusData != null) return
+    if (isConsensusStartedRef.current) return
+    const groqFromResult = typeof (result.analysis_groq as Record<string, string> | undefined)?.creative === 'string' && (result.analysis_groq as Record<string, string>).creative.trim().length > 0
+    const geminiFromResult = typeof (result.analysis_gemini as Record<string, string> | undefined)?.creative === 'string' && (result.analysis_gemini as Record<string, string>).creative.trim().length > 0
+    const needGroq = !tabCacheGroq.creative && !groqFromResult
+    const needGemini = !tabCacheGemini.creative && !geminiFromResult
+    const haveBoth = (tabCacheGroq.creative != null || groqFromResult) && (tabCacheGemini.creative != null || geminiFromResult)
+    if (needGroq || needGemini) {
+      if (creativeFetchedForConsensusRef.current === result.reportId) return
+      creativeFetchedForConsensusRef.current = result.reportId
+      isConsensusStartedRef.current = true
+      fetchTabAnalysis('creative', 'all')
+      return
+    }
+    if (!haveBoth || !bothSettledForConsensus) return
+    const groqOk = (tabCacheGroq.creative ?? (groqFromResult ? (result.analysis_groq as Record<string, string>).creative : '') ?? '').trim().length > 0
+    const geminiOk = (tabCacheGemini.creative ?? (geminiFromResult ? (result.analysis_gemini as Record<string, string>).creative : '') ?? '').trim().length > 0
+    if (!groqOk && !geminiOk) return
+    if (groqFromResult && geminiFromResult) return
+    isConsensusStartedRef.current = true
     creativeFetchedForConsensusRef.current = result.reportId
     fetchTabAnalysis('creative', 'all')
-  }, [status, result?.reportId, quotaExceeded, geminiQuotaExceeded, tabCacheGroq.creative, tabCacheGemini.creative, tabLoadingGroq.creative, tabLoadingGemini.creative, consensusData, fetchTabAnalysis])
+  }, [status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, consensusData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
+
+  /** AI Insight Consensus 전용 재시도: Consensus API(tab creative)만 호출. result 없으면 캐시에서 복원 후 시도, 없으면 전체 분석 */
+  const retryConsensus = useCallback(async () => {
+    const k = currentKeyword?.trim()
+    if (!k) return
+    if (result?.reportId) {
+      setConsensusData(null)
+      setTabErrorGroq((prev) => ({ ...prev, creative: null }))
+      setTabErrorGemini((prev) => ({ ...prev, creative: null }))
+      setTabCacheGroq((prev) => ({ ...prev, creative: null }))
+      setTabCacheGemini((prev) => ({ ...prev, creative: null }))
+      creativeFetchedForConsensusRef.current = null
+      isConsensusStartedRef.current = false
+      fetchTabAnalysis('creative', 'all', { isReanalyze: true })
+      return
+    }
+    const historyStatus = await loadFromHistory(k, countryFromUrl)
+    if (historyStatus === 'cached') {
+      const cachedResult = useResearchStore.getState().result
+      if (cachedResult?.reportId) {
+        const cachedSummary = [
+          cachedResult.marketNews?.length ? `시장 뉴스 요약: ${cachedResult.marketNews.join(' ')}` : '',
+          cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
+          cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
+        ].filter(Boolean).join('\n\n')
+        setConsensusData(null)
+        setTabErrorGroq((prev) => ({ ...prev, creative: null }))
+        setTabErrorGemini((prev) => ({ ...prev, creative: null }))
+        setTabCacheGroq((prev) => ({ ...prev, creative: null }))
+        setTabCacheGemini((prev) => ({ ...prev, creative: null }))
+        creativeFetchedForConsensusRef.current = null
+        isConsensusStartedRef.current = false
+        fetchTabAnalysis('creative', 'all', { isReanalyze: true, reportId: cachedResult.reportId, summary: cachedSummary })
+        return
+      }
+    }
+    toast.info('캐시된 결과가 없어 전체 분석을 다시 실행합니다.')
+    startResearch(k, { country_code: countryFromUrl })
+  }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, startResearch, fetchTabAnalysis])
 
   const handleShare = useCallback(async () => {
     const reportId = result?.reportId
@@ -566,107 +627,32 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* 최상단: AI Insight Consensus (감성 게이지·150자 요약·키워드). 키워드 있으면 항상 박스 표시 */}
-        <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
-          <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
-          {!result ? (
-            status === 'error' && error ? (
+        {/* 최상단: AI Insight Consensus. DB analysis_results 우선 렌더링, 두 AI settled 후에만 API 호출 */}
+        {!result ? (
+          <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
+            {status === 'error' && error ? (
               <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
                 <p className="text-sm text-rose-400">{error}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50"
-                  onClick={() => currentKeyword && startResearch(currentKeyword, { country_code: countryFromUrl })}
-                >
+                <Button variant="outline" size="sm" className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50" onClick={retryConsensus}>
                   다시 분석하기
                 </Button>
               </div>
             ) : (
               <p className="text-sm text-slate-500">
-                분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 긍정/부정 키워드가 여기 표시됩니다.
+                분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 핵심 전략·실행 권고가 여기 표시됩니다.
               </p>
-            )
-          ) : (tabLoadingGroq.creative || tabLoadingGemini.creative) && !consensusData ? (
-            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-[140px] h-[70px] rounded-t-full border border-zinc-700 border-b-0 bg-zinc-800/30 animate-pulse" />
-                <div className="h-5 w-12 bg-zinc-700/50 rounded animate-pulse" />
-                <div className="h-3 w-14 bg-zinc-700/50 rounded animate-pulse" />
-              </div>
-              <div className="flex flex-col gap-3 min-w-0">
-                <div className="space-y-2">
-                  <div className="h-3 w-full max-w-md bg-zinc-700/50 rounded animate-pulse" />
-                  <div className="h-3 w-full max-w-sm bg-zinc-700/50 rounded animate-pulse" />
-                  <div className="h-3 w-4/5 max-w-xs bg-zinc-700/50 rounded animate-pulse" />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <div className="h-5 w-14 bg-zinc-700/50 rounded animate-pulse" />
-                  <div className="h-5 w-16 bg-zinc-700/50 rounded animate-pulse" />
-                  <div className="h-5 w-20 bg-zinc-700/50 rounded animate-pulse" />
-                  <div className="h-5 w-14 bg-zinc-700/50 rounded animate-pulse ml-2" />
-                  <div className="h-5 w-16 bg-zinc-700/50 rounded animate-pulse" />
-                </div>
-              </div>
-            </div>
-          ) : consensusData ? (
-            <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
-              <div className="flex justify-center md:justify-start">
-                <SentimentGauge value={consensusData.sentiment} />
-              </div>
-              <div className="flex flex-col gap-3 min-w-0">
-                <p className="text-sm text-slate-300 leading-relaxed">{consensusData.summary}</p>
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs text-slate-500 shrink-0">Positive</span>
-                  {(consensusData.positiveKeywords ?? []).map((k, i) => (
-                    <span key={i} className="rounded px-2 py-0.5 text-xs bg-emerald-500/5 text-emerald-400">
-                      {k}
-                    </span>
-                  ))}
-                  <span className="text-xs text-slate-500 shrink-0 ml-2">Negative</span>
-                  {(consensusData.negativeKeywords ?? []).map((k, i) => (
-                    <span key={i} className="rounded px-2 py-0.5 text-xs bg-rose-500/5 text-rose-400">
-                      {k}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (tabErrorGroq.creative || tabErrorGemini.creative) ? (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
-              <p className="text-sm text-rose-400">
-                {tabErrorGroq.creative || tabErrorGemini.creative}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
-                disabled={tabLoadingGroq.creative || tabLoadingGemini.creative}
-                onClick={() => {
-                  setConsensusData(null)
-                  setTabErrorGroq((prev) => ({ ...prev, creative: null }))
-                  setTabErrorGemini((prev) => ({ ...prev, creative: null }))
-                  setTabCacheGroq((prev) => ({ ...prev, creative: null }))
-                  setTabCacheGemini((prev) => ({ ...prev, creative: null }))
-                  fetchTabAnalysis('creative', 'all', { isReanalyze: true })
-                }}
-              >
-                {tabLoadingGroq.creative || tabLoadingGemini.creative ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                2사 종합 다시 시도
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500">
-              2사 AI 요약·감성 점수는 인사이트 탭 분석 후 표시됩니다. 위에서 &quot;재분석 (캐시 무시)&quot;를 누르면 다시 계산됩니다.
-            </p>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <ConsensusInsight
+            data={consensusData}
+            loading={(tabLoadingGroq.creative || tabLoadingGemini.creative) && !consensusData}
+            bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
+            errorMessage={tabErrorGroq.creative || tabErrorGemini.creative || null}
+            onRetry={retryConsensus}
+          />
+        )}
 
         {status === 'done' && result && (
           <div className="no-print flex flex-wrap items-center gap-2 mb-4">
@@ -870,10 +856,10 @@ function ResultsContent() {
           ) : (
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6">
-              {showAnalyzing ? (
+              {!historyCheckDone && !result ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <RinAnimation variant="loading" size={140} className="shrink-0" />
-                  <p className="mt-3 text-muted-foreground dark:text-slate-400 text-sm">린이 분석하는 중...</p>
+                  <RinAnimation variant="loading" size={100} className="shrink-0" />
+                  <p className="mt-3 text-muted-foreground dark:text-slate-400 text-sm">이전 결과 불러오는 중...</p>
                 </div>
               ) : (
                 <>
@@ -884,124 +870,41 @@ function ResultsContent() {
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Groq 시장 요약: 해당 AI 원본 분석 텍스트만 표시 (컨센서스 요약 미포함) */}
-                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="secondary">Groq (Llama)</Badge>
-                          {tabLoadingGroq[id] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col gap-4">
-                        {tabErrorGroq[id] ? (
-                          <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
-                            <p className="text-destructive text-sm dark:text-[#00d19a]">
-                              {(retryCountTabGroq[id] ?? 0) >= 3
-                                ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
-                                : tabErrorGroq[id]}
-                            </p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10" disabled={tabLoadingGroq[id]}
-                              onClick={() => {
-                                if ((retryCountTabGroq[id] ?? 0) >= 3) {
-                                  setRetryCountTabGroq((prev) => ({ ...prev, [id]: 0 }))
-                                  setTabErrorGroq((prev) => ({ ...prev, [id]: null }))
-                                }
-                                setTabCacheGroq((prev) => ({ ...prev, [id]: null }))
-                                fetchTabAnalysis(id, 'groq')
-                              }}
-                            >재시도</Button>
-                          </div>
-                        ) : tabLoadingGroq[id] ? (
-                          <div className="flex items-center justify-center min-h-[200px]">
-                            <RinAnimation variant="loading" size={120} className="shrink-0" />
-                          </div>
-                        ) : tabCacheGroq[id] ? (
-                          <>
-                            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', id === 'fact' && 'prose-lg')}>
-                              <MarkdownWithSearchLinks text={tabCacheGroq[id]!} />
-                            </div>
-                            <div className="mt-auto pt-2 flex items-center justify-between gap-2">
-                              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground dark:text-slate-400"
-                                onClick={() => { const t = tabCacheGroq[id]; if (t) navigator.clipboard.writeText(t).then(() => toast.success('텍스트가 복사되었어요.')) }}
-                              ><Copy className="w-3.5 h-3.5" /> 복사</Button>
-                              <Button variant="outline" size="sm" className="gap-1.5" disabled={tabLoadingGroq[id]}
-                                onClick={() => { setTabCacheGroq((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'groq') }}
-                              ><RefreshCw className="w-4 h-4" /> 재시도</Button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto" disabled={tabLoadingGroq[id]}
-                              onClick={() => { setTabCacheGroq((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'groq') }}
-                            >재시도</Button>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                    {/* Gemini 시장 요약: 해당 AI 원본 분석 텍스트만 표시 (컨센서스 요약 미포함) */}
-                    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="secondary">Gemini</Badge>
-                          {tabLoadingGemini[id] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col gap-4">
-                        {tabErrorGemini[id] ? (
-                          <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
-                            <p className="text-destructive text-sm dark:text-[#00d19a]">
-                              {tabErrorGemini[id] === '무료 쿼터 초과'
-                                ? '무료 쿼터 초과'
-                                : (retryCountTabGemini[id] ?? 0) >= 3
-                                  ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
-                                  : tabErrorGemini[id]}
-                            </p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10" disabled={tabLoadingGemini[id]}
-                              onClick={() => {
-                                if (tabErrorGemini[id] === '무료 쿼터 초과') {
-                                  setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
-                                  return
-                                }
-                                if ((retryCountTabGemini[id] ?? 0) >= 3) {
-                                  setRetryCountTabGemini((prev) => ({ ...prev, [id]: 0 }))
-                                  setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
-                                }
-                                setTabCacheGemini((prev) => ({ ...prev, [id]: null }))
-                                fetchTabAnalysis(id, 'gemini')
-                              }}
-                            >
-                              {tabErrorGemini[id] === '무료 쿼터 초과' ? '나중에 다시 시도' : '재시도'}
-                            </Button>
-                          </div>
-                        ) : tabLoadingGemini[id] ? (
-                          <div className="flex items-center justify-center min-h-[200px]">
-                            <RinAnimation variant="loading" size={120} className="shrink-0" />
-                          </div>
-                        ) : tabCacheGemini[id] ? (
-                          <>
-                            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', id === 'fact' && 'prose-lg')}>
-                              <MarkdownWithSearchLinks text={tabCacheGemini[id]!} />
-                            </div>
-                            <div className="mt-auto pt-2 flex items-center justify-between gap-2">
-                              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground dark:text-slate-400"
-                                onClick={() => { const t = tabCacheGemini[id]; if (t) navigator.clipboard.writeText(t).then(() => toast.success('텍스트가 복사되었어요.')) }}
-                              ><Copy className="w-3.5 h-3.5" /> 복사</Button>
-                              <Button variant="outline" size="sm" className="gap-1.5" disabled={tabLoadingGemini[id] || geminiQuotaExceeded}
-                                onClick={() => { if (!geminiQuotaExceeded) { setTabCacheGemini((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'gemini') } }}
-                              ><RefreshCw className="w-4 h-4" /> 재시도</Button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
-                            <Button variant="outline" size="sm" className="gap-1.5 mt-auto" disabled={tabLoadingGemini[id] || geminiQuotaExceeded}
-                              onClick={() => { if (!geminiQuotaExceeded) { setTabCacheGemini((prev) => ({ ...prev, [id]: null })); fetchTabAnalysis(id, 'gemini') } }}
-                            >재시도</Button>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <GroqAnalysis
+                      tabId={id}
+                      text={tabCacheGroq[id] ?? null}
+                      loading={tabLoadingGroq[id] || (loading && !result)}
+                      error={tabErrorGroq[id]}
+                      retryCount={retryCountTabGroq[id] ?? 0}
+                      onRetry={() => {
+                        if ((retryCountTabGroq[id] ?? 0) >= 3) {
+                          setRetryCountTabGroq((prev) => ({ ...prev, [id]: 0 }))
+                          setTabErrorGroq((prev) => ({ ...prev, [id]: null }))
+                        }
+                        setTabCacheGroq((prev) => ({ ...prev, [id]: null }))
+                        fetchTabAnalysis(id, 'groq')
+                      }}
+                    />
+                    <GeminiAnalysis
+                      tabId={id}
+                      text={tabCacheGemini[id] ?? null}
+                      loading={tabLoadingGemini[id] || (loading && !result)}
+                      error={tabErrorGemini[id]}
+                      retryCount={retryCountTabGemini[id] ?? 0}
+                      quotaExceeded={geminiQuotaExceeded}
+                      onRetry={() => {
+                        if (tabErrorGemini[id] === '무료 쿼터 초과') {
+                          setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
+                          return
+                        }
+                        if ((retryCountTabGemini[id] ?? 0) >= 3) {
+                          setRetryCountTabGemini((prev) => ({ ...prev, [id]: 0 }))
+                          setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
+                        }
+                        setTabCacheGemini((prev) => ({ ...prev, [id]: null }))
+                        fetchTabAnalysis(id, 'gemini')
+                      }}
+                    />
                   </div>
                   {id === 'creative' && (
                     <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-6 mt-6">

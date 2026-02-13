@@ -3,11 +3,9 @@ import { trackUsage } from '@/lib/usage'
 import { getEffectiveLicenseKeys } from '@/lib/license'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import Parser from 'rss-parser'
+import { GEMINI_MODEL } from '@/lib/gemini-config'
 
 export const runtime = 'nodejs'
-
-/** 무료 티어: Gemini 1.5 Flash */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
@@ -64,10 +62,17 @@ async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; 
   }
 }
 
+/** Gemini가 ```json ... ``` 또는 ``` ... ``` 로 감싼 경우 제거 후 순수 JSON만 반환 */
 function extractJsonFromText(text: string): string {
   const trimmed = text.trim()
-  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (codeBlock) return codeBlock[1].trim()
+  const codeBlockMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/)
+  if (codeBlockMatch) return codeBlockMatch[1].trim()
+  if (trimmed.startsWith('```')) {
+    const afterOpen = trimmed.replace(/^```(?:json)?\s*\n?/i, '')
+    const closeIdx = afterOpen.indexOf('```')
+    if (closeIdx !== -1) return afterOpen.slice(0, closeIdx).trim()
+    return afterOpen.trim()
+  }
   return trimmed
 }
 
@@ -159,9 +164,9 @@ export async function POST(req: Request) {
         })
       }
 
+      let currentStep = 'firecrawl'
       try {
         send('progress', { step: 'firecrawl_start' })
-
         const news = await fetchNewsTitles(keyword)
         send('progress', { step: 'firecrawl_done', news: news.map((n) => ({ title: n.title, url: n.url })) })
         if (isClosed) {
@@ -174,6 +179,7 @@ export async function POST(req: Request) {
           return
         }
 
+        currentStep = 'gemini'
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
@@ -191,6 +197,7 @@ export async function POST(req: Request) {
             break
           } catch (geminiError: unknown) {
             const msg = String((geminiError as { message?: string })?.message ?? geminiError)
+            console.log('[Research Stream] Gemini error', { attempt, msg })
             const is429 =
               msg.includes('429') ||
               msg.includes('quota') ||
@@ -203,6 +210,7 @@ export async function POST(req: Request) {
               await new Promise((r) => setTimeout(r, waitMs))
               continue
             }
+
             send('progress', {
               step: 'error',
               error:
@@ -234,6 +242,7 @@ export async function POST(req: Request) {
         }
         await trackUsage('gemini')
 
+        currentStep = 'parse_json'
         const rawJson = extractJsonFromText(responseText)
         let parsed: {
           marketNews?: string[]
@@ -309,6 +318,7 @@ export async function POST(req: Request) {
           keyConclusions,
         }
 
+        currentStep = 'report_db'
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
         let reportId: string | null = null
@@ -351,7 +361,14 @@ export async function POST(req: Request) {
 
         send('progress', { step: 'result', data: { ...summary, reportId, source_links: news } as Record<string, unknown> })
       } catch (e) {
-        console.error('[Research Stream]', e)
+        const stepLabels: Record<string, string> = {
+          firecrawl: 'Firecrawl 뉴스 수집',
+          gemini: 'Gemini 초기 시장 분석',
+          parse_json: '분석 결과 JSON 파싱',
+          report_db: '리포트/DB 저장',
+        }
+        const stepLabel = stepLabels[currentStep] ?? currentStep
+        console.error('[Research Stream] Error at step:', stepLabel, currentStep, e)
         send('progress', {
           step: 'error',
           error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',

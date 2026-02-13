@@ -27,7 +27,7 @@
 
 - **Framework**: Next.js 16, React 19
 - **스타일**: Tailwind CSS 4, Pretendard 폰트, 다크 모드 (next-themes)
-- **AI**: Google Gemini (gemini-3-flash-preview / gemini-2.0-flash), Groq (llama-3.3-70b-versatile)
+- **AI**: Google Gemini (gemini-2.5-flash), Groq (llama-3.3-70b-versatile)
 - **DB**: Supabase (Auth, Postgres, RLS)
 - **상태**: Zustand, SWR
 
@@ -69,8 +69,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 GROQ_API_KEY=your_groq_api_key
 
 # 선택 (기본값 사용 시 생략 가능)
-GEMINI_MODEL=gemini-2.0-flash
-GEMINI_TAB_MODEL=gemini-3-flash-preview
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TAB_MODEL=gemini-2.5-flash
 GROQ_TAB_MODEL=llama-3.3-70b-versatile
 
 # OpenAI — 인사이트 Fallback (선택)

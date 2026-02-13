@@ -1,27 +1,25 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { GEMINI_TAB_MODEL } from '@/lib/gemini-config'
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
 const GROQ_429_RETRY_DELAY_MS = 3000
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
-const GEMINI_MODEL_PRIMARY = process.env.GEMINI_TAB_MODEL ?? 'gemini-3-flash-preview'
-const GEMINI_BASE_URL_V1BETA = 'https://generativelanguage.googleapis.com/v1beta/models'
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
-const GEMINI_MODEL_FALLBACK = 'gemini-2.0-flash'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
 
-/** 2사(Gemini 3 + Groq) 종합 요약 → JSON. results 페이지는 Gemini 카드가 아닌 전용 "AI Insight Consensus" 블록에 표시 */
+/** 2사(Gemini + Groq) 종합 요약 → PM 관점 JSON. results 페이지 전용 "AI Insight Consensus" 블록에 표시 */
 const CONSENSUS_SYSTEM = `
-두 분석 결과를 종합하여 다음 형식의 JSON으로만 응답해:
+두 분석 결과를 종합하여 다음 형식의 JSON으로만 응답해. 다른 텍스트는 포함하지 말 것.
 {
   "summary": "150자 이내의 종합 요약",
-  "sentiment": -100~100 사이 점수,
+  "sentiment": -100~100 사이 감성 점수 (음수=부정, 양수=긍정, 0=중립),
   "strategic_insight": "이 이슈가 시사하는 핵심 전략 한 줄",
-  "action_item": "사용자가 고려해야 할 다음 실행 단계",
-  "confidence": 0~100 사이의 두 AI 의견 일치도
+  "action_item": "사용자가 고려해야 할 다음 실행 권고",
+  "confidence": 0~100 사이의 두 AI 의견 일치도(신뢰도)
 }
 `;
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
@@ -30,16 +28,31 @@ const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 export type Consensus = {
   summary: string
   sentiment: number
-  positiveKeywords: string[]
-  negativeKeywords: string[]
+  strategic_insight: string
+  action_item: string
+  confidence: number
 }
 
 /** 입력 부족 시 UI가 깨지지 않도록 반환하는 기본 컨센서스 */
 const FALLBACK_CONSENSUS: Consensus = {
   summary: '분석 불가. 데이터가 부족합니다.',
   sentiment: 0,
-  positiveKeywords: [],
-  negativeKeywords: [],
+  strategic_insight: '—',
+  action_item: '—',
+  confidence: 0,
+}
+
+/** DB/캐시에서 읽은 구형 포맷(positiveKeywords 등)을 새 Consensus 포맷으로 정규화 */
+function normalizeConsensus(raw: unknown): Consensus | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 200) : ''
+  if (!summary) return null
+  const sentiment = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
+  const strategic_insight = typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—'
+  const action_item = typeof o.action_item === 'string' ? o.action_item.trim().slice(0, 300) : '—'
+  const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
+  return { summary, sentiment, strategic_insight, action_item, confidence }
 }
 
 /** 두 분석이 모두 settled된 뒤에만 호출. 한쪽 실패 시에도 가능한 데이터로 요약 (일부 데이터만으로 종합). 항상 Consensus 객체 반환. */
@@ -64,9 +77,8 @@ async function generateConsensus(
       responseMimeType: 'application/json' as const,
     },
   }
-  console.log('[AI Insight Consensus] generateConsensus body', body)
   try {
-    const url = `${GEMINI_BASE_URL_V1BETA}/${GEMINI_MODEL_PRIMARY}:generateContent?key=${apiKey}`
+    const url = `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${apiKey}`
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,12 +88,19 @@ async function generateConsensus(
     const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
     if (!raw) return FALLBACK_CONSENSUS
-    const parsed = JSON.parse(raw) as { summary?: string; sentiment?: number; positiveKeywords?: string[]; negativeKeywords?: string[] }
+    const parsed = JSON.parse(raw) as {
+      summary?: string
+      sentiment?: number
+      strategic_insight?: string
+      action_item?: string
+      confidence?: number
+    }
     const summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 200) : FALLBACK_CONSENSUS.summary
     const sentiment = typeof parsed.sentiment === 'number' ? Math.max(-100, Math.min(100, parsed.sentiment)) : 0
-    const positiveKeywords = Array.isArray(parsed.positiveKeywords) ? parsed.positiveKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : []
-    const negativeKeywords = Array.isArray(parsed.negativeKeywords) ? parsed.negativeKeywords.filter((k): k is string => typeof k === 'string').slice(0, 3) : []
-    return { summary, sentiment, positiveKeywords, negativeKeywords }
+    const strategic_insight = typeof parsed.strategic_insight === 'string' ? parsed.strategic_insight.trim().slice(0, 300) : FALLBACK_CONSENSUS.strategic_insight
+    const action_item = typeof parsed.action_item === 'string' ? parsed.action_item.trim().slice(0, 300) : FALLBACK_CONSENSUS.action_item
+    const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(100, parsed.confidence)) : 0
+    return { summary, sentiment, strategic_insight, action_item, confidence }
   } catch (e) {
     console.warn('[Research Tab] Consensus synthesis', e)
     return FALLBACK_CONSENSUS
@@ -195,9 +214,11 @@ export async function POST(req: Request) {
         (provider === 'gemini' && mergedGemini != null)
       if (allCached) {
         const ar = (cachedData.analysis_results ?? null) as Record<string, unknown> | null
-        let cachedConsensus = ar && typeof ar.consensus === 'object' && ar.consensus != null ? ar.consensus : null
-        if (!cachedConsensus && ar && typeof ar.summary === 'string') {
-          cachedConsensus = ar as Consensus
+        let cachedConsensus: Consensus | null = null
+        if (ar) {
+          const fromConsensus = ar.consensus != null ? normalizeConsensus(ar.consensus) : null
+          const fromRoot = typeof ar.summary === 'string' ? normalizeConsensus(ar) : null
+          cachedConsensus = fromConsensus ?? fromRoot
         }
         if (
           tab === 'creative' &&
@@ -256,8 +277,7 @@ export async function POST(req: Request) {
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
     let c: Consensus | null = null
     if (ar) {
-      if (typeof ar.consensus === 'object' && ar.consensus != null) c = ar.consensus as Consensus
-      else if (typeof ar.summary === 'string') c = ar as Consensus
+      c = (ar.consensus != null ? normalizeConsensus(ar.consensus) : null) ?? (typeof ar.summary === 'string' ? normalizeConsensus(ar) : null)
     }
     return NextResponse.json({
       groq: mergedGroq != null ? { text: mergedGroq } : null,
@@ -328,31 +348,21 @@ export async function POST(req: Request) {
     }
   }
 
-  /** Gemini: v1beta + gemini-3-flash-preview 1차 시도, 404 시 v1 + gemini-2.0-flash Fallback. 429 시 quota_exceeded 반환 */
+  /** Gemini: v1 + GEMINI_TAB_MODEL(gemini-2.5-flash). ConsensusInsight와 동일 모델 사용. 429 시 quota_exceeded 반환 */
   async function callGemini(): Promise<{ text: string | null; quotaExceeded?: boolean }> {
     if (provider !== 'all' && provider !== 'gemini') return { text: null }
     const body = {
       contents: [{ parts: [{ text: fullPromptForGeminiAndHf }] }],
       generationConfig: { maxOutputTokens: 2048 },
     } as const
-    const tryGemini = async (baseUrl: string, model: string): Promise<{ res: Response; data: unknown }> => {
-      const url = `${baseUrl}/${model}:generateContent?key=${geminiKey}`
+    try {
+      const url = `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${geminiKey}`
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       const data = await res.json().catch(() => ({}))
-      return { res, data }
-    }
-    try {
-      let { res, data } = await tryGemini(GEMINI_BASE_URL_V1BETA, GEMINI_MODEL_PRIMARY)
-      if (res.status === 404) {
-        console.warn('[Research Tab] Gemini 404, fallback to v1 + gemini-2.0-flash')
-        const fallback = await tryGemini(GEMINI_BASE_URL_V1, GEMINI_MODEL_FALLBACK)
-        res = fallback.res
-        data = fallback.data
-      }
       const parsed = data as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
         error?: { message?: string }
@@ -391,9 +401,12 @@ export async function POST(req: Request) {
   const groqResult = resultGr
   const geminiResult = resultG
 
-  /** AllSettled로 Groq·Gemini가 모두 끝난 뒤에만 컨센서스 생성. 한쪽 실패(null)여도 가능한 데이터로 요약. */
+  /** AllSettled로 Groq·Gemini가 모두 끝난 뒤에만 컨센서스 생성. 최소 한쪽 성공 시에만 호출. 두 AI 모두 실패 시 호출 중단. */
   let consensus: Consensus | null = null
-  if (tab === 'creative' && geminiKey && !geminiQuotaExceeded) {
+  const groqOk = groqResult != null && String(groqResult).trim().length > 0
+  const geminiOk = geminiResult != null && String(geminiResult).trim().length > 0
+  const atLeastOneSuccess = groqOk || geminiOk
+  if (tab === 'creative' && geminiKey && !geminiQuotaExceeded && atLeastOneSuccess) {
     const geminiInput = (geminiResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
     const groqInput = (groqResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
     consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
@@ -415,11 +428,9 @@ export async function POST(req: Request) {
       const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
       const existingResults = (historyRow?.analysis_results ?? null) as Record<string, unknown> | null
       if (existingResults) {
-        if (typeof existingResults.consensus === 'object' && existingResults.consensus != null) {
-          existingConsensus = existingResults.consensus as Consensus
-        } else if (typeof existingResults.summary === 'string') {
-          existingConsensus = existingResults as Consensus
-        }
+        existingConsensus =
+          (existingResults.consensus != null ? normalizeConsensus(existingResults.consensus) : null) ??
+          (typeof existingResults.summary === 'string' ? normalizeConsensus(existingResults) : null)
       }
 
       const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
@@ -430,8 +441,8 @@ export async function POST(req: Request) {
       const nextGroq = withTab(prevGroq, groqResult, tab)
       const nextGemini = withTab(prevGemini, geminiResult, tab)
 
-      // analysis_results는 AI Insight Consensus 전용. groq/gemini는 analysis_groq, analysis_gemini에 저장.
-      // Consensus는 /api/research/insights/consensus에서 저장.
+      // analysis_results: 새 JSON 포맷(Consensus)만 저장. Groq/Gemini 원본은 저장 금지. 생성된 결과가 있을 때만 업데이트.
+      const consensusToSave = consensus ?? existingConsensus
       const upsertPayload: Record<string, unknown> = {
         user_id: user.id,
         keyword,
@@ -440,6 +451,9 @@ export async function POST(req: Request) {
         analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
         analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
         updated_at: new Date().toISOString(),
+      }
+      if (consensusToSave != null) {
+        upsertPayload.analysis_results = consensusToSave
       }
 
       await supabase.from('research_history').upsert(

@@ -3,9 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
-
-/** 안정적인 기본 모델 (env로 오버라이드 가능) */
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash-latest'
+import { GEMINI_MODEL } from '@/lib/gemini-config'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -33,10 +31,17 @@ async function logAvailableModels(apiKey: string): Promise<void> {
   }
 }
 
+/** Gemini가 ```json ... ``` 또는 ``` ... ``` 로 감싼 경우 제거 후 순수 JSON만 반환 */
 function extractJsonFromText(text: string): string {
   const trimmed = text.trim()
-  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (codeBlock) return codeBlock[1].trim()
+  const codeBlockMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/)
+  if (codeBlockMatch) return codeBlockMatch[1].trim()
+  if (trimmed.startsWith('```')) {
+    const afterOpen = trimmed.replace(/^```(?:json)?\s*\n?/i, '')
+    const closeIdx = afterOpen.indexOf('```')
+    if (closeIdx !== -1) return afterOpen.slice(0, closeIdx).trim()
+    return afterOpen.trim()
+  }
   return trimmed
 }
 

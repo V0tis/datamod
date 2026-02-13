@@ -25,7 +25,7 @@ export interface FormattedErrorDetail {
 
 function normalizeError(err: unknown): ErrorDetailPayload {
   if (err instanceof Error) {
-    const e = err as Error & { code?: string; status?: number; hint?: string; details?: string }
+    const e = err as Error & { code?: string; status?: number; hint?: string; details?: string; cause?: unknown }
     let message = err.message
     if (typeof message === 'string' && message.trim().startsWith('{')) {
       try {
@@ -36,21 +36,26 @@ function normalizeError(err: unknown): ErrorDetailPayload {
         /* keep original message */
       }
     }
+    const details = e.details ?? (e.cause != null ? String(e.cause) : null)
     return {
       message,
       code: e.code ?? (e.status != null ? String(e.status) : null),
       hint: e.hint ?? null,
-      details: e.details ?? null,
+      details,
     }
   }
   if (typeof err === 'object' && err !== null) {
     const o = err as Record<string, unknown>
+    const msg = typeof o.message === 'string' && o.message.trim() ? o.message : null
+    const errStr = typeof o.error === 'string' && o.error.trim() ? o.error : null
+    const codeStr = typeof o.code === 'string' && o.code.trim() ? o.code : null
+    const statusStr = o.status != null ? String(o.status) : null
     return {
-      code: typeof o.code === 'string' ? o.code : String(o.code ?? ''),
-      message: typeof o.message === 'string' ? o.message : String(o.message ?? ''),
-      hint: typeof o.hint === 'string' ? o.hint : String(o.hint ?? ''),
-      details: typeof o.details === 'string' ? o.details : String(o.details ?? ''),
-      error: typeof o.error === 'string' ? o.error : undefined,
+      code: codeStr || statusStr || null,
+      message: msg || errStr || '',
+      hint: typeof o.hint === 'string' ? o.hint : null,
+      details: typeof o.details === 'string' ? o.details : null,
+      error: errStr ?? undefined,
     }
   }
   return { message: String(err), code: null, hint: null, details: null }
@@ -92,15 +97,34 @@ export function getFriendlyMessage(err: unknown): string {
 export function formatErrorDetail(err: unknown): FormattedErrorDetail {
   const isDev = process.env.NODE_ENV === 'development'
   const payload = normalizeError(err)
-  let message = payload.message ?? payload.error ?? '—'
-  const msgStr = typeof message === 'string' ? message : String(message)
-  if (!isDev && looksLikeHtml(msgStr)) {
+  // message: 빈 문자열이면 error로 대체 (API가 { error: "..." } 형태로만 반환하는 경우)
+  const rawMsg = (payload.message && String(payload.message).trim()) || payload.error || ''
+  let message = typeof rawMsg === 'string' && rawMsg.length > 0 ? rawMsg : '—'
+  if (!isDev && looksLikeHtml(message)) {
     message = '시스템 경로를 찾을 수 없습니다.'
   }
+  // details: 기존 details가 없으면 객체 전체를 JSON으로 보여줌 (디버깅용)
+  let details = payload.details ?? '—'
+  if (details === '—' && isDev && typeof err === 'object' && err !== null) {
+    try {
+      const errObj = err as Record<string, unknown>
+      const sanitized: Record<string, unknown> = {}
+      for (const k of Object.keys(errObj)) {
+        if (k !== 'password' && k !== 'token') sanitized[k] = errObj[k]
+      }
+      const json = JSON.stringify(sanitized, null, 2)
+      if (json.length > 0) details = json
+    } catch {
+      /* ignore */
+    }
+  }
+  if (details === '—' && err instanceof Error && err.stack) {
+    details = err.stack
+  }
   return {
-    code: payload.code ?? '—',
-    message: msgStr.length > 0 ? message : '—',
-    hint: payload.hint ?? '—',
-    details: payload.details ?? '—',
+    code: (payload.code && String(payload.code).trim()) || '—',
+    message,
+    hint: (payload.hint && String(payload.hint).trim()) || '—',
+    details,
   }
 }

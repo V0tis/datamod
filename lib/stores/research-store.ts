@@ -44,6 +44,8 @@ export interface ResearchResponse {
   analysis_groq?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
   /** Gemini 탭 분석 결과 (research_history.analysis_gemini). 탭별 텍스트 Record<tabId, string> */
   analysis_gemini?: Record<string, string>
+  /** AI Insight Consensus (research_history.analysis_results). summary, sentiment, strategic_insight, action_item, confidence */
+  analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
 }
 
 type StreamPayload =
@@ -152,11 +154,14 @@ export const useResearchStore = create<ResearchStore>()(
             updated_at?: string
             analysis_groq?: { summary: string; modelName: string }
             analysis_gemini?: Record<string, string>
+            analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
           }
           if (!data.cached) return 'none'
           if (data.emptyAnalysis && !data.reportId) return 'empty'
           if (data.emptyAnalysis && data.reportId) return 'empty'
-          if (data.reportId && (data.content != null || data.ai_responses)) {
+          const hasContent = data.content != null || data.ai_responses
+          const hasAnalysis = data.analysis_groq != null || data.analysis_gemini != null
+          if (data.reportId && (hasContent || hasAnalysis)) {
             set({
               keyword: k,
               status: 'done',
@@ -168,6 +173,7 @@ export const useResearchStore = create<ResearchStore>()(
                 updated_at: data.updated_at,
                 analysis_groq: data.analysis_groq,
                 analysis_gemini: data.analysis_gemini,
+                analysis_results: data.analysis_results,
               } as ResearchResponse,
               error: null,
               newsList: get().newsList,
@@ -269,8 +275,8 @@ export const useResearchStore = create<ResearchStore>()(
         })
 
         if (!res.ok || !res.body) {
-          const err = await res.json().catch(() => ({}))
-          showErrorToast(err, { fallbackMessage: '요청에 실패했어요.' })
+          const err = await res.json().catch(() => ({})) as Record<string, unknown>
+          showErrorToast({ ...err, status: res.status, statusText: res.statusText }, { fallbackMessage: '요청에 실패했어요.' })
           set({
             status: 'error',
             error: (err as { error?: string }).error ?? '요청에 실패했어요.',

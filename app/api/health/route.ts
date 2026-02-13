@@ -5,6 +5,6 @@ import { getSystemGeminiKey } from '@/lib/license'
 export async function GET() {
   const gemini = getSystemGeminiKey().length > 0
   const supabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim())
-  const model = process.env.GEMINI_MODEL?.trim() || process.env.GEMINI_TAB_MODEL?.trim() || 'gemini-2.0-flash'
+  const model = process.env.GEMINI_MODEL?.trim() || process.env.GEMINI_TAB_MODEL?.trim() || 'gemini-2.5-flash'
   return NextResponse.json({ gemini, supabase, model })
 }

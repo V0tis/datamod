@@ -45,10 +45,25 @@ export async function GET(req: Request) {
       return NextResponse.json({ list })
     }
 
+    type HistoryRow = {
+      id: string
+      report_id: string | null
+      analysis_market: string | null
+      analysis_insight: string | null
+      analysis_report: string | null
+      key_metrics: unknown
+      analysis_groq: unknown
+      analysis_gemini: unknown
+      analysis_results: unknown
+      updated_at: string | null
+      created_at: string | null
+      reports?: { id: string; keyword: string; content: unknown; source_links: unknown; ai_responses: unknown; user_id?: string } | null
+    }
     const { data: row, error } = await supabase
       .from('research_history')
       .select(
-        'id, report_id, analysis_market, analysis_insight, analysis_report, key_metrics, analysis_groq, analysis_gemini, updated_at, created_at'
+        `id, report_id, analysis_market, analysis_insight, analysis_report, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at, created_at,
+        reports (id, keyword, content, source_links, ai_responses, user_id)`
       )
       .eq('user_id', user.id)
       .eq('keyword', keyword)
@@ -63,42 +78,40 @@ export async function GET(req: Request) {
       )
     }
 
-    if (!row) {
+    const r = row as HistoryRow | null
+    if (!r) {
       return NextResponse.json({ cached: false })
     }
 
     const hasAnyAnalysis =
-      (row.analysis_market && row.analysis_market.trim() !== '') ||
-      (row.analysis_insight && row.analysis_insight.trim() !== '') ||
-      (row.analysis_report && row.analysis_report.trim() !== '')
+      (r.analysis_market && r.analysis_market.trim() !== '') ||
+      (r.analysis_insight && r.analysis_insight.trim() !== '') ||
+      (r.analysis_report && r.analysis_report.trim() !== '')
 
-    if (!row.report_id) {
+    if (!r.report_id) {
       return NextResponse.json({
         cached: true,
         emptyAnalysis: true,
-        updated_at: row.updated_at,
+        updated_at: r.updated_at,
       })
     }
 
-    const { data: report } = await supabase
-      .from('reports')
-      .select('id, keyword, content, source_links, ai_responses')
-      .eq('id', row.report_id)
-      .eq('user_id', user.id)
-      .single()
+    const reportsRow = Array.isArray(r.reports) ? r.reports[0] : r.reports
+    const report = reportsRow && (reportsRow.user_id == null || reportsRow.user_id === user.id) ? reportsRow : null
 
     if (!report) {
       return NextResponse.json({
         cached: true,
         emptyAnalysis: !hasAnyAnalysis,
-        reportId: row.report_id,
-        analysis_market: row.analysis_market ?? undefined,
-        analysis_insight: row.analysis_insight ?? undefined,
-        analysis_report: row.analysis_report ?? undefined,
-        key_metrics: row.key_metrics ?? undefined,
-        analysis_groq: row.analysis_groq ?? undefined,
-        analysis_gemini: row.analysis_gemini ?? undefined,
-        updated_at: row.updated_at,
+        reportId: r.report_id,
+        analysis_market: r.analysis_market ?? undefined,
+        analysis_insight: r.analysis_insight ?? undefined,
+        analysis_report: r.analysis_report ?? undefined,
+        key_metrics: r.key_metrics ?? undefined,
+        analysis_groq: r.analysis_groq ?? undefined,
+        analysis_gemini: r.analysis_gemini ?? undefined,
+        analysis_results: r.analysis_results ?? undefined,
+        updated_at: r.updated_at,
       })
     }
 
@@ -116,14 +129,15 @@ export async function GET(req: Request) {
       content,
       source_links: sourceLinks,
       ai_responses: {
-        logic: row.analysis_market ?? aiResponses.logic,
-        creative: row.analysis_insight ?? aiResponses.creative,
-        fact: row.analysis_report ?? aiResponses.fact,
+        logic: r.analysis_market ?? aiResponses.logic,
+        creative: r.analysis_insight ?? aiResponses.creative,
+        fact: r.analysis_report ?? aiResponses.fact,
       },
-      key_metrics: row.key_metrics ?? undefined,
-      analysis_groq: row.analysis_groq ?? undefined,
-      analysis_gemini: row.analysis_gemini ?? undefined,
-      updated_at: row.updated_at,
+      key_metrics: r.key_metrics ?? undefined,
+      analysis_groq: r.analysis_groq ?? undefined,
+      analysis_gemini: r.analysis_gemini ?? undefined,
+      analysis_results: r.analysis_results ?? undefined,
+      updated_at: r.updated_at,
     })
   } catch (e) {
     console.error('[Research History]', e)
