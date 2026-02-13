@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, Share2, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Copy, Loader2, RefreshCw } from 'lucide-react'
+import { FileDown, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
@@ -151,7 +151,6 @@ function ResultsContent() {
   } = useResearchStore()
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
-  const [shareUrl, setShareUrl] = useState<string | null>(null)
   /** 탭별 Groq / Gemini 2엔진 결과 */
   const [tabCacheGroq, setTabCacheGroq] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
   const [tabCacheGemini, setTabCacheGemini] = useState<Record<AiTabId, string | null>>({ logic: null, creative: null, fact: null })
@@ -192,6 +191,12 @@ function ResultsContent() {
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** 히스토리 조회가 끝난 뒤에만 "린이 분석하는 중" 표시 (캐시 있으면 카드 먼저 보여주기) */
   const [historyCheckDone, setHistoryCheckDone] = useState(false)
+  /** 실시간 모멘텀 차트 마지막 시점(24h) 복합 점수 - 헤드라인과 동기화 (Consensus 없을 때 사용) */
+  const [lastChartScore, setLastChartScore] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!(result?.key_metrics?.chartData ?? result?.chartData)) setLastChartScore(null)
+  }, [result?.key_metrics?.chartData, result?.chartData])
 
   // URL keyword·country 기준: research_history 캐시 우선 → 없으면 stream 호출 (report·research_history 생성)
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
@@ -595,33 +600,6 @@ function ResultsContent() {
     }
   }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, fetchTabAnalysis])
 
-  const handleShare = useCallback(async () => {
-    const reportId = result?.reportId
-    if (!reportId) return
-    if (shareUrl) {
-      await navigator.clipboard.writeText(shareUrl)
-      toast.success('공유 링크가 복사되었어요.')
-      return
-    }
-    try {
-      const res = await fetch(`/api/reports/${reportId}/share`, { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        showErrorToast(data, { fallbackMessage: '공유 링크를 만들 수 없어요.' })
-        return
-      }
-      const url = (data as { url?: string }).url
-      if (url) {
-        const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`
-        setShareUrl(absoluteUrl)
-        await navigator.clipboard.writeText(absoluteUrl)
-        toast.success('공유 링크가 생성되었고 클립보드에 복사되었어요.')
-      }
-    } catch (err) {
-      showErrorToast(err, { fallbackMessage: '공유 링크 생성에 실패했어요.' })
-    }
-  }, [result?.reportId, shareUrl])
-
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
@@ -673,89 +651,16 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* 상단: 핵심 요약 (초기 연구 분석 결론) */}
-        {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
-          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-3 tracking-tight">핵심 요약</h2>
-            <p className="text-xs text-slate-500 mb-3">초기 연구 분석에서 추출한 결론 (전략적 통찰·컨센서스와 별도)</p>
-            <div className="flex flex-wrap gap-2">
-              {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5).map((line, i) => (
-                <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
-                  {line}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 최상단: AI Insight Consensus. DB analysis_results 우선 렌더링, 두 AI settled 후에만 API 호출 */}
-        {!result ? (
-          <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
-            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
-            {status === 'error' && error ? (
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
-                <p className="text-sm text-rose-400">{error}</p>
-                {error.includes('형식이 올바르지 않아요') && (
-                  <p className="text-xs text-slate-500">(초기 분석 단계에서 JSON 파싱 실패. 서버 로그에 rawJson 스니펫이 기록됩니다.)</p>
-                )}
-                <Button variant="outline" size="sm" className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50" onClick={retryConsensus}>
-                  다시 분석하기
-                </Button>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">
-                분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 핵심 전략·실행 권고가 여기 표시됩니다.
-              </p>
-            )}
-          </div>
-        ) : (
-          <ConsensusInsight
-            data={consensusData}
-            loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
-            bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
-            partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
-            errorMessage={result?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
-            onRetry={retryConsensus}
-          />
-        )}
-
+        {/* 탭 안내 문구 바로 아래: 액션 버튼 + 재분석 + 탭 전환 */}
         {status === 'done' && result && (
           <div className="no-print flex flex-wrap items-center gap-2 mb-4">
             <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
               <FileDown className="w-4 h-4" />
               PDF로 저장
             </Button>
-            {result.reportId && (
-              <Button type="button" variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
-                <Share2 className="w-4 h-4" />
-                {shareUrl ? '링크 복사' : '공유하기'}
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => {
-                const parts = [
-                  result.marketNews?.length ? `시장 뉴스\n${result.marketNews.join('\n')}` : '',
-                  result.painPoints?.length ? `유저 페인포인트\n${result.painPoints.join('\n')}` : '',
-                  result.competitorTrends ? `경쟁사 동향\n${result.competitorTrends}` : '',
-                  result.publicReactionTrends ? `공개 반응 트렌드\n${result.publicReactionTrends}` : '',
-                  (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.length ? `핵심 결론\n${(result.key_metrics?.keyConclusions ?? result.keyConclusions)!.join('\n')}` : '',
-                ].filter(Boolean)
-                const text = parts.join('\n\n')
-                if (!text) return
-                navigator.clipboard.writeText(text).then(() => toast.success('텍스트가 복사되었어요.'))
-              }}
-            >
-              <Copy className="w-4 h-4" />
-              텍스트 복사
-            </Button>
           </div>
         )}
 
-        {/* 재분석 버튼: 완료 시 표시, 로딩 시에도 스피너와 메시지 유지 */}
         {(status === 'done' && result) || (status === 'loading' && currentKeyword) ? (
           <div className="no-print w-full flex flex-wrap items-center gap-3 mb-4 pb-2 border-b border-border dark:border-[#2d2f34]">
             <Button
@@ -825,6 +730,52 @@ function ResultsContent() {
               </TabsTrigger>
             ))}
           </TabsList>
+
+        {/* 상단: 핵심 요약 (초기 연구 분석 결론) */}
+        {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
+          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-3 tracking-tight">핵심 요약</h2>
+            <p className="text-xs text-slate-500 mb-3">초기 연구 분석에서 추출한 결론 (전략적 통찰·컨센서스와 별도)</p>
+            <div className="flex flex-wrap gap-2">
+              {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5).map((line, i) => (
+                <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
+                  {line}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 최상단: AI Insight Consensus. DB analysis_results 우선 렌더링, 두 AI settled 후에만 API 호출 */}
+        {!result ? (
+          <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
+            {status === 'error' && error ? (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
+                <p className="text-sm text-rose-400">{error}</p>
+                {error.includes('형식이 올바르지 않아요') && (
+                  <p className="text-xs text-slate-500">(초기 분석 단계에서 JSON 파싱 실패. 서버 로그에 rawJson 스니펫이 기록됩니다.)</p>
+                )}
+                <Button variant="outline" size="sm" className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50" onClick={retryConsensus}>
+                  다시 분석하기
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 핵심 전략·실행 권고가 여기 표시됩니다.
+              </p>
+            )}
+          </div>
+        ) : (
+          <ConsensusInsight
+            data={consensusData}
+            loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
+            bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
+            partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
+            errorMessage={result?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
+            onRetry={retryConsensus}
+          />
+        )}
 
           {/* 실시간 뉴스: 탭 리스트 바로 아래, 분석 콘텐츠 위 */}
           {currentKeyword && (
@@ -1034,11 +985,14 @@ function ResultsContent() {
                 const chartDataForUi = result?.key_metrics?.chartData ?? result?.chartData
                 const consensusScore = consensusData?.sentiment?.score
                 const consensusTrend = consensusData?.sentiment?.trend ?? 'stable'
-                const headlineScore = typeof consensusScore === 'number'
-                  ? consensusScore
-                  : (result?.key_metrics?.sentiment != null || result?.sentiment != null)
-                    ? (Number(result?.key_metrics?.sentiment ?? result?.sentiment ?? 50) - 50) * 2
-                    : null
+                const headlineScore =
+                  typeof consensusScore === 'number'
+                    ? consensusScore
+                    : lastChartScore != null
+                      ? lastChartScore
+                      : (result?.key_metrics?.sentiment != null || result?.sentiment != null)
+                        ? (Number(result?.key_metrics?.sentiment ?? result?.sentiment ?? 50) - 50) * 2
+                        : null
                 const trendLabel = consensusTrend === 'rising' ? '상승세' : consensusTrend === 'falling' ? '하락세' : '횡보'
                 return (
                   <>
@@ -1052,6 +1006,7 @@ function ResultsContent() {
                         chartData={chartDataForUi}
                         consensusScore={typeof consensusScore === 'number' ? consensusScore : undefined}
                         trend={consensusTrend}
+                        onLastPointScore={setLastChartScore}
                       />
                     ) : (
                       <div className="min-h-[220px] rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700/50">
