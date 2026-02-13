@@ -224,6 +224,8 @@ function ResultsContent() {
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
   const [selectedNewsIndex, setSelectedNewsIndex] = useState<number | null>(null)
   const [rssNews, setRssNews] = useState<RssNewsItem[]>([])
+  const [rssNewsLoading, setRssNewsLoading] = useState(false)
+  const [rssNewsFetched, setRssNewsFetched] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
@@ -270,7 +272,13 @@ function ResultsContent() {
 
   useEffect(() => {
     const q = (keyword ?? storeKeyword ?? '').trim()
-    if (!q) return
+    if (!q) {
+      setRssNews([])
+      setRssNewsFetched(false)
+      return
+    }
+    setRssNewsLoading(true)
+    setRssNewsFetched(false)
     fetch(`/api/news?keyword=${encodeURIComponent(q)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { items?: RssNewsItem[] } | null) => {
@@ -278,6 +286,10 @@ function ResultsContent() {
         else setRssNews([])
       })
       .catch(() => setRssNews([]))
+      .finally(() => {
+        setRssNewsLoading(false)
+        setRssNewsFetched(true)
+      })
   }, [keyword, storeKeyword])
 
   const loading = status === 'loading'
@@ -764,41 +776,71 @@ function ResultsContent() {
           </TabsList>
 
           {/* 실시간 뉴스: 탭 리스트 바로 아래, 분석 콘텐츠 위 */}
-          {rssNews.length > 0 && (
+          {currentKeyword && (
             <div className="mt-6">
               <h2 className="text-base font-semibold text-foreground dark:text-[#e1e3e6] mb-4 flex items-center gap-2 tracking-tight">
                 <Newspaper className="h-4 w-4 text-primary" />
                 실시간 뉴스
+                {rssNewsLoading && (
+                  <span className="inline-flex items-center gap-1.5 text-sm font-normal text-muted-foreground dark:text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    불러오는 중
+                  </span>
+                )}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {rssNews.map((item, i) => (
-                  <article
-                    key={i}
-                    className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#1c1e21] transition-all text-left flex flex-col"
-                  >
-                    <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
-                      <h3 className="font-medium text-foreground dark:text-[#e1e3e6] text-[15px] leading-snug line-clamp-2">
-                        {item.title || '제목 없음'}
-                      </h3>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground dark:text-slate-400">
-                        <span>{item.source || '언론사'}</span>
-                        <span>{item.pubDate ? <TimeAgo isoString={item.pubDate} /> : '최신'}</span>
-                      </div>
-                      {item.link && (
-                        <a
-                          href={item.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mt-auto"
-                        >
-                          원문 링크
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                        </a>
-                      )}
+              {rssNewsLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-4 animate-pulse"
+                    >
+                      <div className="h-4 w-full bg-muted dark:bg-zinc-700/50 rounded mb-3" />
+                      <div className="h-4 w-3/4 bg-muted dark:bg-zinc-700/50 rounded mb-2" />
+                      <div className="h-3 w-1/2 bg-muted dark:bg-zinc-700/50 rounded" />
                     </div>
-                  </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : rssNewsFetched && rssNews.length === 0 ? (
+                <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-6 text-center">
+                  <p className="text-muted-foreground dark:text-slate-400 text-sm">
+                    &quot;{currentKeyword}&quot;에 대한 실시간 뉴스 정보가 없습니다.
+                  </p>
+                  <p className="text-muted-foreground dark:text-slate-500 text-xs mt-1">
+                    다른 키워드로 검색해 보시거나, 잠시 후 다시 시도해 주세요.
+                  </p>
+                </div>
+              ) : rssNews.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {rssNews.map((item, i) => (
+                    <article
+                      key={i}
+                      className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card overflow-hidden hover:shadow-md hover:border-primary/20 dark:hover:bg-[#1c1e21] transition-all text-left flex flex-col"
+                    >
+                      <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
+                        <h3 className="font-medium text-foreground dark:text-[#e1e3e6] text-[15px] leading-snug line-clamp-2">
+                          {item.title || '제목 없음'}
+                        </h3>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground dark:text-slate-400">
+                          <span>{item.source || '언론사'}</span>
+                          <span>{item.pubDate ? <TimeAgo isoString={item.pubDate} /> : '최신'}</span>
+                        </div>
+                        {item.link && (
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mt-auto"
+                          >
+                            원문 링크
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
