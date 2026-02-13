@@ -71,7 +71,7 @@ function NewsDetailModal({
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* AI 요약: 통합 분석 결과에서만 표시 (summarize-article 호출 없음) */}
           <section>
-            <h4 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-2">AI 요약</h4>
+            <h4 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-2">전략적 통찰</h4>
             {summary ? (
               <div className="text-sm text-foreground dark:text-slate-200 whitespace-pre-wrap leading-relaxed rounded-lg bg-primary/5 dark:bg-[#00d19a]/10 border border-primary/20 dark:border-[#00d19a]/30 p-4">
                 {summary}
@@ -913,7 +913,7 @@ function ResultsContent() {
                 </div>
               ) : (
                 <>
-                  <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">AI 요약</h3>
+                  <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">전략적 통찰</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <GroqAnalysis
                         tabId={id}
@@ -1022,16 +1022,42 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* Side widgets: col-span-4 - 검색량·감성 추이 + 실시간 트렌드 */}
+          {/* 우측: 실시간 모멘텀 리포트 (PM 의사결정용) */}
           <div className="lg:col-span-4 space-y-4 bg-[#F9FAFB] dark:bg-transparent rounded-xl p-1">
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">24시간 검색량·감성 추이</h3>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6]">실시간 모멘텀 리포트</h3>
+                <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">24시간 감성 추이 · 시장 온도</p>
+              </div>
               {(() => {
                 const chartDataForUi = result?.key_metrics?.chartData ?? result?.chartData
-                return chartDataForUi ? (
-                  <ResearchCharts chartData={chartDataForUi} />
-                ) : (
-                  <p className="text-muted-foreground dark:text-slate-400 text-xs py-4">데이터가 없어요. 분석 완료 후 표시돼요.</p>
+                const consensusScore = consensusData?.sentiment?.score
+                const consensusTrend = consensusData?.sentiment?.trend ?? 'stable'
+                const headlineScore = typeof consensusScore === 'number'
+                  ? consensusScore
+                  : (result?.key_metrics?.sentiment != null || result?.sentiment != null)
+                    ? (Number(result?.key_metrics?.sentiment ?? result?.sentiment ?? 50) - 50) * 2
+                    : null
+                const trendLabel = consensusTrend === 'rising' ? '상승세' : consensusTrend === 'falling' ? '하락세' : '횡보'
+                return (
+                  <>
+                    {headlineScore != null && (
+                      <p className="text-sm text-slate-300 mb-3 antialiased">
+                        현재 시장 온도는 <strong className="text-[#e1e3e6]">{headlineScore}</strong> ({trendLabel}) 입니다.
+                      </p>
+                    )}
+                    {chartDataForUi ? (
+                      <ResearchCharts
+                        chartData={chartDataForUi}
+                        consensusScore={typeof consensusScore === 'number' ? consensusScore : undefined}
+                        trend={consensusTrend}
+                      />
+                    ) : (
+                      <div className="min-h-[220px] rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700/50">
+                        <p className="text-slate-400 text-sm">데이터 분석 중...</p>
+                      </div>
+                    )}
+                  </>
                 )
               })()}
             </div>
@@ -1073,9 +1099,9 @@ function ResultsContent() {
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">트렌드 데이터를 불러오는 중이에요.</p>
               )}
             </div>
-            {/* 핵심 수치 요약 */}
+            {/* 핵심 수치 */}
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 수치 요약</h3>
+              <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 수치</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground dark:text-slate-400">감성 지수</dt>
