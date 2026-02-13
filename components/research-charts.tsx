@@ -40,14 +40,6 @@ function isValidSentiment(s: unknown): s is { positive: number; neutral: number;
   )
 }
 
-/** (positive - negative) / total * 100, clamped to [-100, 100] */
-function deriveScore(sentiment: { positive: number; neutral: number; negative: number }): number {
-  const total = sentiment.positive + sentiment.neutral + sentiment.negative
-  if (total <= 0) return 0
-  const raw = ((sentiment.positive - sentiment.negative) / total) * 100
-  return Math.max(-100, Math.min(100, Math.round(raw)))
-}
-
 /** 24시간 구간별 데이터: 긍정/중립/부정 비중(%)을 매 시점에 동일하게 적용 (현재 스냅샷 기준) */
 function build24hStackedSeries(
   positivePct: number,

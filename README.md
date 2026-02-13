@@ -117,7 +117,7 @@ app/
     usage/                 # 사용량 조회 (Gemini 일일)
 components/
   sidebar.tsx              # 네비게이션 + 트렌드 링크
-  research-charts.tsx      # 감성 파이 / 영향력 레이더 (recharts)
+  research-charts.tsx      # 24시간 감성 추이 스택 영역 차트 (recharts)
   research-report-view.tsx # 리포트·뉴스 뷰
 lib/
   stores/research-store.ts # 검색·결과·쿼터 상태

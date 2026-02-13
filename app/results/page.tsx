@@ -673,6 +673,21 @@ function ResultsContent() {
           </p>
         </header>
 
+        {/* 상단: 핵심 요약 (초기 연구 분석 결론) */}
+        {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
+          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-3 tracking-tight">핵심 요약</h2>
+            <p className="text-xs text-slate-500 mb-3">초기 연구 분석에서 추출한 결론 (전략적 통찰·컨센서스와 별도)</p>
+            <div className="flex flex-wrap gap-2">
+              {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5).map((line, i) => (
+                <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
+                  {line}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 최상단: AI Insight Consensus. DB analysis_results 우선 렌더링, 두 AI settled 후에만 API 호출 */}
         {!result ? (
           <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
@@ -990,20 +1005,6 @@ function ResultsContent() {
             </TabsContent>
           )))}
         </Tabs>
-
-        {/* Section 3. 핵심 요약: 결론 3가지 Badge (key_metrics.keyConclusions 우선) */}
-        {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
-          <div className="mt-8 pt-6 border-t border-border dark:border-[#2d2f34]">
-            <h2 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 요약</h2>
-            <div className="flex flex-wrap gap-2">
-              {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 3).map((line, i) => (
-                <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
-                  {line}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
 
         {selectedNews && (
           <NewsDetailModal
