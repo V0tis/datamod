@@ -46,6 +46,8 @@ export interface ResearchResponse {
   analysis_gemini?: Record<string, string>
   /** AI Insight Consensus (research_history.analysis_results). summary, sentiment, strategic_insight, action_item, confidence */
   analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
+  /** research_history.key_metrics (chartData, keyConclusions, sentiment) */
+  key_metrics?: { chartData?: ChartData; keyConclusions?: string[]; sentiment?: number }
 }
 
 type StreamPayload =
@@ -80,6 +82,18 @@ let retryScheduledForStream = false
 
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음(최초 분석 필요), 'none' = 기록 없음 */
 export type LoadHistoryResult = 'cached' | 'empty' | 'none'
+
+function parseJsonField<T>(value: unknown): T | undefined {
+  if (value == null) return undefined
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return undefined
+    }
+  }
+  return value as T
+}
 
 interface ResearchStore extends ResearchState {
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
@@ -161,6 +175,8 @@ export const useResearchStore = create<ResearchStore>()(
           if (data.emptyAnalysis && data.reportId) return 'empty'
           const hasContent = data.content != null || data.ai_responses
           const hasAnalysis = data.analysis_groq != null || data.analysis_gemini != null
+          const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
+          const km = parseJsonField(data.key_metrics) as ResearchResponse['key_metrics']
           if (data.reportId && (hasContent || hasAnalysis)) {
             set({
               keyword: k,
@@ -173,7 +189,8 @@ export const useResearchStore = create<ResearchStore>()(
                 updated_at: data.updated_at,
                 analysis_groq: data.analysis_groq,
                 analysis_gemini: data.analysis_gemini,
-                analysis_results: data.analysis_results,
+                analysis_results: ar,
+                key_metrics: km,
               } as ResearchResponse,
               error: null,
               newsList: get().newsList,
@@ -336,6 +353,7 @@ export const useResearchStore = create<ResearchStore>()(
                 get().fetchGeminiQuota()
                 return
               } else if (step === 'error' && 'error' in payload) {
+                console.warn('[ResearchStore] 스트림 에러 수신 (초기 분석 단계)', { step: 'error', error: payload.error })
                 showErrorToast({ error: payload.error })
                 set({
                   status: 'error',

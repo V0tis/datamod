@@ -172,6 +172,8 @@ function ResultsContent() {
   const [rssNews, setRssNews] = useState<RssNewsItem[]>([])
   const [rssNewsLoading, setRssNewsLoading] = useState(false)
   const [rssNewsFetched, setRssNewsFetched] = useState(false)
+  /** 실시간 뉴스: 키워드가 바뀐 경우에만 재요청 (재분석 등으로 effect 재실행 시 중복 요청 방지) */
+  const lastRssKeywordRef = useRef<string | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], updatedAt: null,
   })
@@ -181,9 +183,13 @@ function ResultsContent() {
   const creativeFetchedForConsensusRef = useRef<string | null>(null)
   const isConsensusStartedRef = useRef(false)
   const retryConsensusInProgressRef = useRef(false)
+  /** Consensus 재분석 중일 때는 DB analysis_results로 덮어쓰지 않음 */
+  const isReanalyzingConsensusRef = useRef(false)
 
   /** AI Insight Consensus: PM 관점 JSON (summary, sentiment, strategic_insight, action_item, confidence) */
   const [consensusData, setConsensusData] = useState<ConsensusDataType | null>(null)
+  /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
+  const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** 히스토리 조회가 끝난 뒤에만 "린이 분석하는 중" 표시 (캐시 있으면 카드 먼저 보여주기) */
   const [historyCheckDone, setHistoryCheckDone] = useState(false)
 
@@ -228,10 +234,13 @@ function ResultsContent() {
   useEffect(() => {
     const q = (keyword ?? storeKeyword ?? '').trim()
     if (!q) {
+      lastRssKeywordRef.current = null
       setRssNews([])
       setRssNewsFetched(false)
       return
     }
+    if (lastRssKeywordRef.current === q) return
+    lastRssKeywordRef.current = q
     setRssNewsLoading(true)
     setRssNewsFetched(false)
     fetch(`/api/news?keyword=${encodeURIComponent(q)}`)
@@ -304,17 +313,19 @@ function ResultsContent() {
     prevReportIdRef.current = id
   }, [result?.reportId])
 
-  /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 잘못된 JSON 예외 처리 */
+  /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 재분석 중이면 덮어쓰지 않음 */
   useEffect(() => {
+    if (isReanalyzingConsensusRef.current) return
     const ar = result?.analysis_results as Record<string, unknown> | undefined
     if (!ar || typeof ar !== 'object') return
     const summary = typeof ar.summary === 'string' ? ar.summary.trim() : ''
-    if (!summary) return
     const sentiment = typeof ar.sentiment === 'number' ? Math.max(-100, Math.min(100, ar.sentiment)) : 0
     const strategic_insight = typeof ar.strategic_insight === 'string' ? ar.strategic_insight.trim() : '—'
     const action_item = typeof ar.action_item === 'string' ? ar.action_item.trim() : '—'
     const confidence = typeof ar.confidence === 'number' ? Math.max(0, Math.min(100, ar.confidence)) : 0
-    setConsensusData({ summary, sentiment, strategic_insight, action_item, confidence })
+    if (summary !== '' || typeof ar.sentiment === 'number') {
+      setConsensusData({ summary: summary || '—', sentiment, strategic_insight, action_item, confidence })
+    }
   }, [result?.reportId, result?.analysis_results])
 
   const fetchTabAnalysis = useCallback(
@@ -327,30 +338,41 @@ function ResultsContent() {
       tabAbortControllerRef.current = ac
       const doGroq = provider === 'groq' || provider === 'all'
       const doGemini = (provider === 'all' || provider === 'gemini') && !geminiQuotaExceeded
-      if (doGroq) setTabLoadingGroq((prev) => ({ ...prev, [tabId]: true }))
-      if (doGemini) setTabLoadingGemini((prev) => ({ ...prev, [tabId]: true }))
+      const consensusOnlyReanalyze = (options?.isReanalyze === true && tabId === 'creative')
+      if (!consensusOnlyReanalyze) {
+        if (doGroq) setTabLoadingGroq((prev) => ({ ...prev, [tabId]: true }))
+        if (doGemini) setTabLoadingGemini((prev) => ({ ...prev, [tabId]: true }))
+      }
       setTabErrorGroq((prev) => ({ ...prev, [tabId]: null }))
       setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
       const logicText = tabCacheGroq.logic ?? tabCacheGemini.logic ?? ''
       const creativeText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
+      const isReanalyze = options?.isReanalyze ?? false
+      const payload = {
+        keyword: currentKeyword,
+        summary: options?.summary ?? reportSummary,
+        tab: tabId,
+        reportId: options?.reportId ?? result?.reportId ?? undefined,
+        newsHeadlines: newsHeadlines ?? undefined,
+        provider,
+        isReanalyze,
+        countryCode: countryFromUrl,
+        ...(tabId === 'fact' && { logicText, creativeText }),
+      }
+      if (isReanalyze && tabId === 'creative') {
+        console.log('[AI Insight Consensus] POST /api/research/insights/tab 요청', { tab: tabId, provider, reportId: payload.reportId, summaryLength: typeof payload.summary === 'string' ? payload.summary.length : 0 })
+      }
       try {
         const res = await fetch('/api/research/insights/tab', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            keyword: currentKeyword,
-            summary: options?.summary ?? reportSummary,
-            tab: tabId,
-            reportId: options?.reportId ?? result?.reportId ?? undefined,
-            newsHeadlines: newsHeadlines ?? undefined,
-            provider,
-            isReanalyze: options?.isReanalyze ?? false,
-            countryCode: countryFromUrl,
-            ...(tabId === 'fact' && { logicText, creativeText }),
-          }),
+          body: JSON.stringify(payload),
           signal: ac.signal,
         })
         const data = await res.json().catch(() => ({}))
+        if (isReanalyze && tabId === 'creative') {
+          console.log('[AI Insight Consensus] POST /api/research/insights/tab 응답', { ok: res.ok, status: res.status, hasConsensus: !!(data as { consensus?: unknown }).consensus })
+        }
         if (!res.ok) {
           const errMsg = (data as { error?: string }).error ?? '분석에 실패했습니다.'
           const isQuota = res.status === 429 || (data as { code?: string }).code === 'QUOTA'
@@ -500,6 +522,11 @@ function ResultsContent() {
 
   useEffect(() => {
     if (status !== 'done' || !result?.reportId || quotaExceeded || geminiQuotaExceeded) return
+    const hasDbConsensus = result.analysis_results != null && typeof result.analysis_results === 'object' && (typeof (result.analysis_results as Record<string, unknown>).summary === 'string' || typeof (result.analysis_results as Record<string, unknown>).sentiment === 'number')
+    if (hasDbConsensus) {
+      isConsensusStartedRef.current = true
+      return
+    }
     if (consensusData != null) return
     if (isConsensusStartedRef.current) return
     const groqFromResult = typeof (result.analysis_groq as Record<string, string> | undefined)?.creative === 'string' && (result.analysis_groq as Record<string, string>).creative.trim().length > 0
@@ -529,20 +556,28 @@ function ResultsContent() {
     if (retryConsensusInProgressRef.current) return
     const k = currentKeyword?.trim()
     if (!k) return
+    console.log('[AI Insight Consensus] 재분석 시작', { keyword: k, country: countryFromUrl })
     retryConsensusInProgressRef.current = true
-    const clearProgress = () => { retryConsensusInProgressRef.current = false }
+    isReanalyzingConsensusRef.current = true
+    setConsensusReanalyzing(true)
+    const clearProgress = () => {
+      retryConsensusInProgressRef.current = false
+      isReanalyzingConsensusRef.current = false
+      setConsensusReanalyzing(false)
+    }
     try {
       if (result?.reportId) {
+        console.log('[AI Insight Consensus] 현재 result.reportId로 Consensus만 재분석', { reportId: result.reportId })
         setConsensusData(null)
         setTabErrorGroq((prev) => ({ ...prev, creative: null }))
         setTabErrorGemini((prev) => ({ ...prev, creative: null }))
-        setTabCacheGroq((prev) => ({ ...prev, creative: null }))
-        setTabCacheGemini((prev) => ({ ...prev, creative: null }))
         creativeFetchedForConsensusRef.current = null
         isConsensusStartedRef.current = false
         await fetchTabAnalysis('creative', 'all', { isReanalyze: true })
+        console.log('[AI Insight Consensus] API 호출 완료 (reportId 경로)')
         return
       }
+      console.log('[AI Insight Consensus] reportId 없음, 히스토리에서 캐시 조회')
       const historyStatus = await loadFromHistory(k, countryFromUrl)
       if (historyStatus === 'cached') {
         const cachedResult = useResearchStore.getState().result
@@ -552,23 +587,22 @@ function ResultsContent() {
             cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
             cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
           ].filter(Boolean).join('\n\n')
+          console.log('[AI Insight Consensus] 캐시된 reportId로 Consensus만 재분석', { reportId: cachedResult.reportId, summaryLength: cachedSummary.length })
           setConsensusData(null)
           setTabErrorGroq((prev) => ({ ...prev, creative: null }))
           setTabErrorGemini((prev) => ({ ...prev, creative: null }))
-          setTabCacheGroq((prev) => ({ ...prev, creative: null }))
-          setTabCacheGemini((prev) => ({ ...prev, creative: null }))
           creativeFetchedForConsensusRef.current = null
           isConsensusStartedRef.current = false
           await fetchTabAnalysis('creative', 'all', { isReanalyze: true, reportId: cachedResult.reportId, summary: cachedSummary })
+          console.log('[AI Insight Consensus] API 호출 완료 (캐시 경로)')
           return
         }
       }
-      toast.info('캐시된 결과가 없어 전체 분석을 다시 실행합니다.')
-      startResearch(k, { country_code: countryFromUrl })
+      toast.info('저장된 분석 결과가 없어 Consensus만 재분석할 수 없어요. 키워드로 먼저 검색해 주세요.')
     } finally {
       clearProgress()
     }
-  }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, startResearch, fetchTabAnalysis])
+  }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, fetchTabAnalysis])
 
   const handleShare = useCallback(async () => {
     const reportId = result?.reportId
@@ -655,6 +689,9 @@ function ResultsContent() {
             {status === 'error' && error ? (
               <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
                 <p className="text-sm text-rose-400">{error}</p>
+                {error.includes('형식이 올바르지 않아요') && (
+                  <p className="text-xs text-slate-500">(초기 분석 단계에서 JSON 파싱 실패. 서버 로그에 rawJson 스니펫이 기록됩니다.)</p>
+                )}
                 <Button variant="outline" size="sm" className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50" onClick={retryConsensus}>
                   다시 분석하기
                 </Button>
@@ -668,9 +705,9 @@ function ResultsContent() {
         ) : (
           <ConsensusInsight
             data={consensusData}
-            loading={(tabLoadingGroq.creative || tabLoadingGemini.creative) && !consensusData}
+            loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
             bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
-            errorMessage={tabErrorGroq.creative || tabErrorGemini.creative || null}
+            errorMessage={result?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
             onRetry={retryConsensus}
           />
         )}
@@ -698,7 +735,7 @@ function ResultsContent() {
                   result.painPoints?.length ? `유저 페인포인트\n${result.painPoints.join('\n')}` : '',
                   result.competitorTrends ? `경쟁사 동향\n${result.competitorTrends}` : '',
                   result.publicReactionTrends ? `공개 반응 트렌드\n${result.publicReactionTrends}` : '',
-                  result.keyConclusions?.length ? `핵심 결론\n${result.keyConclusions.join('\n')}` : '',
+                  (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.length ? `핵심 결론\n${(result.key_metrics?.keyConclusions ?? result.keyConclusions)!.join('\n')}` : '',
                 ].filter(Boolean)
                 const text = parts.join('\n\n')
                 if (!text) return
@@ -884,17 +921,11 @@ function ResultsContent() {
                 </div>
               ) : (
                 <>
-                  {id === 'logic' && result?.chartData && (
-                    <div className="rounded-xl border border-border dark:border-[#2d2f34] bg-card dark:bg-card p-6 mb-6">
-                      <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">24시간 검색량·감성 추이</h3>
-                      <ResearchCharts chartData={result.chartData} />
-                    </div>
-                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <GroqAnalysis
                       tabId={id}
-                      text={tabCacheGroq[id] ?? null}
-                      loading={tabLoadingGroq[id] || (loading && !result)}
+                      text={tabCacheGroq[id] ?? (result?.analysis_groq as Record<string, string>)?.[id] ?? null}
+                      loading={!(result?.analysis_groq as Record<string, string>)?.[id] && (tabLoadingGroq[id] || (loading && !result))}
                       error={tabErrorGroq[id]}
                       retryCount={retryCountTabGroq[id] ?? 0}
                       onRetry={() => {
@@ -908,8 +939,8 @@ function ResultsContent() {
                     />
                     <GeminiAnalysis
                       tabId={id}
-                      text={tabCacheGemini[id] ?? null}
-                      loading={tabLoadingGemini[id] || (loading && !result)}
+                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as Record<string, string>)?.[id] ?? null}
+                      loading={!(result?.analysis_gemini as Record<string, string>)?.[id] && (tabLoadingGemini[id] || (loading && !result))}
                       error={tabErrorGemini[id]}
                       retryCount={retryCountTabGemini[id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}
@@ -967,12 +998,12 @@ function ResultsContent() {
           )))}
         </Tabs>
 
-        {/* Section 3. 핵심 요약: 결론 3가지 Badge */}
-        {status === 'done' && result && (result.keyConclusions?.length ?? 0) > 0 && (
+        {/* Section 3. 핵심 요약: 결론 3가지 Badge (key_metrics.keyConclusions 우선) */}
+        {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
           <div className="mt-8 pt-6 border-t border-border dark:border-[#2d2f34]">
             <h2 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 요약</h2>
             <div className="flex flex-wrap gap-2">
-              {result.keyConclusions!.slice(0, 3).map((line, i) => (
+              {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 3).map((line, i) => (
                 <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
                   {line}
                 </Badge>
@@ -998,8 +1029,19 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* Side widgets: col-span-4 - 실시간 트렌드 위젯 (Viva Engage 스타일) */}
+          {/* Side widgets: col-span-4 - 검색량·감성 추이 + 실시간 트렌드 */}
           <div className="lg:col-span-4 space-y-4 bg-[#F9FAFB] dark:bg-transparent rounded-xl p-1">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
+              <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">24시간 검색량·감성 추이</h3>
+              {(() => {
+                const chartDataForUi = result?.key_metrics?.chartData ?? result?.chartData
+                return chartDataForUi ? (
+                  <ResearchCharts chartData={chartDataForUi} />
+                ) : (
+                  <p className="text-muted-foreground dark:text-slate-400 text-xs py-4">데이터가 없어요. 분석 완료 후 표시돼요.</p>
+                )
+              })()}
+            </div>
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
@@ -1038,53 +1080,23 @@ function ResultsContent() {
                 <p className="text-muted-foreground dark:text-slate-400 text-xs">트렌드 데이터를 불러오는 중이에요.</p>
               )}
             </div>
-            {/* 관련 뉴스 피드 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">관련 뉴스 피드</h3>
-              {newsList.length === 0 ? (
-                <p className="text-muted-foreground dark:text-slate-400 text-xs">뉴스를 불러오는 중이에요.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {newsList.slice(0, 5).map((item, i) => (
-                    <li key={i}>
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedNews(item); setSelectedNewsIndex(i) }}
-                        className="w-full text-left text-xs font-medium text-foreground dark:text-[#e1e3e6] hover:text-primary dark:hover:text-[#00d19a] truncate block"
-                      >
-                        {item.title || '제목 없음'}
-                      </button>
-                      {item.url && (
-                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground dark:text-slate-400 hover:underline truncate block" onClick={(e) => e.stopPropagation()}>
-                          출처
-                        </a>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
             {/* 핵심 수치 요약 */}
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">핵심 수치 요약</h3>
-              {result ? (
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground dark:text-slate-400">감성 지수</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.sentiment ?? 0}%</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground dark:text-slate-400">시장 뉴스</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.marketNews?.length ?? 0}건</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground dark:text-slate-400">페인포인트</dt>
-                    <dd className="font-semibold text-foreground dark:text-[#00d19a] ">{result.painPoints?.length ?? 0}건</dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="text-muted-foreground dark:text-slate-400 text-xs">분석 완료 후 표시돼요.</p>
-              )}
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground dark:text-slate-400">감성 지수</dt>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.key_metrics?.sentiment ?? result.sentiment ?? 0) : '—'}%</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground dark:text-slate-400">시장 뉴스</dt>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.marketNews?.length ?? 0) : '—'}건</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground dark:text-slate-400">페인포인트</dt>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.painPoints?.length ?? 0) : '—'}건</dd>
+                </div>
+              </dl>
             </div>
             {/* 인용된 출처 리스트 */}
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-card shadow-sm p-4 dark:hover:bg-[#1c1e21] transition-colors duration-200">

@@ -7,6 +7,11 @@ const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
 const GROQ_429_RETRY_DELAY_MS = 3000
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
+
+function buildGeminiGenerateContentUrl(apiKey: string): string {
+  return `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${apiKey}`
+}
+
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
@@ -78,22 +83,30 @@ async function generateConsensus(
     },
   }
   try {
-    const url = `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${apiKey}`
+    const url = buildGeminiGenerateContentUrl(apiKey)
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+    console.log('[Research Tab] Gemini Consensus synthesis', { url, res: res.status, data: res })
     if (!res.ok) return FALLBACK_CONSENSUS
     const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
-    if (!raw) return FALLBACK_CONSENSUS
-    const parsed = JSON.parse(raw) as {
-      summary?: string
-      sentiment?: number
-      strategic_insight?: string
-      action_item?: string
-      confidence?: number
+    if (!raw) {
+      console.warn('[AI Insight Consensus] generateConsensus: Gemini 응답 텍스트 없음', { hasCandidates: !!data?.candidates?.length })
+      return FALLBACK_CONSENSUS
+    }
+    let parsed: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
+    try {
+      parsed = JSON.parse(raw) as typeof parsed
+    } catch (parseErr) {
+      console.error('[AI Insight Consensus] generateConsensus JSON 파싱 실패', {
+        parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+        rawLength: raw.length,
+        rawSnippet: raw.slice(0, 500),
+      })
+      return FALLBACK_CONSENSUS
     }
     const summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 200) : FALLBACK_CONSENSUS.summary
     const sentiment = typeof parsed.sentiment === 'number' ? Math.max(-100, Math.min(100, parsed.sentiment)) : 0
@@ -190,6 +203,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'keyword required' }, { status: 400 })
   }
 
+  if (tab === 'creative' && isReanalyze) {
+    console.log('[AI Insight Consensus] 재분석 요청 수신', { keyword, reportId: reportId ?? null, countryCode, provider })
+  }
+
   // Read-through 캐시: isReanalyze false면 DB만 조회 후 반환. true일 때만 API 호출
   let mergedGroq: string | null = null
   let mergedGemini: string | null = null
@@ -266,6 +283,28 @@ export async function POST(req: Request) {
       const reportCachedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
       mergedGroq = mergedGroq ?? reportCachedGroq
       mergedGemini = mergedGemini ?? reportCachedGemini
+    }
+  }
+
+  /** 재분석(Consensus만 다시 만들기): Creative 탭일 때 DB에 있는 Groq/Gemini 결과만 쓰고, API 재호출 안 함 */
+  if (isReanalyze && tab === 'creative' && (mergedGroq == null || mergedGemini == null)) {
+    const byReport = reportId
+      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('report_id', reportId).eq('user_id', user.id).maybeSingle()
+      : { data: null }
+    const byKeyword = !byReport.data
+      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
+      : { data: null }
+    const historyRow = byReport.data ?? byKeyword.data
+    if (historyRow) {
+      const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
+      const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
+      const creativeGroq = typeof groqTab?.creative === 'string' && groqTab.creative.trim().length > 0 ? groqTab.creative.trim() : null
+      const creativeGemini = typeof geminiTab?.creative === 'string' && geminiTab.creative.trim().length > 0 ? geminiTab.creative.trim() : null
+      if (creativeGroq) mergedGroq = mergedGroq ?? creativeGroq
+      if (creativeGemini) mergedGemini = mergedGemini ?? creativeGemini
+      if (mergedGroq != null && mergedGemini != null) {
+        console.log('[AI Insight Consensus] 재분석: DB에서 Creative만 사용, Groq/Gemini API 호출 생략')
+      }
     }
   }
 
@@ -356,7 +395,8 @@ export async function POST(req: Request) {
       generationConfig: { maxOutputTokens: 2048 },
     } as const
     try {
-      const url = `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${geminiKey}`
+      if (!geminiKey) return { text: null }
+      const url = buildGeminiGenerateContentUrl(geminiKey)
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,7 +449,13 @@ export async function POST(req: Request) {
   if (tab === 'creative' && geminiKey && !geminiQuotaExceeded && atLeastOneSuccess) {
     const geminiInput = (geminiResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
     const groqInput = (groqResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
+    if (isReanalyze) {
+      console.log('[AI Insight Consensus] generateConsensus 호출', { keyword, geminiLen: geminiInput.length, groqLen: groqInput.length })
+    }
     consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
+    if (isReanalyze) {
+      console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.summary?.length ?? 0, sentiment: consensus?.sentiment })
+    }
   }
 
   let existingConsensus: Consensus | null = null
@@ -456,6 +502,10 @@ export async function POST(req: Request) {
         upsertPayload.analysis_results = consensusToSave
       }
 
+      if (tab === 'creative' && isReanalyze && consensusToSave != null) {
+        console.log('[AI Insight Consensus] research_history upsert (analysis_results 저장)', { keyword, countryCode })
+      }
+
       await supabase.from('research_history').upsert(
         upsertPayload,
         { onConflict: 'user_id,keyword,country_code' }
@@ -469,6 +519,9 @@ export async function POST(req: Request) {
     (groqResult != null && groqResult.length > 0) ||
     (geminiResult != null && geminiResult.length > 0)
   const finalConsensus = consensus ?? existingConsensus ?? (tab === 'creative' ? FALLBACK_CONSENSUS : null)
+  if (tab === 'creative' && isReanalyze) {
+    console.log('[AI Insight Consensus] 응답 반환', { keyword, hasConsensus: !!finalConsensus })
+  }
   return NextResponse.json({
     groq: groqResult != null && groqResult.length > 0 ? { text: groqResult } : null,
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,

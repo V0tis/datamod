@@ -261,7 +261,13 @@ export async function POST(req: Request) {
         }
         try {
           parsed = JSON.parse(rawJson) as typeof parsed
-        } catch {
+        } catch (parseErr) {
+          const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
+          console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
+            parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+            rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
+            rawJsonSnippet: snippet,
+          })
           send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
           safeClose()
           return

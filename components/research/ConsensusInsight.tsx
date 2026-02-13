@@ -59,7 +59,24 @@ export function ConsensusInsight({
   if (data) {
     return (
       <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
-        <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-sm font-semibold text-[#e1e3e6] tracking-tight">AI Insight Consensus</h2>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5 shrink-0"
+            disabled={loading}
+            onClick={onRetry}
+          >
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {loading ? '재분석 중...' : '재분석'}
+          </Button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
           <div className="flex justify-center md:justify-start">
             <SentimentGauge value={data.sentiment} />
