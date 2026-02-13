@@ -14,7 +14,6 @@ function buildGeminiGenerateContentUrl(apiKey: string): string {
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
-const ANALYSIS_FAILED_PLACEHOLDER = '분석 중단'
 
 /** 2사(Gemini + Groq) 종합 요약 → PM 관점 JSON. results 페이지 전용 "AI Insight Consensus" 블록에 표시 */
 const CONSENSUS_SYSTEM = `
@@ -75,12 +74,10 @@ async function generateConsensus(
     ? '\n\n[참고: 한쪽 AI 분석만 사용되었거나 일부 데이터만으로 종합한 결과입니다.]'
     : ''
   const prompt = `${CONSENSUS_SYSTEM}${partialNote}\n\n${CONSENSUS_USER_PREFIX}${g.slice(0, 3000)}${CONSENSUS_USER_SUFFIX}${r.slice(0, 3000)}`
+  // v1 API: role 없이 contents.parts만 사용. responseMimeType은 v1에서 400 유발할 수 있어 제거(프롬프트에서 JSON 요청)
   const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      maxOutputTokens: 2048,
-      responseMimeType: 'application/json' as const,
-    },
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 2048 },
   }
   try {
     const url = buildGeminiGenerateContentUrl(apiKey)
@@ -89,13 +86,24 @@ async function generateConsensus(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    console.log('[Research Tab] Gemini Consensus synthesis', { url, res: res.status, data: res })
+    const data = (await res.json().catch(() => ({}))) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      error?: { message?: string }
+    }
+    console.log('[Research Tab] Gemini Consensus synthesis', { status: res.status, errorMessage: data?.error?.message ?? null })
     if (!res.ok) return FALLBACK_CONSENSUS
-    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+    let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
     if (!raw) {
       console.warn('[AI Insight Consensus] generateConsensus: Gemini 응답 텍스트 없음', { hasCandidates: !!data?.candidates?.length })
       return FALLBACK_CONSENSUS
+    }
+    // Gemini가 ```json ... ``` 으로 감싼 경우 제거 후 파싱
+    const codeBlockMatch = raw.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/m)
+    if (codeBlockMatch) raw = codeBlockMatch[1].trim()
+    else if (raw.startsWith('```')) {
+      const afterOpen = raw.replace(/^```(?:json)?\s*\n?/i, '')
+      const closeIdx = afterOpen.indexOf('```')
+      raw = (closeIdx !== -1 ? afterOpen.slice(0, closeIdx) : afterOpen).trim()
     }
     let parsed: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
     try {
@@ -203,8 +211,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'keyword required' }, { status: 400 })
   }
 
-  if (tab === 'creative' && isReanalyze) {
-    console.log('[AI Insight Consensus] 재분석 요청 수신', { keyword, reportId: reportId ?? null, countryCode, provider })
+  // AI Insight Consensus API call: log request data (lengths + short preview for large fields)
+  if (tab === 'creative' || isReanalyze) {
+    console.log('[AI Insight Consensus] API call – request data', {
+      keyword,
+      tab,
+      provider,
+      isReanalyze,
+      reportId: reportId ?? null,
+      countryCode,
+      summaryLength: typeof summary === 'string' ? summary.length : 0,
+      summaryPreview: typeof summary === 'string' ? summary.slice(0, 200) : '',
+      newsHeadlinesLength: newsHeadlines.length,
+      newsHeadlinesPreview: newsHeadlines.slice(0, 150),
+      logicTextLength: logicText.length,
+      logicTextPreview: logicText.slice(0, 150),
+      creativeTextLength: creativeText.length,
+      creativeTextPreview: creativeText.slice(0, 150),
+    })
   }
 
   // Read-through 캐시: isReanalyze false면 DB만 조회 후 반환. true일 때만 API 호출
@@ -311,7 +335,8 @@ export async function POST(req: Request) {
   const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
-  if (!needGroq && !needGemini) {
+  // 재분석(creative)일 때는 analysis_results 캐시를 쓰지 않고 항상 generateConsensus 재호출
+  if (!needGroq && !needGemini && !(isReanalyze && tab === 'creative')) {
     const historyForConsensus = await supabase.from('research_history').select('analysis_results').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
     let c: Consensus | null = null
@@ -447,11 +472,10 @@ export async function POST(req: Request) {
   const geminiOk = geminiResult != null && String(geminiResult).trim().length > 0
   const atLeastOneSuccess = groqOk || geminiOk
   if (tab === 'creative' && geminiKey && !geminiQuotaExceeded && atLeastOneSuccess) {
-    const geminiInput = (geminiResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
-    const groqInput = (groqResult ?? '').trim() || ANALYSIS_FAILED_PLACEHOLDER
-    if (isReanalyze) {
-      console.log('[AI Insight Consensus] generateConsensus 호출', { keyword, geminiLen: geminiInput.length, groqLen: groqInput.length })
-    }
+    // 한쪽 AI만 있어도 Consensus 생성 (없는 쪽은 빈 문자열로 전달)
+    const geminiInput = (geminiResult ?? '').trim()
+    const groqInput = (groqResult ?? '').trim()
+    console.log('[AI Insight Consensus] generateConsensus input', { geminiInput, groqInput })
     consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
     if (isReanalyze) {
       console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.summary?.length ?? 0, sentiment: consensus?.sentiment })
