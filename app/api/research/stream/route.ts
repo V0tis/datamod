@@ -188,7 +188,7 @@ export async function POST(req: Request) {
         })
         const newsTitles = news.map((n) => n.title)
         const prompt = buildUserPrompt(keyword, newsTitles)
-        const maxRetries = 3
+        const maxRetries = 1
         let responseText: string | null = null
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
@@ -203,20 +203,22 @@ export async function POST(req: Request) {
               msg.includes('quota') ||
               msg.includes('resource exhausted') ||
               msg.includes('rate limit')
-            if (is429 && attempt < maxRetries) {
-              const retryAfterSec = msg.match(/retry[- ]after[:\s]+(\d+)/i)?.[1]
-              const baseWaitMs = retryAfterSec ? parseInt(retryAfterSec, 10) * 1000 : 2000 * Math.pow(2, attempt)
-              const waitMs = Math.min(baseWaitMs, 60_000)
-              await new Promise((r) => setTimeout(r, waitMs))
+            if (is429) {
+              send('progress', {
+                step: 'error',
+                error: '현재 요청이 많아 잠시 후 다시 시도해 주세요.',
+                retryDelay: 13,
+              })
+              safeClose()
+              return
+            }
+            if (attempt < maxRetries) {
+              await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt)))
               continue
             }
-
             send('progress', {
               step: 'error',
-              error:
-                msg.includes('429') || msg.includes('quota')
-                  ? '현재 요청이 많아 잠시 후 다시 시도해 주세요.'
-                  : '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
+              error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
               retryDelay: 13,
             })
             safeClose()

@@ -45,6 +45,7 @@ export function ConsensusInsight({
             variant="outline"
             size="sm"
             className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
+            disabled={loading}
             onClick={onRetry}
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -121,6 +122,7 @@ export function ConsensusInsight({
             variant="outline"
             size="sm"
             className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
+            disabled={loading}
             onClick={onRetry}
           >
             <RefreshCw className="h-3.5 w-3.5" />

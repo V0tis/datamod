@@ -180,6 +180,7 @@ function ResultsContent() {
   const tabHasFetchedRef = useRef<Record<AiTabId, boolean>>({ logic: false, creative: false, fact: false })
   const creativeFetchedForConsensusRef = useRef<string | null>(null)
   const isConsensusStartedRef = useRef(false)
+  const retryConsensusInProgressRef = useRef(false)
 
   /** AI Insight Consensus: PM 관점 JSON (summary, sentiment, strategic_insight, action_item, confidence) */
   const [consensusData, setConsensusData] = useState<ConsensusDataType | null>(null)
@@ -437,20 +438,33 @@ function ResultsContent() {
     [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded]
   )
 
-  // 탭 분석: research_history(analysis_groq/analysis_gemini)에 이미 있으면 API 호출 안 함. hasFetched로 중복 호출 차단.
+  // 탭 분석: DB(result.analysis_groq/analysis_gemini)에 이미 있으면 API 호출 절대 안 함. 재시도 버튼으로만 호출.
   useEffect(() => {
     if (quotaExceeded) return
     const t = activeTab as AiTabId
     if (t !== 'logic' && t !== 'creative' && t !== 'fact') return
     if (status === 'loading') return
     if (status !== 'done' && status !== 'error') return
+
+    const groq = result?.analysis_groq as Record<string, string> | undefined
+    const gemini = result?.analysis_gemini as Record<string, string> | undefined
+    const hasDbCache = (tabId: AiTabId) => {
+      const g = groq && typeof groq[tabId] === 'string' && groq[tabId].trim().length > 0
+      const m = gemini && typeof gemini[tabId] === 'string' && gemini[tabId].trim().length > 0
+      return g && m
+    }
+    if (result?.reportId && hasDbCache('logic') && hasDbCache('creative') && hasDbCache('fact')) {
+      tabHasFetchedRef.current = { logic: true, creative: true, fact: true }
+      return
+    }
+    if (tabHasFetchedRef.current[t]) return
     if (tabLoadingGroq[t] || tabLoadingGemini[t]) return
     if (tabErrorGroq[t] || tabErrorGemini[t]) return
-    if (tabHasFetchedRef.current[t]) return
-    const groqFromResult = result?.analysis_groq && typeof (result.analysis_groq as Record<string, string>)[t] === 'string' && (result.analysis_groq as Record<string, string>)[t].trim().length > 0
-    const geminiFromResult = result?.analysis_gemini && typeof (result.analysis_gemini as Record<string, string>)[t] === 'string' && (result.analysis_gemini as Record<string, string>)[t].trim().length > 0
-    const needGroq = !tabCacheGroq[t] && !tabLoadingGroq[t] && !groqFromResult
-    const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && !tabLoadingGemini[t] && !geminiFromResult
+
+    const groqFromResult = !!(groq && typeof groq[t] === 'string' && groq[t].trim().length > 0)
+    const geminiFromResult = !!(gemini && typeof gemini[t] === 'string' && gemini[t].trim().length > 0)
+    const needGroq = !tabCacheGroq[t] && !groqFromResult
+    const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && !geminiFromResult
     if (!needGroq && !needGemini) return
     tabHasFetchedRef.current[t] = true
     if (needGroq && needGemini) {
@@ -460,7 +474,7 @@ function ResultsContent() {
     } else if (needGemini) {
       fetchTabAnalysis(t, 'gemini')
     }
-  }, [activeTab, status, result?.analysis_groq, result?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
+  }, [activeTab, status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
 
   /** [1. 실행 조건] 각 AI 상태: idle | loading | success | error. 두 상태가 모두 loading·idle이 아닐 때만 consensus 실행 */
   type CreativeAiState = 'idle' | 'loading' | 'success' | 'error'
@@ -510,30 +524,15 @@ function ResultsContent() {
     fetchTabAnalysis('creative', 'all')
   }, [status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, consensusData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
 
-  /** AI Insight Consensus 전용 재시도: Consensus API(tab creative)만 호출. result 없으면 캐시에서 복원 후 시도, 없으면 전체 분석 */
+  /** AI Insight Consensus 전용 재시도: 한 번만 API 호출. Consensus API(tab creative)만 호출. */
   const retryConsensus = useCallback(async () => {
+    if (retryConsensusInProgressRef.current) return
     const k = currentKeyword?.trim()
     if (!k) return
-    if (result?.reportId) {
-      setConsensusData(null)
-      setTabErrorGroq((prev) => ({ ...prev, creative: null }))
-      setTabErrorGemini((prev) => ({ ...prev, creative: null }))
-      setTabCacheGroq((prev) => ({ ...prev, creative: null }))
-      setTabCacheGemini((prev) => ({ ...prev, creative: null }))
-      creativeFetchedForConsensusRef.current = null
-      isConsensusStartedRef.current = false
-      fetchTabAnalysis('creative', 'all', { isReanalyze: true })
-      return
-    }
-    const historyStatus = await loadFromHistory(k, countryFromUrl)
-    if (historyStatus === 'cached') {
-      const cachedResult = useResearchStore.getState().result
-      if (cachedResult?.reportId) {
-        const cachedSummary = [
-          cachedResult.marketNews?.length ? `시장 뉴스 요약: ${cachedResult.marketNews.join(' ')}` : '',
-          cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
-          cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
-        ].filter(Boolean).join('\n\n')
+    retryConsensusInProgressRef.current = true
+    const clearProgress = () => { retryConsensusInProgressRef.current = false }
+    try {
+      if (result?.reportId) {
         setConsensusData(null)
         setTabErrorGroq((prev) => ({ ...prev, creative: null }))
         setTabErrorGemini((prev) => ({ ...prev, creative: null }))
@@ -541,12 +540,34 @@ function ResultsContent() {
         setTabCacheGemini((prev) => ({ ...prev, creative: null }))
         creativeFetchedForConsensusRef.current = null
         isConsensusStartedRef.current = false
-        fetchTabAnalysis('creative', 'all', { isReanalyze: true, reportId: cachedResult.reportId, summary: cachedSummary })
+        await fetchTabAnalysis('creative', 'all', { isReanalyze: true })
         return
       }
+      const historyStatus = await loadFromHistory(k, countryFromUrl)
+      if (historyStatus === 'cached') {
+        const cachedResult = useResearchStore.getState().result
+        if (cachedResult?.reportId) {
+          const cachedSummary = [
+            cachedResult.marketNews?.length ? `시장 뉴스 요약: ${cachedResult.marketNews.join(' ')}` : '',
+            cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
+            cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
+          ].filter(Boolean).join('\n\n')
+          setConsensusData(null)
+          setTabErrorGroq((prev) => ({ ...prev, creative: null }))
+          setTabErrorGemini((prev) => ({ ...prev, creative: null }))
+          setTabCacheGroq((prev) => ({ ...prev, creative: null }))
+          setTabCacheGemini((prev) => ({ ...prev, creative: null }))
+          creativeFetchedForConsensusRef.current = null
+          isConsensusStartedRef.current = false
+          await fetchTabAnalysis('creative', 'all', { isReanalyze: true, reportId: cachedResult.reportId, summary: cachedSummary })
+          return
+        }
+      }
+      toast.info('캐시된 결과가 없어 전체 분석을 다시 실행합니다.')
+      startResearch(k, { country_code: countryFromUrl })
+    } finally {
+      clearProgress()
     }
-    toast.info('캐시된 결과가 없어 전체 분석을 다시 실행합니다.')
-    startResearch(k, { country_code: countryFromUrl })
   }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, startResearch, fetchTabAnalysis])
 
   const handleShare = useCallback(async () => {
