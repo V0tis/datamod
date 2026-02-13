@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +12,8 @@ import { cn } from '@/lib/utils'
 
 export type AiTabId = 'logic' | 'creative' | 'fact'
 
+export type AnalysisStatus = 'idle' | 'loading' | 'success' | 'error'
+
 export interface GroqAnalysisProps {
   tabId: AiTabId
   text: string | null
@@ -20,28 +23,44 @@ export interface GroqAnalysisProps {
   onRetry: () => void
 }
 
-export function GroqAnalysis({ tabId, text, loading, error, retryCount, onRetry }: GroqAnalysisProps) {
+const CARD_MIN_HEIGHT = 240
+
+function GroqAnalysisComponent({ tabId, text, loading, error, retryCount, onRetry }: GroqAnalysisProps) {
   const isFact = tabId === 'fact'
+  const status: AnalysisStatus = loading ? 'loading' : error ? 'error' : text ? 'success' : 'idle'
+
+  const statusLabel = status === 'loading' ? '로딩 중' : status === 'success' ? '성공' : status === 'error' ? '실패' : '대기'
+
   return (
-    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200">
+    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[240px]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <Badge variant="secondary">Groq (Llama)</Badge>
           <div className="flex items-center gap-2">
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 h-8 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
-              disabled={loading}
-              onClick={onRetry}
+            <Badge variant="secondary">Groq (Llama)</Badge>
+            <span
+              className={cn(
+                'text-xs font-medium',
+                status === 'success' && 'text-emerald-500 dark:text-emerald-400',
+                status === 'error' && 'text-rose-500 dark:text-rose-400',
+                status === 'loading' && 'text-amber-500 dark:text-amber-400',
+                status === 'idle' && 'text-slate-500 dark:text-slate-400'
+              )}
             >
-              <RefreshCw className="w-3.5 h-3.5" /> 재시도
-            </Button>
+              {statusLabel}
+            </span>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-8 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
+            disabled={loading}
+            onClick={onRetry}
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> 재시도
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4">
+      <CardContent className="flex-1 flex flex-col gap-4 min-h-[180px]">
         {error ? (
           <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
             <p className="text-destructive text-sm dark:text-[#00d19a]">
@@ -70,9 +89,13 @@ export function GroqAnalysis({ tabId, text, loading, error, retryCount, onRetry 
             </div>
           </>
         ) : (
-          <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
+          <div className="flex flex-col justify-center min-h-[200px] text-center">
+            <p className="text-muted-foreground dark:text-slate-400 text-sm">아직 분석 결과가 없어요. 재시도 버튼을 눌러 주세요.</p>
+          </div>
         )}
       </CardContent>
     </Card>
   )
 }
+
+export const GroqAnalysis = memo(GroqAnalysisComponent)

@@ -1,106 +1,155 @@
 'use client'
 
+import { memo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SentimentGauge } from '@/components/research/SentimentGauge'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, Newspaper, Users, AlertCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Tooltip,
+} from 'recharts'
+
+/** API/DB 신형 Consensus (PM 프레임워크) */
+export interface ConsensusImpactItem {
+  subject: string
+  score: number
+  reason?: string
+}
+export interface ConsensusSentiment {
+  score: number
+  trend?: 'rising' | 'falling' | 'stable'
+  ratio?: { positive?: number; neutral?: number; negative?: number }
+}
+export interface ConsensusStrategicSummary {
+  summary: string
+  opportunity?: string
+  threat?: string
+  actionItems?: string[]
+}
+export interface ConsensusMetadata {
+  confidence: number
+  dataPeriod?: string
+}
 
 export interface ConsensusData {
-  summary: string
-  sentiment: number
-  strategic_insight: string
-  action_item: string
-  confidence: number
+  marketNews?: string[]
+  painPoints?: string[]
+  competitorTrends?: string
+  sentiment: ConsensusSentiment
+  impactAnalysis?: ConsensusImpactItem[]
+  strategicSummary: ConsensusStrategicSummary
+  metadata: ConsensusMetadata
+}
+
+/** 구형 flat 응답 → ConsensusData (하위 호환) */
+export function normalizeConsensusData(raw: unknown): ConsensusData | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
+    const ss = o.strategicSummary as Record<string, unknown>
+    const sent = o.sentiment as Record<string, unknown> | undefined
+    const score = typeof sent?.score === 'number' ? Math.max(-100, Math.min(100, sent.score as number)) : 0
+    const meta = o.metadata as Record<string, unknown> | undefined
+    const confidence = typeof meta?.confidence === 'number' ? Math.max(0, Math.min(100, meta.confidence as number)) : 0
+    const impact = Array.isArray(o.impactAnalysis)
+      ? (o.impactAnalysis as ConsensusImpactItem[]).slice(0, 5)
+      : []
+    return {
+      marketNews: Array.isArray(o.marketNews) ? (o.marketNews as string[]) : [],
+      painPoints: Array.isArray(o.painPoints) ? (o.painPoints as string[]) : [],
+      competitorTrends: typeof o.competitorTrends === 'string' ? o.competitorTrends : '',
+      sentiment: {
+        score,
+        trend: sent?.trend === 'rising' || sent?.trend === 'falling' || sent?.trend === 'stable' ? sent.trend : 'stable',
+        ratio: sent?.ratio as ConsensusSentiment['ratio'],
+      },
+      impactAnalysis: impact,
+      strategicSummary: {
+        summary: typeof ss.summary === 'string' ? ss.summary : '—',
+        opportunity: typeof ss.opportunity === 'string' ? ss.opportunity : '—',
+        threat: typeof ss.threat === 'string' ? ss.threat : '—',
+        actionItems: Array.isArray(ss.actionItems) ? (ss.actionItems as string[]) : [],
+      },
+      metadata: { confidence, dataPeriod: typeof meta?.dataPeriod === 'string' ? meta.dataPeriod : '최근 24시간' },
+    }
+  }
+  if (typeof o.summary === 'string' || typeof o.sentiment === 'number') {
+    const summary = typeof o.summary === 'string' ? o.summary : '—'
+    const score = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
+    const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
+    const actionItems = Array.isArray(o.action_item)
+      ? (o.action_item as string[])
+      : typeof o.action_item === 'string' && o.action_item !== '—'
+        ? [o.action_item]
+        : []
+    return {
+      marketNews: [],
+      painPoints: [],
+      competitorTrends: '',
+      sentiment: { score, trend: 'stable' },
+      impactAnalysis: [
+        { subject: '시장성', score: 5, reason: '—' },
+        { subject: '기술성', score: 5, reason: '—' },
+        { subject: '반응성', score: 5, reason: '—' },
+        { subject: '규제/환경', score: 5, reason: '—' },
+        { subject: '경쟁력', score: 5, reason: '—' },
+      ],
+      strategicSummary: {
+        summary,
+        opportunity: typeof o.strategic_insight === 'string' ? o.strategic_insight : '—',
+        threat: '—',
+        actionItems,
+      },
+      metadata: { confidence, dataPeriod: '최근 24시간' },
+    }
+  }
+  return null
 }
 
 export interface ConsensusInsightProps {
-  /** DB 또는 API에서 온 유효한 consensus 데이터. 있으면 즉시 렌더링 */
   data: ConsensusData | null
-  /** Consensus API 호출 중 (Groq·Gemini는 이미 settled) */
   loading: boolean
-  /** 두 AI 모두 실패한 경우 Consensus 호출 없이 에러만 표시 */
   bothFailed: boolean
-  /** 한쪽이라도 실패 시 표시할 메시지 (bothFailed가 아닐 때) */
+  partialData?: boolean
   errorMessage: string | null
-  /** 결과 없음 안내 문구 */
   noResultMessage?: string
   onRetry: () => void
 }
 
-export function ConsensusInsight({
+const CARD_CLASS = 'rounded-xl border border-slate-800 bg-slate-900/50 p-4'
+
+function TrendIcon({ trend }: { trend?: 'rising' | 'falling' | 'stable' }) {
+  if (trend === 'rising') return <TrendingUp className="w-5 h-5 text-emerald-400" />
+  if (trend === 'falling') return <TrendingDown className="w-5 h-5 text-rose-400" />
+  return <Minus className="w-5 h-5 text-slate-400" />
+}
+
+function ConsensusInsightComponent({
   data,
   loading,
   bothFailed,
+  partialData = false,
   errorMessage,
-  noResultMessage = '2사 AI 요약·감성 점수는 인사이트 탭 분석 후 표시됩니다. 위에서 "재분석 (캐시 무시)"를 누르면 다시 계산됩니다.',
+  noResultMessage = '2사 AI 요약·감성 점수는 인사이트 탭 분석 후 표시됩니다. 재분석을 눌러 주세요.',
   onRetry,
 }: ConsensusInsightProps) {
+  const [contextTab, setContextTab] = useState<'news' | 'competitors' | 'pain'>('news')
+
   if (bothFailed) {
     return (
-      <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+      <div className={cn('no-print w-full mb-6', CARD_CLASS, 'min-h-[200px]')}>
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
-          <p className="text-sm text-rose-400">두 AI 모두 분석에 실패했습니다. Consensus를 생성할 수 없습니다.</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
-            disabled={loading}
-            onClick={onRetry}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            다시 분석하기
+        <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
+          <p className="text-sm text-rose-400">분석 데이터 부족. 두 AI 모두 분석에 실패해 Consensus를 생성할 수 없습니다.</p>
+          <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry}>
+            <RefreshCw className="h-3.5 w-3.5" /> 다시 분석하기
           </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (data) {
-    return (
-      <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-sm font-semibold text-[#e1e3e6] tracking-tight">AI Insight Consensus</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5 shrink-0"
-            disabled={loading}
-            onClick={onRetry}
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            {loading ? '재분석 중...' : '재분석'}
-          </Button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
-          <div className="flex justify-center md:justify-start">
-            <SentimentGauge value={data.sentiment} />
-          </div>
-          <div className="flex flex-col gap-3 min-w-0">
-            <p className="text-sm text-slate-300 leading-relaxed">{data.summary}</p>
-            {data.strategic_insight && data.strategic_insight !== '—' && (
-              <div>
-                <span className="text-xs text-slate-500 font-medium">핵심 전략</span>
-                <p className="text-sm text-slate-200 mt-0.5">{data.strategic_insight}</p>
-              </div>
-            )}
-            {data.action_item && data.action_item !== '—' && (
-              <div>
-                <span className="text-xs text-slate-500 font-medium">실행 권고</span>
-                <p className="text-sm text-slate-200 mt-0.5">{data.action_item}</p>
-              </div>
-            )}
-            {typeof data.confidence === 'number' && (
-              <p className="text-xs text-slate-500">
-                신뢰도 <span className="tabular-nums text-slate-400">{data.confidence}%</span>
-              </p>
-            )}
-          </div>
         </div>
       </div>
     )
@@ -108,21 +157,188 @@ export function ConsensusInsight({
 
   if (loading) {
     return (
-      <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+      <div className={cn('no-print w-full mb-6', CARD_CLASS, 'min-h-[320px]')}>
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
-        <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-[140px] h-[70px] rounded-t-full border border-zinc-700 border-b-0 bg-zinc-800/30 animate-pulse" />
-            <div className="h-5 w-12 bg-zinc-700/50 rounded animate-pulse" />
-            <div className="h-3 w-14 bg-zinc-700/50 rounded animate-pulse" />
+        <div className="space-y-4">
+          <div className="flex gap-4 items-start">
+            <div className="w-[140px] h-[80px] rounded-t-full border border-slate-700 border-b-0 bg-slate-800/50 animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-full max-w-md bg-slate-700/50 rounded animate-pulse" />
+              <div className="h-4 w-4/5 max-w-sm bg-slate-700/50 rounded animate-pulse" />
+            </div>
+            <div className="w-20 h-3 bg-slate-700/50 rounded animate-pulse shrink-0" />
           </div>
-          <div className="flex flex-col gap-3 min-w-0">
-            <div className="space-y-2">
-              <div className="h-3 w-full max-w-md bg-zinc-700/50 rounded animate-pulse" />
-              <div className="h-3 w-full max-w-sm bg-zinc-700/50 rounded animate-pulse" />
-              <div className="h-3 w-4/5 max-w-xs bg-zinc-700/50 rounded animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="h-[240px] bg-slate-800/30 rounded-lg animate-pulse" />
+            <div className="h-[240px] bg-slate-800/30 rounded-lg animate-pulse" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-20 bg-slate-800/30 rounded-lg animate-pulse" />
+            <div className="h-20 bg-slate-800/30 rounded-lg animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (data) {
+    const score = data.sentiment?.score ?? 0
+    const trend = data.sentiment?.trend
+    const summary = data.strategicSummary?.summary ?? '—'
+    const confidence = data.metadata?.confidence ?? 0
+    const impactData = (data.impactAnalysis ?? []).map((i) => ({ subject: i.subject, score: i.score, reason: i.reason ?? '', fullMark: 10 }))
+
+    return (
+      <div className="no-print w-full mb-6 space-y-4">
+        {/* 상단 컨센서스 카드 (Header) */}
+        <div className={cn(CARD_CLASS, 'p-5')}>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-[#e1e3e6] tracking-tight">AI Insight Consensus</h2>
+              {partialData && (
+                <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/40">일부 데이터로 분석됨</span>
+              )}
+            </div>
+            <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5 shrink-0" disabled={loading} onClick={onRetry}>
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {loading ? '재분석 중...' : '재분석'}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-6 items-stretch">
+            <div className="flex flex-col items-center justify-center shrink-0">
+              <SentimentGauge value={score} />
+              <div className="flex items-center gap-1.5 mt-1">
+                <TrendIcon trend={trend} />
+                <span className="text-xs text-slate-400">{trend === 'rising' ? '상승' : trend === 'falling' ? '하락' : '보합'}</span>
+              </div>
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <p className="text-sm text-slate-300 leading-relaxed">{summary}</p>
+            </div>
+            <div className="shrink-0 w-24">
+              <p className="text-xs text-slate-500 font-medium mb-1">신뢰도</p>
+              <div className="h-1.5 w-full rounded-full bg-slate-700/50 overflow-hidden">
+                <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, confidence))}%` }} />
+              </div>
+              <p className="text-xs tabular-nums text-slate-400 mt-0.5">{confidence}%</p>
             </div>
           </div>
+        </div>
+
+        {/* 상세 분석 그리드 (Main): Impact Radar + Context Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className={cn(CARD_CLASS)}>
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">분야별 영향력</h3>
+            {impactData.length > 0 ? (
+              <div className="h-[260px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="48%" outerRadius="65%" data={impactData} margin={{ top: 16, right: 24, bottom: 16, left: 24 }}>
+                    <PolarGrid stroke="#334155" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <Radar name="영향력" dataKey="score" stroke="#10b981" fill="#10b981" fillOpacity={0.35} strokeWidth={2} />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.[0]) return null
+                        const p = payload[0].payload as { subject: string; score: number; reason?: string }
+                        return (
+                          <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs shadow-lg">
+                            <p className="font-medium text-slate-200">{p.subject} · {p.score}</p>
+                            {p.reason && <p className="text-slate-400 mt-1">{p.reason}</p>}
+                          </div>
+                        )
+                      }}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">데이터 없음</div>
+            )}
+          </div>
+          <div className={cn(CARD_CLASS)}>
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">상황 요약</h3>
+            <div className="flex gap-2 mb-3">
+              {(['news', 'competitors', 'pain'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setContextTab(tab)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                    contextTab === tab ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+                  )}
+                >
+                  {tab === 'news' && '핵심 뉴스'}
+                  {tab === 'competitors' && '경쟁 동향'}
+                  {tab === 'pain' && '페인포인트'}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-[180px] text-sm text-slate-300">
+              {contextTab === 'news' && (
+                <ul className="space-y-2">
+                  {(data.marketNews ?? []).length > 0 ? (
+                    (data.marketNews ?? []).map((item, i) => (
+                      <li key={i} className="flex gap-2">
+                        <Newspaper className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <p className="text-slate-500">요약된 뉴스가 없습니다.</p>
+                  )}
+                </ul>
+              )}
+              {contextTab === 'competitors' && (
+                <p className="leading-relaxed">{(data.competitorTrends ?? '').trim() || '경쟁사 동향 정보가 없습니다.'}</p>
+              )}
+              {contextTab === 'pain' && (
+                <ul className="space-y-2">
+                  {(data.painPoints ?? []).length > 0 ? (
+                    (data.painPoints ?? []).map((item, i) => (
+                      <li key={i} className="flex gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-400/80 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <p className="text-slate-500">페인포인트가 없습니다.</p>
+                  )}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 전략적 실행 가이드 (Footer): SWOT + Action Items */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={cn(CARD_CLASS, 'border-emerald-500/30 bg-emerald-900/20')}>
+            <h3 className="text-sm font-semibold text-emerald-400 mb-2">Opportunity</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">{(data.strategicSummary?.opportunity ?? '—').trim() || '—'}</p>
+          </div>
+          <div className={cn(CARD_CLASS, 'border-rose-500/30 bg-rose-900/20')}>
+            <h3 className="text-sm font-semibold text-rose-400 mb-2">Threat</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">{(data.strategicSummary?.threat ?? '—').trim() || '—'}</p>
+          </div>
+        </div>
+        <div className={cn(CARD_CLASS)}>
+          <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400" />
+            Action Items
+          </h3>
+          <ul className="space-y-2">
+            {(data.strategicSummary?.actionItems ?? []).length > 0 ? (
+              (data.strategicSummary.actionItems ?? []).map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-200">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden />
+                  <span>{item}</span>
+                </li>
+              ))
+            ) : (
+              <p className="text-slate-500 text-sm">과제가 없습니다.</p>
+            )}
+          </ul>
         </div>
       </div>
     )
@@ -130,20 +346,12 @@ export function ConsensusInsight({
 
   if (errorMessage) {
     return (
-      <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+      <div className={cn('no-print w-full mb-6', CARD_CLASS, 'min-h-[180px]')}>
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
           <p className="text-sm text-rose-400">{errorMessage}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50 gap-1.5"
-            disabled={loading}
-            onClick={onRetry}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            다시 분석하기
+          <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry}>
+            <RefreshCw className="h-3.5 w-3.5" /> 다시 분석하기
           </Button>
         </div>
       </div>
@@ -151,9 +359,11 @@ export function ConsensusInsight({
   }
 
   return (
-    <div className="no-print w-full mb-6 rounded-xl border border-zinc-800 bg-[#15171a] p-5">
+    <div className={cn('no-print w-full mb-6', CARD_CLASS, 'min-h-[120px]')}>
       <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">AI Insight Consensus</h2>
       <p className="text-sm text-slate-500">{noResultMessage}</p>
     </div>
   )
 }
+
+export const ConsensusInsight = memo(ConsensusInsightComponent)

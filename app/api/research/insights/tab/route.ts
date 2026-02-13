@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { GEMINI_TAB_MODEL } from '@/lib/gemini-config'
+import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL } from '@/lib/gemini-config'
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
@@ -12,51 +12,152 @@ function buildGeminiGenerateContentUrl(apiKey: string): string {
   return `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${apiKey}`
 }
 
+/** Consensus 전용: GEMINI_CONSENSUS_MODEL (기본 gemini-2.5-flash), maxOutputTokens 8192 */
+function buildGeminiConsensusUrl(apiKey: string): string {
+  return `${GEMINI_BASE_URL_V1}/${GEMINI_CONSENSUS_MODEL}:generateContent?key=${apiKey}`
+}
+
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
 
-/** 2사(Gemini + Groq) 종합 요약 → PM 관점 JSON. results 페이지 전용 "AI Insight Consensus" 블록에 표시 */
-const CONSENSUS_SYSTEM = `
-두 분석 결과를 종합하여 다음 형식의 JSON으로만 응답해. 다른 텍스트는 포함하지 말 것.
+/** Context = Gemini + Groq 분석 텍스트. 이 context만 바탕으로 추출하며 검색/외부 데이터 사용 금지 */
+const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 분석가입니다.
+아래 [Gemini 분석]과 [Groq 분석]에 **제공된 텍스트만**을 바탕으로 정보를 추출하세요. 검색이나 외부 데이터를 사용하지 마세요.
+반드시 제공된 데이터에 근거하여 아래 JSON 구조로만 출력하세요. 다른 텍스트는 포함하지 마세요.
+각 항목(marketNews, reason, summary 등)은 1~2문장으로 간결히 작성하세요.
+
+JSON 구조:
 {
-  "summary": "150자 이내의 종합 요약",
-  "sentiment": -100~100 사이 감성 점수 (음수=부정, 양수=긍정, 0=중립),
-  "strategic_insight": "이 이슈가 시사하는 핵심 전략 한 줄",
-  "action_item": "사용자가 고려해야 할 다음 실행 권고",
-  "confidence": 0~100 사이의 두 AI 의견 일치도(신뢰도)
+  "marketNews": ["수집된 데이터에서 가장 비중 있게 다뤄진 핵심 뉴스 3~5개 요약 (문자열 배열)"],
+  "painPoints": ["유저의 구체적 불편함 및 미충족 니즈 (문자열 배열)"],
+  "competitorTrends": "주요 경쟁사 동향 요약 문자열 (없을 시 '정보 부족' 기재)",
+  "sentiment": {
+    "score": -100~100 숫자 (음수=부정, 양수=긍정, 0=중립),
+    "trend": "rising" | "falling" | "stable",
+    "ratio": { "positive": 0~100, "neutral": 0~100, "negative": 0~100 }
+  },
+  "impactAnalysis": [
+    { "subject": "시장성", "score": 0~10, "reason": "점수 근거 한 줄" },
+    { "subject": "기술성", "score": 0~10, "reason": "점수 근거 한 줄" },
+    { "subject": "반응성", "score": 0~10, "reason": "점수 근거 한 줄" },
+    { "subject": "규제/환경", "score": 0~10, "reason": "점수 근거 한 줄" },
+    { "subject": "경쟁력", "score": 0~10, "reason": "점수 근거 한 줄" }
+  ],
+  "strategicSummary": {
+    "summary": "시장 상황 PM 관점 요약 (150자 이내)",
+    "opportunity": "즉시 활용 가능한 기회 요소",
+    "threat": "잠재적 리스크 및 위협",
+    "actionItems": ["PM 우선순위 과제 1", "과제 2", "과제 3"]
+  },
+  "metadata": {
+    "confidence": 0~100 (두 AI 의견 일치도),
+    "dataPeriod": "최근 24시간"
+  }
 }
-`;
+
+impactAnalysis의 subject는 반드시 시장성, 기술성, 반응성, 규제/환경, 경쟁력 5개만 사용하세요.`;
+
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
 const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 
+/** 새 PM 프레임워크 포맷 (API 응답·DB 저장) */
+export type ConsensusImpactItem = { subject: string; score: number; reason?: string }
+export type ConsensusSentiment = { score: number; trend?: 'rising' | 'falling' | 'stable'; ratio?: { positive?: number; neutral?: number; negative?: number } }
+export type ConsensusStrategicSummary = { summary: string; opportunity?: string; threat?: string; actionItems?: string[] }
+export type ConsensusMetadata = { confidence: number; dataPeriod?: string }
+
 export type Consensus = {
-  summary: string
-  sentiment: number
-  strategic_insight: string
-  action_item: string
-  confidence: number
+  marketNews?: string[]
+  painPoints?: string[]
+  competitorTrends?: string
+  sentiment: ConsensusSentiment
+  impactAnalysis?: ConsensusImpactItem[]
+  strategicSummary: ConsensusStrategicSummary
+  metadata: ConsensusMetadata
 }
 
-/** 입력 부족 시 UI가 깨지지 않도록 반환하는 기본 컨센서스 */
-const FALLBACK_CONSENSUS: Consensus = {
+/** 구형 flat 포맷 → Consensus (하위 호환) */
+function legacyToConsensus(o: Record<string, unknown>): Consensus {
+  const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 500) : '분석 불가. 데이터가 부족합니다.'
+  const sentimentScore = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
+  const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
+  const action_item = o.action_item
+  const actionItems = Array.isArray(action_item)
+    ? (action_item as string[]).filter((s): s is string => typeof s === 'string').slice(0, 5)
+    : typeof action_item === 'string' && action_item !== '—'
+      ? [action_item.trim()].filter(Boolean)
+      : []
+  return {
+    marketNews: [],
+    painPoints: [],
+    competitorTrends: '',
+    sentiment: { score: sentimentScore, trend: 'stable', ratio: { positive: 0, neutral: 0, negative: 0 } },
+    impactAnalysis: [
+      { subject: '시장성', score: 5, reason: '—' },
+      { subject: '기술성', score: 5, reason: '—' },
+      { subject: '반응성', score: 5, reason: '—' },
+      { subject: '규제/환경', score: 5, reason: '—' },
+      { subject: '경쟁력', score: 5, reason: '—' },
+    ],
+    strategicSummary: {
+      summary,
+      opportunity: typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—',
+      threat: '—',
+      actionItems,
+    },
+    metadata: { confidence, dataPeriod: '최근 24시간' },
+  }
+}
+
+const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
   summary: '분석 불가. 데이터가 부족합니다.',
   sentiment: 0,
   strategic_insight: '—',
   action_item: '—',
   confidence: 0,
-}
+})
 
-/** DB/캐시에서 읽은 구형 포맷(positiveKeywords 등)을 새 Consensus 포맷으로 정규화 */
+/** DB/캐시에서 읽은 값(구형 또는 신형)을 Consensus로 정규화 */
 function normalizeConsensus(raw: unknown): Consensus | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
-  const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 200) : ''
-  if (!summary) return null
-  const sentiment = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
-  const strategic_insight = typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—'
-  const action_item = typeof o.action_item === 'string' ? o.action_item.trim().slice(0, 300) : '—'
-  const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
-  return { summary, sentiment, strategic_insight, action_item, confidence }
+  // 신형: strategicSummary 존재
+  if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
+    const ss = o.strategicSummary as Record<string, unknown>
+    const sent = o.sentiment as Record<string, unknown> | undefined
+    const score = typeof sent?.score === 'number' ? Math.max(-100, Math.min(100, sent.score as number)) : 0
+    const meta = o.metadata as Record<string, unknown> | undefined
+    const confidence = typeof meta?.confidence === 'number' ? Math.max(0, Math.min(100, meta.confidence as number)) : 0
+    const impact = Array.isArray(o.impactAnalysis)
+      ? (o.impactAnalysis as ConsensusImpactItem[]).map((i) => ({
+          subject: typeof i.subject === 'string' ? i.subject : '—',
+          score: typeof i.score === 'number' ? Math.max(0, Math.min(10, i.score)) : 5,
+          reason: typeof i.reason === 'string' ? i.reason.slice(0, 200) : undefined,
+        }))
+      : FALLBACK_CONSENSUS.impactAnalysis ?? []
+    return {
+      marketNews: Array.isArray(o.marketNews) ? (o.marketNews as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
+      painPoints: Array.isArray(o.painPoints) ? (o.painPoints as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
+      competitorTrends: typeof o.competitorTrends === 'string' ? o.competitorTrends.trim().slice(0, 500) : '',
+      sentiment: {
+        score,
+        trend: sent?.trend === 'rising' || sent?.trend === 'falling' || sent?.trend === 'stable' ? sent.trend : 'stable',
+        ratio: typeof sent?.ratio === 'object' && sent.ratio ? sent.ratio as { positive?: number; neutral?: number; negative?: number } : undefined,
+      },
+      impactAnalysis: impact.length >= 5 ? impact : (FALLBACK_CONSENSUS.impactAnalysis ?? []),
+      strategicSummary: {
+        summary: typeof ss.summary === 'string' ? ss.summary.trim().slice(0, 500) : '—',
+        opportunity: typeof ss.opportunity === 'string' ? ss.opportunity.trim().slice(0, 300) : '—',
+        threat: typeof ss.threat === 'string' ? ss.threat.trim().slice(0, 300) : '—',
+        actionItems: Array.isArray(ss.actionItems) ? (ss.actionItems as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
+      },
+      metadata: { confidence, dataPeriod: typeof meta?.dataPeriod === 'string' ? meta.dataPeriod : '최근 24시간' },
+    }
+  }
+  // 구형: summary + sentiment 숫자
+  if (typeof o.summary === 'string' && o.summary.trim() !== '') return legacyToConsensus(o)
+  if (typeof o.sentiment === 'number') return legacyToConsensus(o)
+  return null
 }
 
 /** 두 분석이 모두 settled된 뒤에만 호출. 한쪽 실패 시에도 가능한 데이터로 요약 (일부 데이터만으로 종합). 항상 Consensus 객체 반환. */
@@ -77,10 +178,10 @@ async function generateConsensus(
   // v1 API: role 없이 contents.parts만 사용. responseMimeType은 v1에서 400 유발할 수 있어 제거(프롬프트에서 JSON 요청)
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 2048 },
+    generationConfig: { maxOutputTokens: 8192 },
   }
   try {
-    const url = buildGeminiGenerateContentUrl(apiKey)
+    const url = buildGeminiConsensusUrl(apiKey)
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,9 +206,9 @@ async function generateConsensus(
       const closeIdx = afterOpen.indexOf('```')
       raw = (closeIdx !== -1 ? afterOpen.slice(0, closeIdx) : afterOpen).trim()
     }
-    let parsed: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
+    let parsed: Record<string, unknown>
     try {
-      parsed = JSON.parse(raw) as typeof parsed
+      parsed = JSON.parse(raw) as Record<string, unknown>
     } catch (parseErr) {
       console.error('[AI Insight Consensus] generateConsensus JSON 파싱 실패', {
         parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
@@ -116,12 +217,9 @@ async function generateConsensus(
       })
       return FALLBACK_CONSENSUS
     }
-    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 200) : FALLBACK_CONSENSUS.summary
-    const sentiment = typeof parsed.sentiment === 'number' ? Math.max(-100, Math.min(100, parsed.sentiment)) : 0
-    const strategic_insight = typeof parsed.strategic_insight === 'string' ? parsed.strategic_insight.trim().slice(0, 300) : FALLBACK_CONSENSUS.strategic_insight
-    const action_item = typeof parsed.action_item === 'string' ? parsed.action_item.trim().slice(0, 300) : FALLBACK_CONSENSUS.action_item
-    const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(100, parsed.confidence)) : 0
-    return { summary, sentiment, strategic_insight, action_item, confidence }
+    const normalized = normalizeConsensus(parsed)
+    if (normalized) return normalized
+    return FALLBACK_CONSENSUS
   } catch (e) {
     console.warn('[Research Tab] Consensus synthesis', e)
     return FALLBACK_CONSENSUS
@@ -478,7 +576,7 @@ export async function POST(req: Request) {
     console.log('[AI Insight Consensus] generateConsensus input', { geminiInput, groqInput })
     consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
     if (isReanalyze) {
-      console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.summary?.length ?? 0, sentiment: consensus?.sentiment })
+      console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })
     }
   }
 

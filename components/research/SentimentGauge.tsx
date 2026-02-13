@@ -7,8 +7,10 @@ import { cn } from '@/lib/utils'
 const CX = 100
 const CY = 100
 const R = 88
-const STROKE = 2.5
-const KNOB_R = 6
+/** 스트로크 두께 1.5배: 2.5 * 1.5 = 3.75 */
+const STROKE = 3.75
+/** 니들(포인터) 길이: 호 끝까지 닿도록 */
+const NEEDLE_LENGTH = R - 4
 
 /** -100 ~ 100 감성 점수에 따른 라벨 */
 function getSentimentLabel(score: number): string {
@@ -19,11 +21,11 @@ function getSentimentLabel(score: number): string {
   return '매우 부정'
 }
 
-/** -100 ~ 100 감성 점수에 따른 색상 (Dashlite 미니멀) */
+/** 음수 → Rose-500, 양수 → Emerald-500, 0 → Slate */
 function getSentimentColor(score: number): string {
-  if (score > 30) return '#34d399' // emerald-400
-  if (score >= -30) return '#fbbf24' // amber-400
-  return '#fb7185' // rose-400
+  if (score < 0) return '#f43f5e' // rose-500
+  if (score > 0) return '#10b981' // emerald-500
+  return '#64748b' // slate-500
 }
 
 /** 반원 arc path (180° → 0°, 상단 호) */
@@ -80,18 +82,18 @@ export function SentimentGauge({ value, className }: SentimentGaugeProps) {
   const fillLength = ((displayValue + 100) / 200) * totalLength
   const dashOffset = totalLength - fillLength
   const angle = valueToAngle(displayValue)
-  const knobPos = angleToPoint(angle, CX, CY, R)
+  const needleTip = angleToPoint(angle, CX, CY, NEEDLE_LENGTH)
   const color = getSentimentColor(displayValue)
   const label = getSentimentLabel(Math.round(displayValue))
 
   return (
-    <div className={cn('flex flex-col items-center justify-center', className)}>
+    <div className={cn('flex flex-col items-center justify-center gap-0', className)}>
       <svg
         viewBox="0 0 200 120"
         className="w-full max-w-[200px] h-auto"
         style={{ overflow: 'visible' }}
       >
-        {/* 트랙: 얇은 반원 */}
+        {/* 트랙: 반원 (두께 1.5배) */}
         <path
           d={getSemicirclePath(CX, CY, R)}
           fill="none"
@@ -99,7 +101,7 @@ export function SentimentGauge({ value, className }: SentimentGaugeProps) {
           strokeWidth={STROKE}
           className="text-zinc-700"
         />
-        {/* 채워지는 호: 0 → value 애니메이션 */}
+        {/* 채워지는 호 */}
         <path
           ref={pathRef}
           d={getSemicirclePath(CX, CY, R)}
@@ -110,20 +112,26 @@ export function SentimentGauge({ value, className }: SentimentGaugeProps) {
           strokeDasharray={totalLength}
           strokeDashoffset={dashOffset}
         />
-        {/* 현재 점수 위치 노브 */}
-        <circle
-          cx={knobPos.x}
-          cy={knobPos.y}
-          r={KNOB_R}
-          fill={color}
-          className="opacity-95"
+        {/* 현재 점수 위치 포인터(니들): 중심 → 호 위 점 */}
+        <line
+          x1={CX}
+          y1={CY}
+          x2={needleTip.x}
+          y2={needleTip.y}
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap="round"
         />
       </svg>
-      <div className="mt-1 text-center">
-        <span className="text-xl font-semibold tabular-nums text-[#e1e3e6]">
+      {/* 점수와 라벨 수직 중앙 정렬 */}
+      <div className="flex flex-col items-center justify-center text-center mt-0.5">
+        <span
+          className="text-xl font-bold tabular-nums text-[#e1e3e6] leading-tight"
+          style={{ color: displayValue < 0 ? '#f43f5e' : displayValue > 0 ? '#10b981' : '#94a3b8' }}
+        >
           {Math.round(displayValue)}
         </span>
-        <p className="text-xs text-slate-400 mt-0.5">{label}</p>
+        <p className="text-xs text-slate-400 mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
   )

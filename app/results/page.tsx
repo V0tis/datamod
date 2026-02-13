@@ -19,7 +19,7 @@ import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/
 import { Badge } from '@/components/ui/badge'
 import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
-import { ConsensusInsight, type ConsensusData as ConsensusDataType } from '@/components/research/ConsensusInsight'
+import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -175,7 +175,7 @@ function ResultsContent() {
   /** 실시간 뉴스: 키워드가 바뀐 경우에만 재요청 (재분석 등으로 effect 재실행 시 중복 요청 방지) */
   const lastRssKeywordRef = useRef<string | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
-    KR: [], US: [], JP: [], updatedAt: null,
+    KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [], updatedAt: null,
   })
   const tabAbortControllerRef = useRef<AbortController | null>(null)
   /** 탭별 API 중복 호출 방지 (React Strict Mode 대응) */
@@ -187,7 +187,7 @@ function ResultsContent() {
   const isReanalyzingConsensusRef = useRef(false)
 
   /** AI Insight Consensus: PM 관점 JSON (summary, sentiment, strategic_insight, action_item, confidence) */
-  const [consensusData, setConsensusData] = useState<ConsensusDataType | null>(null)
+  const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** 히스토리 조회가 끝난 뒤에만 "린이 분석하는 중" 표시 (캐시 있으면 카드 먼저 보여주기) */
@@ -223,6 +223,10 @@ function ResultsContent() {
           KR: normalizeTrendItems(data.KR),
           US: normalizeTrendItems(data.US),
           JP: normalizeTrendItems(data.JP),
+          TW: normalizeTrendItems(data.TW),
+          HK: normalizeTrendItems(data.HK),
+          GB: normalizeTrendItems(data.GB),
+          DE: normalizeTrendItems(data.DE),
           updatedAt: data.updatedAt ?? null,
         })
         if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
@@ -316,16 +320,10 @@ function ResultsContent() {
   /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 재분석 중이면 덮어쓰지 않음 */
   useEffect(() => {
     if (isReanalyzingConsensusRef.current) return
-    const ar = result?.analysis_results as Record<string, unknown> | undefined
+    const ar = result?.analysis_results
     if (!ar || typeof ar !== 'object') return
-    const summary = typeof ar.summary === 'string' ? ar.summary.trim() : ''
-    const sentiment = typeof ar.sentiment === 'number' ? Math.max(-100, Math.min(100, ar.sentiment)) : 0
-    const strategic_insight = typeof ar.strategic_insight === 'string' ? ar.strategic_insight.trim() : '—'
-    const action_item = typeof ar.action_item === 'string' ? ar.action_item.trim() : '—'
-    const confidence = typeof ar.confidence === 'number' ? Math.max(0, Math.min(100, ar.confidence)) : 0
-    if (summary !== '' || typeof ar.sentiment === 'number') {
-      setConsensusData({ summary: summary || '—', sentiment, strategic_insight, action_item, confidence })
-    }
+    const normalized = normalizeConsensusData(ar)
+    if (normalized) setConsensusData(normalized)
   }, [result?.reportId, result?.analysis_results])
 
   const fetchTabAnalysis = useCallback(
@@ -420,16 +418,9 @@ function ResultsContent() {
           setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: 0 }))
           setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
         }
-        const rawConsensus = (data as { consensus?: ConsensusDataType }).consensus
-        if (rawConsensus && typeof rawConsensus === 'object' && typeof rawConsensus.summary === 'string' && typeof rawConsensus.sentiment === 'number') {
-          setConsensusData({
-            summary: String(rawConsensus.summary).slice(0, 200),
-            sentiment: Math.max(-100, Math.min(100, Number(rawConsensus.sentiment))),
-            strategic_insight: typeof rawConsensus.strategic_insight === 'string' ? rawConsensus.strategic_insight.slice(0, 300) : '—',
-            action_item: typeof rawConsensus.action_item === 'string' ? rawConsensus.action_item.slice(0, 300) : '—',
-            confidence: typeof rawConsensus.confidence === 'number' ? Math.max(0, Math.min(100, rawConsensus.confidence)) : 0,
-          })
-        }
+        const rawConsensus = (data as { consensus?: unknown }).consensus
+        const normalized = rawConsensus && typeof rawConsensus === 'object' ? normalizeConsensusData(rawConsensus) : null
+        if (normalized) setConsensusData(normalized)
         if (geminiText === null && (provider === 'all' || provider === 'gemini')) {
           if (geminiQuotaExceeded) {
             setGeminiQuotaExceeded(true)
@@ -707,6 +698,7 @@ function ResultsContent() {
             data={consensusData}
             loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
             bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
+            partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
             errorMessage={result?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
             onRetry={retryConsensus}
           />
