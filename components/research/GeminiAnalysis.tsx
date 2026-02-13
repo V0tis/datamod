@@ -36,7 +36,18 @@ export function GeminiAnalysis({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <Badge variant="secondary">Gemini</Badge>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
+          <div className="flex items-center gap-2">
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground dark:text-slate-400" />}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 h-8 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
+              disabled={loading}
+              onClick={onRetry}
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> 재시도
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
@@ -44,20 +55,11 @@ export function GeminiAnalysis({
           <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
             <p className="text-destructive text-sm dark:text-[#00d19a]">
               {error === '무료 쿼터 초과'
-                ? '무료 쿼터 초과'
+                ? '오늘 사용 한도를 모두 사용했어요. 내일 다시 시도하거나, 잠시 후 재시도 버튼을 눌러 주세요.'
                 : retryCount >= 3
                   ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
                   : error}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 mt-auto dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
-              disabled={loading}
-              onClick={onRetry}
-            >
-              {error === '무료 쿼터 초과' ? '나중에 다시 시도' : '재시도'}
-            </Button>
           </div>
         ) : loading ? (
           <div className="flex flex-col items-center justify-center min-h-[200px] gap-3">
@@ -69,7 +71,7 @@ export function GeminiAnalysis({
             <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', isFact && 'prose-lg')}>
               <MarkdownWithSearchLinks text={text} />
             </div>
-            <div className="mt-auto pt-2 flex items-center justify-between gap-2">
+            <div className="mt-auto pt-2">
               <Button
                 variant="ghost"
                 size="sm"
@@ -78,30 +80,10 @@ export function GeminiAnalysis({
               >
                 <Copy className="w-3.5 h-3.5" /> 복사
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={loading || quotaExceeded}
-                onClick={onRetry}
-              >
-                <RefreshCw className="w-4 h-4" /> 재시도
-              </Button>
             </div>
           </>
         ) : (
-          <>
-            <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 mt-auto"
-              disabled={loading || quotaExceeded}
-              onClick={onRetry}
-            >
-              재시도
-            </Button>
-          </>
+          <p className="text-muted-foreground dark:text-slate-400 text-sm">현재 엔진 응답 지연</p>
         )}
       </CardContent>
     </Card>

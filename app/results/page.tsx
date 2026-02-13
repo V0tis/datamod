@@ -921,9 +921,10 @@ function ResultsContent() {
                 </div>
               ) : (
                 <>
+                  <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3">AI 요약</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <GroqAnalysis
-                      tabId={id}
+                        tabId={id}
                       text={tabCacheGroq[id] ?? (result?.analysis_groq as Record<string, string>)?.[id] ?? null}
                       loading={!(result?.analysis_groq as Record<string, string>)?.[id] && (tabLoadingGroq[id] || (loading && !result))}
                       error={tabErrorGroq[id]}
@@ -934,11 +935,11 @@ function ResultsContent() {
                           setTabErrorGroq((prev) => ({ ...prev, [id]: null }))
                         }
                         setTabCacheGroq((prev) => ({ ...prev, [id]: null }))
-                        fetchTabAnalysis(id, 'groq')
+                        fetchTabAnalysis(id, 'groq', { isReanalyze: true })
                       }}
                     />
                     <GeminiAnalysis
-                      tabId={id}
+                        tabId={id}
                       text={tabCacheGemini[id] ?? (result?.analysis_gemini as Record<string, string>)?.[id] ?? null}
                       loading={!(result?.analysis_gemini as Record<string, string>)?.[id] && (tabLoadingGemini[id] || (loading && !result))}
                       error={tabErrorGemini[id]}
@@ -946,15 +947,15 @@ function ResultsContent() {
                       quotaExceeded={geminiQuotaExceeded}
                       onRetry={() => {
                         if (tabErrorGemini[id] === '무료 쿼터 초과') {
+                          setGeminiQuotaExceeded(false)
                           setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
-                          return
                         }
                         if ((retryCountTabGemini[id] ?? 0) >= 3) {
                           setRetryCountTabGemini((prev) => ({ ...prev, [id]: 0 }))
                           setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
                         }
                         setTabCacheGemini((prev) => ({ ...prev, [id]: null }))
-                        fetchTabAnalysis(id, 'gemini')
+                        fetchTabAnalysis(id, 'gemini', { isReanalyze: true })
                       }}
                     />
                   </div>

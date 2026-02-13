@@ -78,7 +78,7 @@ async function generateConsensus(
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
-      maxOutputTokens: 512,
+      maxOutputTokens: 2048,
       responseMimeType: 'application/json' as const,
     },
   }
