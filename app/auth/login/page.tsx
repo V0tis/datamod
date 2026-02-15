@@ -1,138 +1,21 @@
 'use client'
 
-import React, { useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ArrowLeft, Loader2 } from 'lucide-react'
-import Link from 'next/link'
-import { RinLogo } from '@/components/rin-logo'
+import { useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 
-function LoginForm() {
+/** /auth/login은 /login으로 통일 (기존 링크 호환용 리다이렉트) */
+export default function AuthLoginPage() {
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/'
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    const trimmedEmail = email.trim().toLowerCase()
-    if (!trimmedEmail || !password) {
-      setError('이메일과 비밀번호를 입력해주세요.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      const supabase = createClient()
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      })
-
-      if (signInError) {
-        const msg = signInError.message ?? ''
-        setError(
-          msg.includes('Invalid') || msg.includes('invalid') || msg.includes('credentials')
-            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
-            : msg.includes('이메일') ? msg : '이메일 또는 비밀번호가 올바르지 않습니다.'
-        )
-        return
-      }
-
-      window.location.href = callbackUrl
-    } catch {
-      setError('로그인 처리에 실패했습니다.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEffect(() => {
+    const q = searchParams.toString()
+    router.replace(q ? `/login?${q}` : '/login')
+  }, [searchParams, router])
 
   return (
-    <main className="min-h-screen flex flex-col bg-background">
-      <div className="p-6">
-        <Link href="/">
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" />
-            홈으로 돌아가기
-          </Button>
-        </Link>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center space-y-3">
-            <div className="flex justify-center items-center gap-3">
-              <RinLogo size={48} className="shrink-0" />
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">Rin-AI</h1>
-            </div>
-            <p className="text-muted-foreground text-sm">로그인하고 최신 정보를 받아보세요</p>
-          </div>
-
-          <div className="bg-card rounded-3xl shadow-lg border border-border p-8 space-y-6">
-            <form onSubmit={handleLogin} className="space-y-5">
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">이메일</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11 rounded-xl"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">비밀번호</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 rounded-xl"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base shadow-md"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : '로그인'}
-              </Button>
-            </form>
-
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">계정이 없으신가요? </span>
-              <Link href="/auth/signup" className="text-primary hover:underline font-medium">
-                회원가입
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">로딩 중...</div>}>
-      <LoginForm />
-    </Suspense>
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-muted-foreground">이동 중...</p>
+    </div>
   )
 }

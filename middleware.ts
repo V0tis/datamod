@@ -1,14 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// 로그인하지 않은 사용자는 /auth/login으로 리다이렉트
-// /results (검색 결과)는 비로그인 가능, /results/[id] (저장된 상세)는 로그인 필요
-const PROTECTED_PATHS = ['/history']
+/** 인증 없이 접근 가능한 경로 (로그인/회원가입/공유 등). 그 외 모든 페이지는 로그인 필요. */
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth/login',
+  '/auth/signup',
+  '/auth/verify',
+  '/auth/callback',
+]
 
-function isProtected(pathname: string): boolean {
-  if (PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/')))
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/')))
     return true
-  if (pathname.startsWith('/results/')) return true // /results/[id] dynamic route
+  if (pathname.startsWith('/share/')) return true
   return false
 }
 
@@ -33,9 +38,15 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (isProtected(request.nextUrl.pathname) && !user) {
-    const loginUrl = new URL('/auth/login', request.url)
-    loginUrl.searchParams.set('callbackUrl', request.nextUrl.pathname)
+  const pathname = request.nextUrl.pathname
+  // 세션/토큰은 쿠키로 유지되며 getUser()가 유효성 검사. 새로고침 시에도 인증 상태 유지.
+  if (isPublicPath(pathname)) return response
+  if (pathname.startsWith('/api/')) return response
+
+  if (!user) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search)
+    loginUrl.searchParams.set('reason', 'login_required')
     return NextResponse.redirect(loginUrl)
   }
 
@@ -43,5 +54,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/history', '/results/:path*'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:ico|png|svg|jpg|jpeg|gif|webp)$).*)'],
 }
