@@ -357,7 +357,13 @@ export default function RinAISearch() {
                   ) : (
                     <ul className="space-y-2">
                       {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
-                        <li className="text-xs text-muted-foreground dark:text-slate-400 py-2">데이터 없음</li>
+                        <li className="flex flex-col items-center justify-center py-8 text-center">
+                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted dark:bg-slate-800 text-muted-foreground dark:text-slate-500 mb-2">
+                            <TrendingUp className="h-5 w-5" aria-hidden />
+                          </div>
+                          <span className="text-sm text-muted-foreground dark:text-slate-400">트렌드 데이터가 없어요</span>
+                          <span className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">잠시 후 새로고침하거나 국가를 바꿔 보세요.</span>
+                        </li>
                       ) : (
                         (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => {
                           const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword

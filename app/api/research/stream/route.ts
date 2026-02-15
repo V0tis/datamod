@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { trackUsage } from '@/lib/usage'
 import { getEffectiveLicenseKeys } from '@/lib/license'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import Parser from 'rss-parser'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
-import { withExponentialBackoff, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { logCacheEvent } from '@/lib/research-cache'
+import { generateText } from '@/services/ai/geminiClient'
 
 export const runtime = 'nodejs'
 
@@ -235,23 +236,17 @@ export async function POST(req: Request) {
         }
 
         currentStep = 'gemini'
-        const genAI = new GoogleGenerativeAI(apiKey)
-        const model = genAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-          systemInstruction: SYSTEM_INSTRUCTION,
-          generationConfig: { maxOutputTokens: 3500 },
-        })
         const newsTitles = news.map((n) => n.title)
         const prompt = buildUserPrompt(keyword, newsTitles)
         let responseText: string | null = null
         try {
-          responseText = await withExponentialBackoff(
-            async () => {
-              const result = await model.generateContent(prompt)
-              return result.response.text()
-            },
-            { maxRetries: 5, baseDelayMs: 1000 }
-          )
+          responseText = await generateText({
+            apiKey,
+            prompt,
+            systemInstruction: SYSTEM_INSTRUCTION,
+            maxOutputTokens: 3500,
+            model: GEMINI_MODEL,
+          })
         } catch (geminiError: unknown) {
           const msg = String((geminiError as { message?: string })?.message ?? geminiError)
           console.log('[Research Stream] Gemini error (all retries exhausted)', msg)
@@ -406,6 +401,12 @@ export async function POST(req: Request) {
                 keyConclusions: summary.keyConclusions,
                 sentiment: summary.sentiment,
               }
+              logCacheEvent('write', {
+                scope: 'stream_report',
+                keyword: keyword.trim(),
+                countryCode,
+                detail: 'key_metrics',
+              })
               await supabase.from('research_history').upsert(
                 {
                   user_id: user.id,

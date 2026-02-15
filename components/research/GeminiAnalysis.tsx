@@ -57,14 +57,14 @@ function GeminiAnalysisComponent({
   return (
     <Card
       className={cn(
-        'flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[240px] border-l-4',
+        'flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[200px] sm:min-h-[240px] border-l-4 min-w-0',
         status === 'loading' && 'border-l-amber-500',
         status === 'error' && 'border-l-rose-500',
         status === 'success' && 'border-l-emerald-500',
         status === 'idle' && 'border-l-transparent'
       )}
     >
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-1 sm:pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Badge variant="secondary">Gemini</Badge>
@@ -91,7 +91,7 @@ function GeminiAnalysisComponent({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4 min-h-[180px]">
+      <CardContent className="flex-1 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[180px] px-4 sm:px-6 pb-4 sm:pb-6">
         {error ? (
           <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
             <p className="text-destructive text-sm dark:text-[#00d19a]">
@@ -109,7 +109,7 @@ function GeminiAnalysisComponent({
           </div>
         ) : text ? (
           <>
-            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', isFact && 'prose-lg')}>
+            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words', isFact && 'sm:prose-lg')}>
               <MarkdownWithSearchLinks text={text} />
             </div>
             <div className="mt-auto pt-2" aria-live="polite">

@@ -1,246 +1,30 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL } from '@/lib/gemini-config'
+import { sleep, REQUEST_GAP_MS, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import {
-  withExponentialBackoff,
-  sleep,
-  REQUEST_GAP_MS,
-  RATE_LIMIT_USER_MESSAGE,
-} from '@/lib/gemini-retry'
+  RESEARCH_CACHE_TTL_MS,
+  isCacheValid,
+  logCacheEvent,
+  type ResearchCacheScope,
+} from '@/lib/research-cache'
+import { requestGenerateContent, parseGenerateContentResponse, getTabModel } from '@/services/ai/geminiClient'
+import { completeChat } from '@/services/ai/groqClient'
+import {
+  type Consensus,
+  type ConsensusImpactItem,
+  type ConsensusSentiment,
+  type ConsensusStrategicSummary,
+  type ConsensusMetadata,
+  normalizeConsensus,
+  synthesizeConsensus,
+  FALLBACK_CONSENSUS,
+} from '@/services/ai/consensusService'
 
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
+// Re-export types for API consumers (e.g. frontend)
+export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrategicSummary, ConsensusMetadata }
+
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
-const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
-
-function buildGeminiGenerateContentUrl(apiKey: string): string {
-  return `${GEMINI_BASE_URL_V1}/${GEMINI_TAB_MODEL}:generateContent?key=${apiKey}`
-}
-
-/** Consensus 전용: GEMINI_CONSENSUS_MODEL (기본 gemini-2.5-flash), maxOutputTokens 8192 */
-function buildGeminiConsensusUrl(apiKey: string): string {
-  return `${GEMINI_BASE_URL_V1}/${GEMINI_CONSENSUS_MODEL}:generateContent?key=${apiKey}`
-}
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const UNIFIED_ERROR_MESSAGE = RATE_LIMIT_USER_MESSAGE
-
-/** Context = Gemini + Groq 분석 텍스트. 이 context만 바탕으로 추출하며 검색/외부 데이터 사용 금지 */
-const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 분석가입니다.
-아래 [Gemini 분석]과 [Groq 분석]에 **제공된 텍스트만**을 바탕으로 정보를 추출하세요. 검색이나 외부 데이터를 사용하지 마세요.
-반드시 제공된 데이터에 근거하여 아래 JSON 구조로만 출력하세요. 다른 텍스트는 포함하지 마세요.
-각 항목(marketNews, reason, summary 등)은 1~2문장으로 간결히 작성하세요.
-
-JSON 구조:
-{
-  "marketNews": ["수집된 데이터에서 가장 비중 있게 다뤄진 핵심 뉴스 3~5개 요약 (문자열 배열)"],
-  "painPoints": ["유저의 구체적 불편함 및 미충족 니즈 (문자열 배열)"],
-  "competitorTrends": "주요 경쟁사 동향 요약 문자열 (없을 시 '정보 부족' 기재)",
-  "sentiment": {
-    "score": -100~100 숫자 (음수=부정, 양수=긍정, 0=중립),
-    "trend": "rising" | "falling" | "stable",
-    "ratio": { "positive": 0~100, "neutral": 0~100, "negative": 0~100 }
-  },
-  "impactAnalysis": [
-    { "subject": "시장성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "기술성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "반응성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "규제/환경", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "경쟁력", "score": 0~10, "reason": "점수 근거 한 줄" }
-  ],
-  "strategicSummary": {
-    "summary": "시장 상황 PM 관점 요약 (150자 이내)",
-    "opportunity": "즉시 활용 가능한 기회 요소",
-    "threat": "잠재적 리스크 및 위협",
-    "actionItems": ["PM 우선순위 과제 1", "과제 2", "과제 3"]
-  },
-  "metadata": {
-    "confidence": 0~100 (두 AI 의견 일치도),
-    "dataPeriod": "최근 24시간"
-  }
-}
-
-impactAnalysis의 subject는 반드시 시장성, 기술성, 반응성, 규제/환경, 경쟁력 5개만 사용하세요.`;
-
-const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
-const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
-
-/** 새 PM 프레임워크 포맷 (API 응답·DB 저장) */
-export type ConsensusImpactItem = { subject: string; score: number; reason?: string }
-export type ConsensusSentiment = { score: number; trend?: 'rising' | 'falling' | 'stable'; ratio?: { positive?: number; neutral?: number; negative?: number } }
-export type ConsensusStrategicSummary = { summary: string; opportunity?: string; threat?: string; actionItems?: string[] }
-export type ConsensusMetadata = { confidence: number; dataPeriod?: string }
-
-export type Consensus = {
-  marketNews?: string[]
-  painPoints?: string[]
-  competitorTrends?: string
-  sentiment: ConsensusSentiment
-  impactAnalysis?: ConsensusImpactItem[]
-  strategicSummary: ConsensusStrategicSummary
-  metadata: ConsensusMetadata
-}
-
-/** 구형 flat 포맷 → Consensus (하위 호환) */
-function legacyToConsensus(o: Record<string, unknown>): Consensus {
-  const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 500) : '분석 불가. 데이터가 부족합니다.'
-  const sentimentScore = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
-  const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
-  const action_item = o.action_item
-  const actionItems = Array.isArray(action_item)
-    ? (action_item as string[]).filter((s): s is string => typeof s === 'string').slice(0, 5)
-    : typeof action_item === 'string' && action_item !== '—'
-      ? [action_item.trim()].filter(Boolean)
-      : []
-  return {
-    marketNews: [],
-    painPoints: [],
-    competitorTrends: '',
-    sentiment: { score: sentimentScore, trend: 'stable', ratio: { positive: 0, neutral: 0, negative: 0 } },
-    impactAnalysis: [
-      { subject: '시장성', score: 5, reason: '—' },
-      { subject: '기술성', score: 5, reason: '—' },
-      { subject: '반응성', score: 5, reason: '—' },
-      { subject: '규제/환경', score: 5, reason: '—' },
-      { subject: '경쟁력', score: 5, reason: '—' },
-    ],
-    strategicSummary: {
-      summary,
-      opportunity: typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—',
-      threat: '—',
-      actionItems,
-    },
-    metadata: { confidence, dataPeriod: '최근 24시간' },
-  }
-}
-
-const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
-  summary: '분석 불가. 데이터가 부족합니다.',
-  sentiment: 0,
-  strategic_insight: '—',
-  action_item: '—',
-  confidence: 0,
-})
-
-/** DB/캐시에서 읽은 값(구형 또는 신형)을 Consensus로 정규화 */
-function normalizeConsensus(raw: unknown): Consensus | null {
-  if (!raw || typeof raw !== 'object') return null
-  const o = raw as Record<string, unknown>
-  // 신형: strategicSummary 존재
-  if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
-    const ss = o.strategicSummary as Record<string, unknown>
-    const sent = o.sentiment as Record<string, unknown> | undefined
-    const score = typeof sent?.score === 'number' ? Math.max(-100, Math.min(100, sent.score as number)) : 0
-    const meta = o.metadata as Record<string, unknown> | undefined
-    const confidence = typeof meta?.confidence === 'number' ? Math.max(0, Math.min(100, meta.confidence as number)) : 0
-    const impact = Array.isArray(o.impactAnalysis)
-      ? (o.impactAnalysis as ConsensusImpactItem[]).map((i) => ({
-          subject: typeof i.subject === 'string' ? i.subject : '—',
-          score: typeof i.score === 'number' ? Math.max(0, Math.min(10, i.score)) : 5,
-          reason: typeof i.reason === 'string' ? i.reason.slice(0, 200) : undefined,
-        }))
-      : FALLBACK_CONSENSUS.impactAnalysis ?? []
-    return {
-      marketNews: Array.isArray(o.marketNews) ? (o.marketNews as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
-      painPoints: Array.isArray(o.painPoints) ? (o.painPoints as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
-      competitorTrends: typeof o.competitorTrends === 'string' ? o.competitorTrends.trim().slice(0, 500) : '',
-      sentiment: {
-        score,
-        trend: sent?.trend === 'rising' || sent?.trend === 'falling' || sent?.trend === 'stable' ? sent.trend : 'stable',
-        ratio: typeof sent?.ratio === 'object' && sent.ratio ? sent.ratio as { positive?: number; neutral?: number; negative?: number } : undefined,
-      },
-      impactAnalysis: impact.length >= 5 ? impact : (FALLBACK_CONSENSUS.impactAnalysis ?? []),
-      strategicSummary: {
-        summary: typeof ss.summary === 'string' ? ss.summary.trim().slice(0, 500) : '—',
-        opportunity: typeof ss.opportunity === 'string' ? ss.opportunity.trim().slice(0, 300) : '—',
-        threat: typeof ss.threat === 'string' ? ss.threat.trim().slice(0, 300) : '—',
-        actionItems: Array.isArray(ss.actionItems) ? (ss.actionItems as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
-      },
-      metadata: { confidence, dataPeriod: typeof meta?.dataPeriod === 'string' ? meta.dataPeriod : '최근 24시간' },
-    }
-  }
-  // 구형: summary + sentiment 숫자
-  if (typeof o.summary === 'string' && o.summary.trim() !== '') return legacyToConsensus(o)
-  if (typeof o.sentiment === 'number') return legacyToConsensus(o)
-  return null
-}
-
-/** 두 분석이 모두 settled된 뒤에만 호출. 한쪽 실패 시에도 가능한 데이터로 요약 (일부 데이터만으로 종합). 항상 Consensus 객체 반환. */
-async function generateConsensus(
-  apiKey: string,
-  geminiAnalysis: string,
-  groqAnalysis: string
-): Promise<Consensus> {
-  const g = String(geminiAnalysis ?? '').trim()
-  const r = String(groqAnalysis ?? '').trim()
-  const bothEmpty = g.length < 20 && r.length < 20
-  if (bothEmpty) return FALLBACK_CONSENSUS
-
-  const partialNote = (g.length < 20 || r.length < 20)
-    ? '\n\n[참고: 한쪽 AI 분석만 사용되었거나 일부 데이터만으로 종합한 결과입니다.]'
-    : ''
-  const prompt = `${CONSENSUS_SYSTEM}${partialNote}\n\n${CONSENSUS_USER_PREFIX}${g.slice(0, 3000)}${CONSENSUS_USER_SUFFIX}${r.slice(0, 3000)}`
-  // v1 API: role 없이 contents.parts만 사용. responseMimeType은 v1에서 400 유발할 수 있어 제거(프롬프트에서 JSON 요청)
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 8192 },
-  }
-  try {
-    const url = buildGeminiConsensusUrl(apiKey)
-    const res = await withExponentialBackoff(
-      async () => {
-        const r = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        if (r.status === 429 || r.status >= 500) {
-          const err = new Error(`Gemini Consensus ${r.status}`) as Error & { status?: number }
-          err.status = r.status
-          throw err
-        }
-        return r
-      },
-      { maxRetries: 5, baseDelayMs: 1000 }
-    )
-    const data = (await res.json().catch(() => ({}))) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-      error?: { message?: string }
-    }
-    console.log('[Research Tab] Gemini Consensus synthesis', { status: res.status, errorMessage: data?.error?.message ?? null })
-    if (!res.ok) return FALLBACK_CONSENSUS
-    let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
-    if (!raw) {
-      console.warn('[AI Insight Consensus] generateConsensus: Gemini 응답 텍스트 없음', { hasCandidates: !!data?.candidates?.length })
-      return FALLBACK_CONSENSUS
-    }
-    // Gemini가 ```json ... ``` 으로 감싼 경우 제거 후 파싱
-    const codeBlockMatch = raw.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/m)
-    if (codeBlockMatch) raw = codeBlockMatch[1].trim()
-    else if (raw.startsWith('```')) {
-      const afterOpen = raw.replace(/^```(?:json)?\s*\n?/i, '')
-      const closeIdx = afterOpen.indexOf('```')
-      raw = (closeIdx !== -1 ? afterOpen.slice(0, closeIdx) : afterOpen).trim()
-    }
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>
-    } catch (parseErr) {
-      console.error('[AI Insight Consensus] generateConsensus JSON 파싱 실패', {
-        parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
-        rawLength: raw.length,
-        rawSnippet: raw.slice(0, 500),
-      })
-      return FALLBACK_CONSENSUS
-    }
-    const normalized = normalizeConsensus(parsed)
-    if (normalized) return normalized
-    return FALLBACK_CONSENSUS
-  } catch (e) {
-    console.warn('[Research Tab] Consensus synthesis', e)
-    return FALLBACK_CONSENSUS
-  }
-}
+const CACHE_SCOPE: ResearchCacheScope = 'insight_tab'
 
 /** Gemini·Groq 공통: 시장 분석 및 인사이트를 마크다운 형식으로 요약 */
 const UNIFIED_SYSTEM_PROMPT =
@@ -345,20 +129,33 @@ export async function POST(req: Request) {
     })
   }
 
-  // Read-through 캐시: isReanalyze false면 DB만 조회 후 반환. true일 때만 API 호출
+  // Read-through cache: key = (user_id, keyword, country_code). TTL = 24h to limit duplicate AI cost per key.
   let mergedGroq: string | null = null
   let mergedGemini: string | null = null
 
   if (!isReanalyze && keyword) {
     const { data: cachedData } = await supabase
       .from('research_history')
-      .select('analysis_groq, analysis_gemini, analysis_results')
+      .select('analysis_groq, analysis_gemini, analysis_results, updated_at')
       .eq('user_id', user.id)
       .eq('keyword', keyword)
       .eq('country_code', countryCode)
       .maybeSingle()
 
-    if (cachedData) {
+    const cacheValid = cachedData?.updated_at != null && isCacheValid(cachedData.updated_at, RESEARCH_CACHE_TTL_MS)
+    if (cachedData && !cacheValid) {
+      logCacheEvent('expired', {
+        scope: CACHE_SCOPE,
+        keyword,
+        countryCode,
+        tab,
+        source: 'keyword',
+        detail: 'ttl_exceeded',
+        updatedAt: cachedData.updated_at ?? undefined,
+      })
+    }
+
+    if (cachedData && cacheValid) {
       const groqTab = (cachedData.analysis_groq ?? null) as Record<string, string> | null
       const geminiTab = (cachedData.analysis_gemini ?? null) as Record<string, string> | null
       mergedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
@@ -383,7 +180,7 @@ export async function POST(req: Request) {
         ) {
           const geminiKey = process.env.GOOGLE_GENAI_API_KEY?.trim()
           if (geminiKey) {
-            const synthesized = await generateConsensus(geminiKey, mergedGemini, mergedGroq)
+            const synthesized = await synthesizeConsensus(geminiKey, mergedGemini, mergedGroq)
             if (synthesized) {
               cachedConsensus = synthesized
               await supabase
@@ -395,6 +192,16 @@ export async function POST(req: Request) {
             }
           }
         }
+        logCacheEvent('hit', {
+          scope: CACHE_SCOPE,
+          keyword,
+          countryCode,
+          tab,
+          source: 'keyword',
+          detail: 'full',
+          skippedAi: true,
+          updatedAt: cachedData.updated_at ?? undefined,
+        })
         return NextResponse.json({
           groq: mergedGroq != null ? { text: mergedGroq } : null,
           gemini: mergedGemini != null ? { text: mergedGemini } : null,
@@ -412,9 +219,8 @@ export async function POST(req: Request) {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    const cacheValid =
-      !!historyRow?.updated_at && Date.now() - new Date(historyRow.updated_at).getTime() <= CACHE_TTL_MS
-    if (cacheValid && historyRow) {
+    const reportCacheValid = historyRow?.updated_at != null && isCacheValid(historyRow.updated_at, RESEARCH_CACHE_TTL_MS)
+    if (reportCacheValid && historyRow) {
       const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
       const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
       const reportCachedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
@@ -449,14 +255,24 @@ export async function POST(req: Request) {
   const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
-  // 재분석(creative)일 때는 analysis_results 캐시를 쓰지 않고 항상 generateConsensus 재호출
+  // Reuse existing analyses; only consensus from DB. No extra AI calls (cost: skip Groq/Gemini when both present).
   if (!needGroq && !needGemini && !(isReanalyze && tab === 'creative')) {
-    const historyForConsensus = await supabase.from('research_history').select('analysis_results').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
+    const historyForConsensus = await supabase.from('research_history').select('analysis_results, updated_at').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
     let c: Consensus | null = null
     if (ar) {
       c = (ar.consensus != null ? normalizeConsensus(ar.consensus) : null) ?? (typeof ar.summary === 'string' ? normalizeConsensus(ar) : null)
     }
+    logCacheEvent('hit', {
+      scope: CACHE_SCOPE,
+      keyword,
+      countryCode,
+      tab,
+      source: 'keyword',
+      detail: 'consensus_only',
+      skippedAi: true,
+      updatedAt: historyForConsensus.data?.updated_at ?? undefined,
+    })
     return NextResponse.json({
       groq: mergedGroq != null ? { text: mergedGroq } : null,
       gemini: mergedGemini != null ? { text: mergedGemini } : null,
@@ -483,86 +299,42 @@ export async function POST(req: Request) {
   const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
   const fullPromptForGeminiAndHf = `${UNIFIED_SYSTEM_PROMPT}\n\n${userPrompt}`
 
-  /** Groq / Gemini 각각 독립 호출. 서로의 결과를 참조하지 않음. 429 시 지수 백오프로 최대 5회 재시도. */
+  const aiCallDetail = needGroq && needGemini ? 'groq_and_gemini' : needGroq ? 'groq' : 'gemini'
+  logCacheEvent('miss', {
+    scope: CACHE_SCOPE,
+    keyword,
+    countryCode,
+    tab,
+    detail: aiCallDetail,
+  })
+
+  /** Groq: single responsibility via groqClient */
   async function callGroq(): Promise<{ text: string | null; quotaError?: boolean }> {
     if (provider !== 'all' && provider !== 'groq') return { text: null }
-    try {
-      const { res, data } = await withExponentialBackoff(
-        async () => {
-          const res = await fetch(GROQ_ENDPOINT, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${groqKey}`,
-            },
-            body: JSON.stringify({
-              model: GROQ_MODEL,
-              messages: [
-                { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
-                { role: 'user', content: userPrompt },
-              ],
-              max_tokens: 2048,
-            }),
-          })
-          const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } }
-          if (res.status === 429) {
-            const err = new Error('Groq 429') as Error & { status?: number }
-            err.status = 429
-            throw err
-          }
-          return { res, data }
-        },
-        { maxRetries: 5, baseDelayMs: 1000 }
-      )
-      if (!res.ok) {
-        console.warn('[Research Tab] Groq', res.status, data?.error?.message ?? data)
-        return res.status === 429 ? { text: null, quotaError: true } : { text: null }
-      }
-      const text = data?.choices?.[0]?.message?.content?.trim() ?? ''
-      return { text: text || null }
-    } catch (e) {
-      console.warn('[Research Tab] Groq', e)
-      const is429 = (e as { status?: number })?.status === 429
-      return { text: null, ...(is429 ? { quotaError: true } : {}) }
-    }
+    const result = await completeChat(groqKey!, [
+      { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ])
+    if (result.quotaError) console.warn('[Research Tab] Groq quota/429')
+    return result
   }
 
-  /** Gemini: v1 + GEMINI_TAB_MODEL. 429/5xx 시 지수 백오프로 최대 5회 재시도 후 사용자 메시지 반환 */
+  /** Gemini tab insight: single responsibility via geminiClient */
   async function callGemini(): Promise<{ text: string | null; quotaExceeded?: boolean }> {
     if (provider !== 'all' && provider !== 'gemini') return { text: null }
     if (!geminiKey) return { text: null }
     const body = {
       contents: [{ parts: [{ text: fullPromptForGeminiAndHf }] }],
       generationConfig: { maxOutputTokens: 2048 },
-    } as const
+    }
     try {
-      const res = await withExponentialBackoff(
-        async () => {
-          const url = buildGeminiGenerateContentUrl(geminiKey!)
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          })
-          if (r.status === 429 || r.status >= 500) {
-            const err = new Error(`Gemini ${r.status}`) as Error & { status?: number }
-            err.status = r.status
-            throw err
-          }
-          return r
-        },
-        { maxRetries: 5, baseDelayMs: 1000 }
-      )
+      const res = await requestGenerateContent(geminiKey, body, getTabModel())
       const data = await res.json().catch(() => ({}))
-      const parsed = data as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-        error?: { message?: string }
-      }
       if (!res.ok) {
-        console.warn('[Research Tab] Gemini', res.status, parsed?.error?.message ?? data)
+        console.warn('[Research Tab] Gemini', res.status, (data as { error?: { message?: string } })?.error?.message ?? data)
         return res.status === 429 ? { text: null, quotaExceeded: true } : { text: null }
       }
-      const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+      const text = parseGenerateContentResponse(data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
       return { text: text || null }
     } catch (e) {
       console.warn('[Research Tab] Gemini (all retries exhausted)', e)
@@ -609,7 +381,7 @@ export async function POST(req: Request) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
     console.log('[AI Insight Consensus] generateConsensus input', { geminiInput, groqInput })
-    consensus = await generateConsensus(geminiKey, geminiInput, groqInput)
+    consensus = await synthesizeConsensus(geminiKey, geminiInput, groqInput)
     if (isReanalyze) {
       console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })
     }
@@ -663,6 +435,13 @@ export async function POST(req: Request) {
         console.log('[AI Insight Consensus] research_history upsert (analysis_results 저장)', { keyword, countryCode })
       }
 
+      logCacheEvent('write', {
+        scope: CACHE_SCOPE,
+        keyword,
+        countryCode,
+        tab,
+        detail: consensusToSave != null ? 'analysis_and_consensus' : 'analysis_only',
+      })
       await supabase.from('research_history').upsert(
         upsertPayload,
         { onConflict: 'user_id,keyword,country_code' }

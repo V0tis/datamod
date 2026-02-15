@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
-import { withExponentialBackoff, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { generateResearchWithGrounding } from '@/services/ai/geminiClient'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -85,22 +85,14 @@ export async function POST(req: Request) {
     let sourceLinks: Array<{ title: string; url: string }> = []
 
     if (hasGemini) {
-      const genAI = new GoogleGenerativeAI(effective.gemini)
-      const model = genAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-        systemInstruction: SYSTEM_INSTRUCTION,
-        generationConfig: { maxOutputTokens: 1500 },
-        tools: [{ googleSearchRetrieval: {} }],
-      })
       try {
-        const result = await withExponentialBackoff(
-          async () => {
-            const r = await model.generateContent(prompt)
-            return r.response
-          },
+        const { text, sourceLinks: links } = await generateResearchWithGrounding(
+          effective.gemini!,
+          prompt,
           {
-            maxRetries: 5,
-            baseDelayMs: 1000,
+            systemInstruction: SYSTEM_INSTRUCTION,
+            maxOutputTokens: 1500,
+            model: GEMINI_MODEL,
             isRetryable: (err) => {
               const msg = String((err as { message?: string })?.message ?? err)
               if (/404|not found|invalid model/i.test(msg)) return false
@@ -108,16 +100,8 @@ export async function POST(req: Request) {
             },
           }
         )
-        responseText = result.text()
-        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
-        const candidate = (result as GroundingResp).candidates?.[0]
-        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
-        sourceLinks = chunks
-          .map((c) => ({
-            title: (c.web?.title ?? '제목 없음').slice(0, 200),
-            url: c.web?.uri ?? '',
-          }))
-          .filter((l) => l.url)
+        responseText = text
+        sourceLinks = links
       } catch (geminiError: unknown) {
         const msg = String((geminiError as { message?: string })?.message ?? geminiError)
         console.warn('[Research API] Gemini error (all retries exhausted)', msg)

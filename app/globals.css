@@ -229,6 +229,18 @@
   margin-top: 0.875em;
 }
 
+/* 결과·분석 페이지: 장문 가독 (섹션 간격, 본문 leading) */
+.rin-reading {
+  line-height: 1.7;
+}
+.rin-reading [data-slot="card-content"] p,
+.rin-reading .text-sm.leading-relaxed {
+  line-height: 1.7;
+}
+.rin-reading section + section {
+  margin-top: 1.5rem;
+}
+
 /* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */
 @media print {
   body * {

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isCacheValid } from '@/lib/research-cache'
 
-/** GET ?keyword=xxx&country=KR → research_history + report 캐시 반환 (analysis_results, key_metrics, analysis_groq, analysis_gemini 포함) */
+/** GET ?keyword=xxx&country=KR → research_history + report 캐시 반환. cacheExpired=true when TTL exceeded (reuse possible but consider refetch for fresh AI). */
 export async function GET(req: Request) {
   try {
     const supabase = await createClient()
@@ -32,6 +33,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ cached: false })
     }
 
+    const cacheExpired = !isCacheValid(history.updated_at)
+
     const { data: report, error: reportError } = await supabase
       .from('reports')
       .select('id, content, source_links, ai_responses')
@@ -42,6 +45,7 @@ export async function GET(req: Request) {
     if (reportError || !report) {
       return NextResponse.json({
         cached: true,
+        cacheExpired,
         reportId: history.report_id,
         keyword,
         content: {},
@@ -58,8 +62,9 @@ export async function GET(req: Request) {
     const content = (report.content ?? {}) as Record<string, unknown>
     return NextResponse.json({
       cached: true,
+      cacheExpired,
       reportId: report.id,
-      keyword: report.keyword,
+      keyword,
       content,
       source_links: (report as { source_links?: unknown }).source_links ?? [],
       ai_responses: (report as { ai_responses?: Record<string, string> }).ai_responses ?? {},
