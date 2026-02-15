@@ -205,8 +205,13 @@ function ConsensusInsightComponent({
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <EmptyState
           title="아직 전략 통찰이 없어요"
-          description="인사이트 탭 분석이 끝나면 여기에 요약과 감성 점수가 표시돼요. 재분석 버튼을 눌러 주세요."
+          description="인사이트 탭 분석이 끝나면 여기에 요약과 감성 점수가 표시돼요. 아래 버튼으로 재분석해 주세요."
           className="py-6"
+          action={
+            <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 재분석">
+              <RefreshCw className="h-3.5 w-3.5" /> 재분석
+            </Button>
+          }
         />
       </div>
     )

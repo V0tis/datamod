@@ -80,8 +80,10 @@ interface ResearchState {
 /** 429 등 retryDelay 응답 후 한 번만 재시도하기 위한 플래그 */
 let retryScheduledForStream = false
 
-/** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음(최초 분석 필요), 'none' = 기록 없음 */
-export type LoadHistoryResult = 'cached' | 'empty' | 'none'
+/** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음, 'none' = 기록 없음, 'error' = 요청 실패(스트림 시작 금지) */
+export type LoadHistoryResult = 'cached' | 'empty' | 'none' | 'error'
+
+type TabId = 'logic' | 'creative' | 'fact'
 
 /** DB/API sometimes returns JSON as string; normalize to object for store. */
 function parseJsonField<T>(value: unknown): T | undefined {
@@ -102,6 +104,8 @@ interface ResearchStore extends ResearchState {
   loadFromHistory: (keyword: string, countryCode?: string) => Promise<LoadHistoryResult>
   /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
   loadReportByKeyword: (keyword: string) => Promise<boolean>
+  /** 탭 API 응답을 result에 병합. refetch 없이 UI/동기화 effect에 반영. */
+  mergeResultAnalysis: (tabId: TabId, groqText: string | null, geminiText: string | null) => void
   setInsights: (value: string | null) => void
   setGeminiQuota: (quota: GeminiQuota | null) => void
   fetchGeminiQuota: () => Promise<void>
@@ -171,6 +175,10 @@ export const useResearchStore = create<ResearchStore>()(
             analysis_gemini?: Record<string, string>
             analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
           }
+          if (!res.ok) {
+            if (res.status === 401) return 'none'
+            return 'error'
+          }
           if (!data.cached) return 'none'
           if (data.emptyAnalysis) return 'empty'
           const hasContent = data.content != null || data.ai_responses
@@ -199,7 +207,7 @@ export const useResearchStore = create<ResearchStore>()(
           }
           return data.emptyAnalysis ? 'empty' : 'none'
         } catch {
-          return 'none'
+          return 'error'
         }
       },
 
@@ -236,6 +244,20 @@ export const useResearchStore = create<ResearchStore>()(
         } catch {
           return false
         }
+      },
+
+      mergeResultAnalysis: (tabId, groqText, geminiText) => {
+        const current = get().result
+        if (!current?.reportId) return
+        const prevGroq = (current.analysis_groq as Record<string, string> | undefined) ?? {}
+        const prevGemini = (current.analysis_gemini ?? {}) as Record<string, string>
+        set({
+          result: {
+            ...current,
+            analysis_groq: groqText !== null ? { ...prevGroq, [tabId]: groqText } : current.analysis_groq,
+            analysis_gemini: geminiText !== null ? { ...prevGemini, [tabId]: geminiText } : current.analysis_gemini,
+          } as ResearchResponse,
+        })
       },
 
       startResearch: (keyword: string, options?: { fromRetry?: boolean }) => {

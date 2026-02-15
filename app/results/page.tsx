@@ -85,7 +85,7 @@ function NewsDetailModal({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-muted-foreground">
-                이 기사 요약은 이번 분석에 포함되지 않았어요. 원문에서 확인해 주세요.
+                이 기사 요약은 이번 분석에 포함되지 않았습니다. 원문에서 확인해 주세요.
               </p>
             )}
             {item.url && (
@@ -135,7 +135,7 @@ function NewsDetailModal({
               </div>
             )}
             {!item.content && (
-              <p className="text-sm text-muted-foreground text-muted-foreground">수집된 본문이 없어요. 위 링크에서 확인해 주세요.</p>
+              <p className="text-sm text-muted-foreground text-muted-foreground">수집된 본문이 없습니다. 위 링크에서 확인해 주세요.</p>
             )}
           </section>
         </div>
@@ -155,6 +155,7 @@ function ResultsContent() {
     error,
     startResearch,
     loadFromHistory,
+    mergeResultAnalysis,
   } = useResearchStore()
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
@@ -241,7 +242,10 @@ function ResultsContent() {
       .then((historyStatus) => {
         if (cancelled) return
         if (historyStatus === 'cached') return
+        if (historyStatus === 'error') return
         if (historyStatus === 'empty' || historyStatus === 'none') {
+          const state = useResearchStore.getState()
+          if (state.result?.reportId && state.keyword === k) return
           startResearch(k, { country_code: countryCode })
         }
       })
@@ -301,6 +305,22 @@ function ResultsContent() {
   const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !error && !result
   const currentKeyword = keyword ?? storeKeyword
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
+  /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
+  const headerTitleKo =
+    countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
+      ? (() => {
+          const list: TrendItem[] =
+            countryFromUrl === 'US' ? sharedTrends.US
+            : countryFromUrl === 'JP' ? sharedTrends.JP
+            : countryFromUrl === 'TW' ? sharedTrends.TW
+            : countryFromUrl === 'HK' ? sharedTrends.HK
+            : countryFromUrl === 'GB' ? sharedTrends.GB
+            : countryFromUrl === 'DE' ? sharedTrends.DE
+            : []
+          const found = list.find((t: TrendItem) => t.keyword === (currentKeyword ?? '').trim())
+          return found?.title_ko != null && found.title_ko !== found.keyword ? found.title_ko : null
+        })()
+      : null
 
   const reportSummary = result
     ? [
@@ -322,7 +342,7 @@ function ResultsContent() {
       setTabCacheGroq((prev) => ({
         ...prev,
         logic: typeof groq.logic === 'string' ? groq.logic : prev.logic,
-        creative: typeof groq.creative === 'string' ? groq.creative : prev.creative,
+        creative: typeof groq.creative === 'string' ? groq.creative : (typeof groq.logic === 'string' ? groq.logic : prev.creative),
         fact: typeof groq.fact === 'string' ? groq.fact : prev.fact,
       }))
     }
@@ -330,15 +350,15 @@ function ResultsContent() {
       setTabCacheGemini((prev) => ({
         ...prev,
         logic: typeof gemini.logic === 'string' ? gemini.logic : prev.logic,
-        creative: typeof gemini.creative === 'string' ? gemini.creative : prev.creative,
+        creative: typeof gemini.creative === 'string' ? gemini.creative : (typeof gemini.logic === 'string' ? gemini.logic : prev.creative),
         fact: typeof gemini.fact === 'string' ? gemini.fact : prev.fact,
       }))
     }
-    // DB에 탭 데이터가 있으면 탭/consensus용 API 호출하지 않도록 표시
+    // DB에 탭 데이터가 있으면 탭/consensus용 API 호출하지 않도록 표시 (creative는 .creative 또는 구형 .logic 둘 다 인정)
     const tabs: AiTabId[] = ['logic', 'creative', 'fact']
     tabs.forEach((t) => {
-      const hasGroq = typeof groq?.[t] === 'string' && groq[t].trim().length > 0
-      const hasGemini = typeof gemini?.[t] === 'string' && gemini[t].trim().length > 0
+      const hasGroq = typeof groq?.[t] === 'string' && groq[t].trim().length > 0 || (t === 'creative' && typeof groq?.logic === 'string' && groq.logic.trim().length > 0)
+      const hasGemini = typeof gemini?.[t] === 'string' && gemini[t].trim().length > 0 || (t === 'creative' && typeof gemini?.logic === 'string' && gemini.logic.trim().length > 0)
       if (hasGroq && hasGemini) tabHasFetchedRef.current[t] = true
     })
   }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
@@ -365,9 +385,13 @@ function ResultsContent() {
 
   const fetchTabAnalysis = useCallback(
     async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean; reportId?: string; summary?: string }) => {
-      if (quotaExceeded) return
-      if (provider === 'gemini' && geminiQuotaExceeded) return
-      if (provider === 'all' && geminiQuotaExceeded) return
+      if (quotaExceeded) {
+        toast.error('API 쿼터가 부족합니다. 설정에서 키를 확인하거나 잠시 후 다시 시도해 주세요.')
+        return
+      }
+      const isReanalyze = options?.isReanalyze === true
+      if (provider === 'gemini' && geminiQuotaExceeded && !isReanalyze) return
+      if (provider === 'all' && geminiQuotaExceeded && !isReanalyze) return
       tabAbortControllerRef.current?.abort()
       const ac = new AbortController()
       tabAbortControllerRef.current = ac
@@ -382,7 +406,6 @@ function ResultsContent() {
       setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
       const logicText = tabCacheGroq.logic ?? tabCacheGemini.logic ?? ''
       const creativeText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
-      const isReanalyze = options?.isReanalyze ?? false
       const payload = {
         keyword: currentKeyword,
         summary: options?.summary ?? reportSummary,
@@ -428,10 +451,12 @@ function ResultsContent() {
             if (provider === 'all' || provider === 'groq') {
               setRetryCountTabGroq((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
               setTabErrorGroq((prev) => ({ ...prev, [tabId]: errMsg }))
+              setTabLoadingGroq((prev) => ({ ...prev, [tabId]: false }))
             }
             if (provider === 'all' || provider === 'gemini') {
               setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
               setTabErrorGemini((prev) => ({ ...prev, [tabId]: errMsg }))
+              setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
             }
             toast.error(errMsg, { id: TAB_ERROR_TOAST_ID, duration: 5000 })
             showErrorToast(errForModal, { fallbackMessage: errMsg })
@@ -459,14 +484,18 @@ function ResultsContent() {
         const rawConsensus = (data as { consensus?: unknown }).consensus
         const normalized = rawConsensus && typeof rawConsensus === 'object' ? normalizeConsensusData(rawConsensus) : null
         if (normalized) setConsensusData(normalized)
+        if (groqText !== null || geminiText !== null) {
+          mergeResultAnalysis(tabId, groqText, geminiText)
+        }
         if (geminiText === null && (provider === 'all' || provider === 'gemini')) {
           if (geminiQuotaExceeded) {
             setGeminiQuotaExceeded(true)
             setTabErrorGemini((prev) => ({ ...prev, [tabId]: geminiErrorMsg ?? '무료 쿼터 초과' }))
           } else {
             setRetryCountTabGemini((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
-            setTabErrorGemini((prev) => ({ ...prev, [tabId]: '분석에 실패했습니다.' }))
+            setTabErrorGemini((prev) => ({ ...prev, [tabId]: geminiErrorMsg ?? '분석에 실패했습니다.' }))
           }
+          setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -486,7 +515,7 @@ function ResultsContent() {
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded]
+    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, mergeResultAnalysis]
   )
 
   // 탭 분석: DB(result.analysis_groq/analysis_gemini)에 이미 있으면 API 호출 절대 안 함. 재시도 버튼으로만 호출.
@@ -500,9 +529,9 @@ function ResultsContent() {
     const groq = result?.analysis_groq as TabAnalysisRecord | undefined
     const gemini = result?.analysis_gemini as TabAnalysisRecord | undefined
     const hasDbCache = (tabId: AiTabId) => {
-      const g = groq && typeof groq[tabId] === 'string' && groq[tabId].trim().length > 0
-      const m = gemini && typeof gemini[tabId] === 'string' && gemini[tabId].trim().length > 0
-      return g && m
+      const g = groq && (typeof groq[tabId] === 'string' && groq[tabId].trim().length > 0 || (tabId === 'creative' && typeof groq.logic === 'string' && groq.logic.trim().length > 0))
+      const m = gemini && (typeof gemini[tabId] === 'string' && gemini[tabId].trim().length > 0 || (tabId === 'creative' && typeof gemini.logic === 'string' && gemini.logic.trim().length > 0))
+      return !!g && !!m
     }
     if (result?.reportId && hasDbCache('logic') && hasDbCache('creative') && hasDbCache('fact')) {
       tabHasFetchedRef.current = { logic: true, creative: true, fact: true }
@@ -559,8 +588,10 @@ function ResultsContent() {
     }
     if (consensusData != null) return
     if (isConsensusStartedRef.current) return
-    const groqFromResult = typeof (result.analysis_groq as TabAnalysisRecord | undefined)?.creative === 'string' && (result.analysis_groq as TabAnalysisRecord).creative.trim().length > 0
-    const geminiFromResult = typeof (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative === 'string' && (result.analysis_gemini as TabAnalysisRecord).creative.trim().length > 0
+    const groqCreative = (result.analysis_groq as TabAnalysisRecord | undefined)?.creative ?? (result.analysis_groq as TabAnalysisRecord | undefined)?.logic
+    const geminiCreative = (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative ?? (result.analysis_gemini as TabAnalysisRecord | undefined)?.logic
+    const groqFromResult = typeof groqCreative === 'string' && groqCreative.trim().length > 0
+    const geminiFromResult = typeof geminiCreative === 'string' && geminiCreative.trim().length > 0
     const needGroq = !tabCacheGroq.creative && !groqFromResult
     const needGemini = !tabCacheGemini.creative && !geminiFromResult
     const haveBoth = (tabCacheGroq.creative != null || groqFromResult) && (tabCacheGemini.creative != null || geminiFromResult)
@@ -572,8 +603,8 @@ function ResultsContent() {
       return
     }
     if (!haveBoth || !bothSettledForConsensus) return
-    const groqOk = (tabCacheGroq.creative ?? (groqFromResult ? (result.analysis_groq as TabAnalysisRecord).creative : '') ?? '').trim().length > 0
-    const geminiOk = (tabCacheGemini.creative ?? (geminiFromResult ? (result.analysis_gemini as TabAnalysisRecord).creative : '') ?? '').trim().length > 0
+    const groqOk = (tabCacheGroq.creative ?? (groqFromResult ? groqCreative : '') ?? '').trim().length > 0
+    const geminiOk = (tabCacheGemini.creative ?? (geminiFromResult ? geminiCreative : '') ?? '').trim().length > 0
     if (!groqOk && !geminiOk) return
     if (groqFromResult && geminiFromResult) return
     isConsensusStartedRef.current = true
@@ -679,6 +710,11 @@ function ResultsContent() {
           <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>What — 분석 대상</p>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight break-words">
             &quot;{currentKeyword}&quot;
+            {headerTitleKo && (
+              <span className="ml-2 text-base font-normal text-muted-foreground" title="한국어 번역">
+                · {headerTitleKo}
+              </span>
+            )}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {showAnalyzing
@@ -687,7 +723,7 @@ function ResultsContent() {
               <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
             ) : result?.updated_at ? (
               <>마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
-            ) : '분석이 끝나면 한 줄 요약과 핵심 정리가 먼저 표시돼요.'}
+            ) : '분석이 끝나면 한 줄 요약과 핵심 정리가 먼저 표시됩니다.'}
           </p>
         </header>
 
@@ -872,7 +908,7 @@ function ResultsContent() {
                   ))}
                 </div>
               ) : rssNewsFetched && rssNews.length === 0 ? (
-                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">이 키워드에 대한 실시간 뉴스가 지금은 없어요. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
+                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
               ) : rssNews.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {rssNews.map((item, i) => (
@@ -910,8 +946,8 @@ function ResultsContent() {
             <div className="mt-6">
               <ErrorState
                 variant="warning"
-                title="API 사용량이 초과되었어요"
-                description="지금은 분석을 더 진행할 수 없어요. 설정에서 API 키를 확인하시거나 잠시 뒤에 다시 시도해 주세요."
+                title="API 사용량이 초과되었습니다"
+                description="지금은 분석을 더 진행할 수 없습니다. 설정에서 API 키를 확인하시거나 잠시 뒤에 다시 시도해 주세요."
                 recoveryLabel="다시 시도"
                 onRecovery={() => {
                   setQuotaExceeded(false)
@@ -946,8 +982,8 @@ function ResultsContent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <GroqAnalysis
                         tabId={id}
-                      text={tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? null}
-                      loading={!(result?.analysis_groq as TabAnalysisRecord)?.[id] && (tabLoadingGroq[id] || (loading && !result))}
+                      text={tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_groq as TabAnalysisRecord)?.logic ?? null : null) ?? null}
+                      loading={!(tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_groq as TabAnalysisRecord)?.logic : undefined)) && (tabLoadingGroq[id] || (loading && !result))}
                       error={tabErrorGroq[id]}
                       retryCount={retryCountTabGroq[id] ?? 0}
                       onRetry={() => {
@@ -961,8 +997,8 @@ function ResultsContent() {
                     />
                     <GeminiAnalysis
                         tabId={id}
-                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null}
-                      loading={!(result?.analysis_gemini as TabAnalysisRecord)?.[id] && (tabLoadingGemini[id] || (loading && !result))}
+                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_gemini as TabAnalysisRecord)?.logic ?? null : null) ?? null}
+                      loading={!(tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_gemini as TabAnalysisRecord)?.logic : undefined)) && (tabLoadingGemini[id] || (loading && !result))}
                       error={tabErrorGemini[id]}
                       retryCount={retryCountTabGemini[id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}
@@ -1157,7 +1193,7 @@ function ResultsContent() {
                       <div className="min-h-[240px] rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col justify-center items-center gap-3 p-6 animate-pulse">
                         <div className="h-3 w-32 bg-slate-600/50 rounded" />
                         <div className="h-2 w-48 bg-slate-600/30 rounded" />
-                        <p className="text-slate-500 text-xs">분석이 끝나면 여기에 감성 추이 차트가 표시돼요.</p>
+                        <p className="text-slate-500 text-xs">분석이 끝나면 여기에 감성 추이 차트가 표시됩니다.</p>
                       </div>
                     )}
                   </>
@@ -1182,6 +1218,14 @@ function ResultsContent() {
                             >
                               {item.keyword}
                             </Link>
+                            {countryFromUrl !== 'KR' && item.title_ko != null && item.title_ko !== item.keyword && (
+                              <>
+                                <span className="text-muted-foreground">·</span>
+                                <span className="text-xs text-muted-foreground truncate" title="한국어 번역">
+                                  {item.title_ko}
+                                </span>
+                              </>
+                            )}
                             {item.search_volume != null && (
                               <span className="text-xs shrink-0 tabular-nums text-muted-foreground text-muted-foreground">
                                 {item.search_volume}
@@ -1199,7 +1243,7 @@ function ResultsContent() {
                   <Link href="/trends" className="text-xs text-primary hover:underline mt-1 inline-block">전체 보기</Link>
                 </>
               ) : (
-                <p className="text-muted-foreground text-muted-foreground text-xs">트렌드 데이터를 불러오는 중이에요.</p>
+                <p className="text-muted-foreground text-muted-foreground text-xs">트렌드 데이터를 불러오는 중입니다.</p>
               )}
             </div>
             {/* 핵심 수치 */}
@@ -1224,7 +1268,7 @@ function ResultsContent() {
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground mb-3">인용된 출처</h3>
               {newsList.length === 0 ? (
-                <p className="text-muted-foreground text-muted-foreground text-xs">출처가 없어요.</p>
+                <p className="text-muted-foreground text-muted-foreground text-xs">출처가 없습니다.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {newsList.map((item, i) => (
@@ -1277,7 +1321,7 @@ export default function ResultsPage() {
         <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] bg-background">
           <div className="rounded-2xl border border-border bg-card shadow-sm p-8 w-full max-w-md">
             <LoadingState
-              message="페이지를 불러오는 중이에요"
+              message="페이지를 불러오는 중입니다"
               detail="잠시만 기다려 주세요."
               size="lg"
               icon={<RinAnimation variant="loading" size={200} />}
