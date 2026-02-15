@@ -125,7 +125,7 @@ export default function RinAISearch() {
         setCanSearch(typeof data.canSearch === 'boolean' ? data.canSearch : null)
       })
       .catch((err) => {
-        showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했어요.' })
+        showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했습니다.' })
         setLicenseOrigin(null)
         setCanSearch(null)
       })
@@ -143,7 +143,7 @@ export default function RinAISearch() {
         setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
       })
       .catch((err) => {
-        showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했어요.' })
+        showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했습니다.' })
         setRecentReports([])
       })
   }, [user])
@@ -168,7 +168,7 @@ export default function RinAISearch() {
         if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
         if (data.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
       })
-      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 데이터를 불러오지 못했어요.' }))
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 데이터를 불러오지 못했습니다.' }))
       .finally(() => setTrendsLoading(false))
   }
 
@@ -185,7 +185,7 @@ export default function RinAISearch() {
     }
     setError(null)
     if (useResearchStore.getState().status === 'loading') {
-      toast.info('린이 이미 열심히 분석 중이에요!')
+      toast.info('이미 분석이 진행 중입니다.')
       return
     }
     setSearching(true)
@@ -208,10 +208,10 @@ export default function RinAISearch() {
             .catch(() => {})
         } else {
           const err = await reportRes.json().catch(() => ({}))
-          toast.error(err?.error ?? '검색 기록 저장에 실패했어요.')
+          toast.error(err?.error ?? '검색 기록 저장에 실패했습니다.')
         }
       } catch {
-        toast.error('검색 기록 저장에 실패했어요.')
+        toast.error('검색 기록 저장에 실패했습니다.')
       }
     }
     router.push(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(trendCountry)}`)
@@ -318,7 +318,7 @@ export default function RinAISearch() {
 
             {user && canSearch === false && (
               <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <p className="text-amber-800 dark:text-amber-200 text-sm">키를 등록해 주세요. 분석을 사용하려면 설정에서 Gemini API 키를 등록해야 해요.</p>
+                <p className="text-amber-800 dark:text-amber-200 text-sm">설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.</p>
                 <Link href="/settings?tab=license" className="shrink-0">
                   <Button variant="outline" size="sm" className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/50">
                     키 등록하러 가기

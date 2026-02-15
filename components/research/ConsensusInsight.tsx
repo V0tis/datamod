@@ -3,6 +3,9 @@
 import { memo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, Newspaper, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { InsightCard } from '@/components/research/InsightCard'
@@ -172,7 +175,7 @@ function ConsensusInsightComponent({
       <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[200px]')} role="alert" aria-live="assertive">
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
-          <p className="text-sm text-rose-400">분석 데이터 부족. 두 AI 모두 분석에 실패해 Consensus를 생성할 수 없습니다. 아래 버튼으로 다시 시도해 주세요.</p>
+          <p className="text-sm text-rose-400">두 엔진 모두 분석에 실패했습니다. 전략 통찰을 만들 수 없습니다. 아래 버튼으로 다시 시도해 주세요.</p>
           <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 다시 분석">
             <RefreshCw className="h-3.5 w-3.5" /> 다시 분석하기
           </Button>
@@ -183,21 +186,28 @@ function ConsensusInsightComponent({
 
   if (loading) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[320px]')} aria-busy role="status" aria-live="polite">
+      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[320px]')}>
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-400" aria-hidden />
-          <p className="text-sm text-slate-400">전략 통찰 생성 중…</p>
-        </div>
+        <LoadingState
+          message="두 엔진 결과를 종합해 전략 통찰을 만드는 중입니다"
+          detail="잠시만 기다려 주세요."
+          size="md"
+          icon={<Loader2 className="w-8 h-8 animate-spin text-slate-400" aria-hidden />}
+          className="py-12"
+        />
       </div>
     )
   }
 
   if (!data) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[180px]')}>
+      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS)}>
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
-        <p className="text-sm text-slate-500">2사 AI 요약·감성 점수는 인사이트 탭 분석 후 표시됩니다. 재분석을 눌러 주세요.</p>
+        <EmptyState
+          title="아직 전략 통찰이 없어요"
+          description="인사이트 탭 분석이 끝나면 여기에 요약과 감성 점수가 표시돼요. 재분석 버튼을 눌러 주세요."
+          className="py-6"
+        />
       </div>
     )
   }
@@ -231,7 +241,7 @@ function ConsensusInsightComponent({
           {partialData && (
             <span
               className="text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/40"
-              title="한쪽 AI 결과만 반영되었습니다. 재분석하면 더 나은 결과를 얻을 수 있어요."
+              title="한쪽 AI 결과만 반영되었습니다. 재분석하면 더 나은 결과를 얻을 수 있습니다."
             >
               일부 데이터로 분석됨
             </span>

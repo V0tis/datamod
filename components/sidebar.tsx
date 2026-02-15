@@ -45,7 +45,7 @@ export function Sidebar() {
         else setDisplayName(data?.email ?? user.email ?? '')
       })
       .catch((err) => {
-        showErrorToast(err, { fallbackMessage: '프로필을 불러오지 못했어요.' })
+        showErrorToast(err, { fallbackMessage: '프로필을 불러오지 못했습니다.' })
         setDisplayName(user.email ?? '')
       })
   }, [user])

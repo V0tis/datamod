@@ -5,7 +5,7 @@ import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { getResearchKeysForInitialAnalysis } from '@/lib/research-keys'
 import { parseInitialResearchResponse } from '@/lib/research-parser'
-import { generateResearchWithGrounding } from '@/services/aiClient'
+import { generateResearchWithGrounding } from '@/lib/ai'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     const openaiKey = keys.openai
     if (!hasGemini && !openaiKey) {
       return NextResponse.json(
-        { error: '키를 등록해 주세요. 설정에서 Gemini 또는 OpenAI API 키를 등록하면 분석을 사용할 수 있어요.' },
+        { error: '설정에서 Gemini 또는 OpenAI API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
         { status: 400 }
       )
     }
@@ -63,22 +63,20 @@ export async function POST(req: Request) {
 
     if (hasGemini) {
       try {
-        const { text, sourceLinks: links } = await generateResearchWithGrounding(
-          keys.gemini,
+        const result = await generateResearchWithGrounding({
+          apiKey: keys.gemini,
           prompt,
-          {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            maxOutputTokens: 1500,
-            model: GEMINI_MODEL,
-            isRetryable: (err) => {
-              const msg = String((err as { message?: string })?.message ?? err)
-              if (/404|not found|invalid model/i.test(msg)) return false
-              return /429|quota|resource exhausted|rate limit|5\d{2}/i.test(msg)
-            },
-          }
-        )
-        responseText = text
-        sourceLinks = links
+          systemInstruction: SYSTEM_INSTRUCTION,
+          maxOutputTokens: 1500,
+          model: GEMINI_MODEL,
+          isRetryable: (err) => {
+            const msg = String((err as { message?: string })?.message ?? err)
+            if (/404|not found|invalid model/i.test(msg)) return false
+            return /429|quota|resource exhausted|rate limit|5\d{2}/i.test(msg)
+          },
+        })
+        responseText = result.text
+        sourceLinks = result.sourceLinks
       } catch (geminiError: unknown) {
         const msg = String((geminiError as { message?: string })?.message ?? geminiError)
         console.warn('[Research API] Gemini error (all retries exhausted)', msg)
@@ -161,7 +159,7 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error('[Research API] 분석 실패:', e)
     return NextResponse.json(
-      { error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.' },
+      { error: '분석을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.' },
       { status: 500 }
     )
   }

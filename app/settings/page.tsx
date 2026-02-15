@@ -99,7 +99,7 @@ export default function SettingsPage() {
           setAnthropicApiKey('')
         }
       })
-      .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했어요.' }))
+      .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
       .finally(() => setLoading(false))
   }, [user, router])
 
@@ -115,11 +115,11 @@ export default function SettingsPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        showErrorToast(json, { fallbackMessage: '저장에 실패했어요.' })
+        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
         return
       }
       setData((prev) => (prev ? { ...prev, nickname: nickname.trim() } : null))
-      toast.success('내 정보가 저장되었어요.')
+      toast.success('저장되었습니다.')
     } finally {
       setSaving(false)
     }
@@ -141,7 +141,7 @@ export default function SettingsPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        showErrorToast(json, { fallbackMessage: '저장에 실패했어요.' })
+        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
         return
       }
       setGeminiApiKey('')
@@ -152,7 +152,7 @@ export default function SettingsPage() {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
       }
-      toast.success('라이선스 설정이 저장되었어요.')
+      toast.success('라이선스 설정이 저장되었습니다.')
     } finally {
       setSaving(false)
     }
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       <div className="p-6 md:p-8">
         <Card className="mx-auto max-w-2xl border border-border bg-white shadow-sm">
           <CardContent className="p-8 text-center text-muted-foreground">
-            로그인한 후 설정을 변경할 수 있어요.
+            로그인한 후 설정을 변경할 수 있습니다.
           </CardContent>
         </Card>
       </div>
@@ -228,7 +228,7 @@ export default function SettingsPage() {
           <Card className="border border-border bg-white shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
-              <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있어요.</CardDescription>
+              <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있습니다.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSaveProfile} className="space-y-4 max-w-md">

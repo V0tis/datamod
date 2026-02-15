@@ -1,6 +1,9 @@
 /**
- * @deprecated Use `@/lib/ai` instead. This file re-exports the unified AI layer for backward compatibility.
- * API routes should import from `@/lib/ai` so that AI providers remain swappable and UI never touches AI.
+ * Unified AI layer. Use this from API routes only—never from React components.
+ *
+ * - generateText, generateResearchWithGrounding, completeChat, runTabAnalysis, synthesizeConsensus
+ * - normalizeConsensus, FALLBACK_CONSENSUS (pure helpers)
+ * - setAiProviders (for tests; swap Gemini/Groq)
  */
 export {
   generateText,
@@ -11,7 +14,7 @@ export {
   normalizeConsensus,
   FALLBACK_CONSENSUS,
   setAiProviders,
-} from '@/lib/ai'
+} from './unified-ai-service'
 
 export type {
   GenerateTextInput,
@@ -30,4 +33,4 @@ export type {
   ConsensusSentiment,
   ConsensusStrategicSummary,
   ConsensusMetadata,
-} from '@/lib/ai'
+} from './unified-ai-service'

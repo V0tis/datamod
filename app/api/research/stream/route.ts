@@ -6,7 +6,7 @@ import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { logCacheEvent, buildCacheKeyParts } from '@/lib/research-cache'
 import { getGeminiKeyForRequest } from '@/lib/research-keys'
 import { parseInitialResearchResponse } from '@/lib/research-parser'
-import { generateText } from '@/services/aiClient'
+import { generateText } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
   if (!canSearch) {
     return new Response(
       JSON.stringify({
-        error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.',
+        error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
       }),
       { status: 400 }
     )
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
           return
         }
         if (!responseText) {
-          send('progress', { step: 'error', error: '분석 결과를 생성하지 못했어요. 다시 시도해 주세요.' })
+          send('progress', { step: 'error', error: '분석 결과를 생성하지 못했습니다. 다시 시도해 주세요.' })
           safeClose()
           return
         }
@@ -291,7 +291,7 @@ export async function POST(req: Request) {
         console.error('[Research Stream] Error at step:', stepLabel, currentStep, e)
         send('progress', {
           step: 'error',
-          error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
+          error: '분석을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
         })
       }
       if (!isClosed) {

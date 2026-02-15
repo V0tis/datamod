@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
 import { TimeAgo } from '@/components/time-ago'
 import { showErrorToast } from '@/lib/error-toast'
@@ -26,7 +27,7 @@ function showTrendsErrorToast(err: unknown): void {
     })
     return
   }
-  showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' })
+  showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했습니다.' })
 }
 
 async function trendsFetcher(url: string, refresh?: boolean): Promise<TrendsResponse> {
@@ -176,7 +177,7 @@ export default function TrendsPage() {
     trendsFetcher(trendsUrl, true)
       .then((fresh) => {
         mutate(fresh, false)
-        toast.success('트렌드 데이터를 성공적으로 갱신했어요.')
+        toast.success('트렌드 데이터가 갱신되었습니다.')
       })
       .catch((err) => showTrendsErrorToast(err))
       .finally(() => setUpdating(false))
@@ -256,9 +257,11 @@ export default function TrendsPage() {
           {loading ? (
             <TrendsSkeleton />
           ) : items.length === 0 ? (
-            <p className="text-muted-foreground dark:text-slate-400 text-sm py-12 text-center px-4">
-              현재 해당 국가의 데이터를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.
-            </p>
+            <EmptyState
+              title="이 국가 데이터가 없어요"
+              description="현재 해당 국가의 트렌드 데이터를 가져올 수 없어요. 잠시 후 새로고침하거나 다른 국가를 선택해 보세요."
+              className="py-12 px-4"
+            />
           ) : (
             <>
               <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground dark:text-slate-400 border-b border-border dark:border-[#2d2f34] mb-1 items-center">

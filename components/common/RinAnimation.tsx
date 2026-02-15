@@ -4,12 +4,11 @@ import Lottie from 'lottie-react'
 import { useEffect, useState } from 'react'
 
 export const RIN_LOADING_MESSAGES = [
-  '린이 뉴스를 킁킁거리고 있어요!',
-  '중요한 정보를 입에 물고 오는 중...',
-  '린이 뉴스를 물어오고 있어요...',
-  '신선한 소식 찾아오는 중!',
-  '킁킁, 좋은 걸 찾았어요!',
-  '곧 물어올게요, 잠시만요~',
+  '분석을 준비하고 있습니다.',
+  '뉴스와 데이터를 수집하는 중입니다.',
+  '정보를 종합하는 중입니다.',
+  '리포트를 생성하는 중입니다.',
+  '잠시만 기다려 주세요.',
 ] as const
 
 export function getRandomRinMessage(): string {

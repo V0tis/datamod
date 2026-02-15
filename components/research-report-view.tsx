@@ -79,7 +79,7 @@ export function ResearchReportView({
       ) : !embedded && showLoginCta ? (
         <div className="rounded-[20px] bg-muted border border-border px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            로그인하면 이 리포트를 내 기록에 저장할 수 있어요.
+            로그인하면 이 리포트를 내 기록에 저장할 수 있습니다.
           </p>
           <Link
             href={

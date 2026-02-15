@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { getSystemGeminiKey } from '@/lib/license'
-import { generateText } from '@/services/aiClient'
+import { generateText } from '@/lib/ai'
 
 const FOLLOW_UP_SYSTEM =
-  "당신은 시장 리서치와 대중 반응 분석 전문가 '린'입니다. 사용자가 유저 반응 분석 내용에 대해 추가로 질문했을 때, **앞서 제시된 유저 반응 요약과 맥락**만 바탕으로 친절하고 간결하게 답변해주세요. 1~3문단 이내로 자연스럽게 작성해주세요."
+  "당신은 시장 리서치와 대중 반응 분석 전문가입니다. 사용자가 유저 반응 분석 내용에 대해 추가로 질문했을 때, **앞서 제시된 유저 반응 요약과 맥락**만 바탕으로 간결하고 명확하게 답변해주세요. 1~3문단 이내로 작성해주세요."
 
 /** Follow-up Q&A on previous insights; uses system Gemini key only. */
 export async function POST(req: Request) {
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       systemInstruction: FOLLOW_UP_SYSTEM,
       model: GEMINI_MODEL,
     })
-    const answer = (text || '').trim() || '답변을 생성하지 못했어요.'
+    const answer = (text || '').trim() || '답변을 생성하지 못했습니다.'
     return NextResponse.json({ answer })
   } catch (err) {
     console.error('[Insights Follow-up API] (all retries exhausted)', err)

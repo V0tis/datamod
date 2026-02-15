@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
-import { Loader2 } from 'lucide-react'
 
 interface SharedReportResponse {
   keyword: string
@@ -60,20 +61,26 @@ export default function SharedReportPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
-        <p className="text-destructive text-center">{error}</p>
-        <Link href="/">
-          <Button variant="outline">홈으로</Button>
-        </Link>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <ErrorState
+          title="공유 리포트를 불러오지 못했습니다"
+          description="링크가 만료되었거나 잘못되었을 수 있습니다. 공유해 주신 분에게 새 링크를 요청해 보세요."
+          recoveryLabel="홈으로"
+          onRecovery={() => { window.location.href = '/' }}
+          detail={error}
+        />
       </div>
     )
   }
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">공유된 리포트를 불러오는 중...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <LoadingState
+          message="공유된 리포트를 불러오는 중입니다"
+          detail="잠시만 기다려 주세요."
+          size="lg"
+        />
       </div>
     )
   }

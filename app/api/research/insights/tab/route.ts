@@ -26,7 +26,7 @@ import {
   synthesizeConsensus,
   FALLBACK_CONSENSUS,
   runTabAnalysis,
-} from '@/services/aiClient'
+} from '@/lib/ai'
 
 // Re-export types for API consumers (e.g. frontend)
 export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrategicSummary, ConsensusMetadata }
@@ -193,7 +193,11 @@ export async function POST(req: Request) {
           !cachedConsensus
         ) {
           if (tabKeys.gemini) {
-            const synthesized = await synthesizeConsensus(tabKeys.gemini, mergedGemini, mergedGroq)
+            const synthesized = await synthesizeConsensus({
+              apiKey: tabKeys.gemini,
+              geminiAnalysis: mergedGemini,
+              groqAnalysis: mergedGroq,
+            })
             if (synthesized) {
               cachedConsensus = synthesized
               await supabase
@@ -352,7 +356,11 @@ export async function POST(req: Request) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
     console.log('[AI Insight Consensus] generateConsensus input', { geminiInput, groqInput })
-    consensus = await synthesizeConsensus(geminiKey, geminiInput, groqInput)
+    consensus = await synthesizeConsensus({
+      apiKey: geminiKey,
+      geminiAnalysis: geminiInput,
+      groqAnalysis: groqInput,
+    })
     if (isReanalyze) {
       console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })
     }

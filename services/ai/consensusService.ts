@@ -168,6 +168,35 @@ function stripJsonCodeBlock(raw: string): string {
   return raw
 }
 
+/** Build consensus prompt for provider-agnostic synthesis (unified AI service). */
+export function buildConsensusPrompt(geminiAnalysis: string, groqAnalysis: string): string {
+  const g = String(geminiAnalysis ?? '').trim()
+  const r = String(groqAnalysis ?? '').trim()
+  if (g.length < 20 && r.length < 20) return ''
+  const partialNote =
+    g.length < 20 || r.length < 20
+      ? '\n\n[참고: 한쪽 AI 분석만 사용되었거나 일부 데이터만으로 종합한 결과입니다.]'
+      : ''
+  return `${CONSENSUS_SYSTEM}${partialNote}\n\n${CONSENSUS_USER_PREFIX}${g.slice(0, 3000)}${CONSENSUS_USER_SUFFIX}${r.slice(0, 3000)}`
+}
+
+/** Parse raw model text into Consensus; returns FALLBACK_CONSENSUS on failure. Never throws. */
+export function parseConsensusFromRawText(rawText: string): Consensus {
+  const raw = stripJsonCodeBlock(rawText || '')
+  if (!raw) return FALLBACK_CONSENSUS
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const normalized = normalizeConsensus(parsed)
+    return normalized ?? FALLBACK_CONSENSUS
+  } catch (parseErr) {
+    console.error('[AI Insight Consensus] parseConsensusFromRawText JSON 파싱 실패', {
+      parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      rawLength: raw.length,
+    })
+    return FALLBACK_CONSENSUS
+  }
+}
+
 /**
  * Synthesize Gemini + Groq analyses into one Consensus. Call after both analyses are available.
  * Returns fallback Consensus on parse/API errors; never throws.

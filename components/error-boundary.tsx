@@ -56,10 +56,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <AlertCircle className="w-10 h-10" aria-hidden />
             </div>
             <h1 className="text-xl font-bold text-foreground dark:text-[#e1e3e6] mb-2">
-              앗, 뭔가 흐트러졌어요!
+              오류가 발생했습니다
             </h1>
             <p className="text-muted-foreground dark:text-slate-400 text-sm mb-6">
-              린이 당황한 사이에 오류가 발생했어요. 아래 버튼으로 다시 시도해 주세요.
+              일시적인 오류가 발생했습니다. 아래 버튼으로 다시 시도하거나 새로고침해 주세요.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
               <Button onClick={this.handleRetry} className="gap-2">

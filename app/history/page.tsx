@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { LoadingState } from '@/components/ui/loading-state'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { Search, Trash2, FileText, Loader2, History } from 'lucide-react'
 import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
@@ -74,39 +77,26 @@ export default function HistoryPage() {
   if (loading) {
     return (
       <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-[60vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
-        <div className="space-y-2 mb-6">
-          <div className="h-8 w-48 bg-muted dark:bg-[#1c1e21] rounded animate-pulse" />
-          <div className="h-4 w-72 bg-muted dark:bg-[#1c1e21] rounded animate-pulse" />
-        </div>
-        <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm">
-          <CardContent className="p-6 space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-muted/30 dark:bg-[#1c1e21] p-6 animate-pulse"
-              >
-                <div className="h-6 w-32 bg-muted dark:bg-[#2a2d32] rounded mb-2" />
-                <div className="h-4 w-full max-w-md bg-muted dark:bg-[#2a2d32] rounded" />
-                <div className="h-4 w-24 bg-muted dark:bg-[#2a2d32] rounded mt-2" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <LoadingState
+          message="리서치 기록을 불러오는 중입니다"
+          detail="잠시만 기다려 주세요."
+          size="lg"
+          className="min-h-[50vh]"
+        />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center gap-4 min-h-[40vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
-        <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm max-w-md">
-          <CardContent className="p-8 text-center">
-            <p className="text-destructive mb-4">{error}</p>
-            <Button variant="outline" onClick={() => { setError(null); fetchList() }}>
-              다시 시도
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[40vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
+        <ErrorState
+          title="목록을 불러오지 못했습니다"
+          description="일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
+          recoveryLabel="다시 시도"
+          onRecovery={() => { setError(null); fetchList() }}
+          detail={error}
+        />
       </div>
     )
   }
@@ -115,18 +105,20 @@ export default function HistoryPage() {
     return (
       <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
         <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm max-w-md w-full">
-          <CardContent className="p-10 text-center">
-            <History className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-foreground mb-2">기록이 없습니다</h2>
-            <p className="text-muted-foreground text-sm mb-6">
-              키워드를 검색하면 리서치 결과가 여기에 쌓입니다.
-            </p>
-            <Link href="/">
-              <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Search className="w-4 h-4" />
-                메인 검색으로 이동
-              </Button>
-            </Link>
+          <CardContent className="p-6">
+            <EmptyState
+              title="기록이 없습니다"
+              description="키워드를 검색하면 리서치 결과가 여기에 쌓입니다. 메인에서 검색해 보세요."
+              icon={<History className="w-12 h-12" />}
+              action={
+                <Link href="/">
+                  <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Search className="w-4 h-4" />
+                    메인 검색으로 이동
+                  </Button>
+                </Link>
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -141,7 +133,7 @@ export default function HistoryPage() {
           내 리서치 기록
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          최근 분석한 키워드로 바로 이동해요.
+          최근 분석한 키워드로 바로 이동합니다.
         </p>
       </header>
 

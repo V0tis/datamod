@@ -9,6 +9,8 @@ import { RinAnimation } from '@/components/common/RinAnimation'
 import { Copy, RefreshCw, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { CollapsibleLongContent } from '@/components/research/CollapsibleLongContent'
+import { LoadingState } from '@/components/ui/loading-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
 
 export type AiTabId = 'logic' | 'creative' | 'fact'
@@ -47,7 +49,7 @@ function GeminiAnalysisComponent({
   const handleCopy = useCallback(() => {
     if (!text) return
     navigator.clipboard.writeText(text).then(() => {
-      toast.success('텍스트가 복사되었어요.')
+      toast.success('복사되었습니다.')
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
       setCopyFeedback(true)
       copyTimeoutRef.current = setTimeout(() => setCopyFeedback(false), 2000)
@@ -96,17 +98,20 @@ function GeminiAnalysisComponent({
           <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
             <p className="text-destructive text-sm dark:text-[#00d19a]">
               {error === '무료 쿼터 초과'
-                ? '오늘 사용 한도를 모두 사용했어요. 내일 다시 시도하거나, 잠시 후 재시도 버튼을 눌러 주세요.'
+                ? '오늘 사용 한도를 모두 사용했습니다. 내일 다시 시도하거나, 잠시 후 재시도 버튼을 눌러 주세요.'
                 : retryCount >= 3
-                  ? '3회 시도 모두 실패했습니다. 버튼을 눌러 수동으로 다시 시도하세요.'
+                  ? '여러 번 시도했지만 불러오지 못했습니다. 아래 재시도 버튼을 눌러 주세요.'
                   : error}
             </p>
           </div>
         ) : loading ? (
-          <div className="flex flex-col items-center justify-center min-h-[200px] gap-3">
-            <RinAnimation variant="loading" size={120} className="shrink-0" />
-            <p className="text-sm text-muted-foreground dark:text-slate-400">데이터를 불러오는 중입니다</p>
-          </div>
+          <LoadingState
+            message="분석 내용을 불러오는 중입니다"
+            detail="잠시만 기다려 주세요."
+            size="sm"
+            icon={<RinAnimation variant="loading" size={120} className="shrink-0" />}
+            className="min-h-[200px] py-6"
+          />
         ) : text ? (
           <>
             <div className="prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words prose-p:leading-snug prose-li:leading-snug min-w-0">
@@ -127,9 +132,11 @@ function GeminiAnalysisComponent({
             </div>
           </>
         ) : (
-          <div className="flex flex-col justify-center min-h-[200px] text-center">
-            <p className="text-muted-foreground dark:text-slate-400 text-sm">아직 분석 결과가 없어요. 재시도 버튼을 누르면 이 탭만 다시 분석해요.</p>
-          </div>
+          <EmptyState
+            title="아직 이 탭의 분석 결과가 없어요"
+            description="아래 재시도 버튼을 누르면 이 탭만 다시 분석합니다."
+            className="min-h-[200px] py-6"
+          />
         )}
       </CardContent>
     </Card>

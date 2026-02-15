@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { showErrorToast } from '@/lib/error-toast'
 
 function parseHashParams(hash: string): Record<string, string> {
@@ -57,10 +58,11 @@ export default function AuthCallbackPage() {
   if (status === 'loading') {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">로그인 중입니다. 잠시만 기다려주세요.</p>
-        </div>
+        <LoadingState
+          message="로그인 처리 중이에요"
+          detail="잠시만 기다려 주세요."
+          size="lg"
+        />
       </main>
     )
   }
@@ -68,19 +70,18 @@ export default function AuthCallbackPage() {
   if (status === 'error') {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md space-y-6 text-center">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
-              <AlertCircle className="w-8 h-8 text-destructive" />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">인증 실패</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
-          </div>
-          <Button className="rounded-full" size="lg" asChild>
-            <Link href="/auth/login">로그인 페이지로</Link>
-          </Button>
+        <div className="w-full max-w-md">
+          <ErrorState
+            title="인증에 실패했습니다"
+            description={errorMessage}
+            recoveryLabel="로그인 페이지로"
+            onRecovery={() => { window.location.href = '/auth/login' }}
+            secondaryAction={
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/">홈으로</Link>
+              </Button>
+            }
+          />
         </div>
       </main>
     )
@@ -88,10 +89,11 @@ export default function AuthCallbackPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="text-center space-y-4">
-        <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
-        <p className="text-muted-foreground">대시보드로 이동 중...</p>
-      </div>
+      <LoadingState
+        message="대시보드로 이동 중이에요"
+        detail="잠시만 기다려 주세요."
+        size="lg"
+      />
     </main>
   )
 }

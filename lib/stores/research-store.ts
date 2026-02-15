@@ -120,15 +120,15 @@ const initialState: ResearchState = {
 
 function showToastForStep(step: string) {
   if (step === 'firecrawl_start') {
-    toast.info('뉴스를 찾는 중...')
+    toast.info('뉴스 수집 중.')
   } else if (step === 'firecrawl_done') {
-    toast.success('뉴스 수집 완료. 분석을 시작할게요.')
+    toast.success('뉴스 수집 완료. 분석을 시작합니다.')
   } else if (step === 'gemini_start') {
-    toast.info('린이 모든 정보를 모아 한꺼번에 분석 중이에요...')
+    toast.info('정보를 종합해 분석 중입니다.')
   } else if (step === 'chart_ready') {
-    toast.info('데이터 시각화 차트 그리는 중...')
+    toast.info('차트를 생성하는 중입니다.')
   } else if (step === 'gemini_done') {
-    toast.info('리포트 정리 중...')
+    toast.info('리포트를 정리하는 중입니다.')
   } else if (step === 'result') {
     toast.success('분석이 완료되었습니다.')
   }
@@ -248,7 +248,7 @@ export const useResearchStore = create<ResearchStore>()(
       return
     }
     if (status === 'loading' && currentKeyword === k) {
-      toast.info('린이 이미 열심히 분석 중이에요!')
+      toast.info('이미 분석이 진행 중입니다.')
       return
     }
     if (status === 'done' && currentKeyword === k) {
@@ -270,15 +270,15 @@ export const useResearchStore = create<ResearchStore>()(
         if (checkRes.ok) {
           const checkData = (await checkRes.json()) as { canSearch?: boolean }
           if (checkData.canSearch === false) {
-            toast.error('키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.', {
+            toast.error('설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.', {
               action: {
-                label: '키 등록하러 가기',
+                label: '설정으로 이동',
                 onClick: () => { window.location.href = '/settings?tab=license' },
               },
             })
             set({
               status: 'error',
-              error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.',
+              error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
             })
             return
           }
@@ -368,7 +368,7 @@ export const useResearchStore = create<ResearchStore>()(
                 ) {
                   retryScheduledForStream = true
                   const k = get().keyword
-                  toast.info(`${delaySec}초 후 한 번 더 시도할게요.`)
+                  toast.info(`${delaySec}초 후 다시 시도합니다.`)
                   setTimeout(() => {
                     get().startResearch(k, { fromRetry: true })
                   }, delaySec * 1000)

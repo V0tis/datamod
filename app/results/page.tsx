@@ -18,6 +18,9 @@ import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { Badge } from '@/components/ui/badge'
+import { LoadingState } from '@/components/ui/loading-state'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
@@ -193,7 +196,7 @@ function ResultsContent() {
   const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
-  /** 히스토리 조회가 끝난 뒤에만 "린이 분석하는 중" 표시 (캐시 있으면 카드 먼저 보여주기) */
+  /** 히스토리 조회가 끝난 뒤에만 분석 중 표시 (캐시 있으면 카드 먼저 보여주기) */
   const [historyCheckDone, setHistoryCheckDone] = useState(false)
   /** 실시간 모멘텀 차트 마지막 시점(24h) 복합 점수 - 헤드라인과 동기화 (Consensus 없을 때 사용) */
   const [lastChartScore, setLastChartScore] = useState<number | null>(null)
@@ -265,7 +268,7 @@ function ResultsContent() {
         if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
         if (data.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
       })
-      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했어요.' }))
+      .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했습니다.' }))
   }, [])
 
   useEffect(() => {
@@ -294,7 +297,7 @@ function ResultsContent() {
   }, [keyword, storeKeyword])
 
   const loading = status === 'loading'
-  /** 히스토리 확인 후, 스트림 분석 중일 때만 "린이 분석하는 중" 표시. result 있으면(캐시 포함) 탭·카드 표시 */
+  /** 히스토리 확인 후, 스트림 분석 중일 때만 분석 중 표시. result 있으면(캐시 포함) 탭·카드 표시 */
   const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !error && !result
   const currentKeyword = keyword ?? storeKeyword
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
@@ -467,7 +470,7 @@ function ResultsContent() {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
-        const fallback = '분석을 불러오지 못했어요. 다시 시도해 주세요.'
+        const fallback = '분석을 불러오지 못했습니다. 다시 시도해 주세요.'
         if (provider === 'all' || provider === 'groq') {
           setRetryCountTabGroq((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
           setTabErrorGroq((prev) => ({ ...prev, [tabId]: fallback }))
@@ -625,7 +628,7 @@ function ResultsContent() {
           return
         }
       }
-      toast.info('저장된 분석 결과가 없어 Consensus만 재분석할 수 없어요. 키워드로 먼저 검색해 주세요.')
+      toast.info('저장된 분석이 없어 재분석할 수 없습니다. 키워드로 먼저 검색해 주세요.')
     } finally {
       clearProgress()
     }
@@ -650,14 +653,14 @@ function ResultsContent() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        showErrorToast(data, { fallbackMessage: '답변을 불러오지 못했어요.' })
+        showErrorToast(data, { fallbackMessage: '답변을 불러오지 못했습니다.' })
         setFollowUpLoading(false)
         return
       }
-      const answer = (data as { answer?: string }).answer ?? '답변을 생성하지 못했어요.'
+      const answer = (data as { answer?: string }).answer ?? '답변을 생성하지 못했습니다.'
       setFollowUps((prev) => [...prev, { question: q, answer }])
     } catch (err) {
-      showErrorToast(err, { fallbackMessage: '추가 질문 처리에 실패했어요.' })
+      showErrorToast(err, { fallbackMessage: '추가 질문 처리에 실패했습니다.' })
     } finally {
       setFollowUpLoading(false)
     }
@@ -679,20 +682,23 @@ function ResultsContent() {
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {showAnalyzing
-              ? '분석 중입니다. 다른 페이지로 이동해도 계속돼요.'
+              ? '뉴스를 수집하고 분석 중입니다. 완료되면 요약부터 표시됩니다.'
               : status === 'done' && result?.updated_at ? (
-              <>요약과 핵심 정리부터 확인하세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
+              <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
             ) : result?.updated_at ? (
               <>마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
-            ) : '탭에서 시장 분석·인사이트·종합 리포트를 확인하세요.'}
+            ) : '분석이 끝나면 한 줄 요약과 핵심 정리가 먼저 표시돼요.'}
           </p>
         </header>
 
-        {/* Insight Summary — first on small screens for quick scanning; id for jump-back when resuming. */}
+        {/* Insight Summary — PM "insight first": one-line conclusion + key findings before any long content. */}
         {status === 'done' && result && (
-          <>
-            <section id="insight-summary" className="mb-4 sm:mb-5 scroll-mt-4" aria-label="Insight summary">
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>So what? — 요약</p>
+          <section id="insight-summary" className="mb-6 sm:mb-8 scroll-mt-4 rounded-xl border border-border/80 dark:border-slate-700/80 bg-card/50 dark:bg-slate-900/30 p-4 sm:p-5" aria-label="Insight summary">
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-foreground dark:text-slate-200">인사이트 요약</h2>
+              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">결론을 먼저 확인하세요. 상세 리포트는 아래에서 펼쳐볼 수 있습니다.</p>
+            </div>
+            <div className="space-y-4">
               <InsightSummary
                 summary={
                   consensusData?.strategicSummary?.summary?.trim() ||
@@ -707,22 +713,17 @@ function ResultsContent() {
                   !consensusData &&
                   !(result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0]
                 }
-                className="mb-4 sm:mb-5"
               />
-            </section>
-            {(() => {
-              const keyFindingItems =
-                (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0
-                  ? (result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5)
-                  : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
-              if (keyFindingItems.length === 0) return null
-              return (
-                <section className="mb-6 sm:mb-8" aria-label="Key findings">
-                  <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
-                </section>
-              )
-            })()}
-          </>
+              {(() => {
+                const keyFindingItems =
+                  (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0
+                    ? (result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5)
+                    : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
+                if (keyFindingItems.length === 0) return null
+                return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
+              })()}
+            </div>
+          </section>
         )}
 
         {/* Actions: after summary so the fold is summary-first; details/actions below */}
@@ -794,22 +795,15 @@ function ResultsContent() {
             전략 통찰
           </h2>
         {!result ? (
-          <div className="no-print w-full rounded-xl border border-border dark:border-zinc-800 bg-card dark:bg-[#15171a] p-8 text-center">
+          <div className="no-print w-full rounded-xl border border-border dark:border-zinc-800 bg-card dark:bg-[#15171a] p-6">
             {status === 'error' && error ? (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 dark:border-zinc-700 dark:bg-zinc-800/30 p-5 space-y-4 max-w-lg mx-auto">
-                <p className="text-sm text-destructive dark:text-rose-400">{error}</p>
-                {error.includes('형식이 올바르지 않아요') && (
-                  <p className="text-xs text-muted-foreground">초기 분석 단계에서 JSON 파싱에 실패했어요.</p>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50"
-                  onClick={() => (result ? retryConsensus() : startResearch(currentKeyword ?? '', { country_code: countryFromUrl }))}
-                >
-                  다시 분석하기
-                </Button>
-              </div>
+              <ErrorState
+                title="분석을 완료하지 못했습니다"
+                description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
+                recoveryLabel="다시 분석하기"
+                onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+                detail={error.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : error}
+              />
             ) : (
               <>
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted dark:bg-slate-800 text-muted-foreground dark:text-slate-500 mb-4">
@@ -817,7 +811,7 @@ function ResultsContent() {
                 </div>
                 <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6] mb-1">전략 통찰이 여기 표시됩니다</p>
                 <p className="text-sm text-muted-foreground dark:text-slate-500 max-w-md mx-auto">
-                  분석이 완료되면 Groq·Gemini 2사 종합 요약, 감성 점수, 핵심 전략·실행 권고가 자동으로 채워져요.
+                  분석이 완료되면 두 엔진의 종합 요약, 감성 점수, 핵심 전략·실행 권고가 자동으로 채워져요.
                 </p>
               </>
             )}
@@ -834,13 +828,14 @@ function ResultsContent() {
         )}
         </section>
 
-        {/* Evidence — collapsed on small screens so summary + key findings + insight stay scannable; expand for detail. */}
+        {/* Evidence — long content deferred: news + full tab reports. Collapsed on small screens so insight stays first. */}
         <div className="border-t-2 border-border dark:border-slate-700/80 pt-6 sm:pt-8 mb-6 sm:mb-8" role="separator" aria-hidden />
         <section className="mb-6 sm:mb-8 rounded-xl bg-muted/30 dark:bg-slate-900/50 border border-border dark:border-slate-800 p-4 sm:p-5" aria-label="Evidence">
           <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>근거 (선택)</p>
-              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">뉴스·상세 분석은 필요할 때 펼쳐보세요.</p>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>상세 (선택)</p>
+              <h3 className="text-sm font-semibold text-foreground dark:text-slate-200">뉴스 · 시장 분석 · 종합 리포트</h3>
+              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">긴 내용이 필요할 때만 펼쳐보세요. 요약만 보시려면 접어두셔도 됩니다.</p>
             </div>
             <button
               type="button"
@@ -849,7 +844,7 @@ function ResultsContent() {
               aria-expanded={evidenceOpen}
               aria-controls="evidence-content"
             >
-              {evidenceOpen ? '접기' : '뉴스·상세 분석 펼치기'}
+              {evidenceOpen ? '접기' : '상세 리포트 펼치기'}
               {evidenceOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
             </button>
           </div>
@@ -863,7 +858,7 @@ function ResultsContent() {
                 {rssNewsLoading && (
                   <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    불러오는 중
+                    실시간 뉴스를 불러오는 중입니다
                   </span>
                 )}
               </h3>
@@ -877,7 +872,7 @@ function ResultsContent() {
                   ))}
                 </div>
               ) : rssNewsFetched && rssNews.length === 0 ? (
-                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">&quot;{currentKeyword}&quot;에 대한 실시간 뉴스가 없습니다.</p>
+                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">이 키워드에 대한 실시간 뉴스가 지금은 없어요. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
               ) : rssNews.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {rssNews.map((item, i) => (
@@ -899,7 +894,7 @@ function ResultsContent() {
           )}
 
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 sm:mb-3">
-            상세 분석
+            시장 분석 · 인사이트 · 종합 리포트 (전문)
           </h3>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
           <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
@@ -912,37 +907,38 @@ function ResultsContent() {
           </TabsList>
 
           {quotaExceeded ? (
-            <div className="mt-6 flex flex-col items-center justify-center min-h-[280px] text-center rounded-xl border border-border dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-8" role="alert">
-              <p className="text-base font-semibold text-foreground dark:text-[#e1e3e6] mb-1">API 쿼터 초과</p>
-              <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">{QUOTA_UNIFIED_MESSAGE}</p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/settings">설정에서 키 확인</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setQuotaExceeded(false)
-                    setTabErrorGroq({ logic: null, creative: null, fact: null })
-                    setTabErrorGemini({ logic: null, creative: null, fact: null })
-                    setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
-                    setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                    fetchTabAnalysis(activeTab as AiTabId, 'all')
-                  }}
-                >
-                  다시 시도
-                </Button>
-              </div>
+            <div className="mt-6">
+              <ErrorState
+                variant="warning"
+                title="API 사용량이 초과되었어요"
+                description="지금은 분석을 더 진행할 수 없어요. 설정에서 API 키를 확인하시거나 잠시 뒤에 다시 시도해 주세요."
+                recoveryLabel="다시 시도"
+                onRecovery={() => {
+                  setQuotaExceeded(false)
+                  setTabErrorGroq({ logic: null, creative: null, fact: null })
+                  setTabErrorGemini({ logic: null, creative: null, fact: null })
+                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
+                  fetchTabAnalysis(activeTab as AiTabId, 'all')
+                }}
+                secondaryAction={
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/settings">설정에서 키 확인</Link>
+                  </Button>
+                }
+              />
             </div>
           ) : (
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
               {!historyCheckDone && !result ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border border-border bg-muted/20 dark:bg-slate-900/30" role="status" aria-live="polite">
-                  <RinAnimation variant="loading" size={100} className="shrink-0" />
-                  <p className="mt-4 text-muted-foreground text-sm font-medium">이전 결과 불러오는 중</p>
-                  <p className="mt-1 text-muted-foreground dark:text-slate-500 text-xs">잠시만 기다려 주세요.</p>
+                <div className="rounded-xl border border-border bg-muted/20 dark:bg-slate-900/30 py-4">
+                  <LoadingState
+                    message="저장된 분석을 확인하는 중입니다."
+                    detail="잠시만 기다려 주세요."
+                    size="md"
+                    icon={<RinAnimation variant="loading" size={100} className="shrink-0" />}
+                  />
                 </div>
               ) : (
                 <>
@@ -986,12 +982,12 @@ function ResultsContent() {
                   </div>
                   {id === 'creative' && (
                     <div className="rounded-xl border border-border bg-card p-4 sm:p-6 mt-4 sm:mt-6">
-                      <p className="text-sm font-medium text-foreground mb-2 sm:mb-3">더 궁금한 점이 있나요?</p>
+                      <p className="text-sm font-medium text-foreground mb-2 sm:mb-3">추가 질문 (선택)</p>
                       <div className="flex flex-col sm:flex-row gap-2" aria-busy={followUpLoading}>
                         <Input
                           type="text"
                           aria-label="추가 질문"
-                          placeholder={followUpLoading ? '답변 생성 중…' : '궁금한 점을 입력하세요'}
+                          placeholder={followUpLoading ? '답변 생성 중…' : '질문을 입력하세요'}
                           value={followUpQuestion}
                           onChange={(e) => setFollowUpQuestion(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
@@ -1161,7 +1157,7 @@ function ResultsContent() {
                       <div className="min-h-[240px] rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col justify-center items-center gap-3 p-6 animate-pulse">
                         <div className="h-3 w-32 bg-slate-600/50 rounded" />
                         <div className="h-2 w-48 bg-slate-600/30 rounded" />
-                        <p className="text-slate-500 text-xs">분석이 완료되면 차트가 표시됩니다.</p>
+                        <p className="text-slate-500 text-xs">분석이 끝나면 여기에 감성 추이 차트가 표시돼요.</p>
                       </div>
                     )}
                   </>
@@ -1255,13 +1251,17 @@ function ResultsContent() {
 
   if (!hasKeyword) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-background" role="status">
-        <div className="rounded-2xl border border-border bg-card shadow-sm p-8 text-center max-w-md">
-          <h2 className="text-lg font-semibold text-foreground dark:text-[#e1e3e6] mb-1">키워드를 검색하세요</h2>
-          <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">키워드를 입력하고 검색하면 한 줄 요약과 핵심 인사이트를 바로 볼 수 있어요.</p>
-          <Link href="/">
-            <Button variant="outline">홈에서 검색하기</Button>
-          </Link>
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] bg-background">
+        <div className="rounded-2xl border border-border bg-card shadow-sm p-8 max-w-md w-full">
+          <EmptyState
+            title="키워드를 검색하세요"
+            description="검색하면 인사이트 요약을 먼저 볼 수 있습니다. 상세 리포트는 필요할 때 펼쳐보시면 됩니다."
+            action={
+              <Link href="/">
+                <Button variant="outline">홈에서 검색하기</Button>
+              </Link>
+            }
+          />
         </div>
       </div>
     )
@@ -1274,10 +1274,14 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-background">
-          <div className="rounded-2xl border border-border bg-card shadow-sm p-8">
-            <RinAnimation variant="loading" size={200} />
-            <p className="text-muted-foreground text-muted-foreground mt-4">{getRandomRinMessage()}</p>
+        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] bg-background">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-8 w-full max-w-md">
+            <LoadingState
+              message="페이지를 불러오는 중이에요"
+              detail="잠시만 기다려 주세요."
+              size="lg"
+              icon={<RinAnimation variant="loading" size={200} />}
+            />
           </div>
         </div>
       }

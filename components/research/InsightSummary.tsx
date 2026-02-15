@@ -52,7 +52,9 @@ export function InsightSummary({
           className
         )}
         aria-label="Insight summary"
+        aria-busy="true"
       >
+        <p className="text-sm text-muted-foreground dark:text-slate-500 mb-3">한 줄 요약을 만드는 중입니다. 잠시만 기다려 주세요.</p>
         <div className="h-6 w-3/4 max-w-xl bg-muted dark:bg-slate-700/50 rounded animate-pulse mb-3" />
         <div className="h-4 w-1/2 max-w-sm bg-muted dark:bg-slate-700/40 rounded animate-pulse" />
       </section>
@@ -76,7 +78,7 @@ export function InsightSummary({
           isLong && !expanded && 'line-clamp-3 sm:line-clamp-none'
         )}
       >
-        {summary || '요약을 생성 중이에요.'}
+        {summary || '아직 요약이 준비되지 않았어요. 곧 표시될 거예요.'}
       </p>
       {isLong && !expanded && (
         <button
