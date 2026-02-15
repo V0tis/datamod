@@ -51,8 +51,8 @@ export interface ResearchResponse {
 }
 
 type StreamPayload =
-  | { step: 'firecrawl_start' }
-  | { step: 'firecrawl_done'; news: NewsItem[] }
+  | { step: 'news_start' }
+  | { step: 'news_done'; news: NewsItem[] }
   | { step: 'gemini_start' }
   | { step: 'chart_ready' }
   | { step: 'gemini_done' }
@@ -123,9 +123,9 @@ const initialState: ResearchState = {
 }
 
 function showToastForStep(step: string) {
-  if (step === 'firecrawl_start') {
+  if (step === 'news_start') {
     toast.info('뉴스 수집 중.')
-  } else if (step === 'firecrawl_done') {
+  } else if (step === 'news_done') {
     toast.success('뉴스 수집 완료. 분석을 시작합니다.')
   } else if (step === 'gemini_start') {
     toast.info('정보를 종합해 분석 중입니다.')
@@ -344,13 +344,13 @@ export const useResearchStore = create<ResearchStore>()(
               const payload = JSON.parse(dataStr) as StreamPayload
               const step = payload.step
 
-              if (step === 'firecrawl_done' && 'news' in payload) {
+              if (step === 'news_done' && 'news' in payload) {
                 set({ newsList: payload.news })
                 if (lastToastStep !== step) {
                   lastToastStep = step
                   showToastForStep(step)
                 }
-              } else if (step === 'firecrawl_start') {
+              } else if (step === 'news_start') {
                 if (lastToastStep !== step) {
                   lastToastStep = step
                   showToastForStep(step)

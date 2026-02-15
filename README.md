@@ -98,6 +98,9 @@ GROQ_TAB_MODEL=llama-3.3-70b-versatile
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+**Vercel 배포 시:** 위와 동일한 변수들을 Vercel 대시보드에서 반드시 설정하세요.  
+**Project → Settings → Environment Variables** 에서 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 는 필수이며, 나머지는 기능별로 필요 시 추가하세요. 저장 후 **Redeploy** 한 번 해주면 적용됩니다.
+
 대시보드의 **API 연결 상태**는 `GEMINI_API_KEY`, `GOOGLE_GENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `NEXT_PUBLIC_GEMINI_API_KEY` 중 하나라도 설정되면 Gemini를 "연결됨"으로 표시합니다.
 
 ---

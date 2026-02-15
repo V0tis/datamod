@@ -66,8 +66,8 @@ async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; 
 }
 
 type StreamEvent =
-  | { step: 'firecrawl_start' }
-  | { step: 'firecrawl_done'; news: Array<{ title: string; url: string; content?: string }> }
+  | { step: 'news_start' }
+  | { step: 'news_done'; news: Array<{ title: string; url: string; content?: string }> }
   | { step: 'gemini_start' }
   | { step: 'chart_ready' }
   | { step: 'gemini_done' }
@@ -142,11 +142,11 @@ export async function POST(req: Request) {
         })
       }
 
-      let currentStep = 'firecrawl'
+      let currentStep = 'news'
       try {
-        send('progress', { step: 'firecrawl_start' })
+        send('progress', { step: 'news_start' })
         const news = await fetchNewsTitles(keyword)
-        send('progress', { step: 'firecrawl_done', news: news.map((n) => ({ title: n.title, url: n.url })) })
+        send('progress', { step: 'news_done', news: news.map((n) => ({ title: n.title, url: n.url })) })
         if (isClosed) {
           safeClose()
           return
@@ -282,7 +282,7 @@ export async function POST(req: Request) {
         send('progress', { step: 'result', data: { ...summary, reportId, source_links: news } as Record<string, unknown> })
       } catch (e) {
         const stepLabels: Record<string, string> = {
-          firecrawl: 'Firecrawl 뉴스 수집',
+          news: '뉴스 수집',
           gemini: 'Gemini 초기 시장 분석',
           parse_json: '분석 결과 JSON 파싱',
           report_db: '리포트/DB 저장',
