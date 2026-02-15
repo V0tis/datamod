@@ -888,7 +888,6 @@ function ResultsContent() {
         <section className="mb-6 sm:mb-8 rounded-xl bg-muted/30 dark:bg-slate-900/50 border border-border dark:border-slate-800 p-4 sm:p-5" aria-label="Evidence">
           <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>상세 (선택)</p>
               <h3 className="text-sm font-semibold text-foreground dark:text-slate-200">뉴스 · 시장 분석 · 종합 리포트</h3>
               <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">긴 내용이 필요할 때만 펼쳐보세요. 요약만 보시려면 접어두셔도 됩니다.</p>
             </div>
