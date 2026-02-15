@@ -1,5 +1,6 @@
 /**
  * Research cache: key strategy, TTL, and request metadata logging.
+ * When cache is valid we skip AI calls (cost savings); when expired we allow new calls.
  *
  * CACHE OWNERSHIP
  * - Storage: Supabase table `research_history`. One row per (user_id, keyword, country_code).

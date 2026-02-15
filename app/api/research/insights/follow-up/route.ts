@@ -45,6 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ answer })
   } catch (err) {
     console.error('[Insights Follow-up API] (all retries exhausted)', err)
+    // 503 + user-facing message: client shows toast; user can retry the question.
     return NextResponse.json(
       { error: RATE_LIMIT_USER_MESSAGE },
       { status: 503 }

@@ -1,7 +1,8 @@
 /**
  * POST /api/research/insights/tab
- * Flow: auth → parse body → read cache (user, keyword, country) → report_id fallback → reanalyze fill from DB
- *       → needGroq/needGemini → runTabAnalysis → consensus (creative only) → upsert research_history → JSON response.
+ *
+ * Responsibility: Tab-level AI analysis (logic/creative/fact) and consensus. Cache in research_history; key (user_id, keyword, country_code); TTL 24h.
+ * Flow: auth → parse body → cache read (keyword, then report_id fallback) → reanalyze path fills from DB → needGroq/needGemini → runTabAnalysis → consensus (creative only) → upsert → JSON.
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -14,6 +15,7 @@ import {
   type ResearchCacheScope,
 } from '@/lib/research-cache'
 import { getTabProviderKeys } from '@/lib/research-keys'
+import type { TabAnalysisRecord } from '@/lib/research-types'
 import {
   type Consensus,
   type ConsensusImpactItem,
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'keyword required' }, { status: 400 })
   }
 
-  // AI Insight Consensus API call: log request data (lengths + short preview for large fields)
+  // Log request metadata for cost attribution and debugging duplicate AI calls (no PII).
   if (tab === 'creative' || isReanalyze) {
     console.log('[AI Insight Consensus] API call – request data', {
       keyword,
@@ -137,13 +139,13 @@ export async function POST(req: Request) {
     })
   }
 
-  // Read-through cache. Key: (user_id, keyword, country_code). TTL: RESEARCH_CACHE_TTL_MS (24h). Owner: research_history.
-  // Cost: valid cache => skip Groq/Gemini/Consensus; expired => allow new AI calls.
+  // --- Cache: one row per (user_id, keyword, country_code). TTL 24h. Valid cache => skip AI; expired => allow new calls.
   const cacheKey = buildCacheKeyParts(user.id, keyword, countryCode)
-  /** Tab result for this tab: from cache or from this request; used for response and for merging into DB. */
+  /** This tab's text: from cache or from this request; used for response and for merging into DB. */
   let mergedGroq: string | null = null
   let mergedGemini: string | null = null
 
+  // Lookup 1: by keyword (primary). Fills mergedGroq/mergedGemini when cache hit and provider matches.
   if (!isReanalyze && keyword) {
     const { data: cachedData } = await supabase
       .from('research_history')
@@ -167,8 +169,8 @@ export async function POST(req: Request) {
     }
 
     if (cachedData && cacheValid) {
-      const groqTab = (cachedData.analysis_groq ?? null) as Record<string, string> | null
-      const geminiTab = (cachedData.analysis_gemini ?? null) as Record<string, string> | null
+      const groqTab = (cachedData.analysis_groq ?? null) as TabAnalysisRecord | null
+      const geminiTab = (cachedData.analysis_gemini ?? null) as TabAnalysisRecord | null
       mergedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
       mergedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
       const allCached =
@@ -183,6 +185,7 @@ export async function POST(req: Request) {
           const fromRoot = typeof ar.summary === 'string' ? normalizeConsensus(ar) : null
           cachedConsensus = fromConsensus ?? fromRoot
         }
+        // Creative tab hit but no consensus in DB yet: synthesize once and write back (cost: one Gemini call).
         if (
           tab === 'creative' &&
           mergedGroq != null &&
@@ -202,6 +205,7 @@ export async function POST(req: Request) {
             }
           }
         }
+        // Cost: no Groq/Gemini/Consensus API calls; response from cache (24h TTL).
         logCacheEvent('hit', {
           scope: CACHE_SCOPE,
           keyword,
@@ -221,7 +225,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Secondary lookup by report_id (same cache row; key still user_id+keyword+country_code). TTL unchanged.
+  // Lookup 2: by report_id when keyword lookup missed (e.g. client sent reportId before keyword row exists). Same TTL.
   if (reportId && !isReanalyze) {
     const { data: historyRow } = await supabase
       .from('research_history')
@@ -232,8 +236,8 @@ export async function POST(req: Request) {
 
     const reportCacheValid = historyRow?.updated_at != null && isCacheValid(historyRow.updated_at, RESEARCH_CACHE_TTL_MS)
     if (reportCacheValid && historyRow) {
-      const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
-      const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
+      const groqTab = (historyRow.analysis_groq ?? null) as TabAnalysisRecord | null
+      const geminiTab = (historyRow.analysis_gemini ?? null) as TabAnalysisRecord | null
       const reportCachedGroq = typeof groqTab?.[tab] === 'string' && groqTab[tab].trim().length > 0 ? groqTab[tab].trim() : null
       const reportCachedGemini = typeof geminiTab?.[tab] === 'string' && geminiTab[tab].trim().length > 0 ? geminiTab[tab].trim() : null
       mergedGroq = mergedGroq ?? reportCachedGroq
@@ -241,7 +245,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Reanalyze (Consensus only): reuse stored Groq/Gemini; no new tab AI calls. Cost: one Gemini consensus call only.
+  // Reanalyze path: user asked to regenerate consensus only. Fill mergedGroq/mergedGemini from DB so we skip Groq/Gemini tab calls.
   if (isReanalyze && tab === 'creative' && (mergedGroq == null || mergedGemini == null)) {
     const byReport = reportId
       ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('report_id', reportId).eq('user_id', cacheKey.userId).maybeSingle()
@@ -251,13 +255,14 @@ export async function POST(req: Request) {
       : { data: null }
     const historyRow = byReport.data ?? byKeyword.data
     if (historyRow) {
-      const groqTab = (historyRow.analysis_groq ?? null) as Record<string, string> | null
-      const geminiTab = (historyRow.analysis_gemini ?? null) as Record<string, string> | null
+      const groqTab = (historyRow.analysis_groq ?? null) as TabAnalysisRecord | null
+      const geminiTab = (historyRow.analysis_gemini ?? null) as TabAnalysisRecord | null
       const creativeGroq = typeof groqTab?.creative === 'string' && groqTab.creative.trim().length > 0 ? groqTab.creative.trim() : null
       const creativeGemini = typeof geminiTab?.creative === 'string' && geminiTab.creative.trim().length > 0 ? geminiTab.creative.trim() : null
       if (creativeGroq) mergedGroq = mergedGroq ?? creativeGroq
       if (creativeGemini) mergedGemini = mergedGemini ?? creativeGemini
       if (mergedGroq != null && mergedGemini != null) {
+        // Cost: reanalyze path — no Groq/Gemini tab calls; only Consensus (one Gemini call) below.
         console.log('[AI Insight Consensus] 재분석: DB에서 Creative만 사용, Groq/Gemini API 호출 생략')
       }
     }
@@ -266,7 +271,7 @@ export async function POST(req: Request) {
   const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
-  // Reuse: both providers already cached for this tab => return stored consensus only. No AI calls (cost savings).
+  // Cost: both providers already cached for this tab; no Groq/Gemini calls. Return stored consensus only.
   if (!needGroq && !needGemini && !(isReanalyze && tab === 'creative')) {
     const historyForConsensus = await supabase.from('research_history').select('analysis_results, updated_at').eq('user_id', cacheKey.userId).eq('keyword', cacheKey.keyword).eq('country_code', cacheKey.countryCode).maybeSingle()
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
@@ -365,8 +370,8 @@ export async function POST(req: Request) {
         .eq('country_code', cacheKey.countryCode)
         .maybeSingle()
 
-      const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
-      const prevGemini = (historyRow?.analysis_gemini as Record<string, string>) ?? {}
+      const prevGroq = (historyRow?.analysis_groq as TabAnalysisRecord) ?? {}
+      const prevGemini = (historyRow?.analysis_gemini as TabAnalysisRecord) ?? {}
       const existingResults = (historyRow?.analysis_results ?? null) as Record<string, unknown> | null
       if (existingResults) {
         existingConsensus =
@@ -374,11 +379,11 @@ export async function POST(req: Request) {
           (typeof existingResults.summary === 'string' ? normalizeConsensus(existingResults) : null)
       }
 
-      /** Merge this tab's result into existing analysis record; other tabs stay unchanged. */
-      const mergeTabIntoRecord = (prev: Record<string, string>, result: string | null, tabKey: string) => {
+      /** Merge this tab's result into existing record; other tabs (logic/fact) stay unchanged. */
+      const mergeTabIntoRecord = (prev: TabAnalysisRecord, result: string | null, tabKey: string) => {
         const next = { ...prev }
         if (result != null && String(result).trim().length > 0) next[tabKey] = String(result).trim()
-        return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as Record<string, string>
+        return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as TabAnalysisRecord
       }
       const nextGroq = mergeTabIntoRecord(prevGroq, groqResult, tab)
       const nextGemini = mergeTabIntoRecord(prevGemini, geminiResult, tab)
@@ -424,6 +429,7 @@ export async function POST(req: Request) {
   if (tab === 'creative' && isReanalyze) {
     console.log('[AI Insight Consensus] 응답 반환', { keyword, hasConsensus: !!finalConsensus })
   }
+  // Frontend: groqError / geminiQuotaExceeded + geminiError show in cards; error when both failed so user can retry.
   return NextResponse.json({
     groq: groqResult != null && groqResult.length > 0 ? { text: groqResult } : null,
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,

@@ -83,6 +83,7 @@ let retryScheduledForStream = false
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음(최초 분석 필요), 'none' = 기록 없음 */
 export type LoadHistoryResult = 'cached' | 'empty' | 'none'
 
+/** DB/API sometimes returns JSON as string; normalize to object for store. */
 function parseJsonField<T>(value: unknown): T | undefined {
   if (value == null) return undefined
   if (typeof value === 'string') {
@@ -171,8 +172,7 @@ export const useResearchStore = create<ResearchStore>()(
             analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
           }
           if (!data.cached) return 'none'
-          if (data.emptyAnalysis && !data.reportId) return 'empty'
-          if (data.emptyAnalysis && data.reportId) return 'empty'
+          if (data.emptyAnalysis) return 'empty'
           const hasContent = data.content != null || data.ai_responses
           const hasAnalysis = data.analysis_groq != null || data.analysis_gemini != null
           const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
@@ -359,6 +359,7 @@ export const useResearchStore = create<ResearchStore>()(
                   status: 'error',
                   error: payload.error,
                 })
+                // Server may ask for one auto-retry after delay (e.g. 429); user sees toast and can also retry manually.
                 const delaySec = (payload as { retryDelay?: number }).retryDelay
                 if (
                   typeof delaySec === 'number' &&

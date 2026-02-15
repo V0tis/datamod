@@ -203,7 +203,7 @@ export default function TrendsPage() {
           국가별 트렌드
         </h1>
         <p className="text-muted-foreground dark:text-slate-400 text-sm mt-1">
-          DB에 캐시된 국가별 인기 검색어예요. 갱신 버튼으로 최신 트렌드를 불러올 수 있어요. 키워드를 클릭하면 상세 패널이 열려요.
+          국가별 인기 검색어를 보고, 키워드를 클릭해 리서치를 시작하세요.
         </p>
       </header>
 
@@ -238,7 +238,7 @@ export default function TrendsPage() {
         </div>
         <CardHeader>
           <CardTitle className="text-lg dark:text-[#e1e3e6]">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
-          <CardDescription className="dark:text-slate-400">키워드를 클릭하면 우측 상세 패널이 열려요. 패널에서 &quot;이 키워드로 분석하기&quot;를 누르면 리서치가 시작돼요.</CardDescription>
+          <CardDescription className="dark:text-slate-400">키워드 클릭 → 상세 패널에서 &quot;이 키워드로 분석하기&quot;로 바로 리서치</CardDescription>
           <p className="text-amber-700/90 dark:text-amber-300/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
         </CardHeader>
         <CardContent className="relative">

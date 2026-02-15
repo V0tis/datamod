@@ -165,15 +165,15 @@ function ConsensusInsightComponent({
   const [impactOpen, setImpactOpen] = useState(false)
   /** Mobile: long insight summary — show line-clamp with expand for readability. */
   const [summaryExpanded, setSummaryExpanded] = useState(false)
-  const summaryLong = (data?.strategicSummary?.summary?.length ?? 0) > 160
+  const summaryLong = (data?.strategicSummary?.summary?.length ?? 0) > 200
 
   if (bothFailed) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[200px]')}>
+      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[200px]')} role="alert" aria-live="assertive">
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
-          <p className="text-sm text-rose-400">분석 데이터 부족. 두 AI 모두 분석에 실패해 Consensus를 생성할 수 없습니다.</p>
-          <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry}>
+          <p className="text-sm text-rose-400">분석 데이터 부족. 두 AI 모두 분석에 실패해 Consensus를 생성할 수 없습니다. 아래 버튼으로 다시 시도해 주세요.</p>
+          <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 다시 분석">
             <RefreshCw className="h-3.5 w-3.5" /> 다시 분석하기
           </Button>
         </div>
@@ -222,11 +222,11 @@ function ConsensusInsightComponent({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
     >
-      {/* Insight — AI conclusion (summary + sentiment). Summary first for comprehension. */}
-      <div className={cn(CARD_CLASS, 'p-4 sm:p-5')}>
+      {/* So what? — AI conclusion (dominant). Summary first for scanning. */}
+      <div className={cn(CARD_CLASS, 'p-4 sm:p-5 border-emerald-500/30 dark:border-emerald-500/40')}>
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
           <span className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-            Insight
+            So what? — 통찰
           </span>
           {partialData && (
             <span
@@ -242,8 +242,8 @@ function ConsensusInsightComponent({
         </div>
         <p
           className={cn(
-            'text-sm sm:text-base text-slate-200 dark:text-[#e1e3e6] leading-relaxed font-medium break-words',
-            summaryLong && !summaryExpanded ? 'mb-2 line-clamp-4 sm:line-clamp-none' : 'mb-4 sm:mb-5'
+            'text-base sm:text-lg text-slate-200 dark:text-[#e1e3e6] leading-snug font-semibold break-words tracking-tight',
+            summaryLong && !summaryExpanded ? 'mb-2 line-clamp-4' : 'mb-4 sm:mb-5'
           )}
         >
           {summary}
@@ -252,7 +252,7 @@ function ConsensusInsightComponent({
           <button
             type="button"
             onClick={() => setSummaryExpanded(true)}
-            className="mb-4 sm:mb-5 flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline sm:hidden"
+            className="mb-4 sm:mb-5 flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline"
           >
             전체 보기
           </button>
@@ -275,7 +275,8 @@ function ConsensusInsightComponent({
         </div>
       </div>
 
-      {/* Problem — pain points & risk */}
+      {/* Why? — Evidence: problem & signal. Clearly secondary to insight. */}
+      <p className="text-[10px] font-medium uppercase tracking-widest text-slate-500 pt-2 pb-1" aria-hidden>Why? — 근거·맥락</p>
       <InsightCard label="Problem" title="페인포인트·리스크">
         {painPoints.length > 0 ? (
           <ul className="space-y-2 list-none pl-0">
@@ -302,7 +303,7 @@ function ConsensusInsightComponent({
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
           <button
             type="button"
-            className="w-full flex items-center justify-between gap-2 p-3 sm:p-4 text-left hover:bg-slate-800/50 transition-colors sm:pointer-events-none sm:hover:bg-transparent"
+            className="w-full flex items-center justify-between gap-2 min-h-[44px] p-3 sm:p-4 text-left hover:bg-slate-800/50 transition-colors sm:pointer-events-none sm:hover:bg-transparent touch-manipulation"
             onClick={() => setSignalOpen((o) => !o)}
             aria-expanded={signalOpen}
             aria-controls="consensus-signal-content"
@@ -353,7 +354,7 @@ function ConsensusInsightComponent({
         <div className={cn(CARD_CLASS)}>
           <button
             type="button"
-            className="w-full flex items-center justify-between gap-2 text-left sm:pointer-events-none sm:block"
+            className="w-full flex items-center justify-between gap-2 min-h-[44px] py-2.5 px-3 text-left sm:pointer-events-none sm:block touch-manipulation"
             onClick={() => setImpactOpen((o) => !o)}
             aria-expanded={impactOpen}
             aria-controls="consensus-impact-content"
@@ -392,27 +393,30 @@ function ConsensusInsightComponent({
         </div>
       </div>
 
-      {/* Implication — action items & opportunity */}
-      <InsightCard label="Implication" title="실행 권고·다음 액션">
+      {/* So what? — Implications for decision-making (surface prominently). */}
+      <div className="rounded-xl border-2 border-emerald-500/30 dark:border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/10 p-4 sm:p-5">
+        <div className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-3">
+          다음 액션 — 의사결정 참고
+        </div>
         {opportunity !== '—' && (
           <>
             <p className="text-xs font-semibold text-emerald-400 mb-1">Opportunity</p>
-            <p className="leading-relaxed mb-4">{opportunity}</p>
+            <p className="text-sm leading-relaxed mb-4 text-slate-200 dark:text-[#e1e3e6]">{opportunity}</p>
           </>
         )}
         {actionItems.length > 0 ? (
-          <ul className="space-y-2 list-none pl-0">
+          <ul className="space-y-2.5 list-none pl-0">
             {actionItems.map((item, i) => (
-              <li key={i} className="flex items-start gap-2">
+              <li key={i} className="flex items-start gap-2.5">
                 <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden />
-                <span>{item}</span>
+                <span className="text-sm font-medium text-slate-200 dark:text-[#e1e3e6]">{item}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-slate-500">과제가 없습니다.</p>
+          <p className="text-slate-500 text-sm">과제가 없습니다.</p>
         )}
-      </InsightCard>
+      </div>
     </motion.div>
   )
 }

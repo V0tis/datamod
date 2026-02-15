@@ -327,6 +327,10 @@ export default function RinAISearch() {
               </div>
             )}
 
+            <p className="text-muted-foreground dark:text-slate-400 text-sm mb-4 max-w-2xl">
+              키워드로 시장 인사이트를 확인하고, 실시간 트렌드와 리서치 기록을 한눈에 보세요.
+            </p>
+
             {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
             <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
               {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역 후 / 번역 전 함께 표시) */}

@@ -23,6 +23,7 @@ import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import { InsightSummary } from '@/components/research/InsightSummary'
 import { KeyFindings } from '@/components/research/KeyFindings'
+import type { TabAnalysisRecord } from '@/lib/research-types'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -296,6 +297,7 @@ function ResultsContent() {
   /** 히스토리 확인 후, 스트림 분석 중일 때만 "린이 분석하는 중" 표시. result 있으면(캐시 포함) 탭·카드 표시 */
   const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !error && !result
   const currentKeyword = keyword ?? storeKeyword
+  const hasKeyword = Boolean((currentKeyword ?? '').trim())
 
   const reportSummary = result
     ? [
@@ -311,8 +313,8 @@ function ResultsContent() {
   // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화. DB에 있으면 탭 API 호출 방지용 ref 세팅.
   useEffect(() => {
     if (!result?.reportId) return
-    const groq = result.analysis_groq as Record<string, string> | undefined
-    const gemini = result.analysis_gemini as Record<string, string> | undefined
+    const groq = result.analysis_groq as TabAnalysisRecord | undefined
+    const gemini = result.analysis_gemini as TabAnalysisRecord | undefined
     if (groq && typeof groq === 'object' && ('logic' in groq || 'creative' in groq || 'fact' in groq)) {
       setTabCacheGroq((prev) => ({
         ...prev,
@@ -492,8 +494,8 @@ function ResultsContent() {
     if (status === 'loading') return
     if (status !== 'done' && status !== 'error') return
 
-    const groq = result?.analysis_groq as Record<string, string> | undefined
-    const gemini = result?.analysis_gemini as Record<string, string> | undefined
+    const groq = result?.analysis_groq as TabAnalysisRecord | undefined
+    const gemini = result?.analysis_gemini as TabAnalysisRecord | undefined
     const hasDbCache = (tabId: AiTabId) => {
       const g = groq && typeof groq[tabId] === 'string' && groq[tabId].trim().length > 0
       const m = gemini && typeof gemini[tabId] === 'string' && gemini[tabId].trim().length > 0
@@ -546,6 +548,7 @@ function ResultsContent() {
 
   useEffect(() => {
     if (status !== 'done' || !result?.reportId || quotaExceeded || geminiQuotaExceeded) return
+    // DB may store consensus in analysis_results.consensus (new) or analysis_results.summary/sentiment (legacy).
     const hasDbConsensus = result.analysis_results != null && typeof result.analysis_results === 'object' && (typeof (result.analysis_results as Record<string, unknown>).summary === 'string' || typeof (result.analysis_results as Record<string, unknown>).sentiment === 'number')
     if (hasDbConsensus) {
       isConsensusStartedRef.current = true
@@ -553,8 +556,8 @@ function ResultsContent() {
     }
     if (consensusData != null) return
     if (isConsensusStartedRef.current) return
-    const groqFromResult = typeof (result.analysis_groq as Record<string, string> | undefined)?.creative === 'string' && (result.analysis_groq as Record<string, string>).creative.trim().length > 0
-    const geminiFromResult = typeof (result.analysis_gemini as Record<string, string> | undefined)?.creative === 'string' && (result.analysis_gemini as Record<string, string>).creative.trim().length > 0
+    const groqFromResult = typeof (result.analysis_groq as TabAnalysisRecord | undefined)?.creative === 'string' && (result.analysis_groq as TabAnalysisRecord).creative.trim().length > 0
+    const geminiFromResult = typeof (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative === 'string' && (result.analysis_gemini as TabAnalysisRecord).creative.trim().length > 0
     const needGroq = !tabCacheGroq.creative && !groqFromResult
     const needGemini = !tabCacheGemini.creative && !geminiFromResult
     const haveBoth = (tabCacheGroq.creative != null || groqFromResult) && (tabCacheGemini.creative != null || geminiFromResult)
@@ -566,8 +569,8 @@ function ResultsContent() {
       return
     }
     if (!haveBoth || !bothSettledForConsensus) return
-    const groqOk = (tabCacheGroq.creative ?? (groqFromResult ? (result.analysis_groq as Record<string, string>).creative : '') ?? '').trim().length > 0
-    const geminiOk = (tabCacheGemini.creative ?? (geminiFromResult ? (result.analysis_gemini as Record<string, string>).creative : '') ?? '').trim().length > 0
+    const groqOk = (tabCacheGroq.creative ?? (groqFromResult ? (result.analysis_groq as TabAnalysisRecord).creative : '') ?? '').trim().length > 0
+    const geminiOk = (tabCacheGemini.creative ?? (geminiFromResult ? (result.analysis_gemini as TabAnalysisRecord).creative : '') ?? '').trim().length > 0
     if (!groqOk && !geminiOk) return
     if (groqFromResult && geminiFromResult) return
     isConsensusStartedRef.current = true
@@ -660,7 +663,7 @@ function ResultsContent() {
     }
   }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
 
-  const showTabs = !!currentKeyword
+  const showTabs = hasKeyword
   if (showTabs) {
     return (
       <div className="px-4 py-5 sm:px-6 sm:py-6 md:p-8 min-h-screen bg-background rin-doc">
@@ -668,95 +671,28 @@ function ResultsContent() {
           {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-card */}
           <div className="lg:col-span-8 space-y-4 sm:space-y-6 dark:bg-card rounded-xl p-0 sm:p-1 min-w-0">
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading">
-        {/* Input — what was analyzed (PM: context first) */}
+        {/* What — analyzed context. Narrative: What → Why → So what. */}
         <header className="mb-5 sm:mb-6">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Input</p>
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>What — 분석 대상</p>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight break-words">
             &quot;{currentKeyword}&quot;
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {showAnalyzing
               ? '분석 중입니다. 다른 페이지로 이동해도 계속돼요.'
-              : result?.updated_at ? (
+              : status === 'done' && result?.updated_at ? (
+              <>요약과 핵심 정리부터 확인하세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
+            ) : result?.updated_at ? (
               <>마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
             ) : '탭에서 시장 분석·인사이트·종합 리포트를 확인하세요.'}
           </p>
         </header>
 
-        {/* Actions: PDF, re-analyze, last updated */}
-        {status === 'done' && result && (
-          <div className="no-print flex flex-wrap items-center gap-2 mb-6">
-            <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
-              <FileDown className="w-4 h-4" />
-              PDF로 저장
-            </Button>
-          </div>
-        )}
-
-        {(status === 'done' && result) || (status === 'loading' && currentKeyword) ? (
-          <div className="no-print w-full flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-border">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="gap-2"
-              disabled={loading}
-              onClick={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-              aria-label="전체 리포트를 새 데이터로 다시 생성"
-              aria-busy={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  AI가 최신 정보를 분석 중입니다...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4" />
-                  새로운 데이터로 다시 분석하기
-                </>
-              )}
-            </Button>
-            {status === 'done' && result?.reportId && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 border-primary text-primary hover:bg-primary/10"
-                disabled={
-                  tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]
-                }
-                aria-label="현재 탭만 캐시 무시하고 다시 분석"
-                aria-busy={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
-                onClick={() => {
-                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabErrorGroq((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabErrorGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  fetchTabAnalysis(activeTab as AiTabId, 'all', { isReanalyze: true })
-                }}
-              >
-                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    탭 분석 재실행 중...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    재분석 (캐시 무시)
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        ) : null}
-
-        {/* Insight Summary — "So what?" dominant; key takeaways above the fold */}
+        {/* Insight Summary — first on small screens for quick scanning; id for jump-back when resuming. */}
         {status === 'done' && result && (
           <>
-            <section className="mb-4 sm:mb-5" aria-label="Insight summary">
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Summary</p>
+            <section id="insight-summary" className="mb-4 sm:mb-5 scroll-mt-4" aria-label="Insight summary">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>So what? — 요약</p>
               <InsightSummary
                 summary={
                   consensusData?.strategicSummary?.summary?.trim() ||
@@ -782,17 +718,79 @@ function ResultsContent() {
               if (keyFindingItems.length === 0) return null
               return (
                 <section className="mb-6 sm:mb-8" aria-label="Key findings">
-                  <KeyFindings items={keyFindingItems} title="Key findings" maxItems={5} />
+                  <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
                 </section>
               )
             })()}
           </>
         )}
 
-        {/* Insight — AI interpretation (strategic conclusion; PM: decision-oriented) */}
+        {/* Actions: after summary so the fold is summary-first; details/actions below */}
+        {status === 'done' && result && (
+          <div className="no-print flex flex-wrap items-center gap-2 sm:gap-3 mb-6 pb-4 border-b border-border">
+            <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
+              <FileDown className="w-4 h-4" />
+              PDF로 저장
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+              disabled={loading}
+              onClick={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              aria-label="전체 리포트를 새 데이터로 다시 생성"
+              aria-busy={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI가 최신 정보를 분석 중입니다...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  새로운 데이터로 다시 분석하기
+                </>
+              )}
+            </Button>
+            {result?.reportId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 border-primary text-primary hover:bg-primary/10"
+                disabled={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
+                aria-label="현재 탭만 캐시 무시하고 다시 분석"
+                aria-busy={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
+                onClick={() => {
+                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabErrorGroq((prev) => ({ ...prev, [activeTab]: null }))
+                  setTabErrorGemini((prev) => ({ ...prev, [activeTab]: null }))
+                  fetchTabAnalysis(activeTab as AiTabId, 'all', { isReanalyze: true })
+                }}
+              >
+                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    탭 분석 재실행 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    재분석 (캐시 무시)
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* So what? — Strategic insight (dominant). Decision-oriented. */}
         <section className="mb-6 sm:mb-8" aria-labelledby="consensus-heading">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Insight</p>
-          <h2 id="consensus-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-3">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>So what? — 전략 통찰</p>
+          <h2 id="consensus-heading" className="text-sm font-semibold uppercase tracking-wider text-foreground dark:text-slate-300 mb-3">
             전략 통찰
           </h2>
         {!result ? (
@@ -803,7 +801,12 @@ function ResultsContent() {
                 {error.includes('형식이 올바르지 않아요') && (
                   <p className="text-xs text-muted-foreground">초기 분석 단계에서 JSON 파싱에 실패했어요.</p>
                 )}
-                <Button variant="outline" size="sm" className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50" onClick={retryConsensus}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-zinc-600 text-slate-300 hover:bg-zinc-700/50"
+                  onClick={() => (result ? retryConsensus() : startResearch(currentKeyword ?? '', { country_code: countryFromUrl }))}
+                >
                   다시 분석하기
                 </Button>
               </div>
@@ -831,14 +834,18 @@ function ResultsContent() {
         )}
         </section>
 
-        {/* Evidence — supporting data (PM: skim or dig deeper). Collapsible on small screens so Summary/Insight stay above the fold. */}
-        <section className="mb-6 sm:mb-8" aria-label="Evidence">
+        {/* Evidence — collapsed on small screens so summary + key findings + insight stay scannable; expand for detail. */}
+        <div className="border-t-2 border-border dark:border-slate-700/80 pt-6 sm:pt-8 mb-6 sm:mb-8" role="separator" aria-hidden />
+        <section className="mb-6 sm:mb-8 rounded-xl bg-muted/30 dark:bg-slate-900/50 border border-border dark:border-slate-800 p-4 sm:p-5" aria-label="Evidence">
           <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
-            <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>Evidence</p>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>근거 (선택)</p>
+              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">뉴스·상세 분석은 필요할 때 펼쳐보세요.</p>
+            </div>
             <button
               type="button"
               onClick={() => setEvidenceOpen((o) => !o)}
-              className="lg:sr-only flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300"
+              className="lg:sr-only flex items-center gap-1.5 min-h-[44px] py-2.5 px-1 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 touch-manipulation"
               aria-expanded={evidenceOpen}
               aria-controls="evidence-content"
             >
@@ -943,8 +950,8 @@ function ResultsContent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <GroqAnalysis
                         tabId={id}
-                      text={tabCacheGroq[id] ?? (result?.analysis_groq as Record<string, string>)?.[id] ?? null}
-                      loading={!(result?.analysis_groq as Record<string, string>)?.[id] && (tabLoadingGroq[id] || (loading && !result))}
+                      text={tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? null}
+                      loading={!(result?.analysis_groq as TabAnalysisRecord)?.[id] && (tabLoadingGroq[id] || (loading && !result))}
                       error={tabErrorGroq[id]}
                       retryCount={retryCountTabGroq[id] ?? 0}
                       onRetry={() => {
@@ -958,8 +965,8 @@ function ResultsContent() {
                     />
                     <GeminiAnalysis
                         tabId={id}
-                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as Record<string, string>)?.[id] ?? null}
-                      loading={!(result?.analysis_gemini as Record<string, string>)?.[id] && (tabLoadingGemini[id] || (loading && !result))}
+                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null}
+                      loading={!(result?.analysis_gemini as TabAnalysisRecord)?.[id] && (tabLoadingGemini[id] || (loading && !result))}
                       error={tabErrorGemini[id]}
                       retryCount={retryCountTabGemini[id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}
@@ -1028,25 +1035,25 @@ function ResultsContent() {
           </div>
         </section>
 
-        {/* Implication — what to do next (PM: returning users see actions in one place). Collapsible on small screens. */}
+        {/* Implication — collapsed on small screens; expand for next steps. */}
         {status === 'done' && result && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
           <section className="mb-6 sm:mb-8 pt-4 border-t border-border" aria-label="Implication">
             <button
               type="button"
               onClick={() => setImplicationOpen((o) => !o)}
-              className="lg:sr-only w-full flex items-center justify-between gap-2 text-left mb-2"
+              className="lg:sr-only w-full flex items-center justify-between gap-2 min-h-[44px] py-2.5 text-left mb-2 touch-manipulation"
               aria-expanded={implicationOpen}
               aria-controls="implication-content"
             >
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500">Implication</p>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500">다음 단계</p>
               <span className="text-xs font-medium text-muted-foreground dark:text-slate-400">
-                {implicationOpen ? '접기' : 'Next steps 펼치기'}
+                {implicationOpen ? '접기' : '다음 단계 펼치기'}
                 {implicationOpen ? <ChevronUp className="w-4 h-4 inline-block ml-1 align-middle" /> : <ChevronDown className="w-4 h-4 inline-block ml-1 align-middle" />}
               </span>
             </button>
             <div className="hidden lg:block">
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-2" aria-hidden>Implication</p>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2">Next steps</h2>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-2" aria-hidden>So what? — 다음 단계</p>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground dark:text-slate-300 mb-2">다음 단계 (의사결정 참고)</h2>
             </div>
             <div id="implication-content" className={cn(implicationOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!implicationOpen}>
               <ul className="space-y-1 list-none pl-0 text-sm text-foreground dark:text-slate-200">
@@ -1060,6 +1067,18 @@ function ResultsContent() {
               <p className="text-xs text-muted-foreground dark:text-slate-500 mt-2">추가 질문은 인사이트 탭에서 질문하기를 이용하세요.</p>
             </div>
           </section>
+        )}
+
+        {/* Small screens: jump back to summary after partial reading (interrupted usage). */}
+        {status === 'done' && result && (
+          <div className="lg:hidden flex justify-center py-3">
+            <a
+              href="#insight-summary"
+              className="text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 underline underline-offset-2"
+            >
+              요약으로 돌아가기
+            </a>
+          </div>
         )}
 
         {selectedNews && (
@@ -1086,7 +1105,7 @@ function ResultsContent() {
               <button
                 type="button"
                 onClick={() => setSidebarOpen((o) => !o)}
-                className="w-full flex items-center justify-between gap-2 p-3 sm:p-4 text-left hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 min-h-[44px] p-3 sm:p-4 text-left hover:bg-muted/50 transition-colors touch-manipulation"
                 aria-expanded={sidebarOpen}
                 aria-controls="results-sidebar-content"
               >
@@ -1234,14 +1253,14 @@ function ResultsContent() {
     )
   }
 
-  if (!keyword) {
+  if (!hasKeyword) {
     return (
       <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] gap-6 bg-background" role="status">
         <div className="rounded-2xl border border-border bg-card shadow-sm p-8 text-center max-w-md">
-          <p className="text-base font-medium text-foreground dark:text-[#e1e3e6] mb-1">검색어가 없습니다</p>
-          <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">홈에서 키워드를 검색한 뒤 결과를 확인하세요.</p>
+          <h2 className="text-lg font-semibold text-foreground dark:text-[#e1e3e6] mb-1">키워드를 검색하세요</h2>
+          <p className="text-sm text-muted-foreground dark:text-slate-400 mb-6">키워드를 입력하고 검색하면 한 줄 요약과 핵심 인사이트를 바로 볼 수 있어요.</p>
           <Link href="/">
-            <Button variant="outline">검색으로 돌아가기</Button>
+            <Button variant="outline">홈에서 검색하기</Button>
           </Link>
         </div>
       </div>

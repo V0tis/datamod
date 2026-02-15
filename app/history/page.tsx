@@ -141,7 +141,7 @@ export default function HistoryPage() {
           내 리서치 기록
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          research_history 기준 최근 분석 기록입니다.
+          최근 분석한 키워드로 바로 이동해요.
         </p>
       </header>
 

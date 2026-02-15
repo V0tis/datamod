@@ -116,6 +116,7 @@ const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
 /** Normalize raw (legacy or new) payload from DB/cache into Consensus */
 export function normalizeConsensus(raw: unknown): Consensus | null {
   if (!raw || typeof raw !== 'object') return null
+  // API/DB consensus shape: strategicSummary.summary required; sentiment/metadata optional.
   const o = raw as Record<string, unknown>
   if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
     const ss = o.strategicSummary as Record<string, unknown>

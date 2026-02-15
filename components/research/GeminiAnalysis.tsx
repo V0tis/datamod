@@ -36,7 +36,6 @@ function GeminiAnalysisComponent({
 }: GeminiAnalysisProps) {
   const [copyFeedback, setCopyFeedback] = useState(false)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isFact = tabId === 'fact'
   const status: AnalysisStatus = loading ? 'loading' : error ? 'error' : text ? 'success' : 'idle'
 
   const statusLabel = status === 'loading' ? '로딩 중' : status === 'success' ? '성공' : status === 'error' ? '실패' : '대기'
@@ -110,7 +109,7 @@ function GeminiAnalysisComponent({
           </div>
         ) : text ? (
           <>
-            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words min-w-0', isFact && 'sm:prose-lg')}>
+            <div className="prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words prose-p:leading-snug prose-li:leading-snug min-w-0">
               <CollapsibleLongContent>
                 <MarkdownWithSearchLinks text={text} />
               </CollapsibleLongContent>

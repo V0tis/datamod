@@ -172,6 +172,7 @@ export async function POST(req: Request) {
         } catch (geminiError: unknown) {
           const msg = String((geminiError as { message?: string })?.message ?? geminiError)
           console.log('[Research Stream] Gemini error (all retries exhausted)', msg)
+          // retryDelay: client will show toast and auto-retry once after N seconds (cost: one more attempt).
           send('progress', {
             step: 'error',
             error: RATE_LIMIT_USER_MESSAGE,
@@ -187,7 +188,7 @@ export async function POST(req: Request) {
           return
         }
         if (!responseText) {
-          send('progress', { step: 'error', error: '분석 결과를 생성하지 못했어요.' })
+          send('progress', { step: 'error', error: '분석 결과를 생성하지 못했어요. 다시 시도해 주세요.' })
           safeClose()
           return
         }
@@ -200,9 +201,10 @@ export async function POST(req: Request) {
         await trackUsage('gemini')
 
         currentStep = 'parse_json'
+        // repair: true — AI sometimes returns truncated JSON; try closing brackets/strings before failing.
         const parsed = parseInitialResearchResponse(responseText, { repair: true })
         if (!parsed.ok) {
-          send('progress', { step: 'error', error: parsed.error })
+          send('progress', { step: 'error', error: `${parsed.error} 다시 시도해 주세요.` })
           safeClose()
           return
         }

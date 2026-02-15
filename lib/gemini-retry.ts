@@ -4,6 +4,10 @@
  * - 대기 시간에 Jitter 적용으로 동시 재시도 분산
  */
 
+/**
+ * Shown when 429/quota/5xx after all retries are exhausted.
+ * User can retry manually; stream route may send retryDelay so client auto-retries once.
+ */
 export const RATE_LIMIT_USER_MESSAGE =
   '서버가 혼잡하여 잠시 후 다시 시도해 주세요.'
 

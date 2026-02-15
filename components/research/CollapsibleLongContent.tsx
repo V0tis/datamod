@@ -4,9 +4,12 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * On small screens, clamp content height and show "전체 보기" to expand. Improves scannability of long insights.
- * On sm and up, no clamp (sm:max-h-none).
+ * Clamp content height by default so key insight stays scannable; expand for full text.
+ * Mobile: tighter clamp. Desktop: moderate clamp so first screen isn't dominated by verbose AI text.
  */
+const MOBILE_MAX_H = 'max-h-[16rem]'
+const DESKTOP_MAX_H = 'md:max-h-[22rem] lg:max-h-none'
+
 export function CollapsibleLongContent({
   children,
   className,
@@ -22,7 +25,8 @@ export function CollapsibleLongContent({
       <div
         className={cn(
           'overflow-hidden',
-          !expanded && 'max-h-[20rem] sm:max-h-none',
+          !expanded && MOBILE_MAX_H,
+          !expanded && DESKTOP_MAX_H,
           className
         )}
       >
@@ -32,7 +36,8 @@ export function CollapsibleLongContent({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-2 flex items-center gap-1 text-xs font-medium text-primary dark:text-emerald-400 hover:underline sm:hidden"
+          className="mt-2 flex items-center gap-1 min-h-[44px] py-2 text-xs font-medium text-primary dark:text-emerald-400 hover:underline lg:hidden touch-manipulation"
+          aria-label={expandLabel}
         >
           {expandLabel}
         </button>

@@ -59,6 +59,7 @@ export async function GET(req: Request) {
       })
     }
 
+    // reports.content is JSON (marketNews, painPoints, etc.). Supabase may return object or null.
     const content = (report.content ?? {}) as Record<string, unknown>
     return NextResponse.json({
       cached: true,

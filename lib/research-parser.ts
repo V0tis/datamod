@@ -54,7 +54,7 @@ function normalizeChartImpact(raw: Array<{ subject?: string; score?: number }> |
 
 /**
  * Parse AI response text into normalized InitialResearchSummary.
- * Uses extractJsonFromText and optional repair for truncated JSON.
+ * Uses extractJsonFromText; options.repair tries to fix truncated JSON (common when AI hits token limit).
  * Single responsibility: data transformation only.
  */
 export function parseInitialResearchResponse(
