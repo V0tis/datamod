@@ -42,6 +42,7 @@ export type {
   ChatCompletionOutput,
   TabAnalysisInput,
   TabAnalysisOutput,
+  TabAnalysisProvider,
   SynthesizeConsensusInput,
   SynthesizeConsensusOutput,
   Consensus,

@@ -260,7 +260,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
-      startResearch: (keyword: string, options?: { fromRetry?: boolean }) => {
+      startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => {
     const { status, keyword: currentKeyword } = get()
     if (!options?.fromRetry) retryScheduledForStream = false
     const k = keyword?.trim()
@@ -337,7 +337,7 @@ export const useResearchStore = create<ResearchStore>()(
           buffer = lines.pop() ?? ''
 
           for (const chunk of lines) {
-            const eventMatch = chunk.match(/^event:\s*(\w+)\ndata:\s*(.+)/s)
+            const eventMatch = chunk.match(/^event:\s*(\w+)\ndata:\s*([\s\S]+)/)
             if (!eventMatch) continue
             const [, , dataStr] = eventMatch
             try {
@@ -429,15 +429,20 @@ export const useResearchStore = create<ResearchStore>()(
         getItem: (name: string) => {
           if (typeof window === 'undefined') return null
           try {
-            return localStorage.getItem(name)
+            const raw = localStorage.getItem(name)
+            if (raw == null) return null
+            const parsed = JSON.parse(raw) as { state?: unknown; version?: number }
+            return parsed && typeof parsed === 'object' && 'state' in parsed
+              ? { state: parsed.state, version: parsed.version }
+              : { state: parsed, version: 0 }
           } catch {
             return null
           }
         },
-        setItem: (name: string, value: string) => {
+        setItem: (name: string, value: { state: unknown; version?: number }) => {
           if (typeof window === 'undefined') return
           try {
-            localStorage.setItem(name, value)
+            localStorage.setItem(name, JSON.stringify(value))
           } catch {
             /* ignore */
           }

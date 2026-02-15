@@ -119,10 +119,10 @@ export function ResearchReportView({
             title: '📰 시장 뉴스 요약',
             children: (
               <ul className="list-disc pl-5 space-y-2">
-                {marketNews.map((item, i) => (
+                {(marketNews ?? []).map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
-                {marketNews.length === 0 && (
+                {(marketNews ?? []).length === 0 && (
                   <li className="text-muted-foreground">수집된 뉴스가 없습니다.</li>
                 )}
               </ul>
@@ -133,10 +133,10 @@ export function ResearchReportView({
             title: '😫 유저 페인 포인트',
             children: (
               <ul className="list-disc pl-5 space-y-2 text-red-600 dark:text-red-400">
-                {painPoints.map((item, i) => (
+                {(painPoints ?? []).map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
-                {painPoints.length === 0 && (
+                {(painPoints ?? []).length === 0 && (
                   <li className="text-muted-foreground">수집된 페인 포인트가 없습니다.</li>
                 )}
               </ul>
@@ -160,7 +160,7 @@ export function ResearchReportView({
                 <div className="w-full bg-muted h-4 rounded-full mt-4 overflow-hidden">
                   <div
                     className="bg-primary h-4 rounded-full transition-[width] duration-500"
-                    style={{ width: `${Math.min(100, Math.max(0, sentiment))}%` }}
+                    style={{ width: `${Math.min(100, Math.max(0, sentiment ?? 0))}%` }}
                   />
                 </div>
               </>

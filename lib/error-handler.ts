@@ -78,7 +78,7 @@ export function getFriendlyMessage(err: unknown): string {
   if (code && FRIENDLY_MESSAGES[code]) {
     return FRIENDLY_MESSAGES[code]
   }
-  if (code != null && (String(code) === '429' || code === 429)) {
+  if (code != null && String(code) === '429') {
     return RATE_LIMIT_FRIENDLY
   }
   const message = payload.message ?? payload.error

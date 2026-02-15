@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-/** /auth/login은 /login으로 통일 (기존 링크 호환용 리다이렉트) */
-export default function AuthLoginPage() {
+function AuthLoginRedirect() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -17,5 +16,18 @@ export default function AuthLoginPage() {
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-muted-foreground">이동 중...</p>
     </div>
+  )
+}
+
+/** /auth/login은 /login으로 통일 (기존 링크 호환용 리다이렉트) */
+export default function AuthLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">이동 중...</p>
+      </div>
+    }>
+      <AuthLoginRedirect />
+    </Suspense>
   )
 }

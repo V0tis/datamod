@@ -46,6 +46,26 @@ yarn dev
 
 ---
 
+## 배포 (외부 접속)
+
+**Vercel로 배포하면 누구나 URL로 접속할 수 있습니다.**
+
+1. [Vercel](https://vercel.com)에 로그인 후 **Add New → Project**에서 이 저장소(GitHub/GitLab)를 연결합니다.
+2. **Environment Variables**에 `.env.local`에 넣은 값들을 그대로 등록합니다. (Supabase, Resend, Gemini, Groq 등)
+3. **Deploy**를 누르면 빌드 후 `https://<프로젝트명>.vercel.app` 같은 URL이 생성됩니다.
+4. (선택) 커스텀 도메인은 Vercel 대시보드 → Project → Settings → Domains에서 설정할 수 있습니다.
+
+로컬에서 프로덕션 빌드 후 바로 실행해 보려면:
+
+```bash
+yarn build
+yarn start
+```
+
+`yarn start`는 기본적으로 `http://localhost:3000`에서만 접속 가능합니다. 같은 네트워크의 다른 기기에서 접속하려면 `yarn start --hostname 0.0.0.0`으로 실행할 수 있습니다.
+
+---
+
 ## 환경 변수
 
 프로젝트 루트에 `.env.local` (또는 `.env`)을 만들고 아래 값을 채우세요.

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,7 +45,7 @@ const SETTINGS_TAB_PARAM = 'tab'
 const TAB_LICENSE = 'license'
 const TAB_PROFILE = 'profile'
 
-export default function SettingsPage() {
+function SettingsPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get(SETTINGS_TAB_PARAM)
@@ -56,7 +56,7 @@ export default function SettingsPage() {
     router.replace(`/settings${query}`)
   }
 
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [data, setData] = useState<SettingsData | null>(null)
@@ -336,5 +336,17 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    }>
+      <SettingsPageInner />
+    </Suspense>
   )
 }

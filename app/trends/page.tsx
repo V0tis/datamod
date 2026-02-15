@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useResearchStore } from '@/lib/stores/research-store'
@@ -79,7 +79,7 @@ function TrendsSkeleton() {
   )
 }
 
-export default function TrendsPage() {
+function TrendsPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const startResearch = useResearchStore((s) => s.startResearch)
@@ -322,5 +322,17 @@ export default function TrendsPage() {
         onAnalyze={handleAnalyzeFromPanel}
       />
     </div>
+  )
+}
+
+export default function TrendsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    }>
+      <TrendsPageInner />
+    </Suspense>
   )
 }

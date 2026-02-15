@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
@@ -24,7 +24,7 @@ import { TrendDetailPanel } from '@/components/trend-detail-panel'
 const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
-export default function RinAISearch() {
+function RinAISearchInner() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [query, setQuery] = useState('')
@@ -512,5 +512,17 @@ export default function RinAISearch() {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+export default function RinAISearch() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    }>
+      <RinAISearchInner />
+    </Suspense>
   )
 }
