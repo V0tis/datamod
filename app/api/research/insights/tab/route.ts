@@ -387,14 +387,18 @@ export async function POST(req: Request) {
           (typeof existingResults.summary === 'string' ? normalizeConsensus(existingResults) : null)
       }
 
-      /** Merge this tab's result into existing record; other tabs (logic/fact) stay unchanged. */
+      /** Merge this tab's result into existing record; other tabs (logic/fact) stay unchanged. Do not persist 'logic' — only creative and fact. */
       const mergeTabIntoRecord = (prev: TabAnalysisRecord, result: string | null, tabKey: string) => {
         const next = { ...prev }
         if (result != null && String(result).trim().length > 0) next[tabKey] = String(result).trim()
         return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as TabAnalysisRecord
       }
-      const nextGroq = mergeTabIntoRecord(prevGroq, groqResult, tab)
-      const nextGemini = mergeTabIntoRecord(prevGemini, geminiResult, tab)
+      let nextGroq = mergeTabIntoRecord(prevGroq, groqResult, tab)
+      let nextGemini = mergeTabIntoRecord(prevGemini, geminiResult, tab)
+      if (tab === 'logic') {
+        nextGroq = Object.fromEntries(Object.entries(nextGroq).filter(([k]) => k !== 'logic')) as TabAnalysisRecord
+        nextGemini = Object.fromEntries(Object.entries(nextGemini).filter(([k]) => k !== 'logic')) as TabAnalysisRecord
+      }
 
       // analysis_results: 새 JSON 포맷(Consensus)만 저장. Groq/Gemini 원본은 저장 금지. 생성된 결과가 있을 때만 업데이트.
       const consensusToSave = consensus ?? existingConsensus

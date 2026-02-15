@@ -338,27 +338,25 @@ function ResultsContent() {
     if (!result?.reportId) return
     const groq = result.analysis_groq as TabAnalysisRecord | undefined
     const gemini = result.analysis_gemini as TabAnalysisRecord | undefined
-    if (groq && typeof groq === 'object' && ('logic' in groq || 'creative' in groq || 'fact' in groq)) {
+    if (groq && typeof groq === 'object' && ('creative' in groq || 'fact' in groq)) {
       setTabCacheGroq((prev) => ({
         ...prev,
-        logic: typeof groq.logic === 'string' ? groq.logic : prev.logic,
-        creative: typeof groq.creative === 'string' ? groq.creative : (typeof groq.logic === 'string' ? groq.logic : prev.creative),
+        creative: typeof groq.creative === 'string' ? groq.creative : prev.creative,
         fact: typeof groq.fact === 'string' ? groq.fact : prev.fact,
       }))
     }
-    if (gemini && typeof gemini === 'object' && ('logic' in gemini || 'creative' in gemini || 'fact' in gemini)) {
+    if (gemini && typeof gemini === 'object' && ('creative' in gemini || 'fact' in gemini)) {
       setTabCacheGemini((prev) => ({
         ...prev,
-        logic: typeof gemini.logic === 'string' ? gemini.logic : prev.logic,
-        creative: typeof gemini.creative === 'string' ? gemini.creative : (typeof gemini.logic === 'string' ? gemini.logic : prev.creative),
+        creative: typeof gemini.creative === 'string' ? gemini.creative : prev.creative,
         fact: typeof gemini.fact === 'string' ? gemini.fact : prev.fact,
       }))
     }
-    // DB에 탭 데이터가 있으면 탭/consensus용 API 호출하지 않도록 표시 (creative는 .creative 또는 구형 .logic 둘 다 인정)
     const tabs: AiTabId[] = ['logic', 'creative', 'fact']
     tabs.forEach((t) => {
-      const hasGroq = typeof groq?.[t] === 'string' && groq[t].trim().length > 0 || (t === 'creative' && typeof groq?.logic === 'string' && groq.logic.trim().length > 0)
-      const hasGemini = typeof gemini?.[t] === 'string' && gemini[t].trim().length > 0 || (t === 'creative' && typeof gemini?.logic === 'string' && gemini.logic.trim().length > 0)
+      const key = t === 'logic' ? 'creative' : t
+      const hasGroq = typeof groq?.[key] === 'string' && groq[key].trim().length > 0
+      const hasGemini = typeof gemini?.[key] === 'string' && gemini[key].trim().length > 0
       if (hasGroq && hasGemini) tabHasFetchedRef.current[t] = true
     })
   }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
@@ -404,7 +402,7 @@ function ResultsContent() {
       }
       setTabErrorGroq((prev) => ({ ...prev, [tabId]: null }))
       setTabErrorGemini((prev) => ({ ...prev, [tabId]: null }))
-      const logicText = tabCacheGroq.logic ?? tabCacheGemini.logic ?? ''
+      const logicText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
       const creativeText = tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
       const payload = {
         keyword: currentKeyword,
@@ -529,29 +527,39 @@ function ResultsContent() {
     const groq = result?.analysis_groq as TabAnalysisRecord | undefined
     const gemini = result?.analysis_gemini as TabAnalysisRecord | undefined
     const hasDbCache = (tabId: AiTabId) => {
-      const g = groq && (typeof groq[tabId] === 'string' && groq[tabId].trim().length > 0 || (tabId === 'creative' && typeof groq.logic === 'string' && groq.logic.trim().length > 0))
-      const m = gemini && (typeof gemini[tabId] === 'string' && gemini[tabId].trim().length > 0 || (tabId === 'creative' && typeof gemini.logic === 'string' && gemini.logic.trim().length > 0))
+      const key = tabId === 'logic' ? 'creative' : tabId
+      const g = groq && typeof groq[key] === 'string' && groq[key].trim().length > 0
+      const m = gemini && typeof gemini[key] === 'string' && gemini[key].trim().length > 0
       return !!g && !!m
     }
     if (result?.reportId && hasDbCache('logic') && hasDbCache('creative') && hasDbCache('fact')) {
       tabHasFetchedRef.current = { logic: true, creative: true, fact: true }
       return
     }
+    if (t === 'logic') {
+      tabHasFetchedRef.current.logic = true
+      return
+    }
     if (tabHasFetchedRef.current[t]) return
     if (tabLoadingGroq[t] || tabLoadingGemini[t]) return
     if (tabErrorGroq[t] || tabErrorGemini[t]) return
 
-    const groqFromResult = !!(groq && typeof groq[t] === 'string' && groq[t].trim().length > 0)
-    const geminiFromResult = !!(gemini && typeof gemini[t] === 'string' && gemini[t].trim().length > 0)
+    const contentKey = t as keyof TabAnalysisRecord
+    const groqFromResult = !!(groq && typeof groq[contentKey] === 'string' && groq[contentKey].trim().length > 0)
+    const geminiFromResult = !!(gemini && typeof gemini[contentKey] === 'string' && gemini[contentKey].trim().length > 0)
     const needGroq = !tabCacheGroq[t] && !groqFromResult
     const needGemini = !geminiQuotaExceeded && !tabCacheGemini[t] && !geminiFromResult
     if (!needGroq && !needGemini) return
     tabHasFetchedRef.current[t] = true
     if (needGroq && needGemini) {
+      setTabLoadingGroq((prev) => ({ ...prev, [t]: true }))
+      setTabLoadingGemini((prev) => ({ ...prev, [t]: true }))
       fetchTabAnalysis(t, 'all')
     } else if (needGroq) {
+      setTabLoadingGroq((prev) => ({ ...prev, [t]: true }))
       fetchTabAnalysis(t, 'groq')
     } else if (needGemini) {
+      setTabLoadingGemini((prev) => ({ ...prev, [t]: true }))
       fetchTabAnalysis(t, 'gemini')
     }
   }, [activeTab, status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
@@ -588,8 +596,8 @@ function ResultsContent() {
     }
     if (consensusData != null) return
     if (isConsensusStartedRef.current) return
-    const groqCreative = (result.analysis_groq as TabAnalysisRecord | undefined)?.creative ?? (result.analysis_groq as TabAnalysisRecord | undefined)?.logic
-    const geminiCreative = (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative ?? (result.analysis_gemini as TabAnalysisRecord | undefined)?.logic
+    const groqCreative = (result.analysis_groq as TabAnalysisRecord | undefined)?.creative
+    const geminiCreative = (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative
     const groqFromResult = typeof groqCreative === 'string' && groqCreative.trim().length > 0
     const geminiFromResult = typeof geminiCreative === 'string' && geminiCreative.trim().length > 0
     const needGroq = !tabCacheGroq.creative && !groqFromResult
@@ -982,37 +990,39 @@ function ResultsContent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <GroqAnalysis
                         tabId={id}
-                      text={tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_groq as TabAnalysisRecord)?.logic ?? null : null) ?? null}
-                      loading={!(tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_groq as TabAnalysisRecord)?.logic : undefined)) && (tabLoadingGroq[id] || (loading && !result))}
-                      error={tabErrorGroq[id]}
-                      retryCount={retryCountTabGroq[id] ?? 0}
+                      text={(id === 'logic' ? tabCacheGroq.creative ?? (result?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
+                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (result?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || (loading && !result))}
+                      error={tabErrorGroq[id === 'logic' ? 'creative' : id]}
+                      retryCount={retryCountTabGroq[id === 'logic' ? 'creative' : id] ?? 0}
                       onRetry={() => {
-                        if ((retryCountTabGroq[id] ?? 0) >= 3) {
-                          setRetryCountTabGroq((prev) => ({ ...prev, [id]: 0 }))
-                          setTabErrorGroq((prev) => ({ ...prev, [id]: null }))
+                        const tabToFetch = id === 'logic' ? 'creative' : id
+                        if ((retryCountTabGroq[tabToFetch] ?? 0) >= 3) {
+                          setRetryCountTabGroq((prev) => ({ ...prev, [tabToFetch]: 0 }))
+                          setTabErrorGroq((prev) => ({ ...prev, [tabToFetch]: null }))
                         }
-                        setTabCacheGroq((prev) => ({ ...prev, [id]: null }))
-                        fetchTabAnalysis(id, 'groq', { isReanalyze: true })
+                        setTabCacheGroq((prev) => ({ ...prev, [tabToFetch]: null }))
+                        fetchTabAnalysis(tabToFetch, 'groq', { isReanalyze: true })
                       }}
                     />
                     <GeminiAnalysis
                         tabId={id}
-                      text={tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_gemini as TabAnalysisRecord)?.logic ?? null : null) ?? null}
-                      loading={!(tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? (id === 'creative' ? (result?.analysis_gemini as TabAnalysisRecord)?.logic : undefined)) && (tabLoadingGemini[id] || (loading && !result))}
-                      error={tabErrorGemini[id]}
-                      retryCount={retryCountTabGemini[id] ?? 0}
+                      text={(id === 'logic' ? tabCacheGemini.creative ?? (result?.analysis_gemini as TabAnalysisRecord)?.creative : tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null) ?? null}
+                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (result?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || (loading && !result))}
+                      error={tabErrorGemini[id === 'logic' ? 'creative' : id]}
+                      retryCount={retryCountTabGemini[id === 'logic' ? 'creative' : id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}
                       onRetry={() => {
-                        if (tabErrorGemini[id] === '무료 쿼터 초과') {
+                        const tabToFetch = id === 'logic' ? 'creative' : id
+                        if (tabErrorGemini[tabToFetch] === '무료 쿼터 초과') {
                           setGeminiQuotaExceeded(false)
-                          setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
+                          setTabErrorGemini((prev) => ({ ...prev, [tabToFetch]: null }))
                         }
-                        if ((retryCountTabGemini[id] ?? 0) >= 3) {
-                          setRetryCountTabGemini((prev) => ({ ...prev, [id]: 0 }))
-                          setTabErrorGemini((prev) => ({ ...prev, [id]: null }))
+                        if ((retryCountTabGemini[tabToFetch] ?? 0) >= 3) {
+                          setRetryCountTabGemini((prev) => ({ ...prev, [tabToFetch]: 0 }))
+                          setTabErrorGemini((prev) => ({ ...prev, [tabToFetch]: null }))
                         }
-                        setTabCacheGemini((prev) => ({ ...prev, [id]: null }))
-                        fetchTabAnalysis(id, 'gemini', { isReanalyze: true })
+                        setTabCacheGemini((prev) => ({ ...prev, [tabToFetch]: null }))
+                        fetchTabAnalysis(tabToFetch, 'gemini', { isReanalyze: true })
                       }}
                     />
                   </div>

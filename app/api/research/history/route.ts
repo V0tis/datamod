@@ -120,12 +120,13 @@ function ensureObject(value: unknown): Record<string, unknown> | undefined {
   return undefined
 }
 
-/** research_history.analysis_groq / analysis_gemini: DB가 문자열이거나 객체일 수 있음. 클라이언트는 Record<tabId, string> 기대. */
+/** research_history.analysis_groq / analysis_gemini: DB가 문자열이거나 객체일 수 있음. logic 키는 제외하고 creative/fact만 반환. */
 function ensureTabAnalysisRecord(value: unknown): Record<string, string> | undefined {
   const obj = ensureObject(value) as Record<string, string> | undefined
   if (!obj) return undefined
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
+    if (k === 'logic') continue
     if (typeof v === 'string' && v.trim().length > 0) out[k] = v
   }
   return Object.keys(out).length > 0 ? out : undefined

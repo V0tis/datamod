@@ -3,5 +3,5 @@
  * so routes and frontend don't duplicate casts. No business logic.
  */
 
-/** research_history.analysis_groq / analysis_gemini: keys are 'logic' | 'creative' | 'fact', value is markdown string. */
+/** research_history.analysis_groq / analysis_gemini: keys 'creative' | 'fact' (logic 미사용). value is markdown string. */
 export type TabAnalysisRecord = Record<string, string>

@@ -40,9 +40,9 @@ export interface ResearchResponse {
   source_links?: Array<{ title?: string; url?: string }>
   /** research_history.updated_at (마지막 분석 시간) */
   updated_at?: string
-  /** Groq 분석 결과 (research_history.analysis_groq). 탭별 logic/creative/fact */
-  analysis_groq?: { summary?: string; modelName?: string; logic?: string; creative?: string; fact?: string }
-  /** Gemini 탭 분석 결과 (research_history.analysis_gemini). 탭별 텍스트 Record<tabId, string> */
+  /** Groq 분석 결과 (research_history.analysis_groq). 탭별 creative/fact (logic 미사용) */
+  analysis_groq?: { summary?: string; modelName?: string; creative?: string; fact?: string }
+  /** Gemini 탭 분석 결과 (research_history.analysis_gemini). 탭별 creative/fact */
   analysis_gemini?: Record<string, string>
   /** AI Insight Consensus (research_history.analysis_results). summary, sentiment, strategic_insight, action_item, confidence */
   analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
