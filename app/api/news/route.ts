@@ -30,13 +30,21 @@ function extractSource(description: string | undefined, title: string | undefine
   return '언론사'
 }
 
-/** GET: keyword 쿼리로 구글 뉴스 RSS 조회, 5~10개 최신순 반환 (AI 호출 없음) */
+const DEFAULT_DAYS = 30
+const MIN_DAYS = 1
+const MAX_DAYS = 365
+
+/** GET: keyword 쿼리로 구글 뉴스 RSS 조회. days(기본 30)일 이내 기사만 반환, 최신순 (AI 호출 없음) */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const keyword = searchParams.get('keyword')?.trim()
   if (!keyword) {
     return NextResponse.json({ error: 'keyword required', items: [] }, { status: 400 })
   }
+
+  const daysParam = searchParams.get('days')
+  const days = Math.min(MAX_DAYS, Math.max(MIN_DAYS, daysParam ? parseInt(daysParam, 10) : DEFAULT_DAYS))
+  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000
 
   try {
     const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
@@ -56,7 +64,7 @@ export async function GET(req: Request) {
     const xml = await res.text()
     const feed = await parser.parseString(xml)
     const raw = (feed.items ?? [])
-      .slice(0, MAX_ITEMS * 2)
+      .slice(0, MAX_ITEMS * 4)
       .map((it) => {
         const title = (it.title ?? '').trim()
         const link = typeof it.link === 'string' ? it.link : ''
@@ -66,12 +74,18 @@ export async function GET(req: Request) {
       })
       .filter((i) => i.title.length > 0)
 
-    // 발행일 기준 최신순 (pubDate 내림차순)
-    const sorted = raw.sort((a, b) => {
-      const tA = a.pubDate ? new Date(a.pubDate).getTime() : 0
-      const tB = b.pubDate ? new Date(b.pubDate).getTime() : 0
-      return tB - tA
-    })
+    // 발행일 기준 최신순 (pubDate 내림차순), 선택한 기간(days) 이내만
+    const sorted = raw
+      .filter((i) => {
+        if (!i.pubDate) return true
+        const t = new Date(i.pubDate).getTime()
+        return !Number.isNaN(t) && t >= cutoffMs
+      })
+      .sort((a, b) => {
+        const tA = a.pubDate ? new Date(a.pubDate).getTime() : 0
+        const tB = b.pubDate ? new Date(b.pubDate).getTime() : 0
+        return tB - tA
+      })
     const items = sorted.slice(0, MAX_ITEMS)
 
     return NextResponse.json({ items })

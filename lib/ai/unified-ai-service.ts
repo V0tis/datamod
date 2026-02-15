@@ -4,7 +4,6 @@
  * - Uses swappable providers (Gemini, Groq); UI and routes never touch providers directly.
  * - Each function has a single responsibility.
  */
-import { sleep, REQUEST_GAP_MS } from '@/lib/gemini-retry'
 import {
   buildConsensusPrompt,
   parseConsensusFromRawText,
@@ -104,7 +103,7 @@ export async function completeChat(
 
 /**
  * Run tab analysis: Groq and/or Gemini with the same prompts.
- * Single responsibility: orchestrate chat + content providers; sequential when both needed.
+ * Each provider is isolated: one failing does not block the other; results are returned independently.
  */
 export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalysisOutput> {
   const { groqKey, geminiKey, provider, systemPrompt, userPrompt } = input
@@ -114,16 +113,22 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
 
   const callGroq = async (): Promise<{ text: string | null; quotaError: boolean }> => {
     if (!needGroq || !groqKey) return { text: null, quotaError: false }
-    const result = await providers.chat.completeChat({
-      apiKey: groqKey,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    })
-    return {
-      text: result.text ?? null,
-      quotaError: result.quotaError === true,
+    try {
+      const result = await providers.chat.completeChat({
+        apiKey: groqKey,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      })
+      return {
+        text: result.text ?? null,
+        quotaError: result.quotaError === true,
+      }
+    } catch (e) {
+      const msg = String((e as { message?: string })?.message ?? e)
+      const quotaError = /429|quota|rate limit/i.test(msg) || (e as { status?: number })?.status === 429
+      return { text: null, quotaError }
     }
   }
 
@@ -147,9 +152,12 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
   let geminiResult: { text: string | null; quotaExceeded: boolean }
 
   if (needGroq && needGemini) {
-    groqResult = await callGroq()
-    await sleep(REQUEST_GAP_MS)
-    geminiResult = await callGemini()
+    const [groqSettled, geminiSettled] = await Promise.all([
+      callGroq(),
+      callGemini(),
+    ])
+    groqResult = groqSettled
+    geminiResult = geminiSettled
   } else if (needGroq) {
     groqResult = await callGroq()
     geminiResult = { text: null, quotaExceeded: false }

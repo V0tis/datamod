@@ -179,8 +179,10 @@ function ResultsContent() {
   const [rssNews, setRssNews] = useState<RssNewsItem[]>([])
   const [rssNewsLoading, setRssNewsLoading] = useState(false)
   const [rssNewsFetched, setRssNewsFetched] = useState(false)
-  /** 실시간 뉴스: 키워드가 바뀐 경우에만 재요청 (재분석 등으로 effect 재실행 시 중복 요청 방지) */
-  const lastRssKeywordRef = useRef<string | null>(null)
+  /** 실시간 뉴스 기간(일). 기본 30일 */
+  const [newsDays, setNewsDays] = useState(30)
+  /** 실시간 뉴스: 키워드·기간이 바뀐 경우에만 재요청 */
+  const lastRssFetchKeyRef = useRef<string | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [], updatedAt: null,
   })
@@ -277,17 +279,19 @@ function ResultsContent() {
 
   useEffect(() => {
     const q = (keyword ?? storeKeyword ?? '').trim()
+    const days = Math.min(365, Math.max(1, newsDays))
     if (!q) {
-      lastRssKeywordRef.current = null
+      lastRssFetchKeyRef.current = null
       setRssNews([])
       setRssNewsFetched(false)
       return
     }
-    if (lastRssKeywordRef.current === q) return
-    lastRssKeywordRef.current = q
+    const fetchKey = `${q}|${days}`
+    if (lastRssFetchKeyRef.current === fetchKey) return
+    lastRssFetchKeyRef.current = fetchKey
     setRssNewsLoading(true)
     setRssNewsFetched(false)
-    fetch(`/api/news?keyword=${encodeURIComponent(q)}`)
+    fetch(`/api/news?keyword=${encodeURIComponent(q)}&days=${days}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { items?: RssNewsItem[] } | null) => {
         if (Array.isArray(data?.items)) setRssNews(data.items)
@@ -298,7 +302,7 @@ function ResultsContent() {
         setRssNewsLoading(false)
         setRssNewsFetched(true)
       })
-  }, [keyword, storeKeyword])
+  }, [keyword, storeKeyword, newsDays])
 
   const loading = status === 'loading'
   /** 히스토리 확인 후, 스트림 분석 중일 때만 분석 중 표시. result 있으면(캐시 포함) 탭·카드 표시 */
@@ -848,16 +852,23 @@ function ResultsContent() {
                 onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
                 detail={error.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : error}
               />
-            ) : (
-              <>
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted dark:bg-slate-800 text-muted-foreground dark:text-slate-500 mb-4">
-                  <Lightbulb className="w-7 h-7" aria-hidden />
+            ) : showAnalyzing ? (
+              <div className="flex items-center gap-3 py-2">
+                <Loader2 className="w-5 h-5 shrink-0 animate-spin text-primary" aria-hidden />
+                <div>
+                  <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6]">리포트 생성 중</p>
+                  <p className="text-xs text-muted-foreground dark:text-slate-500">완료 후 전략 요약·감성·실행 권고가 여기에 표시됩니다.</p>
                 </div>
-                <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6] mb-1">전략 통찰이 여기 표시됩니다</p>
-                <p className="text-sm text-muted-foreground dark:text-slate-500 max-w-md mx-auto">
-                  분석이 완료되면 두 엔진의 종합 요약, 감성 점수, 핵심 전략·실행 권고가 자동으로 채워져요.
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80 dark:bg-slate-800/80">
+                  <Lightbulb className="h-4 w-4 text-muted-foreground dark:text-slate-500" aria-hidden />
+                </div>
+                <p className="text-sm text-muted-foreground dark:text-slate-500">
+                  분석을 실행하면 전략 통찰이 여기에 표시됩니다.
                 </p>
-              </>
+              </div>
             )}
           </div>
         ) : (
@@ -884,28 +895,47 @@ function ResultsContent() {
             <button
               type="button"
               onClick={() => setEvidenceOpen((o) => !o)}
-              className="lg:sr-only flex items-center gap-1.5 min-h-[44px] py-2.5 px-1 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 touch-manipulation"
+              className="flex items-center gap-1.5 min-h-[44px] py-2.5 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 touch-manipulation rounded-md hover:bg-muted/60"
               aria-expanded={evidenceOpen}
               aria-controls="evidence-content"
             >
-              {evidenceOpen ? '접기' : '상세 리포트 펼치기'}
+              {evidenceOpen ? '접기' : '상세 펼치기'}
               {evidenceOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
             </button>
           </div>
-          <div id="evidence-content" className={cn(evidenceOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!evidenceOpen}>
-          {/* 실시간 뉴스: compact so Insight stays above the fold */}
+          <div id="evidence-content" className={evidenceOpen ? 'block' : 'hidden'} aria-hidden={!evidenceOpen}>
+          {/* 실시간 뉴스: compact so Insight stays above the fold. 기간 선택 기본 30일 */}
           {currentKeyword && (
             <div className="mb-6">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 flex items-center gap-2">
-                <Newspaper className="h-3.5 w-3.5 text-primary" />
-                실시간 뉴스
-                {rssNewsLoading && (
-                  <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    실시간 뉴스를 불러오는 중입니다
-                  </span>
-                )}
-              </h3>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 flex items-center gap-2">
+                  <Newspaper className="h-3.5 w-3.5 text-primary" />
+                  실시간 뉴스
+                  {rssNewsLoading && (
+                    <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      불러오는 중
+                    </span>
+                  )}
+                </h3>
+                <div className="flex items-center gap-1" role="group" aria-label="뉴스 기간 선택">
+                  {([7, 14, 30, 90] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setNewsDays(d)}
+                      className={cn(
+                        'min-w-[2.25rem] py-1.5 px-2 text-xs font-medium rounded-md border transition-colors',
+                        newsDays === d
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      {d}일
+                    </button>
+                  ))}
+                </div>
+              </div>
               {rssNewsLoading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {[1, 2, 3].map((i) => (
