@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
+import { withExponentialBackoff, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 
 const FOLLOW_UP_SYSTEM =
   "당신은 시장 리서치와 대중 반응 분석 전문가 '린'입니다. 사용자가 유저 반응 분석 내용에 대해 추가로 질문했을 때, **앞서 제시된 유저 반응 요약과 맥락**만 바탕으로 친절하고 간결하게 답변해주세요. 1~3문단 이내로 자연스럽게 작성해주세요."
@@ -38,15 +39,20 @@ export async function POST(req: Request) {
     : `키워드: "${keyword}"\n\n[추가 질문]\n${question}\n\n질문에 답변해주세요.`
 
   try {
-    const result = await model.generateContent(userPrompt)
-    const text = result.response.text()
+    const text = await withExponentialBackoff(
+      async () => {
+        const result = await model.generateContent(userPrompt)
+        return result.response.text()
+      },
+      { maxRetries: 5, baseDelayMs: 1000 }
+    )
     const answer = (text || '').trim() || '답변을 생성하지 못했어요.'
     return NextResponse.json({ answer })
   } catch (err) {
-    console.error('[Insights Follow-up API]', err)
+    console.error('[Insights Follow-up API] (all retries exhausted)', err)
     return NextResponse.json(
-      { error: '추가 질문 처리 중 오류가 발생했어요.' },
-      { status: 500 }
+      { error: RATE_LIMIT_USER_MESSAGE },
+      { status: 503 }
     )
   }
 }

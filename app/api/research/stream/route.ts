@@ -4,6 +4,7 @@ import { getEffectiveLicenseKeys } from '@/lib/license'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import Parser from 'rss-parser'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
+import { withExponentialBackoff, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 
 export const runtime = 'nodejs'
 
@@ -242,42 +243,25 @@ export async function POST(req: Request) {
         })
         const newsTitles = news.map((n) => n.title)
         const prompt = buildUserPrompt(keyword, newsTitles)
-        const maxRetries = 1
         let responseText: string | null = null
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            const result = await model.generateContent(prompt)
-            responseText = result.response.text()
-            break
-          } catch (geminiError: unknown) {
-            const msg = String((geminiError as { message?: string })?.message ?? geminiError)
-            console.log('[Research Stream] Gemini error', { attempt, msg })
-            const is429 =
-              msg.includes('429') ||
-              msg.includes('quota') ||
-              msg.includes('resource exhausted') ||
-              msg.includes('rate limit')
-            if (is429) {
-              send('progress', {
-                step: 'error',
-                error: '현재 요청이 많아 잠시 후 다시 시도해 주세요.',
-                retryDelay: 13,
-              })
-              safeClose()
-              return
-            }
-            if (attempt < maxRetries) {
-              await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt)))
-              continue
-            }
-            send('progress', {
-              step: 'error',
-              error: '분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
-              retryDelay: 13,
-            })
-            safeClose()
-            return
-          }
+        try {
+          responseText = await withExponentialBackoff(
+            async () => {
+              const result = await model.generateContent(prompt)
+              return result.response.text()
+            },
+            { maxRetries: 5, baseDelayMs: 1000 }
+          )
+        } catch (geminiError: unknown) {
+          const msg = String((geminiError as { message?: string })?.message ?? geminiError)
+          console.log('[Research Stream] Gemini error (all retries exhausted)', msg)
+          send('progress', {
+            step: 'error',
+            error: RATE_LIMIT_USER_MESSAGE,
+            retryDelay: 13,
+          })
+          safeClose()
+          return
         }
 
         send('progress', { step: 'gemini_done' })

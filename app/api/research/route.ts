@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
+import { withExponentialBackoff, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -91,41 +92,38 @@ export async function POST(req: Request) {
         generationConfig: { maxOutputTokens: 1500 },
         tools: [{ googleSearchRetrieval: {} }],
       })
-      const maxRetries = 3
-      let lastError: unknown = null
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          const result = await model.generateContent(prompt)
-          const resp = result.response
-          responseText = resp.text()
-          type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
-          const candidate = (resp as GroundingResp).candidates?.[0]
-          const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
-          sourceLinks = chunks
-            .map((c) => ({
-              title: (c.web?.title ?? '제목 없음').slice(0, 200),
-              url: c.web?.uri ?? '',
-            }))
-            .filter((l) => l.url)
-          break
-        } catch (geminiError: unknown) {
-          lastError = geminiError
-          const msg = String((geminiError as { message?: string })?.message ?? geminiError)
-          console.warn('[Research API] Gemini error (attempt', attempt + 1, '):', msg)
-
-          const is404 = /404|not found|invalid model/i.test(msg)
-          if (is404) {
-            logAvailableModels(effective.gemini)
-            console.warn('[Research API] Gemini 404/모델 오류 → GPT Fallback 시도')
-            break
+      try {
+        const result = await withExponentialBackoff(
+          async () => {
+            const r = await model.generateContent(prompt)
+            return r.response
+          },
+          {
+            maxRetries: 5,
+            baseDelayMs: 1000,
+            isRetryable: (err) => {
+              const msg = String((err as { message?: string })?.message ?? err)
+              if (/404|not found|invalid model/i.test(msg)) return false
+              return /429|quota|resource exhausted|rate limit|5\d{2}/i.test(msg)
+            },
           }
-          const is429 = /429|quota|resource exhausted|rate limit/i.test(msg)
-          if (is429 && attempt < maxRetries) {
-            const waitMs = Math.min(2000 * Math.pow(2, attempt), 60_000)
-            await new Promise((r) => setTimeout(r, waitMs))
-            continue
-          }
-          break
+        )
+        responseText = result.text()
+        type GroundingResp = { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } }> }
+        const candidate = (result as GroundingResp).candidates?.[0]
+        const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
+        sourceLinks = chunks
+          .map((c) => ({
+            title: (c.web?.title ?? '제목 없음').slice(0, 200),
+            url: c.web?.uri ?? '',
+          }))
+          .filter((l) => l.url)
+      } catch (geminiError: unknown) {
+        const msg = String((geminiError as { message?: string })?.message ?? geminiError)
+        console.warn('[Research API] Gemini error (all retries exhausted)', msg)
+        if (/404|not found|invalid model/i.test(msg)) {
+          logAvailableModels(effective.gemini)
+          console.warn('[Research API] Gemini 404/모델 오류 → GPT Fallback 시도')
         }
       }
     }
@@ -150,8 +148,8 @@ export async function POST(req: Request) {
 
     if (responseText == null) {
       return NextResponse.json(
-        { error: '분석을 완료하지 못했어요. API 키를 확인하거나 잠시 후 다시 시도해 주세요.' },
-        { status: 500 }
+        { error: RATE_LIMIT_USER_MESSAGE },
+        { status: 503 }
       )
     }
 

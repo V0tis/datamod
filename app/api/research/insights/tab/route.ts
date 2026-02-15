@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL } from '@/lib/gemini-config'
+import {
+  withExponentialBackoff,
+  sleep,
+  REQUEST_GAP_MS,
+  RATE_LIMIT_USER_MESSAGE,
+} from '@/lib/gemini-retry'
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'
-const GROQ_429_RETRY_DELAY_MS = 3000
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
 
@@ -18,7 +23,7 @@ function buildGeminiConsensusUrl(apiKey: string): string {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const UNIFIED_ERROR_MESSAGE = '현재 AI 엔진 트래픽이 높습니다. 잠시 후 다시 시도해 주세요.'
+const UNIFIED_ERROR_MESSAGE = RATE_LIMIT_USER_MESSAGE
 
 /** Context = Gemini + Groq 분석 텍스트. 이 context만 바탕으로 추출하며 검색/외부 데이터 사용 금지 */
 const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 분석가입니다.
@@ -182,11 +187,22 @@ async function generateConsensus(
   }
   try {
     const url = buildGeminiConsensusUrl(apiKey)
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    const res = await withExponentialBackoff(
+      async () => {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (r.status === 429 || r.status >= 500) {
+          const err = new Error(`Gemini Consensus ${r.status}`) as Error & { status?: number }
+          err.status = r.status
+          throw err
+        }
+        return r
+      },
+      { maxRetries: 5, baseDelayMs: 1000 }
+    )
     const data = (await res.json().catch(() => ({}))) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
       error?: { message?: string }
@@ -467,37 +483,37 @@ export async function POST(req: Request) {
   const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
   const fullPromptForGeminiAndHf = `${UNIFIED_SYSTEM_PROMPT}\n\n${userPrompt}`
 
-  /** Groq / Gemini 각각 독립 호출. 서로의 결과를 참조하지 않음. */
+  /** Groq / Gemini 각각 독립 호출. 서로의 결과를 참조하지 않음. 429 시 지수 백오프로 최대 5회 재시도. */
   async function callGroq(): Promise<{ text: string | null; quotaError?: boolean }> {
     if (provider !== 'all' && provider !== 'groq') return { text: null }
-    const doRequest = async (): Promise<{ res: Response; data: { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } } }> => {
-      const res = await fetch(GROQ_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqKey}`,
-        },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          messages: [
-            { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 2048,
-        }),
-      })
-      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } }
-      return { res, data }
-    }
     try {
-      let { res, data } = await doRequest()
-      if (res.status === 429) {
-        console.warn('[Research Tab] Groq 429, 3초 후 1회 재시도')
-        await new Promise((r) => setTimeout(r, GROQ_429_RETRY_DELAY_MS))
-        const retry = await doRequest()
-        res = retry.res
-        data = retry.data
-      }
+      const { res, data } = await withExponentialBackoff(
+        async () => {
+          const res = await fetch(GROQ_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${groqKey}`,
+            },
+            body: JSON.stringify({
+              model: GROQ_MODEL,
+              messages: [
+                { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
+                { role: 'user', content: userPrompt },
+              ],
+              max_tokens: 2048,
+            }),
+          })
+          const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } }
+          if (res.status === 429) {
+            const err = new Error('Groq 429') as Error & { status?: number }
+            err.status = 429
+            throw err
+          }
+          return { res, data }
+        },
+        { maxRetries: 5, baseDelayMs: 1000 }
+      )
       if (!res.ok) {
         console.warn('[Research Tab] Groq', res.status, data?.error?.message ?? data)
         return res.status === 429 ? { text: null, quotaError: true } : { text: null }
@@ -506,55 +522,74 @@ export async function POST(req: Request) {
       return { text: text || null }
     } catch (e) {
       console.warn('[Research Tab] Groq', e)
-      return { text: null }
+      const is429 = (e as { status?: number })?.status === 429
+      return { text: null, ...(is429 ? { quotaError: true } : {}) }
     }
   }
 
-  /** Gemini: v1 + GEMINI_TAB_MODEL(gemini-2.5-flash). ConsensusInsight와 동일 모델 사용. 429 시 quota_exceeded 반환 */
+  /** Gemini: v1 + GEMINI_TAB_MODEL. 429/5xx 시 지수 백오프로 최대 5회 재시도 후 사용자 메시지 반환 */
   async function callGemini(): Promise<{ text: string | null; quotaExceeded?: boolean }> {
     if (provider !== 'all' && provider !== 'gemini') return { text: null }
+    if (!geminiKey) return { text: null }
     const body = {
       contents: [{ parts: [{ text: fullPromptForGeminiAndHf }] }],
       generationConfig: { maxOutputTokens: 2048 },
     } as const
     try {
-      if (!geminiKey) return { text: null }
-      const url = buildGeminiGenerateContentUrl(geminiKey)
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      const res = await withExponentialBackoff(
+        async () => {
+          const url = buildGeminiGenerateContentUrl(geminiKey!)
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (r.status === 429 || r.status >= 500) {
+            const err = new Error(`Gemini ${r.status}`) as Error & { status?: number }
+            err.status = r.status
+            throw err
+          }
+          return r
+        },
+        { maxRetries: 5, baseDelayMs: 1000 }
+      )
       const data = await res.json().catch(() => ({}))
       const parsed = data as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
         error?: { message?: string }
       }
-      if (res.status === 429) {
-        console.warn('[Research Tab] Gemini 429 quota exceeded', res)
-        return { text: null, quotaExceeded: true }
-      }
       if (!res.ok) {
         console.warn('[Research Tab] Gemini', res.status, parsed?.error?.message ?? data)
-        return { text: null }
+        return res.status === 429 ? { text: null, quotaExceeded: true } : { text: null }
       }
       const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
       return { text: text || null }
     } catch (e) {
-      console.warn('[Research Tab] Gemini', e)
-      return { text: null }
+      console.warn('[Research Tab] Gemini (all retries exhausted)', e)
+      const is429 = (e as { status?: number })?.status === 429
+      return { text: null, ...(is429 ? { quotaExceeded: true } : {}) }
     }
   }
 
-  // 캐시 있는 엔진은 API 호출 생략, 없는 엔진만 호출 (Gemini·Groq만)
-  const [groqSettled, geminiSettled] = await Promise.allSettled([
-    needGroq ? callGroq() : Promise.resolve({ text: mergedGroq, quotaError: false as const }),
-    needGemini ? callGemini() : Promise.resolve({ text: mergedGemini, quotaExceeded: false as const }),
-  ])
-  const groqPayload = groqSettled.status === 'fulfilled' ? groqSettled.value : { text: null, quotaError: false }
+  // 요청 큐잉: 동시 다발 호출 방지를 위해 Groq → 500ms 간격 → Gemini 순차 호출
+  let groqPayload: { text: string | null; quotaError?: boolean }
+  let geminiPayload: { text: string | null; quotaExceeded?: boolean }
+  if (needGroq && needGemini) {
+    groqPayload = await callGroq()
+    await sleep(REQUEST_GAP_MS)
+    geminiPayload = await callGemini()
+  } else if (needGroq) {
+    groqPayload = await callGroq()
+    geminiPayload = { text: mergedGemini, quotaExceeded: false }
+  } else if (needGemini) {
+    geminiPayload = await callGemini()
+    groqPayload = { text: mergedGroq, quotaError: false }
+  } else {
+    groqPayload = { text: mergedGroq, quotaError: false }
+    geminiPayload = { text: mergedGemini, quotaExceeded: false }
+  }
   const groqText = groqPayload.text
   const groqQuotaError = groqPayload.quotaError === true
-  const geminiPayload = geminiSettled.status === 'fulfilled' ? geminiSettled.value : { text: null, quotaExceeded: false }
   const geminiText = geminiPayload.text
   const geminiQuotaExceeded = geminiPayload.quotaExceeded === true
 
@@ -649,7 +684,7 @@ export async function POST(req: Request) {
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,
     ...(finalConsensus ? { consensus: finalConsensus } : {}),
     ...(groqQuotaError ? { groqError: GROQ_QUOTA_MESSAGE } : {}),
-    ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true } : {}),
-    ...(!hasAny ? { error: UNIFIED_ERROR_MESSAGE } : {}),
+    ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true, geminiError: RATE_LIMIT_USER_MESSAGE } : {}),
+    ...(!hasAny ? { error: RATE_LIMIT_USER_MESSAGE } : {}),
   })
 }
