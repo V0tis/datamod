@@ -11,13 +11,13 @@ type HistoryRow = {
   updated_at: string
 }
 
-/** GET ?keyword=xxx&country=KR → research_history + report. 키워드·국가 일치하는 최신 행(계정 무관) 사용. */
+/** GET: no params → list of research_history for current user. ?keyword=xxx&country=KR → single cached report. */
 export async function GET(req: Request) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.id) {
-      return NextResponse.json({ cached: false }, { status: 401 })
+      return NextResponse.json({ cached: false, list: [] }, { status: 401 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -26,7 +26,25 @@ export async function GET(req: Request) {
     const country = countryRaw.length === 2 ? countryRaw.toUpperCase() : countryRaw
 
     if (!keyword) {
-      return NextResponse.json({ cached: false })
+      const { data: rows, error } = await supabase
+        .from('research_history')
+        .select('id, keyword, country_code, report_id, updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+
+      if (error) {
+        console.error('[Research History] list:', error)
+        return NextResponse.json({ list: [], error: error.message }, { status: 500 })
+      }
+      const list = (rows ?? []).map((r) => ({
+        id: r.id,
+        keyword: r.keyword ?? '',
+        country_code: r.country_code ?? 'KR',
+        report_id: r.report_id ?? null,
+        updated_at: r.updated_at ?? null,
+        date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
+      }))
+      return NextResponse.json({ list })
     }
 
     const selectCols = 'report_id, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
@@ -100,6 +118,36 @@ export async function GET(req: Request) {
   } catch (e) {
     console.error('[Research History] GET:', e)
     return NextResponse.json({ cached: false }, { status: 500 })
+  }
+}
+
+/** DELETE body: { id: string } — delete research_history row for current user. */
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const body = await req.json().catch(() => ({})) as { id?: string }
+    const id = typeof body?.id === 'string' ? body.id.trim() : ''
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+    const { error } = await supabase
+      .from('research_history')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('[Research History] DELETE:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return new Response(null, { status: 204 })
+  } catch (e) {
+    console.error('[Research History] DELETE:', e)
+    return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
   }
 }
 
