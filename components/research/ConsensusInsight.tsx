@@ -175,10 +175,11 @@ function ConsensusInsightComponent({
 
   if (loading) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[320px]')}>
+      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[320px]')} aria-busy role="status" aria-live="polite">
         <h2 className="text-sm font-semibold text-[#e1e3e6] mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-slate-400" aria-hidden />
+          <p className="text-sm text-slate-400">전략 통찰 생성 중…</p>
         </div>
       </div>
     )
@@ -213,7 +214,12 @@ function ConsensusInsightComponent({
             <h2 className="text-sm font-semibold text-[#e1e3e6] tracking-tight">전략적 통찰 및 컨센서스</h2>
             <span className="text-xs text-slate-500 font-normal">Consensus 리포트</span>
             {partialData && (
-              <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/40">일부 데이터로 분석됨</span>
+              <span
+                className="text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                title="한쪽 AI 결과만 반영되었습니다. 재분석하면 더 나은 결과를 얻을 수 있어요."
+              >
+                일부 데이터로 분석됨
+              </span>
             )}
           </div>
           <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700/50 gap-1.5 shrink-0" disabled={loading} onClick={onRetry}>

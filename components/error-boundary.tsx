@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { AlertCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface ErrorBoundaryProps {
@@ -11,15 +11,16 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryState {
   hasError: boolean
   error: Error | null
+  showDetails: boolean
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false, error: null, showDetails: false }
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error }
   }
 
@@ -31,28 +32,36 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: null })
+    this.setState({ hasError: false, error: null, showDetails: false })
   }
 
   handleReload = () => {
     window.location.reload()
   }
 
+  toggleDetails = () => {
+    this.setState((s) => ({ showDetails: !s.showDetails }))
+  }
+
   render() {
     if (this.state.hasError) {
+      const { error, showDetails } = this.state
+      const message = error?.message
+      const stack = error?.stack
+
       return (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 bg-[#F8F9FA]">
-          <div className="rounded-2xl border border-border bg-white shadow-lg p-8 max-w-md w-full text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 text-amber-600 mb-6">
+        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 bg-[#F8F9FA] dark:bg-[#0f1113]">
+          <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-lg p-8 max-w-md w-full text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 mb-6">
               <AlertCircle className="w-10 h-10" aria-hidden />
             </div>
-            <h1 className="text-xl font-bold text-foreground mb-2">
+            <h1 className="text-xl font-bold text-foreground dark:text-[#e1e3e6] mb-2">
               앗, 뭔가 흐트러졌어요!
             </h1>
-            <p className="text-muted-foreground text-sm mb-6">
+            <p className="text-muted-foreground dark:text-slate-400 text-sm mb-6">
               린이 당황한 사이에 오류가 발생했어요. 아래 버튼으로 다시 시도해 주세요.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
               <Button onClick={this.handleRetry} className="gap-2">
                 <RefreshCw className="w-4 h-4" />
                 다시 시도
@@ -61,6 +70,24 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 새로고침
               </Button>
             </div>
+            {(message || (process.env.NODE_ENV === 'development' && stack)) && (
+              <div className="text-left border-t border-border dark:border-[#2d2f34] pt-4 mt-4">
+                <button
+                  type="button"
+                  onClick={this.toggleDetails}
+                  className="text-xs text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-slate-200 flex items-center gap-1"
+                >
+                  {showDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  오류 내용 보기
+                </button>
+                {showDetails && (
+                  <pre className="mt-2 p-3 rounded-lg bg-muted/50 dark:bg-[#1a1c20] text-muted-foreground dark:text-slate-400 text-xs overflow-auto max-h-40 whitespace-pre-wrap break-words">
+                    {message}
+                    {process.env.NODE_ENV === 'development' && stack && `\n\n${stack}`}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )

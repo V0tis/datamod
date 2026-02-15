@@ -1,12 +1,12 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links'
 import { RinAnimation } from '@/components/common/RinAnimation'
-import { Copy, Loader2, RefreshCw } from 'lucide-react'
+import { Copy, RefreshCw, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -33,13 +33,37 @@ function GeminiAnalysisComponent({
   quotaExceeded,
   onRetry,
 }: GeminiAnalysisProps) {
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isFact = tabId === 'fact'
   const status: AnalysisStatus = loading ? 'loading' : error ? 'error' : text ? 'success' : 'idle'
 
   const statusLabel = status === 'loading' ? '로딩 중' : status === 'success' ? '성공' : status === 'error' ? '실패' : '대기'
 
+  useEffect(() => () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+  }, [])
+
+  const handleCopy = useCallback(() => {
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success('텍스트가 복사되었어요.')
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      setCopyFeedback(true)
+      copyTimeoutRef.current = setTimeout(() => setCopyFeedback(false), 2000)
+    })
+  }, [text])
+
   return (
-    <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[240px]">
+    <Card
+      className={cn(
+        'flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[240px] border-l-4',
+        status === 'loading' && 'border-l-amber-500',
+        status === 'error' && 'border-l-rose-500',
+        status === 'success' && 'border-l-emerald-500',
+        status === 'idle' && 'border-l-transparent'
+      )}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -88,20 +112,21 @@ function GeminiAnalysisComponent({
             <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1', isFact && 'prose-lg')}>
               <MarkdownWithSearchLinks text={text} />
             </div>
-            <div className="mt-auto pt-2">
+            <div className="mt-auto pt-2" aria-live="polite">
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-1.5 text-muted-foreground dark:text-slate-400"
-                onClick={() => text && navigator.clipboard.writeText(text).then(() => toast.success('텍스트가 복사되었어요.'))}
+                className={cn('gap-1.5 text-muted-foreground dark:text-slate-400', copyFeedback && 'text-emerald-600 dark:text-emerald-400')}
+                onClick={handleCopy}
               >
-                <Copy className="w-3.5 h-3.5" /> 복사
+                {copyFeedback ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copyFeedback ? '복사됨' : '복사'}
               </Button>
             </div>
           </>
         ) : (
           <div className="flex flex-col justify-center min-h-[200px] text-center">
-            <p className="text-muted-foreground dark:text-slate-400 text-sm">아직 분석 결과가 없어요. 재시도 버튼을 눌러 주세요.</p>
+            <p className="text-muted-foreground dark:text-slate-400 text-sm">아직 분석 결과가 없어요. 재시도 버튼을 누르면 이 탭만 다시 분석해요.</p>
           </div>
         )}
       </CardContent>

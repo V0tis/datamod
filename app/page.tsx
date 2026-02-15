@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -179,7 +179,11 @@ export default function RinAISearch() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     const k = query.trim()
-    if (!k) return
+    if (!k) {
+      setError('검색어를 입력해 주세요.')
+      return
+    }
+    setError(null)
     if (useResearchStore.getState().status === 'loading') {
       toast.info('린이 이미 열심히 분석 중이에요!')
       return
@@ -224,21 +228,51 @@ export default function RinAISearch() {
               <span className="font-semibold text-lg text-foreground dark:text-[#e1e3e6] hidden sm:inline">Rin-AI</span>
             </Link>
           </div>
-          <form onSubmit={handleSearch} className="flex flex-1 max-w-xl mx-auto items-stretch gap-2 min-w-0 justify-center h-12">
-            <div className="relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 dark:bg-[#1a1c20] dark:border-[#33363b] h-full focus-within:bg-white focus-within:dark:bg-[#1a1c20] focus-within:ring-2 focus-within:ring-primary/20 focus-within:dark:ring-[#00d19a]/40 overflow-hidden min-h-[2.75rem]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground dark:text-slate-400">
+          <form
+            onSubmit={handleSearch}
+            className="flex flex-1 max-w-xl mx-auto items-stretch gap-2 min-w-0 justify-center h-12"
+            aria-busy={searching}
+          >
+            <div
+              className={cn(
+                'relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 dark:bg-[#1a1c20] dark:border-[#33363b] h-full focus-within:bg-white focus-within:dark:bg-[#1a1c20] focus-within:ring-2 focus-within:ring-primary/20 focus-within:dark:ring-[#00d19a]/40 overflow-hidden min-h-[2.75rem]',
+                searching && 'opacity-80 pointer-events-none'
+              )}
+            >
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground dark:text-slate-400" aria-hidden>
                 <Search className="h-4 w-4 shrink-0" />
               </span>
               <Input
-                type="text"
+                type="search"
+                aria-label="검색 키워드"
                 placeholder="키워드 검색..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="border-0 bg-transparent dark:bg-transparent pl-9 pr-3 h-full py-0 text-sm text-foreground dark:text-[#e1e3e6] placeholder:dark:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setError(null)
+                }}
+                disabled={searching}
+                className="border-0 bg-transparent dark:bg-transparent pl-9 pr-9 h-full py-0 text-sm text-foreground dark:text-[#e1e3e6] placeholder:dark:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
               />
+              {query.length > 0 && !searching && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-[#2a2d32] transition-colors"
+                  aria-label="검색어 지우기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <Button type="submit" size="sm" className="shrink-0 h-full min-h-[2.75rem] px-4 dark:bg-card dark:text-[#e1e3e6] dark:hover:bg-[#2a2d32] dark:border-[#2d2f34]">
-              검색
+            <Button
+              type="submit"
+              size="sm"
+              disabled={searching}
+              aria-busy={searching}
+              className="shrink-0 h-full min-h-[2.75rem] px-4 dark:bg-card dark:text-[#e1e3e6] dark:hover:bg-[#2a2d32] dark:border-[#2d2f34]"
+            >
+              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : '검색'}
             </Button>
           </form>
           <div className="w-[72px] sm:w-20 shrink-0 flex justify-end">

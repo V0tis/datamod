@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
@@ -676,6 +677,8 @@ function ResultsContent() {
               className="gap-2"
               disabled={loading}
               onClick={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              aria-label="전체 리포트를 새 데이터로 다시 생성"
+              aria-busy={loading}
             >
               {loading ? (
                 <>
@@ -698,6 +701,8 @@ function ResultsContent() {
                 disabled={
                   tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]
                 }
+                aria-label="현재 탭만 캐시 무시하고 다시 분석"
+                aria-busy={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
                 onClick={() => {
                   setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
                   setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
@@ -739,9 +744,9 @@ function ResultsContent() {
 
         {/* 상단: 핵심 요약 (초기 연구 분석 결론) */}
         {status === 'done' && result && (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0 && (
-          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <h2 className="text-sm font-semibold text-[#e1e3e6] mb-3 tracking-tight">핵심 요약</h2>
-            <p className="text-xs text-slate-500 mb-3">초기 연구 분석에서 추출한 결론 (전략적 통찰·컨센서스와 별도)</p>
+          <div className="mb-6 rounded-xl border border-border dark:border-slate-800 bg-muted/50 dark:bg-slate-900/50 p-4">
+            <h2 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3 tracking-tight">핵심 요약</h2>
+            <p className="text-xs text-muted-foreground dark:text-slate-500 mb-3">초기 연구 분석에서 추출한 결론 (전략적 통찰·컨센서스와 별도)</p>
             <div className="flex flex-wrap gap-2">
               {(result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5).map((line, i) => (
                 <Badge key={i} variant="secondary" className="text-xs font-normal py-2 px-3 max-w-full sm:max-w-md text-left whitespace-normal">
@@ -926,23 +931,32 @@ function ResultsContent() {
                   {id === 'creative' && (
                     <div className="rounded-xl border border-border bg-card p-6 mt-6">
                       <p className="text-sm font-medium text-foreground mb-3">더 궁금한 점이 있나요?</p>
-                      <div className="flex gap-2">
-                        <input
+                      <div className="flex gap-2" aria-busy={followUpLoading}>
+                        <Input
                           type="text"
-                          placeholder="궁금한 점을 입력하세요"
+                          aria-label="추가 질문"
+                          placeholder={followUpLoading ? '답변 생성 중…' : '궁금한 점을 입력하세요'}
                           value={followUpQuestion}
                           onChange={(e) => setFollowUpQuestion(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
-                          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
                           disabled={followUpLoading}
+                          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
                         />
                         <Button
                           type="button"
                           size="sm"
                           onClick={handleFollowUp}
                           disabled={followUpLoading || !followUpQuestion.trim()}
+                          aria-busy={followUpLoading}
                         >
-                          {followUpLoading ? '답변 중...' : '질문하기'}
+                          {followUpLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                              답변 중...
+                            </>
+                          ) : (
+                            '질문하기'
+                          )}
                         </Button>
                       </div>
                       {followUps.length > 0 && (

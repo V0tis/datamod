@@ -19,21 +19,33 @@ const SENTIMENT_LABELS = {
   neutral: '중립 유지',
   negative: '부정적 리스크',
 } as const
+/** 다크 모드에서 선명한 색상 */
 const SENTIMENT_COLORS = {
-  positive: '#10b981',
+  positive: '#34d399',
   neutral: '#94a3b8',
-  negative: '#ef4444',
+  negative: '#fb7185',
 } as const
 
 const STROKE_WIDTH = 3
+const FILL_OPACITY = 0.1
 const X_TICK_HOURS = [0, 6, 12, 18, 24] as const
+
+/** hour(0~24) → "HH:00" 표시 (당일 기준) */
+function formatHourLabel(hour: number): string {
+  const h = Math.max(0, Math.min(24, Math.round(hour)))
+  if (h === 24) return '24:00'
+  return `${String(h).padStart(2, '0')}:00`
+}
 
 interface ResearchChartsProps {
   chartData: ChartData
   consensusScore?: number | null
   trend?: 'rising' | 'falling' | 'stable'
-  /** 차트 마지막 시점(24h) 복합 점수 - 헤드라인과 동기화용. 없으면 (positive - negative)로 계산 */
   onLastPointScore?: (score: number) => void
+  /** 전일 대비 변동폭(%): (last - first) / |first| * 100. 차트에서 계산해 전달 */
+  onVariance?: (variancePct: number) => void
+  /** 툴팁에 표시할 주요 뉴스/키워드 (PM이 수치 변화 맥락 파악용) */
+  marketNews?: string[]
 }
 
 function isValidSentiment(s: unknown): s is { positive: number; neutral: number; negative: number } {
@@ -50,7 +62,7 @@ function isValidSentiment(s: unknown): s is { positive: number; neutral: number;
   )
 }
 
-/** 0~24시 시계열: 마지막(24h) = 현재 비율, 이전 시점은 trend에 따라 흐름 생성 (직선 방지) */
+/** 0~24시 시계열: 마지막(24h)=현재 비율, trend로 흐름 생성 */
 function buildTimeSeriesData(
   positivePct: number,
   neutralPct: number,
@@ -76,7 +88,27 @@ function buildTimeSeriesData(
   })
 }
 
-export function ResearchCharts({ chartData, consensusScore, trend = 'stable', onLastPointScore }: ResearchChartsProps) {
+function ChartSkeleton() {
+  return (
+    <div className="min-h-[240px] w-full rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col justify-center items-center gap-3 p-6 animate-pulse">
+      <div className="h-3 w-32 bg-slate-600/50 rounded" />
+      <div className="h-2 w-48 bg-slate-600/30 rounded" />
+      <div className="flex gap-2 mt-2">
+        <div className="w-16 h-16 rounded-full bg-slate-600/30" />
+        <div className="w-20 h-20 rounded bg-slate-600/20" />
+        <div className="w-16 h-16 rounded-full bg-slate-600/30" />
+      </div>
+    </div>
+  )
+}
+
+export function ResearchCharts({
+  chartData,
+  trend = 'stable',
+  onLastPointScore,
+  onVariance,
+  marketNews = [],
+}: ResearchChartsProps) {
   const [visible, setVisible] = useState({ positive: true, neutral: true, negative: true })
 
   const sentiment = chartData?.sentiment
@@ -101,29 +133,35 @@ export function ResearchCharts({ chartData, consensusScore, trend = 'stable', on
   )
 
   useEffect(() => {
-    if (timeSeriesData.length > 0 && onLastPointScore) {
+    if (timeSeriesData.length > 0) {
+      const first = timeSeriesData[0]
       const last = timeSeriesData[timeSeriesData.length - 1]
-      onLastPointScore(last.positive - last.negative)
+      const firstScore = first.positive - first.negative
+      const lastScore = last.positive - last.negative
+      onLastPointScore?.(lastScore)
+      if (onVariance && Math.abs(firstScore) > 0) {
+        const variancePct = Math.round(((lastScore - firstScore) / Math.abs(firstScore)) * 100)
+        onVariance(variancePct)
+      }
     }
-  }, [timeSeriesData, onLastPointScore])
+  }, [timeSeriesData, onLastPointScore, onVariance])
 
   const hasChartData = timeSeriesData.length > 0
 
   if (!valid || !hasChartData) {
+    const noData = !chartData?.sentiment
     return (
-      <div className="space-y-6 antialiased">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 ring-1 ring-slate-700/50 shadow-lg">
+      <div className="space-y-6 antialiased" role="status" aria-label="감성 차트 데이터 대기 중">
+        <div className="rounded-xl border border-border dark:border-slate-800 bg-muted/30 dark:bg-slate-900/50 p-6 ring-1 ring-border/50 dark:ring-slate-700/50 shadow-lg">
           <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-4 antialiased">
             24시간 감성 변화 추이
           </h3>
-          <div
-            className="flex flex-col items-center justify-center min-h-[220px] w-full rounded-lg bg-slate-800/50 border border-slate-700/50"
-            style={{ background: 'rgb(30 41 59 / 0.5)' }}
-          >
-            <p className="text-slate-400 text-sm">데이터 분석 중...</p>
-          </div>
+          <ChartSkeleton />
+          <p className="text-muted-foreground dark:text-slate-500 text-xs mt-3 text-center">
+            {noData ? '데이터가 없어요. 분석이 완료되면 차트가 표시됩니다.' : '분석이 완료되면 차트가 표시됩니다.'}
+          </p>
         </div>
-        <p className="text-xs text-slate-400 pt-1 antialiased">
+        <p className="text-xs text-muted-foreground dark:text-slate-400 pt-1 antialiased">
           ※ 본 지표는 AI가 수집된 뉴스를 분석하여 생성한 추정치입니다.
         </p>
       </div>
@@ -140,30 +178,58 @@ export function ResearchCharts({ chartData, consensusScore, trend = 'stable', on
     { key: 'negative' as const, label: SENTIMENT_LABELS.negative, pct: percentages.negative, color: SENTIMENT_COLORS.negative },
   ]
 
+  const tooltipNews = marketNews.slice(0, 3).join(' · ') || null
+
   return (
     <div className="space-y-6 antialiased">
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 ring-1 ring-slate-700/50 shadow-lg">
-        <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-4 antialiased">
-          24시간 감성 변화 추이
-        </h3>
+        <div className="flex flex-wrap items-start gap-4 mb-4">
+          <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] antialiased shrink-0">
+            24시간 감성 변화 추이
+          </h3>
+          {/* 현재 감성 요약 칩 (듀얼 뷰) */}
+          <div className="flex items-center gap-2 shrink-0 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5">
+            <div className="flex gap-0.5">
+              <span
+                className="w-2 h-6 rounded-sm"
+                style={{ backgroundColor: SENTIMENT_COLORS.positive, flex: percentages.positive }}
+                title={SENTIMENT_LABELS.positive}
+              />
+              <span
+                className="w-2 h-6 rounded-sm"
+                style={{ backgroundColor: SENTIMENT_COLORS.neutral, flex: Math.max(1, percentages.neutral) }}
+                title={SENTIMENT_LABELS.neutral}
+              />
+              <span
+                className="w-2 h-6 rounded-sm"
+                style={{ backgroundColor: SENTIMENT_COLORS.negative, flex: percentages.negative }}
+                title={SENTIMENT_LABELS.negative}
+              />
+            </div>
+            <span className="text-xs text-slate-400 tabular-nums">
+              {percentages.positive}/{percentages.neutral}/{percentages.negative}%
+            </span>
+          </div>
+        </div>
+
         <div className="relative w-full min-h-[240px] rounded-lg bg-slate-800/50">
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={timeSeriesData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
               <defs>
                 <linearGradient id="sentiment-line-positive" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#34d399" stopOpacity={FILL_OPACITY} />
+                  <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="sentiment-line-neutral" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.2} />
+                  <stop offset="0%" stopColor="#94a3b8" stopOpacity={FILL_OPACITY} />
                   <stop offset="100%" stopColor="#94a3b8" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="sentiment-line-negative" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#fb7185" stopOpacity={FILL_OPACITY} />
+                  <stop offset="100%" stopColor="#fb7185" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" strokeOpacity={0.4} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" strokeOpacity={0.35} vertical={false} />
               <XAxis
                 dataKey="hour"
                 type="number"
@@ -172,7 +238,7 @@ export function ResearchCharts({ chartData, consensusScore, trend = 'stable', on
                 tick={{ fill: '#94a3b8', fontSize: 10 }}
                 axisLine={{ stroke: '#475569' }}
                 tickLine={false}
-                tickFormatter={(v) => `${v}h`}
+                tickFormatter={formatHourLabel}
               />
               <YAxis
                 domain={[0, 100]}
@@ -187,11 +253,12 @@ export function ResearchCharts({ chartData, consensusScore, trend = 'stable', on
                   const p = payload[0]?.payload as { hour: number; positive: number; neutral: number; negative: number }
                   if (!p) return null
                   return (
-                    <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs shadow-lg space-y-1">
-                      <p className="font-medium text-slate-200">{p.hour}h 시점</p>
-                      <p><span className="text-emerald-400">긍정</span> {p.positive}%</p>
-                      <p><span className="text-slate-400">중립</span> {p.neutral}%</p>
-                      <p><span className="text-rose-400">부정</span> {p.negative}%</p>
+                    <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs shadow-lg space-y-1.5 max-w-xs">
+                      <p className="font-medium text-slate-200">{formatHourLabel(p.hour)} 시점</p>
+                      <p><span className="text-emerald-400">긍정</span> {p.positive}% · <span className="text-slate-400">중립</span> {p.neutral}% · <span className="text-rose-400">부정</span> {p.negative}%</p>
+                      {tooltipNews && (
+                        <p className="text-slate-500 pt-1 border-t border-slate-600 mt-1">참고: {tooltipNews}</p>
+                      )}
                     </div>
                   )
                 }}
@@ -225,26 +292,26 @@ export function ResearchCharts({ chartData, consensusScore, trend = 'stable', on
               />
               {visible.positive && (
                 <>
-                  <Area type="monotone" dataKey="positive" fill="url(#sentiment-line-positive)" stroke="none" isAnimationActive animationDuration={400} />
-                  <Line type="monotone" dataKey="positive" stroke={SENTIMENT_COLORS.positive} strokeWidth={STROKE_WIDTH} dot={false} isAnimationActive animationDuration={400} name={SENTIMENT_LABELS.positive} />
+                  <Area type="monotone" dataKey="positive" fill="url(#sentiment-line-positive)" stroke="none" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="positive" stroke={SENTIMENT_COLORS.positive} strokeWidth={STROKE_WIDTH} strokeOpacity={1} dot={false} isAnimationActive={false} name={SENTIMENT_LABELS.positive} />
                 </>
               )}
               {visible.neutral && (
                 <>
-                  <Area type="monotone" dataKey="neutral" fill="url(#sentiment-line-neutral)" stroke="none" isAnimationActive animationDuration={400} />
-                  <Line type="monotone" dataKey="neutral" stroke={SENTIMENT_COLORS.neutral} strokeWidth={STROKE_WIDTH} dot={false} isAnimationActive animationDuration={400} name={SENTIMENT_LABELS.neutral} />
+                  <Area type="monotone" dataKey="neutral" fill="url(#sentiment-line-neutral)" stroke="none" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="neutral" stroke={SENTIMENT_COLORS.neutral} strokeWidth={STROKE_WIDTH} strokeOpacity={1} dot={false} isAnimationActive={false} name={SENTIMENT_LABELS.neutral} />
                 </>
               )}
               {visible.negative && (
                 <>
-                  <Area type="monotone" dataKey="negative" fill="url(#sentiment-line-negative)" stroke="none" isAnimationActive animationDuration={400} />
-                  <Line type="monotone" dataKey="negative" stroke={SENTIMENT_COLORS.negative} strokeWidth={STROKE_WIDTH} dot={false} isAnimationActive animationDuration={400} name={SENTIMENT_LABELS.negative} />
+                  <Area type="monotone" dataKey="negative" fill="url(#sentiment-line-negative)" stroke="none" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="negative" stroke={SENTIMENT_COLORS.negative} strokeWidth={STROKE_WIDTH} strokeOpacity={1} dot={false} isAnimationActive={false} name={SENTIMENT_LABELS.negative} />
                 </>
               )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-xs text-slate-500 mt-2 antialiased">범례 클릭 시 해당 감성 선만 표시/숨김</p>
+        <p className="text-[10px] text-slate-500/80 mt-2 antialiased">범례 클릭 시 해당 감성 선만 표시/숨김</p>
       </div>
       <p className="text-xs text-slate-400 pt-1 antialiased">
         ※ 본 지표는 AI가 수집된 뉴스를 분석하여 생성한 추정치입니다.
