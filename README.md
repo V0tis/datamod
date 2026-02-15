@@ -18,7 +18,8 @@
 | **Read-through 캐시** | 키워드·국가별로 Supabase `research_history`에 결과 저장. 재방문 시 API 호출 없이 즉시 표시, 재분석 시에만 재호출 |
 | **통합 스트리밍** | 뉴스 수집 후 Gemini 한 번 호출로 리포트·차트·유저 반응·기사 요약 동시 생성 |
 | **실시간 트렌드** | 한국(KR) / 미국(US) / 일본(JP) 등 국가별 인기 검색어 (`/trends`), 클릭 시 즉시 분석 |
-| **결과 탭** | 시장 분석 / 인사이트 / 종합 리포트 (Gemini·Groq 1:1), 실시간 뉴스, PDF·공유 |
+| **결과 탭** | 시장 분석 / 인사이트 / 종합 리포트 (Gemini·Groq 1:1), 실시간 뉴스(기간 선택 7/14/30/90일), PDF·공유 |
+| **탭 분석 격리** | Groq·Gemini 병렬 호출, 한쪽 실패 시에도 다른 쪽 결과 표시 |
 | **인증** | 이메일 OTP (Resend), Supabase Auth |
 
 ---
@@ -113,6 +114,7 @@ app/
     research/              # POST 분석, stream 스트리밍
     research/insights/tab/  # 탭별 Gemini·Groq 호출, Read-through 캐시
     research/history/      # 키워드별 캐시 조회
+    news/                  # 실시간 뉴스 RSS (keyword, days 파라미터, 기본 30일)
     trends/                # 트렌드 캐시 조회·갱신
     usage/                 # 사용량 조회 (Gemini 일일)
 components/
