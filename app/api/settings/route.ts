@@ -26,7 +26,8 @@ export async function GET() {
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
   const hasGeminiKey = !!(row?.gemini_api_key && row.gemini_api_key.trim().length > 0)
   const hasOpenAIKey = !!(row?.openai_api_key && row.openai_api_key.trim().length > 0)
-  const hasAnthropicKey = !!(row?.anthropic_api_key && (row as { anthropic_api_key?: string }).anthropic_api_key?.trim().length > 0)
+  const anthKey = (row as { anthropic_api_key?: string } | undefined)?.anthropic_api_key?.trim()
+  const hasAnthropicKey = !!(anthKey && anthKey.length > 0)
   const effectiveOpenAI = getEffectiveOpenAIKey(row?.openai_api_key)
   const openaiOrigin =
     hasOpenAIKey ? 'USER' : (process.env.OPENAI_API_KEY?.trim() ? 'SYSTEM' : null)

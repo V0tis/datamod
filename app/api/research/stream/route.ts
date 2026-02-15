@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { trackUsage } from '@/lib/usage'
-import { getEffectiveLicenseKeys } from '@/lib/license'
 import Parser from 'rss-parser'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
-import { logCacheEvent } from '@/lib/research-cache'
-import { generateText } from '@/services/ai/geminiClient'
+import { logCacheEvent, buildCacheKeyParts } from '@/lib/research-cache'
+import { getGeminiKeyForRequest } from '@/lib/research-keys'
+import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { generateText } from '@/services/aiClient'
 
 export const runtime = 'nodejs'
 
@@ -64,74 +65,6 @@ async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; 
   }
 }
 
-/** Gemini가 ```json ... ``` 또는 ``` ... ``` 로 감싼 경우 제거 후 순수 JSON만 반환 */
-function extractJsonFromText(text: string): string {
-  const trimmed = text.trim()
-  const codeBlockMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/)
-  if (codeBlockMatch) return codeBlockMatch[1].trim()
-  if (trimmed.startsWith('```')) {
-    const afterOpen = trimmed.replace(/^```(?:json)?\s*\n?/i, '')
-    const closeIdx = afterOpen.indexOf('```')
-    if (closeIdx !== -1) return afterOpen.slice(0, closeIdx).trim()
-    return afterOpen.trim()
-  }
-  return trimmed
-}
-
-/**
- * Gemini 응답이 잘려 "Unterminated string" 등으로 파싱 실패할 때,
- * 잘린 위치에서 문자열/객체를 닫아 복구 시도.
- */
-function tryRepairTruncatedJson(rawJson: string, parseError: Error): string | null {
-  const msg = parseError.message
-  const posMatch = msg.match(/position\s+(\d+)/i)
-  const pos = posMatch ? Math.min(parseInt(posMatch[1], 10), rawJson.length) : rawJson.length
-  if (pos <= 0) return null
-
-  let truncated = rawJson.slice(0, pos).trim()
-  if (!truncated) return null
-
-  const isUnterminatedString = /unterminated\s+string/i.test(msg) || msg.includes('Unterminated string')
-  if (isUnterminatedString) {
-    truncated += '"'
-  }
-
-  let openBraces = 0
-  let openBrackets = 0
-  let inString = false
-  let escape = false
-  let quoteChar = ''
-  for (let i = 0; i < truncated.length; i++) {
-    const c = truncated[i]
-    if (escape) {
-      escape = false
-      continue
-    }
-    if (inString) {
-      if (c === '\\') escape = true
-      else if (c === quoteChar) inString = false
-      continue
-    }
-    if (c === '"' || c === "'") {
-      inString = true
-      quoteChar = c
-      continue
-    }
-    if (c === '{') openBraces++
-    else if (c === '}') openBraces--
-    else if (c === '[') openBrackets++
-    else if (c === ']') openBrackets--
-  }
-
-  truncated += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces))
-  try {
-    JSON.parse(truncated)
-    return truncated
-  } catch {
-    return null
-  }
-}
-
 type StreamEvent =
   | { step: 'firecrawl_start' }
   | { step: 'firecrawl_done'; news: Array<{ title: string; url: string; content?: string }> }
@@ -145,6 +78,7 @@ function sseMessage(event: string, data: StreamEvent): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
+/** SSE stream: fetch news (RSS) → Gemini analysis → parse research JSON → upsert research_history → send result. */
 export async function POST(req: Request) {
   let body: { keyword?: string; query?: string; country_code?: string }
   try {
@@ -159,21 +93,9 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  let userGemini: string | null = null
-  if (user?.id) {
-    const { data: row } = await supabase
-      .from('user_settings')
-      .select('gemini_api_key')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    userGemini = row?.gemini_api_key ?? null
-  }
-  const effective = getEffectiveLicenseKeys(userGemini)
-  const apiKey = effective.gemini
-  if (!effective.canSearch) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { gemini: apiKey, canSearch } = await getGeminiKeyForRequest(supabase, user?.id)
+  if (!canSearch) {
     return new Response(
       JSON.stringify({
         error: '키를 등록해 주세요. 설정에서 API 키를 등록하면 분석을 사용할 수 있어요.',
@@ -278,103 +200,24 @@ export async function POST(req: Request) {
         await trackUsage('gemini')
 
         currentStep = 'parse_json'
-        const rawJson = extractJsonFromText(responseText)
-        let parsed: {
-          marketNews?: string[]
-          painPoints?: string[]
-          competitorTrends?: string
-          sentiment?: number
-          publicReactionTrends?: string
-          articleSummaries?: string[]
-          keyConclusions?: string[]
-          chartData?: {
-            sentiment?: { positive?: number; neutral?: number; negative?: number }
-            impact?: Array<{ subject?: string; score?: number }>
-          }
-        }
-        try {
-          parsed = JSON.parse(rawJson) as typeof parsed
-        } catch (parseErr) {
-          const err = parseErr instanceof Error ? parseErr : new Error(String(parseErr))
-          const repaired = typeof rawJson === 'string' ? tryRepairTruncatedJson(rawJson, err) : null
-          if (repaired) {
-            try {
-              parsed = JSON.parse(repaired) as typeof parsed
-            } catch {
-              const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
-              console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
-                parseError: err.message,
-                rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
-                rawJsonSnippet: snippet,
-              })
-              send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
-              safeClose()
-              return
-            }
-          } else {
-            const snippet = typeof rawJson === 'string' ? rawJson.slice(0, 800) : String(rawJson).slice(0, 800)
-            console.error('[Research Stream] 분석 결과 JSON 파싱 실패 (초기 Gemini 응답)', {
-              parseError: err.message,
-              rawJsonLength: typeof rawJson === 'string' ? rawJson.length : 0,
-              rawJsonSnippet: snippet,
-            })
-            send('progress', { step: 'error', error: '분석 결과 형식이 올바르지 않아요.' })
-            safeClose()
-            return
-          }
+        const parsed = parseInitialResearchResponse(responseText, { repair: true })
+        if (!parsed.ok) {
+          send('progress', { step: 'error', error: parsed.error })
+          safeClose()
+          return
         }
 
-        const sentiment =
-          typeof parsed.sentiment === 'number'
-            ? Math.min(100, Math.max(0, parsed.sentiment))
-            : 0
-        const sd = parsed.chartData?.sentiment
-        const positive = Math.min(100, Math.max(0, typeof sd?.positive === 'number' ? sd.positive : 65))
-        const neutral = Math.min(100, Math.max(0, typeof sd?.neutral === 'number' ? sd.neutral : 20))
-        const negative = Math.min(100, Math.max(0, typeof sd?.negative === 'number' ? sd.negative : 15))
-        const sum = positive + neutral + negative
-        const chartSentiment = sum > 0
-          ? {
-              positive: Math.round((positive / sum) * 100),
-              neutral: Math.round((neutral / sum) * 100),
-              negative: Math.round((negative / sum) * 100),
-            }
-          : { positive: 65, neutral: 20, negative: 15 }
-        const rawImpact = Array.isArray(parsed.chartData?.impact) ? parsed.chartData.impact : []
-        const impactList = rawImpact
-          .filter((i): i is { subject: string; score: number } => typeof i?.subject === 'string' && typeof i?.score === 'number')
-          .map((i) => ({ subject: i.subject, score: Math.min(10, Math.max(0, i.score)) }))
-          .slice(0, 8)
-        const chartImpact =
-          impactList.length > 0
-            ? impactList
-            : [
-                { subject: '경제', score: 5 },
-                { subject: '사회', score: 5 },
-                { subject: '기술', score: 5 },
-                { subject: '정치', score: 5 },
-                { subject: '환경', score: 5 },
-              ]
-        const chartData = { sentiment: chartSentiment, impact: chartImpact }
-
-        const articleSummaries = Array.isArray(parsed.articleSummaries)
-          ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string').slice(0, news.length)
-          : []
-        const keyConclusions = Array.isArray(parsed.keyConclusions)
-          ? parsed.keyConclusions.filter((s): s is string => typeof s === 'string').slice(0, 3)
-          : (Array.isArray(parsed.marketNews) ? parsed.marketNews : []).slice(0, 3)
-
+        const s = parsed.summary
+        const articleSummaries = s.articleSummaries.slice(0, news.length)
         const summary = {
-          marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
-          painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
-          competitorTrends:
-            typeof parsed.competitorTrends === 'string' ? parsed.competitorTrends : '',
-          sentiment,
-          publicReactionTrends:
-            typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
-          chartData,
+          marketNews: s.marketNews,
+          painPoints: s.painPoints,
+          competitorTrends: s.competitorTrends,
+          sentiment: s.sentiment,
+          publicReactionTrends: s.publicReactionTrends,
+          chartData: s.chartData,
           articleSummaries,
-          keyConclusions,
+          keyConclusions: s.keyConclusions,
         }
 
         currentStep = 'report_db'
@@ -401,22 +244,32 @@ export async function POST(req: Request) {
                 keyConclusions: summary.keyConclusions,
                 sentiment: summary.sentiment,
               }
+              // Same cache key as insights/tab. TTL: RESEARCH_CACHE_TTL_MS (24h). Owner: research_history.
+              const cacheKey = buildCacheKeyParts(user.id, keyword, countryCode)
               logCacheEvent('write', {
                 scope: 'stream_report',
-                keyword: keyword.trim(),
-                countryCode,
+                keyword: cacheKey.keyword,
+                countryCode: cacheKey.countryCode,
                 detail: 'key_metrics',
               })
+              type ResearchHistoryRow = {
+                user_id: string
+                keyword: string
+                country_code: string
+                report_id: string | null
+                key_metrics: unknown
+                updated_at: string
+              }
               await supabase.from('research_history').upsert(
                 {
-                  user_id: user.id,
-                  keyword: keyword.trim(),
-                  country_code: countryCode,
+                  user_id: cacheKey.userId,
+                  keyword: cacheKey.keyword,
+                  country_code: cacheKey.countryCode,
                   report_id: report.id,
                   key_metrics: keyMetrics,
                   updated_at: new Date().toISOString(),
-                },
-                { onConflict: ['user_id', 'keyword', 'country_code'] }
+                } as ResearchHistoryRow,
+                { onConflict: 'user_id,keyword,country_code' }
               )
             } else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)
           } catch (insertErr) {

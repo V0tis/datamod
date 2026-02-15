@@ -1,14 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
+import { refreshGlobalTrends, TrendsFetchError, TRENDS_CACHE_TTL_MS } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
-/** 트렌드 캐시 저장 테이블: global_trends (테이블명 통일) */
+/** 트렌드 캐시 저장 테이블: global_trends. Cache key = region (country_code); expiration = max(created_at) + TRENDS_CACHE_TTL_MS. */
 const TRENDS_TABLE = 'global_trends'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
-/** 데이터 기준 시각이 이 값(1시간)보다 오래되면 응답 전 자동 RSS 갱신 */
-const CACHE_TTL_MS = 3_600_000 // 1 * 60 * 60 * 1000
 const isDev = process.env.NODE_ENV === 'development'
 
 const JSON_HEADERS = {
@@ -52,7 +50,7 @@ function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null 
   return latest
 }
 
-/** GET: Cache-Aside. 데이터 기준(created_at)이 1시간 초과 시 응답 전 자동 RSS 갱신. ?refresh=1 이면 강제 갱신. */
+/** GET: Cache-Aside. Key = country_code; valid while max(created_at) within TRENDS_CACHE_TTL_MS. ?refresh=1 forces refresh. */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
@@ -78,7 +76,7 @@ export async function GET(req: Request) {
     const lastUpdatedAt = getLastUpdatedAt(list)
     const now = Date.now()
     const lastMs = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0
-    const isStale = list.length === 0 || now - lastMs > CACHE_TTL_MS
+    const isStale = list.length === 0 || now - lastMs > TRENDS_CACHE_TTL_MS
 
     const selectTrendStatus = async (): Promise<{ country_code: string; source_type: 'API' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]> => {
       const { data: statusRows, error: statusErr } = await supabase

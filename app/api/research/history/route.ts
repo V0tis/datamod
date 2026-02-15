@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isCacheValid } from '@/lib/research-cache'
+import { isCacheValid, RESEARCH_CACHE_TTL_MS } from '@/lib/research-cache'
 
-/** GET ?keyword=xxx&country=KR → research_history + report 캐시 반환. cacheExpired=true when TTL exceeded (reuse possible but consider refetch for fresh AI). */
+/** GET ?keyword=xxx&country=KR → research_history + report. Cache key: (user_id, keyword, country_code). cacheExpired=true when updated_at older than RESEARCH_CACHE_TTL_MS (24h). */
 export async function GET(req: Request) {
   try {
     const supabase = await createClient()
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ cached: false })
     }
 
-    const cacheExpired = !isCacheValid(history.updated_at)
+    const cacheExpired = !isCacheValid(history.updated_at, RESEARCH_CACHE_TTL_MS)
 
     const { data: report, error: reportError } = await supabase
       .from('reports')
@@ -80,6 +80,7 @@ export async function GET(req: Request) {
   }
 }
 
+/** Normalize DB JSON/string into a plain object for API response; returns undefined if not an object. */
 function ensureObject(value: unknown): Record<string, unknown> | undefined {
   if (value == null) return undefined
   if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>

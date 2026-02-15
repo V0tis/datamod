@@ -163,6 +163,9 @@ function ConsensusInsightComponent({
   const [signalOpen, setSignalOpen] = useState(false)
   /** Mobile: collapse Impact radar (secondary detail). */
   const [impactOpen, setImpactOpen] = useState(false)
+  /** Mobile: long insight summary — show line-clamp with expand for readability. */
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
+  const summaryLong = (data?.strategicSummary?.summary?.length ?? 0) > 160
 
   if (bothFailed) {
     return (
@@ -237,9 +240,23 @@ function ConsensusInsightComponent({
             <RefreshCw className="h-3.5 w-3.5" /> 재분석
           </Button>
         </div>
-        <p className="text-sm sm:text-base text-slate-200 dark:text-[#e1e3e6] leading-relaxed mb-4 sm:mb-5 font-medium break-words">
+        <p
+          className={cn(
+            'text-sm sm:text-base text-slate-200 dark:text-[#e1e3e6] leading-relaxed font-medium break-words',
+            summaryLong && !summaryExpanded ? 'mb-2 line-clamp-4 sm:line-clamp-none' : 'mb-4 sm:mb-5'
+          )}
+        >
           {summary}
         </p>
+        {summaryLong && !summaryExpanded && (
+          <button
+            type="button"
+            onClick={() => setSummaryExpanded(true)}
+            className="mb-4 sm:mb-5 flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline sm:hidden"
+          >
+            전체 보기
+          </button>
+        )}
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-6 items-stretch sm:items-center border-t border-slate-700/50 pt-4 sm:pt-5">
           <div className="flex flex-col items-center justify-center shrink-0">
             <SentimentGauge value={score} />

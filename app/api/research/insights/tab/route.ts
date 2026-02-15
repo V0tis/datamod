@@ -1,14 +1,19 @@
+/**
+ * POST /api/research/insights/tab
+ * Flow: auth → parse body → read cache (user, keyword, country) → report_id fallback → reanalyze fill from DB
+ *       → needGroq/needGemini → runTabAnalysis → consensus (creative only) → upsert research_history → JSON response.
+ */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sleep, REQUEST_GAP_MS, RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import {
   RESEARCH_CACHE_TTL_MS,
   isCacheValid,
   logCacheEvent,
+  buildCacheKeyParts,
   type ResearchCacheScope,
 } from '@/lib/research-cache'
-import { requestGenerateContent, parseGenerateContentResponse, getTabModel } from '@/services/ai/geminiClient'
-import { completeChat } from '@/services/ai/groqClient'
+import { getTabProviderKeys } from '@/lib/research-keys'
 import {
   type Consensus,
   type ConsensusImpactItem,
@@ -18,7 +23,8 @@ import {
   normalizeConsensus,
   synthesizeConsensus,
   FALLBACK_CONSENSUS,
-} from '@/services/ai/consensusService'
+  runTabAnalysis,
+} from '@/services/aiClient'
 
 // Re-export types for API consumers (e.g. frontend)
 export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrategicSummary, ConsensusMetadata }
@@ -102,6 +108,8 @@ export async function POST(req: Request) {
       ? body.provider
       : 'all'
 
+  const tabKeys = getTabProviderKeys()
+
   if (!tab || !['logic', 'creative', 'fact'].includes(tab)) {
     return NextResponse.json({ error: 'tab must be one of logic, creative, fact' }, { status: 400 })
   }
@@ -129,7 +137,10 @@ export async function POST(req: Request) {
     })
   }
 
-  // Read-through cache: key = (user_id, keyword, country_code). TTL = 24h to limit duplicate AI cost per key.
+  // Read-through cache. Key: (user_id, keyword, country_code). TTL: RESEARCH_CACHE_TTL_MS (24h). Owner: research_history.
+  // Cost: valid cache => skip Groq/Gemini/Consensus; expired => allow new AI calls.
+  const cacheKey = buildCacheKeyParts(user.id, keyword, countryCode)
+  /** Tab result for this tab: from cache or from this request; used for response and for merging into DB. */
   let mergedGroq: string | null = null
   let mergedGemini: string | null = null
 
@@ -137,9 +148,9 @@ export async function POST(req: Request) {
     const { data: cachedData } = await supabase
       .from('research_history')
       .select('analysis_groq, analysis_gemini, analysis_results, updated_at')
-      .eq('user_id', user.id)
-      .eq('keyword', keyword)
-      .eq('country_code', countryCode)
+      .eq('user_id', cacheKey.userId)
+      .eq('keyword', cacheKey.keyword)
+      .eq('country_code', cacheKey.countryCode)
       .maybeSingle()
 
     const cacheValid = cachedData?.updated_at != null && isCacheValid(cachedData.updated_at, RESEARCH_CACHE_TTL_MS)
@@ -178,17 +189,16 @@ export async function POST(req: Request) {
           mergedGemini != null &&
           !cachedConsensus
         ) {
-          const geminiKey = process.env.GOOGLE_GENAI_API_KEY?.trim()
-          if (geminiKey) {
-            const synthesized = await synthesizeConsensus(geminiKey, mergedGemini, mergedGroq)
+          if (tabKeys.gemini) {
+            const synthesized = await synthesizeConsensus(tabKeys.gemini, mergedGemini, mergedGroq)
             if (synthesized) {
               cachedConsensus = synthesized
               await supabase
                 .from('research_history')
                 .update({ analysis_results: synthesized, updated_at: new Date().toISOString() })
-                .eq('user_id', user.id)
-                .eq('keyword', keyword)
-                .eq('country_code', countryCode)
+                .eq('user_id', cacheKey.userId)
+                .eq('keyword', cacheKey.keyword)
+                .eq('country_code', cacheKey.countryCode)
             }
           }
         }
@@ -211,12 +221,13 @@ export async function POST(req: Request) {
     }
   }
 
+  // Secondary lookup by report_id (same cache row; key still user_id+keyword+country_code). TTL unchanged.
   if (reportId && !isReanalyze) {
     const { data: historyRow } = await supabase
       .from('research_history')
       .select('analysis_groq, analysis_gemini, analysis_results, updated_at')
       .eq('report_id', reportId)
-      .eq('user_id', user.id)
+      .eq('user_id', cacheKey.userId)
       .maybeSingle()
 
     const reportCacheValid = historyRow?.updated_at != null && isCacheValid(historyRow.updated_at, RESEARCH_CACHE_TTL_MS)
@@ -230,13 +241,13 @@ export async function POST(req: Request) {
     }
   }
 
-  /** 재분석(Consensus만 다시 만들기): Creative 탭일 때 DB에 있는 Groq/Gemini 결과만 쓰고, API 재호출 안 함 */
+  // Reanalyze (Consensus only): reuse stored Groq/Gemini; no new tab AI calls. Cost: one Gemini consensus call only.
   if (isReanalyze && tab === 'creative' && (mergedGroq == null || mergedGemini == null)) {
     const byReport = reportId
-      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('report_id', reportId).eq('user_id', user.id).maybeSingle()
+      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('report_id', reportId).eq('user_id', cacheKey.userId).maybeSingle()
       : { data: null }
     const byKeyword = !byReport.data
-      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
+      ? await supabase.from('research_history').select('analysis_groq, analysis_gemini').eq('user_id', cacheKey.userId).eq('keyword', cacheKey.keyword).eq('country_code', cacheKey.countryCode).maybeSingle()
       : { data: null }
     const historyRow = byReport.data ?? byKeyword.data
     if (historyRow) {
@@ -255,9 +266,9 @@ export async function POST(req: Request) {
   const needGroq = (provider === 'all' || provider === 'groq') && mergedGroq == null
   const needGemini = (provider === 'all' || provider === 'gemini') && mergedGemini == null
 
-  // Reuse existing analyses; only consensus from DB. No extra AI calls (cost: skip Groq/Gemini when both present).
+  // Reuse: both providers already cached for this tab => return stored consensus only. No AI calls (cost savings).
   if (!needGroq && !needGemini && !(isReanalyze && tab === 'creative')) {
-    const historyForConsensus = await supabase.from('research_history').select('analysis_results, updated_at').eq('user_id', user.id).eq('keyword', keyword).eq('country_code', countryCode).maybeSingle()
+    const historyForConsensus = await supabase.from('research_history').select('analysis_results, updated_at').eq('user_id', cacheKey.userId).eq('keyword', cacheKey.keyword).eq('country_code', cacheKey.countryCode).maybeSingle()
     const ar = (historyForConsensus.data?.analysis_results ?? null) as Record<string, unknown> | null
     let c: Consensus | null = null
     if (ar) {
@@ -280,8 +291,8 @@ export async function POST(req: Request) {
     })
   }
 
-  const groqKey = process.env.GROQ_API_KEY?.trim()
-  const geminiKey = process.env.GOOGLE_GENAI_API_KEY?.trim()
+  const groqKey = tabKeys.groq || null
+  const geminiKey = tabKeys.gemini || null
 
   if ((provider === 'all' || provider === 'groq') && !groqKey) {
     return NextResponse.json(
@@ -297,7 +308,6 @@ export async function POST(req: Request) {
   }
 
   const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
-  const fullPromptForGeminiAndHf = `${UNIFIED_SYSTEM_PROMPT}\n\n${userPrompt}`
 
   const aiCallDetail = needGroq && needGemini ? 'groq_and_gemini' : needGroq ? 'groq' : 'gemini'
   logCacheEvent('miss', {
@@ -308,70 +318,26 @@ export async function POST(req: Request) {
     detail: aiCallDetail,
   })
 
-  /** Groq: single responsibility via groqClient */
-  async function callGroq(): Promise<{ text: string | null; quotaError?: boolean }> {
-    if (provider !== 'all' && provider !== 'groq') return { text: null }
-    const result = await completeChat(groqKey!, [
-      { role: 'system', content: UNIFIED_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ])
-    if (result.quotaError) console.warn('[Research Tab] Groq quota/429')
-    return result
-  }
+  const analysisResult = await runTabAnalysis({
+    groqKey: groqKey || null,
+    geminiKey: geminiKey || null,
+    provider,
+    systemPrompt: UNIFIED_SYSTEM_PROMPT,
+    userPrompt,
+  })
 
-  /** Gemini tab insight: single responsibility via geminiClient */
-  async function callGemini(): Promise<{ text: string | null; quotaExceeded?: boolean }> {
-    if (provider !== 'all' && provider !== 'gemini') return { text: null }
-    if (!geminiKey) return { text: null }
-    const body = {
-      contents: [{ parts: [{ text: fullPromptForGeminiAndHf }] }],
-      generationConfig: { maxOutputTokens: 2048 },
-    }
-    try {
-      const res = await requestGenerateContent(geminiKey, body, getTabModel())
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        console.warn('[Research Tab] Gemini', res.status, (data as { error?: { message?: string } })?.error?.message ?? data)
-        return res.status === 429 ? { text: null, quotaExceeded: true } : { text: null }
-      }
-      const text = parseGenerateContentResponse(data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
-      return { text: text || null }
-    } catch (e) {
-      console.warn('[Research Tab] Gemini (all retries exhausted)', e)
-      const is429 = (e as { status?: number })?.status === 429
-      return { text: null, ...(is429 ? { quotaExceeded: true } : {}) }
-    }
-  }
+  const groqText = needGroq ? analysisResult.groqText : mergedGroq
+  const geminiText = needGemini ? analysisResult.geminiText : mergedGemini
+  const groqQuotaError = analysisResult.groqQuotaError
+  const geminiQuotaExceeded = analysisResult.geminiQuotaExceeded
 
-  // 요청 큐잉: 동시 다발 호출 방지를 위해 Groq → 500ms 간격 → Gemini 순차 호출
-  let groqPayload: { text: string | null; quotaError?: boolean }
-  let geminiPayload: { text: string | null; quotaExceeded?: boolean }
-  if (needGroq && needGemini) {
-    groqPayload = await callGroq()
-    await sleep(REQUEST_GAP_MS)
-    geminiPayload = await callGemini()
-  } else if (needGroq) {
-    groqPayload = await callGroq()
-    geminiPayload = { text: mergedGemini, quotaExceeded: false }
-  } else if (needGemini) {
-    geminiPayload = await callGemini()
-    groqPayload = { text: mergedGroq, quotaError: false }
-  } else {
-    groqPayload = { text: mergedGroq, quotaError: false }
-    geminiPayload = { text: mergedGemini, quotaExceeded: false }
-  }
-  const groqText = groqPayload.text
-  const groqQuotaError = groqPayload.quotaError === true
-  const geminiText = geminiPayload.text
-  const geminiQuotaExceeded = geminiPayload.quotaExceeded === true
+  /** Final text to return and to merge into DB: from this request or from cache, depending on provider. */
+  const groqResult =
+    (provider === 'all' || provider === 'groq') ? (groqText ?? mergedGroq ?? '') : null
+  const geminiResult =
+    (provider === 'all' || provider === 'gemini') ? (geminiText ?? mergedGemini ?? '') : null
 
-  const resultG = (provider === 'all' || provider === 'gemini') ? (geminiText ?? mergedGemini ?? '') : null
-  const resultGr = (provider === 'all' || provider === 'groq') ? (groqText ?? mergedGroq ?? '') : null
-
-  const groqResult = resultGr
-  const geminiResult = resultG
-
-  /** AllSettled로 Groq·Gemini가 모두 끝난 뒤에만 컨센서스 생성. 최소 한쪽 성공 시에만 호출. 두 AI 모두 실패 시 호출 중단. */
+  /** Consensus only when we have at least one successful result; skip if both AI calls failed. */
   let consensus: Consensus | null = null
   const groqOk = groqResult != null && String(groqResult).trim().length > 0
   const geminiOk = geminiResult != null && String(geminiResult).trim().length > 0
@@ -394,9 +360,9 @@ export async function POST(req: Request) {
       const { data: historyRow } = await supabase
         .from('research_history')
         .select('analysis_groq, analysis_gemini, analysis_results')
-        .eq('user_id', user.id)
-        .eq('keyword', keyword)
-        .eq('country_code', countryCode)
+        .eq('user_id', cacheKey.userId)
+        .eq('keyword', cacheKey.keyword)
+        .eq('country_code', cacheKey.countryCode)
         .maybeSingle()
 
       const prevGroq = (historyRow?.analysis_groq as Record<string, string>) ?? {}
@@ -408,20 +374,21 @@ export async function POST(req: Request) {
           (typeof existingResults.summary === 'string' ? normalizeConsensus(existingResults) : null)
       }
 
-      const withTab = (prev: Record<string, string>, result: string | null, key: string) => {
+      /** Merge this tab's result into existing analysis record; other tabs stay unchanged. */
+      const mergeTabIntoRecord = (prev: Record<string, string>, result: string | null, tabKey: string) => {
         const next = { ...prev }
-        if (result != null && String(result).trim().length > 0) next[key] = String(result).trim()
+        if (result != null && String(result).trim().length > 0) next[tabKey] = String(result).trim()
         return Object.fromEntries(Object.entries(next).filter(([, v]) => String(v).trim().length > 0)) as Record<string, string>
       }
-      const nextGroq = withTab(prevGroq, groqResult, tab)
-      const nextGemini = withTab(prevGemini, geminiResult, tab)
+      const nextGroq = mergeTabIntoRecord(prevGroq, groqResult, tab)
+      const nextGemini = mergeTabIntoRecord(prevGemini, geminiResult, tab)
 
       // analysis_results: 새 JSON 포맷(Consensus)만 저장. Groq/Gemini 원본은 저장 금지. 생성된 결과가 있을 때만 업데이트.
       const consensusToSave = consensus ?? existingConsensus
       const upsertPayload: Record<string, unknown> = {
-        user_id: user.id,
-        keyword,
-        country_code: countryCode,
+        user_id: cacheKey.userId,
+        keyword: cacheKey.keyword,
+        country_code: cacheKey.countryCode,
         report_id: reportId ?? null,
         analysis_groq: Object.keys(nextGroq).length > 0 ? nextGroq : null,
         analysis_gemini: Object.keys(nextGemini).length > 0 ? nextGemini : null,
@@ -442,10 +409,9 @@ export async function POST(req: Request) {
         tab,
         detail: consensusToSave != null ? 'analysis_and_consensus' : 'analysis_only',
       })
-      await supabase.from('research_history').upsert(
-        upsertPayload,
-        { onConflict: 'user_id,keyword,country_code' }
-      )
+      await supabase.from('research_history').upsert(upsertPayload, {
+        onConflict: 'user_id,keyword,country_code',
+      })
     } catch (e) {
       console.warn('[Research Tab] DB save', e)
     }

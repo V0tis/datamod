@@ -28,3 +28,6 @@ export type {
   ConsensusStrategicSummary,
   ConsensusMetadata,
 } from './consensusService'
+
+export { runTabAnalysis } from './tabAnalysis'
+export type { TabAnalysisInput, TabAnalysisResult, TabAnalysisProvider } from './tabAnalysis'

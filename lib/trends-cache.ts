@@ -2,6 +2,24 @@ import Parser from 'rss-parser'
 import { getSupabase } from '@/lib/supabase'
 import type { TrendItem, TrendNewsItem } from '@/lib/trends-types'
 
+/**
+ * Trends cache: key strategy and TTL.
+ *
+ * CACHE OWNERSHIP
+ * - Storage: Supabase table `global_trends`. Rows keyed by (country_code, rank); RPC upsert_country_trends replaces all rows per country.
+ * - Writer: refreshGlobalTrends() only. Route GET does cache-aside (read then optionally refresh).
+ *
+ * CACHE KEY STRUCTURE
+ * - Region: country_code (KR, US, JP, TW, HK, GB, DE). One "bucket" per country.
+ * - Time bucket: created_at on each row. Staleness = max(created_at) per country; if now - max(created_at) > TTL we refresh.
+ * - No keyword/model in key; each country has many keyword rows with same created_at for that refresh run.
+ *
+ * COST DECISIONS
+ * - TTL 1h: Limits RSS + translate calls to at most once per country per hour. Predictable cost for trends feed.
+ */
+export const TRENDS_CACHE_TTL_MINUTES = 60
+export const TRENDS_CACHE_TTL_MS = TRENDS_CACHE_TTL_MINUTES * 60 * 1000
+
 const COUNTRY_GEO: Record<string, string> = {
   KR: 'KR',
   US: 'US',
@@ -15,7 +33,7 @@ const COUNTRY_GEO: Record<string, string> = {
 /** 구글 트렌드 RSS (한국 도메인, geo 파라미터) */
 const RSS_BASE = 'https://trends.google.co.kr/trending/rss'
 
-const STALE_MINUTES = 60
+const STALE_MINUTES = TRENDS_CACHE_TTL_MINUTES
 
 export type TrendSourceType = 'RSS'
 

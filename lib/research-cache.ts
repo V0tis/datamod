@@ -1,19 +1,36 @@
 /**
  * Research cache: key strategy, TTL, and request metadata logging.
- * Used by insight tab and stream/history to reduce duplicate AI calls and keep cost predictable.
  *
- * Cache key strategy:
- * - Key dimensions: (user_id, keyword, country_code). One row per user+keyword+country; insight_tab and stream_report share it.
- * - Time range: entries are valid for RESEARCH_CACHE_TTL_MS; after that we treat as expired and allow new AI calls.
- * - Reuse: same key + valid updated_at = return cached analysis/consensus and skip Groq/Gemini (cost savings).
+ * CACHE OWNERSHIP
+ * - Storage: Supabase table `research_history`. One row per (user_id, keyword, country_code).
+ * - Writers: stream route (initial report + key_metrics), insights/tab route (analysis_groq, analysis_gemini, analysis_results).
+ * - Readers: insights/tab route (read-through), history route (GET), research-store (loadFromHistory).
+ *
+ * CACHE KEY STRUCTURE (standardized)
+ * - Primary key: (user_id, keyword, country_code). DB unique constraint on these columns.
+ * - Region: country_code (e.g. KR, US). Normalized to non-empty string; default 'KR'.
+ * - Model: not part of the key. One row holds both Groq and Gemini outputs per tab (logic/creative/fact).
+ * - Time bucket: we do not bucket by hour/day; validity is "updated_at within TTL". So effectively one cache entry per (user, keyword, region) until TTL expires.
+ *
+ * COST DECISIONS
+ * - TTL 24h: Same (user, keyword, country) reuses cached Groq/Gemini/Consensus for 24h, minimizing redundant AI calls.
+ * - Predictable cost: At most one full tab analysis (Groq + Gemini + Consensus) per key per 24h unless user forces reanalyze.
+ * - Reanalyze (Consensus only): Reuses stored analysis_groq/analysis_gemini; only calls Gemini for synthesizeConsensus (one cheaper call).
  */
 
-/** Cost decision: 24h TTL per (user, keyword, country) reuses Groq/Gemini/Consensus and avoids repeated paid calls for the same scope. */
+/** Cost: 24h TTL per (user, keyword, country) reuses Groq/Gemini/Consensus and avoids repeated paid calls for the same scope. */
 export const RESEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+
+/** Same TTL in hours for logging and docs. */
+export const RESEARCH_CACHE_TTL_HOURS = 24
 
 /** Logical scope for logging; DB key is always (user_id, keyword, country_code). */
 export type ResearchCacheScope = 'insight_tab' | 'stream_report'
 
+/**
+ * Standardized cache key parts. Matches DB columns (user_id, keyword, country_code).
+ * Use for lookups and logging; single source of truth for "what identifies one cache entry".
+ */
 export type CacheKeyParts = {
   userId: string
   keyword: string
@@ -22,7 +39,7 @@ export type CacheKeyParts = {
 
 /**
  * Build the logical cache key parts used for DB lookups and logging.
- * Single source of truth for "what identifies one cache entry" (keyword + scope = same row; time range = TTL).
+ * Normalizes keyword (trim) and countryCode (default 'KR').
  */
 export function buildCacheKeyParts(userId: string, keyword: string, countryCode: string): CacheKeyParts {
   return {
@@ -33,8 +50,8 @@ export function buildCacheKeyParts(userId: string, keyword: string, countryCode:
 }
 
 /**
- * True if updatedAt is within ttlMs from now. Used to avoid reusing stale cache and to trigger refetch.
- * Cost: returning false forces new AI calls; 24h keeps cost predictable per key per day.
+ * True if updatedAt is within ttlMs from now.
+ * Cost: returning false allows new AI calls; explicit TTL keeps behavior predictable.
  */
 export function isCacheValid(
   updatedAt: string | null | undefined,
@@ -46,7 +63,7 @@ export function isCacheValid(
   return Date.now() - t <= ttlMs
 }
 
-/** Age in ms; negative if updatedAt is in the future. */
+/** Age in ms since updatedAt; negative if updatedAt is in the future. */
 export function cacheAgeMs(updatedAt: string | null | undefined): number | null {
   if (!updatedAt) return null
   const t = new Date(updatedAt).getTime()
@@ -60,9 +77,9 @@ export type CacheLogMeta = {
   countryCode: string
   /** insight_tab: which tab (logic/creative/fact) */
   tab?: string
-  /** Where the result came from: 'memory' | 'report_id' | 'keyword' */
+  /** Where the result came from: 'keyword' | 'report_id' */
   source?: string
-  /** Short reason: 'full' | 'consensus_only' | 'groq' | 'gemini' | 'groq_and_gemini' | 'expired' | 'write' */
+  /** Short reason: 'full' | 'consensus_only' | 'groq' | 'gemini' | 'groq_and_gemini' | 'expired' | 'write' | 'ttl_exceeded' */
   detail?: string
   /** When we skip AI calls (cache hit or reanalyze using stored analyses). */
   skippedAi?: boolean

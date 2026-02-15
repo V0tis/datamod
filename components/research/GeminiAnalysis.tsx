@@ -8,6 +8,7 @@ import { MarkdownWithSearchLinks } from '@/components/markdown-with-search-links
 import { RinAnimation } from '@/components/common/RinAnimation'
 import { Copy, RefreshCw, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import { CollapsibleLongContent } from '@/components/research/CollapsibleLongContent'
 import { cn } from '@/lib/utils'
 
 export type AiTabId = 'logic' | 'creative' | 'fact'
@@ -109,8 +110,10 @@ function GeminiAnalysisComponent({
           </div>
         ) : text ? (
           <>
-            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words', isFact && 'sm:prose-lg')}>
-              <MarkdownWithSearchLinks text={text} />
+            <div className={cn('prose prose-sm max-w-none text-foreground dark:text-[#e1e3e6] flex-1 break-words prose-p:break-words prose-li:break-words min-w-0', isFact && 'sm:prose-lg')}>
+              <CollapsibleLongContent>
+                <MarkdownWithSearchLinks text={text} />
+              </CollapsibleLongContent>
             </div>
             <div className="mt-auto pt-2" aria-live="polite">
               <Button

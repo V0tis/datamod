@@ -34,6 +34,7 @@ export function SummaryBlock({
         className
       )}
       aria-labelledby="summary-block-title"
+      aria-label="Summary"
     >
       <h2
         id="summary-block-title"

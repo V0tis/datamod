@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
-import { generateResearchWithGrounding } from '@/services/ai/geminiClient'
+import { getResearchKeysForInitialAnalysis } from '@/lib/research-keys'
+import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { generateResearchWithGrounding } from '@/services/aiClient'
 
 const SYSTEM_INSTRUCTION =
   "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
@@ -32,38 +33,14 @@ async function logAvailableModels(apiKey: string): Promise<void> {
   }
 }
 
-/** Gemini가 ```json ... ``` 또는 ``` ... ``` 로 감싼 경우 제거 후 순수 JSON만 반환 */
-function extractJsonFromText(text: string): string {
-  const trimmed = text.trim()
-  const codeBlockMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/)
-  if (codeBlockMatch) return codeBlockMatch[1].trim()
-  if (trimmed.startsWith('```')) {
-    const afterOpen = trimmed.replace(/^```(?:json)?\s*\n?/i, '')
-    const closeIdx = afterOpen.indexOf('```')
-    if (closeIdx !== -1) return afterOpen.slice(0, closeIdx).trim()
-    return afterOpen.trim()
-  }
-  return trimmed
-}
-
+/** Initial research (non-stream): resolve keys → Gemini with grounding or OpenAI fallback → parse JSON → upsert report. */
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    let userGemini: string | null = null
-    let userOpenAI: string | null = null
-    if (user?.id) {
-      const { data: row } = await supabase
-        .from('user_settings')
-        .select('gemini_api_key, openai_api_key')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      userGemini = row?.gemini_api_key ?? null
-      userOpenAI = (row as { openai_api_key?: string })?.openai_api_key ?? null
-    }
-    const effective = getEffectiveLicenseKeys(userGemini)
-    const openaiKey = getEffectiveOpenAIKey(userOpenAI)
-    const hasGemini = !!(effective.canSearch && effective.gemini)
+    const keys = await getResearchKeysForInitialAnalysis(supabase, user?.id)
+    const hasGemini = keys.canSearch && !!keys.gemini
+    const openaiKey = keys.openai
     if (!hasGemini && !openaiKey) {
       return NextResponse.json(
         { error: '키를 등록해 주세요. 설정에서 Gemini 또는 OpenAI API 키를 등록하면 분석을 사용할 수 있어요.' },
@@ -87,7 +64,7 @@ export async function POST(req: Request) {
     if (hasGemini) {
       try {
         const { text, sourceLinks: links } = await generateResearchWithGrounding(
-          effective.gemini!,
+          keys.gemini,
           prompt,
           {
             systemInstruction: SYSTEM_INSTRUCTION,
@@ -106,12 +83,13 @@ export async function POST(req: Request) {
         const msg = String((geminiError as { message?: string })?.message ?? geminiError)
         console.warn('[Research API] Gemini error (all retries exhausted)', msg)
         if (/404|not found|invalid model/i.test(msg)) {
-          logAvailableModels(effective.gemini)
+          logAvailableModels(keys.gemini)
           console.warn('[Research API] Gemini 404/모델 오류 → GPT Fallback 시도')
         }
       }
     }
 
+    // Fallback when Gemini fails (404, quota, or 5xx) so the user still gets a result.
     if (responseText == null && openaiKey) {
       try {
         const openai = new OpenAI({ apiKey: openaiKey })
@@ -137,68 +115,22 @@ export async function POST(req: Request) {
       )
     }
 
-    const rawJson = extractJsonFromText(responseText)
-    let parsed: {
-      marketNews?: string[]
-      painPoints?: string[]
-      competitorTrends?: string
-      sentiment?: number
-      publicReactionTrends?: string
-      chartData?: {
-        sentiment?: { positive?: number; neutral?: number; negative?: number }
-        impact?: Array<{ subject?: string; score?: number }>
-      }
-    }
-    try {
-      parsed = JSON.parse(rawJson) as typeof parsed
-    } catch {
-      console.error('[Research API] Invalid JSON from Gemini:', rawJson.slice(0, 200))
+    const parsed = parseInitialResearchResponse(responseText, { repair: false })
+    if (!parsed.ok) {
       return NextResponse.json(
-        { error: '분석 결과 형식이 올바르지 않아요. 다시 검색해 주세요.' },
+        { error: parsed.error },
         { status: 500 }
       )
     }
 
-    const sentiment =
-      typeof parsed.sentiment === 'number'
-        ? Math.min(100, Math.max(0, parsed.sentiment))
-        : 0
-
-    const sd = parsed.chartData?.sentiment
-    const positive = Math.min(100, Math.max(0, typeof sd?.positive === 'number' ? sd.positive : 65))
-    const neutral = Math.min(100, Math.max(0, typeof sd?.neutral === 'number' ? sd.neutral : 20))
-    const negative = Math.min(100, Math.max(0, typeof sd?.negative === 'number' ? sd.negative : 15))
-    const sum = positive + neutral + negative
-    const chartSentiment = sum > 0
-      ? { positive: Math.round((positive / sum) * 100), neutral: Math.round((neutral / sum) * 100), negative: Math.round((negative / sum) * 100) }
-      : { positive: 65, neutral: 20, negative: 15 }
-    const rawImpact = Array.isArray(parsed.chartData?.impact) ? parsed.chartData.impact : []
-    const impactList = rawImpact
-      .filter((i): i is { subject: string; score: number } => typeof i?.subject === 'string' && typeof i?.score === 'number')
-      .map((i) => ({ subject: i.subject, score: Math.min(10, Math.max(0, i.score)) }))
-      .slice(0, 8)
-    const chartImpact = impactList.length > 0
-      ? impactList
-      : [
-          { subject: '경제', score: 5 },
-          { subject: '사회', score: 5 },
-          { subject: '기술', score: 5 },
-          { subject: '정치', score: 5 },
-          { subject: '환경', score: 5 },
-        ]
-    const chartData = { sentiment: chartSentiment, impact: chartImpact }
-
+    const { summary: s } = parsed
     const summary = {
-      marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
-      painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
-      competitorTrends:
-        typeof parsed.competitorTrends === 'string'
-          ? parsed.competitorTrends
-          : '',
-      sentiment,
-      publicReactionTrends:
-        typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
-      chartData,
+      marketNews: s.marketNews,
+      painPoints: s.painPoints,
+      competitorTrends: s.competitorTrends,
+      sentiment: s.sentiment,
+      publicReactionTrends: s.publicReactionTrends,
+      chartData: s.chartData,
     }
 
     let reportId: string | null = null

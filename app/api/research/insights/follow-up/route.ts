@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
-import { generateText } from '@/services/ai/geminiClient'
+import { getSystemGeminiKey } from '@/lib/license'
+import { generateText } from '@/services/aiClient'
 
 const FOLLOW_UP_SYSTEM =
   "당신은 시장 리서치와 대중 반응 분석 전문가 '린'입니다. 사용자가 유저 반응 분석 내용에 대해 추가로 질문했을 때, **앞서 제시된 유저 반응 요약과 맥락**만 바탕으로 친절하고 간결하게 답변해주세요. 1~3문단 이내로 자연스럽게 작성해주세요."
 
+/** Follow-up Q&A on previous insights; uses system Gemini key only. */
 export async function POST(req: Request) {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  const apiKey = getSystemGeminiKey()
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'GOOGLE_GENERATIVE_AI_API_KEY is not set' },
-      { status: 500 }
+      { error: 'Gemini API key is not set. Set GOOGLE_GENAI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY in environment.' },
+      { status: 503 }
     )
   }
 

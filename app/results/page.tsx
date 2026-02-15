@@ -21,7 +21,8 @@ import { Badge } from '@/components/ui/badge'
 import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
-import { SummaryBlock } from '@/components/research/SummaryBlock'
+import { InsightSummary } from '@/components/research/InsightSummary'
+import { KeyFindings } from '@/components/research/KeyFindings'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -199,6 +200,10 @@ function ResultsContent() {
   const [chartVariance, setChartVariance] = useState<number | null>(null)
   /** Mobile: collapse secondary sidebar (momentum, trends, metrics, sources) to reduce scroll; expand for comprehension. */
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
+  const [evidenceOpen, setEvidenceOpen] = useState(false)
+  /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
+  const [implicationOpen, setImplicationOpen] = useState(false)
 
   useEffect(() => {
     if (!(result?.key_metrics?.chartData ?? result?.chartData)) {
@@ -206,6 +211,19 @@ function ResultsContent() {
       setChartVariance(null)
     }
   }, [result?.key_metrics?.chartData, result?.chartData])
+
+  // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)') : null
+    if (!mq) return
+    const setOpen = () => {
+      setEvidenceOpen(mq.matches)
+      setImplicationOpen(mq.matches)
+    }
+    setOpen()
+    mq.addEventListener('change', setOpen)
+    return () => mq.removeEventListener('change', setOpen)
+  }, [])
 
   // URL keyword·country 기준: research_history 캐시 우선 → 없으면 stream 호출 (report·research_history 생성)
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
@@ -650,14 +668,18 @@ function ResultsContent() {
           {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-card */}
           <div className="lg:col-span-8 space-y-4 sm:space-y-6 dark:bg-card rounded-xl p-0 sm:p-1 min-w-0">
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading">
-        <header className="mb-5 sm:mb-8">
+        {/* Input — what was analyzed (PM: context first) */}
+        <header className="mb-5 sm:mb-6">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Input</p>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight break-words">
-            &quot;{currentKeyword}&quot; 검색 결과
+            &quot;{currentKeyword}&quot;
           </h1>
-          <p className="text-muted-foreground text-sm mt-1.5">
+          <p className="text-muted-foreground text-sm mt-1">
             {showAnalyzing
-              ? '린이 가져온 뉴스예요. 다른 페이지로 이동해도 분석은 계속돼요.'
-              : '탭을 전환해 시장 분석, 인사이트, 종합 리포트를 확인하세요.'}
+              ? '분석 중입니다. 다른 페이지로 이동해도 계속돼요.'
+              : result?.updated_at ? (
+              <>마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
+            ) : '탭에서 시장 분석·인사이트·종합 리포트를 확인하세요.'}
           </p>
         </header>
 
@@ -727,39 +749,49 @@ function ResultsContent() {
                 )}
               </Button>
             )}
-            {result?.updated_at && !loading && (
-              <span className="text-xs text-muted-foreground text-muted-foreground">
-                마지막 업데이트: <TimeAgo isoString={result.updated_at} />
-              </span>
-            )}
           </div>
         ) : null}
 
-        {/* Above the fold: Key takeaways within ~5 seconds */}
+        {/* Insight Summary — "So what?" dominant; key takeaways above the fold */}
         {status === 'done' && result && (
-          <SummaryBlock
-            title="Key takeaways"
-            lead={
-              consensusData?.strategicSummary?.summary?.trim() ||
-              (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0] ||
-              null
-            }
-            items={
-              (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0
-                ? (result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5)
-                : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 4)
-            }
-            description={
-              !consensusData?.strategicSummary?.summary && (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.length
-                ? '초기 연구 분석에서 추출한 결론'
-                : undefined
-            }
-            className="mb-8"
-          />
+          <>
+            <section className="mb-4 sm:mb-5" aria-label="Insight summary">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Summary</p>
+              <InsightSummary
+                summary={
+                  consensusData?.strategicSummary?.summary?.trim() ||
+                  (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0] ||
+                  ''
+                }
+                sentimentScore={consensusData?.sentiment?.score ?? null}
+                trend={consensusData?.sentiment?.trend ?? 'stable'}
+                confidence={consensusData?.metadata?.confidence ?? null}
+                loading={
+                  ((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) &&
+                  !consensusData &&
+                  !(result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0]
+                }
+                className="mb-4 sm:mb-5"
+              />
+            </section>
+            {(() => {
+              const keyFindingItems =
+                (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0
+                  ? (result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5)
+                  : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
+              if (keyFindingItems.length === 0) return null
+              return (
+                <section className="mb-6 sm:mb-8" aria-label="Key findings">
+                  <KeyFindings items={keyFindingItems} title="Key findings" maxItems={5} />
+                </section>
+              )
+            })()}
+          </>
         )}
 
-        {/* Section 2: 전략 통찰 — Consensus (PM: Insight / Problem / Signal / Implication) */}
-        <section className="mb-8" aria-labelledby="consensus-heading">
+        {/* Insight — AI interpretation (strategic conclusion; PM: decision-oriented) */}
+        <section className="mb-6 sm:mb-8" aria-labelledby="consensus-heading">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>Insight</p>
           <h2 id="consensus-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-3">
             전략 통찰
           </h2>
@@ -799,82 +831,56 @@ function ResultsContent() {
         )}
         </section>
 
-        {/* Section 3: 상세 분석 — Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 sm:mb-3">
-            상세 분석
-          </h2>
-          <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
-            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
-              <TabsTrigger key={id} value={id} className={cn('gap-1 sm:gap-2 text-xs sm:text-sm border border-transparent dark:data-[state=active]:bg-[#202226] dark:data-[state=active]:text-[#00d19a] dark:data-[state=active]:border-b-2 dark:data-[state=active]:border-[#00d19a] dark:data-[state=active]:rounded-b-none px-2 sm:px-3', theme)}>
-                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                <span className="truncate">{label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {/* Section 4: 실시간 뉴스 (reference) */}
+        {/* Evidence — supporting data (PM: skim or dig deeper). Collapsible on small screens so Summary/Insight stay above the fold. */}
+        <section className="mb-6 sm:mb-8" aria-label="Evidence">
+          <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500" aria-hidden>Evidence</p>
+            <button
+              type="button"
+              onClick={() => setEvidenceOpen((o) => !o)}
+              className="lg:sr-only flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300"
+              aria-expanded={evidenceOpen}
+              aria-controls="evidence-content"
+            >
+              {evidenceOpen ? '접기' : '뉴스·상세 분석 펼치기'}
+              {evidenceOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+            </button>
+          </div>
+          <div id="evidence-content" className={cn(evidenceOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!evidenceOpen}>
+          {/* 실시간 뉴스: compact so Insight stays above the fold */}
           {currentKeyword && (
-            <div className="mb-8">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-3 flex items-center gap-2">
-                <Newspaper className="h-4 w-4 text-primary" />
+            <div className="mb-6">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 flex items-center gap-2">
+                <Newspaper className="h-3.5 w-3.5 text-primary" />
                 실시간 뉴스
                 {rssNewsLoading && (
-                  <span className="inline-flex items-center gap-1.5 text-sm font-normal text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
                     불러오는 중
                   </span>
                 )}
               </h3>
               {rssNewsLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl border border-border bg-card p-4 animate-pulse"
-                    >
-                      <div className="h-4 w-full bg-muted dark:bg-zinc-700/50 rounded mb-3" />
-                      <div className="h-4 w-3/4 bg-muted dark:bg-zinc-700/50 rounded mb-2" />
-                      <div className="h-3 w-1/2 bg-muted dark:bg-zinc-700/50 rounded" />
+                    <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
+                      <div className="h-3.5 w-full bg-muted dark:bg-zinc-700/50 rounded mb-2" />
+                      <div className="h-3 w-3/4 bg-muted dark:bg-zinc-700/50 rounded" />
                     </div>
                   ))}
                 </div>
               ) : rssNewsFetched && rssNews.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-8 text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted dark:bg-slate-800 text-muted-foreground dark:text-slate-500 mb-3">
-                    <Newspaper className="h-6 w-6" aria-hidden />
-                  </div>
-                  <p className="text-muted-foreground text-sm font-medium">
-                    &quot;{currentKeyword}&quot;에 대한 실시간 뉴스가 없습니다
-                  </p>
-                  <p className="text-muted-foreground dark:text-slate-500 text-xs mt-1">
-                    다른 키워드로 검색해 보시거나, 잠시 후 다시 시도해 주세요.
-                  </p>
-                </div>
+                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">&quot;{currentKeyword}&quot;에 대한 실시간 뉴스가 없습니다.</p>
               ) : rssNews.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {rssNews.map((item, i) => (
-                    <article
-                      key={i}
-                      className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:border-primary/20 hover:bg-muted transition-all text-left flex flex-col"
-                    >
-                      <div className="p-4 flex flex-col gap-3 flex-1 min-w-0">
-                        <h3 className="font-medium text-foreground text-[15px] leading-snug line-clamp-2">
-                          {item.title || '제목 없음'}
-                        </h3>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground text-muted-foreground">
-                          <span>{item.source || '언론사'}</span>
-                          <span>{item.pubDate ? <TimeAgo isoString={item.pubDate} /> : '최신'}</span>
-                        </div>
+                    <article key={i} className="rounded-lg border border-border bg-card p-3 hover:border-primary/20 transition-colors text-left">
+                      <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2">{item.title || '제목 없음'}</h4>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mt-1.5">
+                        <span>{item.source || '언론사'}</span>
                         {item.link && (
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mt-auto"
-                          >
-                            원문 링크
-                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                            링크 <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
                       </div>
@@ -884,6 +890,19 @@ function ResultsContent() {
               ) : null}
             </div>
           )}
+
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 sm:mb-3">
+            상세 분석
+          </h3>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
+          <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
+            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
+              <TabsTrigger key={id} value={id} className={cn('gap-1 sm:gap-2 text-xs sm:text-sm border border-transparent dark:data-[state=active]:bg-[#202226] dark:data-[state=active]:text-[#00d19a] dark:data-[state=active]:border-b-2 dark:data-[state=active]:border-[#00d19a] dark:data-[state=active]:rounded-b-none px-2 sm:px-3', theme)}>
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="truncate">{label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
           {quotaExceeded ? (
             <div className="mt-6 flex flex-col items-center justify-center min-h-[280px] text-center rounded-xl border border-border dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-8" role="alert">
@@ -1006,6 +1025,42 @@ function ResultsContent() {
             </TabsContent>
           )))}
         </Tabs>
+          </div>
+        </section>
+
+        {/* Implication — what to do next (PM: returning users see actions in one place). Collapsible on small screens. */}
+        {status === 'done' && result && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
+          <section className="mb-6 sm:mb-8 pt-4 border-t border-border" aria-label="Implication">
+            <button
+              type="button"
+              onClick={() => setImplicationOpen((o) => !o)}
+              className="lg:sr-only w-full flex items-center justify-between gap-2 text-left mb-2"
+              aria-expanded={implicationOpen}
+              aria-controls="implication-content"
+            >
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500">Implication</p>
+              <span className="text-xs font-medium text-muted-foreground dark:text-slate-400">
+                {implicationOpen ? '접기' : 'Next steps 펼치기'}
+                {implicationOpen ? <ChevronUp className="w-4 h-4 inline-block ml-1 align-middle" /> : <ChevronDown className="w-4 h-4 inline-block ml-1 align-middle" />}
+              </span>
+            </button>
+            <div className="hidden lg:block">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-2" aria-hidden>Implication</p>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2">Next steps</h2>
+            </div>
+            <div id="implication-content" className={cn(implicationOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!implicationOpen}>
+              <ul className="space-y-1 list-none pl-0 text-sm text-foreground dark:text-slate-200">
+                {(consensusData?.strategicSummary?.actionItems ?? []).slice(0, 3).map((item, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-primary dark:text-[#00d19a] shrink-0">·</span>
+                    <span className="break-words">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-2">추가 질문은 인사이트 탭에서 질문하기를 이용하세요.</p>
+            </div>
+          </section>
+        )}
 
         {selectedNews && (
           <NewsDetailModal
