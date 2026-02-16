@@ -1,4 +1,5 @@
 -- analysis_jobs: background analysis queue per user/keyword
+-- Run this in Supabase Dashboard → SQL Editor if the table is missing.
 CREATE TABLE IF NOT EXISTS analysis_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
