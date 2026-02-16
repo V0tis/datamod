@@ -32,6 +32,7 @@ function RinAISearchInner() {
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string }[]>([])
+  const [recentReportsLoading, setRecentReportsLoading] = useState(false)
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [],
@@ -134,8 +135,10 @@ function RinAISearchInner() {
   useEffect(() => {
     if (!user) {
       setRecentReports([])
+      setRecentReportsLoading(false)
       return
     }
+    setRecentReportsLoading(true)
     fetch('/api/research/history')
       .then((res) => res.json())
       .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
@@ -146,6 +149,7 @@ function RinAISearchInner() {
         showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했습니다.' })
         setRecentReports([])
       })
+      .finally(() => setRecentReportsLoading(false))
   }, [user])
 
   const fetchTrends = (forceRefresh = false) => {
@@ -432,7 +436,20 @@ function RinAISearchInner() {
                   </Link>
                 </div>
                 {user ? (
-                  recentReports.length > 0 ? (
+                  recentReportsLoading ? (
+                    <div className="space-y-2" aria-busy="true" aria-label="리서치 기록 불러오는 중">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-card px-3 py-2.5">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <span className="h-4 w-28 bg-muted dark:bg-zinc-700 rounded animate-pulse" />
+                            <span className="h-3 w-8 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
+                          </div>
+                          <span className="h-3 w-12 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground dark:text-slate-500 text-center pt-1">불러오는 중...</p>
+                    </div>
+                  ) : recentReports.length > 0 ? (
                     <ul className="space-y-2">
                       {recentReports.map((r, i) => (
                         <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>

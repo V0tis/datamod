@@ -77,12 +77,35 @@ export default function HistoryPage() {
   if (loading) {
     return (
       <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-[60vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <History className="h-6 w-6 text-primary" />
+            내 리서치 기록
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            최근 분석한 키워드로 바로 이동합니다.
+          </p>
+        </header>
         <LoadingState
           message="리서치 기록을 불러오는 중입니다"
           detail="잠시만 기다려 주세요."
           size="lg"
-          className="min-h-[50vh]"
+          className="py-8"
         />
+        <div className="mt-6 space-y-2" aria-hidden>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-xl border border-border dark:border-zinc-800 bg-card p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0 flex items-center gap-3">
+                <span className="h-5 w-24 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
+                <span className="h-4 w-16 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="h-4 w-20 bg-muted dark:bg-zinc-700 rounded animate-pulse" />
+                <span className="h-8 w-8 bg-muted dark:bg-zinc-700 rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
