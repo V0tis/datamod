@@ -144,6 +144,11 @@ function NewsDetailModal({
   )
 }
 
+/**
+ * Results view is driven by global analysis state (store).
+ * URL ?keyword= and ?country= select the task; store holds status, result, error.
+ * No local component state owns analysis lifecycle—orchestration lives in the store.
+ */
 function ResultsContent() {
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')

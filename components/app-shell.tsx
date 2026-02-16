@@ -1,10 +1,9 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { Sidebar } from '@/components/sidebar'
 import { PageTransition } from '@/components/common/PageTransition'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { AnalysisJobCenter } from '@/components/research/analysis-job-center'
+import { GlobalHeader } from '@/components/global-header'
 import { AnalysisJobSync } from '@/components/research/analysis-job-sync'
 
 const isAuthOnlyPath = (path: string) =>
@@ -29,14 +28,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <Sidebar />
-      <main className="min-h-screen bg-background pl-0 lg:pl-[240px] overflow-auto transition-[padding] transition-colors duration-300">
+      <GlobalHeader />
+      <main className="min-h-screen bg-background overflow-auto">
         <ErrorBoundary>
           <PageTransition>{children}</PageTransition>
         </ErrorBoundary>
       </main>
       <AnalysisJobSync />
-      <AnalysisJobCenter />
     </>
   )
 }

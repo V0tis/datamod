@@ -1,9 +1,17 @@
 'use client'
 
+/**
+ * Global analysis state: single source of truth for all analysis tasks.
+ * - Tasks are first-class (id, keyword, status, progress, result, createdAt).
+ * - Backing data comes from Supabase analysis_jobs + research_history; sync via API + Realtime.
+ * - UI only reads and triggers; orchestration (start, retry, cancel, refresh) lives here.
+ */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
+import type { AnalysisTask } from '@/lib/analysis-types'
+import { jobStatusToTaskStatus } from '@/lib/analysis-types'
 
 export interface NewsItem {
   title: string
@@ -54,6 +62,7 @@ type ResearchStatus = 'idle' | 'loading' | 'done' | 'error'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
+/** API/DB shape; use getTasks() for the public AnalysisTask[] view. */
 export interface AnalysisJob {
   id: string
   keyword: string
@@ -64,6 +73,45 @@ export interface AnalysisJob {
   report_id?: string | null
   created_at?: string
   updated_at?: string
+}
+
+const PROGRESS_LABELS: Record<string, string> = {
+  news: '뉴스 수집',
+  gemini: 'AI 분석',
+  creative: '인사이트 생성',
+  parse_json: '결과 정리',
+  report_db: '리포트 저장',
+  done: '완료',
+  cached: '캐시 사용',
+}
+
+/** Derive AnalysisTask[] from current jobs (single source of truth). */
+export function getTasksFromStore(): AnalysisTask[] {
+  const state = useResearchStore.getState()
+  const order = state.jobOrder
+  const jobs = state.jobs
+  return order.map((id) => {
+    const job = jobs[id]
+    if (!job) return null
+    return {
+      id: job.id,
+      keyword: job.keyword,
+      status: jobStatusToTaskStatus(job.status),
+      progress: job.progress_step ? (PROGRESS_LABELS[job.progress_step] ?? job.progress_step) : null,
+      result: job.status === 'succeeded' ? undefined : null,
+      createdAt: job.created_at ?? '',
+      countryCode: job.country_code ?? 'KR',
+      error: job.error ?? null,
+    }
+  }).filter(Boolean) as AnalysisTask[]
+}
+
+/** Number of tasks that are pending or running. */
+export function getRunningCountFromStore(): number {
+  const state = useResearchStore.getState()
+  return Object.values(state.jobs).filter(
+    (j) => j.status === 'queued' || j.status === 'running'
+  ).length
 }
 
 export interface GeminiQuota {
