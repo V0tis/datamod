@@ -221,12 +221,21 @@ function ResultsContent() {
   /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
   const [implicationOpen, setImplicationOpen] = useState(false)
 
+  const currentKeyword = keyword ?? storeKeyword
+  const urlKeyword = keyword?.trim() ?? null
+  const storeKeywordTrim = (storeKeyword ?? '').trim()
+  /** URL 키워드와 스토어 활성 작업이 같을 때만 result/status/error 표시 → 다른 분석 데이터 깜빡임 방지 */
+  const isViewingActiveJob = urlKeyword === null || storeKeywordTrim === urlKeyword
+  const displayResult = isViewingActiveJob ? result : null
+  const displayStatus = isViewingActiveJob ? status : (urlKeyword ? 'loading' : status)
+  const displayError = isViewingActiveJob ? error : null
+
   useEffect(() => {
-    if (!(result?.key_metrics?.chartData ?? result?.chartData)) {
+    if (!(displayResult?.key_metrics?.chartData ?? displayResult?.chartData)) {
       setLastChartScore(null)
       setChartVariance(null)
     }
-  }, [result?.key_metrics?.chartData, result?.chartData])
+  }, [displayResult?.key_metrics?.chartData, displayResult?.chartData])
 
   // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
   useEffect(() => {
@@ -316,10 +325,9 @@ function ResultsContent() {
       })
   }, [keyword, storeKeyword, newsDays])
 
-  const loading = status === 'loading'
+  const loading = displayStatus === 'loading'
   /** 히스토리 확인 후, 스트림 분석 중일 때만 분석 중 표시. result 있으면(캐시 포함) 탭·카드 표시 */
-  const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !error && !result
-  const currentKeyword = keyword ?? storeKeyword
+  const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !displayError && !displayResult
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
@@ -338,22 +346,22 @@ function ResultsContent() {
         })()
       : null
 
-  const reportSummary = result
+  const reportSummary = displayResult
     ? [
-        result.marketNews?.length ? `시장 뉴스 요약: ${result.marketNews.join(' ')}` : '',
-        result.painPoints?.length ? `유저 페인포인트: ${result.painPoints.join(' ')}` : '',
-        result.competitorTrends ? `경쟁사 동향: ${result.competitorTrends}` : '',
+        displayResult.marketNews?.length ? `시장 뉴스 요약: ${displayResult.marketNews.join(' ')}` : '',
+        displayResult.painPoints?.length ? `유저 페인포인트: ${displayResult.painPoints.join(' ')}` : '',
+        displayResult.competitorTrends ? `경쟁사 동향: ${displayResult.competitorTrends}` : '',
       ]
         .filter(Boolean)
         .join('\n\n')
     : ''
   const newsHeadlines = rssNews.length > 0 ? rssNews.map((i) => i.title).join('\n') : ''
 
-  // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화. DB에 있으면 탭 API 호출 방지용 ref 세팅.
+  // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화. DB에 있으면 탭 API 호출 방지용 ref 세팅. 현재 URL 키워드와 일치할 때만 적용.
   useEffect(() => {
-    if (!result?.reportId) return
-    const groq = result.analysis_groq as TabAnalysisRecord | undefined
-    const gemini = result.analysis_gemini as TabAnalysisRecord | undefined
+    if (!isViewingActiveJob || !displayResult?.reportId) return
+    const groq = displayResult.analysis_groq as TabAnalysisRecord | undefined
+    const gemini = displayResult.analysis_gemini as TabAnalysisRecord | undefined
     if (groq && typeof groq === 'object' && ('creative' in groq || 'fact' in groq)) {
       setTabCacheGroq((prev) => ({
         ...prev,
@@ -375,27 +383,27 @@ function ResultsContent() {
       const hasGemini = typeof gemini?.[key] === 'string' && gemini[key].trim().length > 0
       if (hasGroq && hasGemini) tabHasFetchedRef.current[t] = true
     })
-  }, [result?.reportId, result?.analysis_groq, result?.analysis_gemini])
+  }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini])
 
   const prevReportIdRef = useRef<string | null>(null)
   useEffect(() => {
-    const id = result?.reportId ?? null
+    const id = displayResult?.reportId ?? null
     if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) {
       setConsensusData(null)
       isConsensusStartedRef.current = false
       tabHasFetchedRef.current = { logic: false, creative: false, fact: false }
     }
     prevReportIdRef.current = id
-  }, [result?.reportId])
+  }, [displayResult?.reportId])
 
   /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 재분석 중이면 덮어쓰지 않음 */
   useEffect(() => {
-    if (isReanalyzingConsensusRef.current) return
-    const ar = result?.analysis_results
+    if (!isViewingActiveJob || isReanalyzingConsensusRef.current) return
+    const ar = displayResult?.analysis_results
     if (!ar || typeof ar !== 'object') return
     const normalized = normalizeConsensusData(ar)
     if (normalized) setConsensusData(normalized)
-  }, [result?.reportId, result?.analysis_results])
+  }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_results])
 
   const fetchTabAnalysis = useCallback(
     async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean; reportId?: string; summary?: string }) => {
@@ -424,7 +432,7 @@ function ResultsContent() {
         keyword: currentKeyword,
         summary: options?.summary ?? reportSummary,
         tab: tabId,
-        reportId: options?.reportId ?? result?.reportId ?? undefined,
+        reportId: options?.reportId ?? displayResult?.reportId ?? undefined,
         newsHeadlines: newsHeadlines ?? undefined,
         provider,
         isReanalyze,
@@ -529,7 +537,7 @@ function ResultsContent() {
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, countryFromUrl, reportSummary, result?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, mergeResultAnalysis]
+    [currentKeyword, countryFromUrl, reportSummary, displayResult?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, mergeResultAnalysis]
   )
 
   // 탭 분석: DB(result.analysis_groq/analysis_gemini)에 이미 있으면 API 호출 절대 안 함. 재시도 버튼으로만 호출.
@@ -537,18 +545,18 @@ function ResultsContent() {
     if (quotaExceeded) return
     const t = activeTab as AiTabId
     if (t !== 'logic' && t !== 'creative' && t !== 'fact') return
-    if (status === 'loading') return
-    if (status !== 'done' && status !== 'error') return
+    if (displayStatus === 'loading') return
+    if (displayStatus !== 'done' && displayStatus !== 'error') return
 
-    const groq = result?.analysis_groq as TabAnalysisRecord | undefined
-    const gemini = result?.analysis_gemini as TabAnalysisRecord | undefined
+    const groq = displayResult?.analysis_groq as TabAnalysisRecord | undefined
+    const gemini = displayResult?.analysis_gemini as TabAnalysisRecord | undefined
     const hasDbCache = (tabId: AiTabId) => {
       const key = tabId === 'logic' ? 'creative' : tabId
       const g = groq && typeof groq[key] === 'string' && groq[key].trim().length > 0
       const m = gemini && typeof gemini[key] === 'string' && gemini[key].trim().length > 0
       return !!g && !!m
     }
-    if (result?.reportId && hasDbCache('logic') && hasDbCache('creative') && hasDbCache('fact')) {
+    if (displayResult?.reportId && hasDbCache('logic') && hasDbCache('creative') && hasDbCache('fact')) {
       tabHasFetchedRef.current = { logic: true, creative: true, fact: true }
       return
     }
@@ -578,7 +586,7 @@ function ResultsContent() {
       setTabLoadingGemini((prev) => ({ ...prev, [t]: true }))
       fetchTabAnalysis(t, 'gemini')
     }
-  }, [activeTab, status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
+  }, [activeTab, displayStatus, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini, tabCacheGroq, tabCacheGemini, tabLoadingGroq, tabLoadingGemini, tabErrorGroq, tabErrorGemini, fetchTabAnalysis, quotaExceeded, geminiQuotaExceeded])
 
   /** [1. 실행 조건] 각 AI 상태: idle | loading | success | error. 두 상태가 모두 loading·idle이 아닐 때만 consensus 실행 */
   type CreativeAiState = 'idle' | 'loading' | 'success' | 'error'
@@ -603,25 +611,25 @@ function ResultsContent() {
     creativeGeminiState !== 'loading'
 
   useEffect(() => {
-    if (status !== 'done' || !result?.reportId || quotaExceeded || geminiQuotaExceeded) return
+    if (displayStatus !== 'done' || !displayResult?.reportId || quotaExceeded || geminiQuotaExceeded) return
     // DB may store consensus in analysis_results.consensus (new) or analysis_results.summary/sentiment (legacy).
-    const hasDbConsensus = result.analysis_results != null && typeof result.analysis_results === 'object' && (typeof (result.analysis_results as Record<string, unknown>).summary === 'string' || typeof (result.analysis_results as Record<string, unknown>).sentiment === 'number')
+    const hasDbConsensus = displayResult?.analysis_results != null && typeof displayResult.analysis_results === 'object' && (typeof (displayResult.analysis_results as Record<string, unknown>).summary === 'string' || typeof (displayResult.analysis_results as Record<string, unknown>).sentiment === 'number')
     if (hasDbConsensus) {
       isConsensusStartedRef.current = true
       return
     }
     if (consensusData != null) return
     if (isConsensusStartedRef.current) return
-    const groqCreative = (result.analysis_groq as TabAnalysisRecord | undefined)?.creative
-    const geminiCreative = (result.analysis_gemini as TabAnalysisRecord | undefined)?.creative
+    const groqCreative = (displayResult?.analysis_groq as TabAnalysisRecord | undefined)?.creative
+    const geminiCreative = (displayResult?.analysis_gemini as TabAnalysisRecord | undefined)?.creative
     const groqFromResult = typeof groqCreative === 'string' && groqCreative.trim().length > 0
     const geminiFromResult = typeof geminiCreative === 'string' && geminiCreative.trim().length > 0
     const needGroq = !tabCacheGroq.creative && !groqFromResult
     const needGemini = !tabCacheGemini.creative && !geminiFromResult
     const haveBoth = (tabCacheGroq.creative != null || groqFromResult) && (tabCacheGemini.creative != null || geminiFromResult)
     if (needGroq || needGemini) {
-      if (creativeFetchedForConsensusRef.current === result.reportId) return
-      creativeFetchedForConsensusRef.current = result.reportId
+      if (creativeFetchedForConsensusRef.current === displayResult.reportId) return
+      creativeFetchedForConsensusRef.current = displayResult.reportId
       isConsensusStartedRef.current = true
       fetchTabAnalysis('creative', 'all')
       return
@@ -632,9 +640,9 @@ function ResultsContent() {
     if (!groqOk && !geminiOk) return
     if (groqFromResult && geminiFromResult) return
     isConsensusStartedRef.current = true
-    creativeFetchedForConsensusRef.current = result.reportId
+    creativeFetchedForConsensusRef.current = displayResult?.reportId ?? null
     fetchTabAnalysis('creative', 'all')
-  }, [status, result?.reportId, result?.analysis_groq, result?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, consensusData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
+  }, [displayStatus, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, consensusData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
 
   /** AI Insight Consensus 전용 재시도: 한 번만 API 호출. Consensus API(tab creative)만 호출. */
   const retryConsensus = useCallback(async () => {
@@ -651,8 +659,8 @@ function ResultsContent() {
       setConsensusReanalyzing(false)
     }
     try {
-      if (result?.reportId) {
-        console.log('[AI Insight Consensus] 현재 result.reportId로 Consensus만 재분석', { reportId: result.reportId })
+      if (displayResult?.reportId) {
+        console.log('[AI Insight Consensus] 현재 result.reportId로 Consensus만 재분석', { reportId: displayResult?.reportId })
         setConsensusData(null)
         setTabErrorGroq((prev) => ({ ...prev, creative: null }))
         setTabErrorGemini((prev) => ({ ...prev, creative: null }))
@@ -687,12 +695,12 @@ function ResultsContent() {
     } finally {
       clearProgress()
     }
-  }, [currentKeyword, countryFromUrl, result?.reportId, loadFromHistory, fetchTabAnalysis])
+  }, [currentKeyword, countryFromUrl, displayResult?.reportId, loadFromHistory, fetchTabAnalysis])
 
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
-    const previousInsights = result?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
+    const previousInsights = displayResult?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
     if (!previousInsights) return
     setFollowUpLoading(true)
     setFollowUpQuestion('')
@@ -719,7 +727,7 @@ function ResultsContent() {
     } finally {
       setFollowUpLoading(false)
     }
-  }, [followUpQuestion, followUpLoading, currentKeyword, result?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
+  }, [followUpQuestion, followUpLoading, currentKeyword, displayResult?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
 
   const showTabs = hasKeyword
   if (showTabs) {
@@ -745,16 +753,16 @@ function ResultsContent() {
               ? (currentTask?.progress
                   ? `분석 중: ${currentTask.progress}. 완료되면 요약부터 표시됩니다.`
                   : '뉴스를 수집하고 분석 중입니다. 완료되면 요약부터 표시됩니다.')
-              : status === 'done' && result?.updated_at ? (
-              <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
-            ) : result?.updated_at ? (
-              <>마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
+              : displayStatus === 'done' && displayResult?.updated_at ? (
+              <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+            ) : displayResult?.updated_at ? (
+              <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
             ) : '분석이 끝나면 한 줄 요약과 핵심 정리가 먼저 표시됩니다.'}
           </p>
         </header>
 
         {/* Insight Summary — PM "insight first": one-line conclusion + key findings before any long content. */}
-        {status === 'done' && result && (
+        {displayStatus === 'done' && displayResult && (
           <section id="insight-summary" className="mb-6 sm:mb-8 scroll-mt-4 rounded-xl border border-border/80 dark:border-slate-700/80 bg-card/50 dark:bg-slate-900/30 p-4 sm:p-5" aria-label="Insight summary">
             <div className="mb-3">
               <h2 className="text-sm font-semibold text-foreground dark:text-slate-200">인사이트 요약</h2>
@@ -764,7 +772,7 @@ function ResultsContent() {
               <InsightSummary
                 summary={
                   consensusData?.strategicSummary?.summary?.trim() ||
-                  (result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0] ||
+                  (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
                   ''
                 }
                 sentimentScore={consensusData?.sentiment?.score ?? null}
@@ -773,13 +781,13 @@ function ResultsContent() {
                 loading={
                   ((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) &&
                   !consensusData &&
-                  !(result.key_metrics?.keyConclusions ?? result.keyConclusions)?.[0]
+                  !(displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0]
                 }
               />
               {(() => {
                 const keyFindingItems =
-                  (result.key_metrics?.keyConclusions?.length ?? result.keyConclusions?.length ?? 0) > 0
-                    ? (result.key_metrics?.keyConclusions ?? result.keyConclusions ?? []).slice(0, 5)
+                  (displayResult?.key_metrics?.keyConclusions?.length ?? displayResult?.keyConclusions?.length ?? 0) > 0
+                    ? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions ?? []).slice(0, 5)
                     : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
                 if (keyFindingItems.length === 0) return null
                 return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
@@ -789,7 +797,7 @@ function ResultsContent() {
         )}
 
         {/* Actions: after summary so the fold is summary-first; details/actions below */}
-        {status === 'done' && result && (
+        {displayStatus === 'done' && displayResult && (
           <div className="no-print flex flex-wrap items-center gap-2 sm:gap-3 mb-6 pb-4 border-b border-border">
             <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
               <FileDown className="w-4 h-4" />
@@ -817,7 +825,7 @@ function ResultsContent() {
                 </>
               )}
             </Button>
-            {result?.reportId && (
+            {displayResult?.reportId && (
               <Button
                 type="button"
                 variant="outline"
@@ -856,15 +864,15 @@ function ResultsContent() {
           <h2 id="consensus-heading" className="text-sm font-semibold uppercase tracking-wider text-foreground dark:text-slate-300 mb-3">
             전략 통찰
           </h2>
-        {!result ? (
+        {!displayResult ? (
           <div className="no-print w-full rounded-xl border border-border dark:border-zinc-800 bg-card dark:bg-[#15171a] p-6">
-            {status === 'error' && error ? (
+            {displayStatus === 'error' && displayError ? (
               <ErrorState
                 title="분석을 완료하지 못했습니다"
                 description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
                 recoveryLabel="다시 분석하기"
                 onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-                detail={error.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : error}
+                detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError}
               />
             ) : showAnalyzing ? (
               <div className="flex items-center gap-3 py-2">
@@ -893,7 +901,7 @@ function ResultsContent() {
             loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
             bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
             partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
-            errorMessage={result?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
+            errorMessage={displayResult?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
             onRetry={retryConsensus}
           />
         )}
@@ -1020,7 +1028,7 @@ function ResultsContent() {
           ) : (
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
-              {!historyCheckDone && !result ? (
+              {!historyCheckDone && !displayResult ? (
                 <div className="rounded-xl border border-border bg-muted/20 dark:bg-slate-900/30 py-4">
                   <LoadingState
                     message="저장된 분석을 확인하는 중입니다."
@@ -1035,8 +1043,8 @@ function ResultsContent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <GroqAnalysis
                         tabId={id}
-                      text={(id === 'logic' ? tabCacheGroq.creative ?? (result?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (result?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (result?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || (loading && !result))}
+                      text={(id === 'logic' ? tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
+                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || (loading && !displayResult))}
                       error={tabErrorGroq[id === 'logic' ? 'creative' : id]}
                       retryCount={retryCountTabGroq[id === 'logic' ? 'creative' : id] ?? 0}
                       onRetry={() => {
@@ -1051,8 +1059,8 @@ function ResultsContent() {
                     />
                     <GeminiAnalysis
                         tabId={id}
-                      text={(id === 'logic' ? tabCacheGemini.creative ?? (result?.analysis_gemini as TabAnalysisRecord)?.creative : tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (result?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (result?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || (loading && !result))}
+                      text={(id === 'logic' ? tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative : tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null) ?? null}
+                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || (loading && !displayResult))}
                       error={tabErrorGemini[id === 'logic' ? 'creative' : id]}
                       retryCount={retryCountTabGemini[id === 'logic' ? 'creative' : id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}
@@ -1123,7 +1131,7 @@ function ResultsContent() {
         </section>
 
         {/* Implication — collapsed on small screens; expand for next steps. */}
-        {status === 'done' && result && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
+        {displayStatus === 'done' && displayResult && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
           <section className="mb-6 sm:mb-8 pt-4 border-t border-border" aria-label="Implication">
             <button
               type="button"
@@ -1157,7 +1165,7 @@ function ResultsContent() {
         )}
 
         {/* Small screens: jump back to summary after partial reading (interrupted usage). */}
-        {status === 'done' && result && (
+        {displayStatus === 'done' && displayResult && (
           <div className="lg:hidden flex justify-center py-3">
             <a
               href="#insight-summary"
@@ -1172,8 +1180,8 @@ function ResultsContent() {
           <NewsDetailModal
             item={selectedNews}
             preSummary={
-              selectedNewsIndex != null && result?.articleSummaries?.[selectedNewsIndex]
-                ? result.articleSummaries[selectedNewsIndex]
+              selectedNewsIndex != null && displayResult?.articleSummaries?.[selectedNewsIndex]
+                ? displayResult.articleSummaries[selectedNewsIndex]
                 : null
             }
             onClose={() => {
@@ -1208,7 +1216,7 @@ function ResultsContent() {
                 <p className="text-xs text-muted-foreground text-muted-foreground mt-0.5">24시간 감성 추이 · 시장 온도</p>
               </div>
               {(() => {
-                const chartDataForUi = result?.key_metrics?.chartData ?? result?.chartData
+                const chartDataForUi = displayResult?.key_metrics?.chartData ?? displayResult?.chartData
                 const consensusScore = consensusData?.sentiment?.score
                 const consensusTrend = consensusData?.sentiment?.trend ?? 'stable'
                 const headlineScore =
@@ -1216,8 +1224,8 @@ function ResultsContent() {
                     ? consensusScore
                     : lastChartScore != null
                       ? lastChartScore
-                      : (result?.key_metrics?.sentiment != null || result?.sentiment != null)
-                        ? (Number(result?.key_metrics?.sentiment ?? result?.sentiment ?? 50) - 50) * 2
+                      : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
+                        ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
                         : null
                 const trendLabel = consensusTrend === 'rising' ? '상승세' : consensusTrend === 'falling' ? '하락세' : '횡보'
                 const varianceLabel = chartVariance != null
@@ -1242,7 +1250,7 @@ function ResultsContent() {
                         trend={consensusTrend}
                         onLastPointScore={setLastChartScore}
                         onVariance={setChartVariance}
-                        marketNews={result?.marketNews ?? []}
+                        marketNews={displayResult?.marketNews ?? []}
                       />
                     ) : (
                       <div className="min-h-[240px] rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col justify-center items-center gap-3 p-6 animate-pulse">
@@ -1307,15 +1315,15 @@ function ResultsContent() {
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">감성 지수</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.key_metrics?.sentiment ?? result.sentiment ?? 0) : '—'}%</dd>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? 0) : '—'}%</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">시장 뉴스</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.marketNews?.length ?? 0) : '—'}건</dd>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">페인포인트</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{result ? (result.painPoints?.length ?? 0) : '—'}건</dd>
+                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
                 </div>
               </dl>
             </div>

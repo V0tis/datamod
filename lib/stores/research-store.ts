@@ -346,14 +346,15 @@ export const useResearchStore = create<ResearchStore>()(
           set({ activeJobId: null })
           return
         }
+        const state = get()
+        const isSameJob = state.activeJobId === jobId && (state.keyword?.trim() ?? '') === (job.keyword?.trim() ?? '')
         const status = job.status === 'succeeded' ? 'done' : job.status === 'failed' || job.status === 'cancelled' ? 'error' : 'loading'
         set({
           activeJobId: jobId,
           keyword: job.keyword,
           status,
           error: job.error ?? null,
-          result: null,
-          newsList: [],
+          ...(isSameJob ? {} : { result: null, newsList: [] }),
         })
         if (job.status === 'succeeded') {
           await get().loadFromHistory(job.keyword, job.country_code)
