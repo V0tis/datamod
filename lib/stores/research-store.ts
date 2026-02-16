@@ -93,13 +93,18 @@ export function getTasksFromStore(): AnalysisTask[] {
   return order.map((id) => {
     const job = jobs[id]
     if (!job) return null
+    const status = jobStatusToTaskStatus(job.status)
+    const createdAt = job.created_at ?? ''
+    const updatedAt = job.updated_at ?? createdAt
     return {
       id: job.id,
       keyword: job.keyword,
-      status: jobStatusToTaskStatus(job.status),
+      status,
       progress: job.progress_step ? (PROGRESS_LABELS[job.progress_step] ?? job.progress_step) : null,
       result: job.status === 'succeeded' ? undefined : null,
-      createdAt: job.created_at ?? '',
+      createdAt,
+      startedAt: createdAt,
+      completedAt: status === 'completed' || status === 'failed' ? updatedAt : null,
       countryCode: job.country_code ?? 'KR',
       error: job.error ?? null,
     }

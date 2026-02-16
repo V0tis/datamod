@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -11,33 +11,23 @@ import { RinLogo } from '@/components/rin-logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
-import { useResearchStore, type AnalysisJob } from '@/lib/stores/research-store'
+import { useAnalysisTasks } from '@/lib/hooks/use-analysis-tasks'
+import type { AnalysisTask } from '@/lib/analysis-types'
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/history', label: 'History', icon: History },
 ]
 
-const statusLabel: Record<string, string> = {
-  queued: 'Pending',
-  running: 'Running',
-  succeeded: 'Completed',
+const TASK_STATUS_LABEL: Record<AnalysisTask['status'], string> = {
+  idle: 'Pending',
+  analyzing: 'Analyzing',
+  completed: 'Completed',
   failed: 'Failed',
-  cancelled: 'Cancelled',
 }
 
-const stepLabel: Record<string, string> = {
-  news: 'Fetching news',
-  gemini: 'AI analysis',
-  creative: 'Insights',
-  parse_json: 'Parsing',
-  report_db: 'Saving',
-  done: 'Done',
-  cached: 'Cached',
-}
-
-function isActive(job: AnalysisJob) {
-  return job.status === 'queued' || job.status === 'running'
+function isTaskActive(t: AnalysisTask) {
+  return t.status === 'idle' || t.status === 'analyzing'
 }
 
 export function GlobalHeader() {
@@ -47,20 +37,7 @@ export function GlobalHeader() {
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const jobs = useResearchStore((s) => s.jobs)
-  const jobOrder = useResearchStore((s) => s.jobOrder)
-  const setActiveJob = useResearchStore((s) => s.setActiveJob)
-  const retryJob = useResearchStore((s) => s.retryJob)
-  const cancelJob = useResearchStore((s) => s.cancelJob)
-
-  const taskList = useMemo(
-    () => jobOrder.map((id) => jobs[id]).filter(Boolean) as AnalysisJob[],
-    [jobOrder, jobs]
-  )
-  const runningCount = useMemo(
-    () => taskList.filter((j) => isActive(j)).length,
-    [taskList]
-  )
+  const { tasks, runningCount, setActiveJob, retryTask, cancelTask } = useAnalysisTasks()
 
   useEffect(() => {
     const supabase = createClient()
@@ -133,93 +110,79 @@ export function GlobalHeader() {
 
       <div className="flex-1 min-w-0" />
 
-      {/* Global analysis indicator: running count + entry to task list */}
+      {/* Lightweight global indicator: pill when running, dropdown for full list */}
       <div className="relative shrink-0" ref={panelRef}>
         <Button
           variant="ghost"
           size="sm"
           className={cn(
-            'gap-2',
-            runningCount > 0 && 'text-amber-500 dark:text-amber-400'
+            'gap-1.5 text-sm',
+            runningCount > 0 && 'text-amber-600 dark:text-amber-400'
           )}
           onClick={() => setAnalysisOpen((o) => !o)}
           aria-expanded={analysisOpen}
           aria-haspopup="true"
         >
-          {runningCount > 0 ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : null}
-          <span className="text-sm">
-            {runningCount > 0 ? `${runningCount} running` : 'Analyses'}
+          {runningCount > 0 && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+          <span>
+            {runningCount > 0 ? `${runningCount} analyzing` : 'Analyses'}
           </span>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', analysisOpen && 'rotate-180')} />
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', analysisOpen && 'rotate-180')} />
         </Button>
         {analysisOpen && (
-          <div className="absolute right-0 top-full mt-1 w-[320px] max-w-[90vw] rounded-lg border border-border bg-card shadow-lg overflow-hidden">
-            <div className="px-3 py-2 border-b border-border text-xs font-semibold text-muted-foreground">
-              Task status
+          <div className="absolute right-0 top-full mt-1 w-[300px] max-w-[90vw] rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+            <div className="px-3 py-2 border-b border-border text-xs font-medium text-muted-foreground">
+              Analysis tasks
             </div>
-            <div className="max-h-[360px] overflow-auto">
-              {taskList.length === 0 ? (
+            <div className="max-h-[320px] overflow-auto">
+              {tasks.length === 0 ? (
                 <p className="px-4 py-6 text-sm text-muted-foreground text-center">
                   No analyses yet. Start one from Home.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {taskList.slice(0, 8).map((job) => (
-                    <li key={job.id} className="px-4 py-3 text-sm">
+                  {tasks.slice(0, 8).map((task) => (
+                    <li key={task.id} className="px-4 py-2.5 text-sm">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <Link
-                            href={`/results?keyword=${encodeURIComponent(job.keyword)}&country=${encodeURIComponent(job.country_code || 'KR')}`}
+                            href={`/results?keyword=${encodeURIComponent(task.keyword)}&country=${encodeURIComponent(task.countryCode || 'KR')}`}
                             onClick={() => {
-                              void setActiveJob(job.id)
+                              void setActiveJob(task.id)
                               setAnalysisOpen(false)
                             }}
                             className="font-medium text-foreground hover:text-primary truncate block"
                           >
-                            {job.keyword}
+                            {task.keyword}
                           </Link>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {job.progress_step ? stepLabel[job.progress_step] ?? job.progress_step : 'Waiting'}
+                            {task.progress ?? 'Waiting'}
                           </p>
-                          {job.error && (
-                            <p className="text-xs text-destructive line-clamp-2 mt-1">{job.error}</p>
+                          {task.error && (
+                            <p className="text-xs text-destructive line-clamp-2 mt-1">{task.error}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <span
                             className={cn(
                               'rounded-full px-2 py-0.5 text-[10px]',
-                              job.status === 'failed'
+                              task.status === 'failed'
                                 ? 'bg-red-500/10 text-red-500'
-                                : job.status === 'succeeded'
+                                : task.status === 'completed'
                                   ? 'bg-emerald-500/10 text-emerald-500'
                                   : 'bg-muted text-muted-foreground'
                             )}
                           >
-                            {statusLabel[job.status] ?? job.status}
+                            {TASK_STATUS_LABEL[task.status]}
                           </span>
-                          {job.status === 'failed' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => void retryJob(job.id)}
-                              aria-label="Retry"
-                            >
-                              <RefreshCcw className="h-4 w-4" />
+                          {task.status === 'failed' && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void retryTask(task.id)} aria-label="Retry">
+                              <RefreshCcw className="h-3.5 w-3.5" />
                             </Button>
                           )}
-                          {isActive(job) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => void cancelJob(job.id)}
-                              aria-label="Cancel"
-                            >
-                              <Ban className="h-4 w-4" />
+                          {isTaskActive(task) && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void cancelTask(task.id)} aria-label="Cancel">
+                              <Ban className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>

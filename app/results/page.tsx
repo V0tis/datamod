@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
+import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
 import { FileDown, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
@@ -147,11 +148,13 @@ function NewsDetailModal({
 /**
  * Results view is driven by global analysis state (store).
  * URL ?keyword= and ?country= select the task; store holds status, result, error.
- * No local component state owns analysis lifecycle—orchestration lives in the store.
+ * useCurrentTask syncs selection and provides task-level progress for the analyzing state.
  */
 function ResultsContent() {
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')
+  const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
+  const currentTask = useCurrentTask(keyword, countryFromUrl)
   const {
     keyword: storeKeyword,
     status,
@@ -159,8 +162,6 @@ function ResultsContent() {
     result,
     error,
     startResearch,
-    refreshJobs,
-    setActiveJobByKeyword,
     loadFromHistory,
     mergeResultAnalysis,
   } = useResearchStore()
@@ -240,18 +241,7 @@ function ResultsContent() {
     return () => mq.removeEventListener('change', setOpen)
   }, [])
 
-  useEffect(() => {
-    if (keyword) {
-      void setActiveJobByKeyword(keyword)
-    }
-  }, [keyword, setActiveJobByKeyword])
-
-  useEffect(() => {
-    void refreshJobs()
-  }, [refreshJobs])
-
-  // URL keyword·country 기준: research_history 캐시 우선 → 없으면 작업 생성
-  const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
+  // URL keyword·country: load from history or start new task. useCurrentTask syncs active task.
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
@@ -752,7 +742,9 @@ function ResultsContent() {
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {showAnalyzing
-              ? '뉴스를 수집하고 분석 중입니다. 완료되면 요약부터 표시됩니다.'
+              ? (currentTask?.progress
+                  ? `분석 중: ${currentTask.progress}. 완료되면 요약부터 표시됩니다.`
+                  : '뉴스를 수집하고 분석 중입니다. 완료되면 요약부터 표시됩니다.')
               : status === 'done' && result?.updated_at ? (
               <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={result.updated_at} /></>
             ) : result?.updated_at ? (
@@ -878,7 +870,9 @@ function ResultsContent() {
               <div className="flex items-center gap-3 py-2">
                 <Loader2 className="w-5 h-5 shrink-0 animate-spin text-primary" aria-hidden />
                 <div>
-                  <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6]">리포트 생성 중</p>
+                  <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6]">
+                    {currentTask?.progress ?? '리포트 생성 중'}
+                  </p>
                   <p className="text-xs text-muted-foreground dark:text-slate-500">완료 후 전략 요약·감성·실행 권고가 여기에 표시됩니다.</p>
                 </div>
               </div>
