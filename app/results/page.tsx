@@ -154,9 +154,12 @@ function ResultsContent() {
     result,
     error,
     startResearch,
+    refreshJobs,
+    setActiveJobByKeyword,
     loadFromHistory,
     mergeResultAnalysis,
   } = useResearchStore()
+  const jobs = useResearchStore((s) => s.jobs)
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
   /** 탭별 Groq / Gemini 2엔진 결과 */
@@ -232,7 +235,17 @@ function ResultsContent() {
     return () => mq.removeEventListener('change', setOpen)
   }, [])
 
-  // URL keyword·country 기준: research_history 캐시 우선 → 없으면 stream 호출 (report·research_history 생성)
+  useEffect(() => {
+    if (keyword) {
+      void setActiveJobByKeyword(keyword)
+    }
+  }, [keyword, setActiveJobByKeyword])
+
+  useEffect(() => {
+    void refreshJobs()
+  }, [refreshJobs])
+
+  // URL keyword·country 기준: research_history 캐시 우선 → 없으면 작업 생성
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
@@ -246,6 +259,10 @@ function ResultsContent() {
         if (historyStatus === 'cached') return
         if (historyStatus === 'error') return
         if (historyStatus === 'empty' || historyStatus === 'none') {
+          const hasRunningJob = Object.values(jobs).some(
+            (job) => job.keyword === k && (job.status === 'queued' || job.status === 'running')
+          )
+          if (hasRunningJob) return
           const state = useResearchStore.getState()
           if (state.result?.reportId && state.keyword === k) return
           startResearch(k, { country_code: countryCode })
@@ -255,7 +272,7 @@ function ResultsContent() {
         if (!cancelled) setHistoryCheckDone(true)
       })
     return () => { cancelled = true }
-  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch])
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch, jobs])
 
   useEffect(() => {
     fetch('/api/trends')

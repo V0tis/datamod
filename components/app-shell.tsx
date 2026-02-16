@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { PageTransition } from '@/components/common/PageTransition'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { AnalysisJobCenter } from '@/components/research/analysis-job-center'
+import { AnalysisJobSync } from '@/components/research/analysis-job-sync'
 
 const isAuthOnlyPath = (path: string) =>
   path === '/login' ||
@@ -33,6 +35,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <PageTransition>{children}</PageTransition>
         </ErrorBoundary>
       </main>
+      <AnalysisJobSync />
+      <AnalysisJobCenter />
     </>
   )
 }

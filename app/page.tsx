@@ -87,9 +87,9 @@ function RinAISearchInner() {
   }
   const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
-  const { status: researchStatus } = useResearchStore()
+  const jobs = useResearchStore((s) => s.jobs)
   const startResearch = useResearchStore((s) => s.startResearch)
-  const engineActive = researchStatus === 'loading'
+  const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running')
 
   useEffect(() => {
     const supabase = createClient()
@@ -188,11 +188,8 @@ function RinAISearchInner() {
       return
     }
     setError(null)
-    if (useResearchStore.getState().status === 'loading') {
-      toast.info('이미 분석이 진행 중입니다.')
-      return
-    }
     setSearching(true)
+    startResearch(k, { country_code: trendCountry })
     if (user) {
       try {
         const reportRes = await fetch('/api/reports', {

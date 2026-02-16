@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -10,6 +10,7 @@ import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
+import { useResearchStore } from '@/lib/stores/research-store'
 
 const navItems = [
   { href: '/', label: '홈', icon: Home },
@@ -23,6 +24,15 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [systemModalOpen, setSystemModalOpen] = useState(false)
   const [systemInfo, setSystemInfo] = useState<{ model?: string } | null>(null)
+  const jobs = useResearchStore((s) => s.jobs)
+  const jobOrder = useResearchStore((s) => s.jobOrder)
+
+  const { activeJobs, completedJobs } = useMemo(() => {
+    const list = jobOrder.map((id) => jobs[id]).filter(Boolean)
+    const active = list.filter((job) => job.status === 'queued' || job.status === 'running')
+    const completed = list.filter((job) => job.status === 'succeeded')
+    return { activeJobs: active, completedJobs: completed }
+  }, [jobOrder, jobs])
 
   useEffect(() => {
     const supabase = createClient()
@@ -98,6 +108,54 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {activeJobs.length > 0 || completedJobs.length > 0 ? (
+          <div className="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-3">
+            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-2">
+              <span>분석 상태</span>
+              <div className="flex items-center gap-1">
+                {activeJobs.length > 0 && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-500">
+                    진행 {activeJobs.length}
+                  </span>
+                )}
+                {completedJobs.length > 0 && (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-500">
+                    완료 {completedJobs.length}
+                  </span>
+                )}
+              </div>
+            </div>
+            <ul className="space-y-1.5 text-xs text-muted-foreground">
+              {activeJobs.slice(0, 3).map((job) => (
+                <li key={job.id} className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/results?keyword=${encodeURIComponent(job.keyword)}&country=${encodeURIComponent(job.country_code || 'KR')}`}
+                    className="truncate text-foreground/80 hover:text-foreground"
+                  >
+                    {job.keyword}
+                  </Link>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-500">
+                    진행 중
+                  </span>
+                </li>
+              ))}
+              {activeJobs.length === 0 && completedJobs.slice(0, 2).map((job) => (
+                <li key={job.id} className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/results?keyword=${encodeURIComponent(job.keyword)}&country=${encodeURIComponent(job.country_code || 'KR')}`}
+                    className="truncate text-foreground/70 hover:text-foreground"
+                  >
+                    {job.keyword}
+                  </Link>
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-500">
+                    완료
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </nav>
 
       {/* 하단: System + 설정 + 로그아웃 */}

@@ -50,16 +50,21 @@ export interface ResearchResponse {
   key_metrics?: { chartData?: ChartData; keyConclusions?: string[]; sentiment?: number }
 }
 
-type StreamPayload =
-  | { step: 'news_start' }
-  | { step: 'news_done'; news: NewsItem[] }
-  | { step: 'gemini_start' }
-  | { step: 'chart_ready' }
-  | { step: 'gemini_done' }
-  | { step: 'result'; data: ResearchResponse }
-  | { step: 'error'; error: string; retryDelay?: number }
-
 type ResearchStatus = 'idle' | 'loading' | 'done' | 'error'
+
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+export interface AnalysisJob {
+  id: string
+  keyword: string
+  country_code: string
+  status: JobStatus
+  progress_step?: string | null
+  error?: string | null
+  report_id?: string | null
+  created_at?: string
+  updated_at?: string
+}
 
 export interface GeminiQuota {
   used: number
@@ -75,10 +80,10 @@ interface ResearchState {
   insights: string | null
   /** Gemini 오늘 사용량 (에너지 바용). null이면 아직 로드 안 함 */
   geminiQuota: GeminiQuota | null
+  jobs: Record<string, AnalysisJob>
+  jobOrder: string[]
+  activeJobId: string | null
 }
-
-/** 429 등 retryDelay 응답 후 한 번만 재시도하기 위한 플래그 */
-let retryScheduledForStream = false
 
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음, 'none' = 기록 없음, 'error' = 요청 실패(스트림 시작 금지) */
 export type LoadHistoryResult = 'cached' | 'empty' | 'none' | 'error'
@@ -100,6 +105,11 @@ function parseJsonField<T>(value: unknown): T | undefined {
 
 interface ResearchStore extends ResearchState {
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
+  refreshJobs: () => Promise<void>
+  setActiveJob: (jobId: string | null) => Promise<void>
+  setActiveJobByKeyword: (keyword: string) => Promise<void>
+  retryJob: (jobId: string) => Promise<void>
+  cancelJob: (jobId: string) => Promise<void>
   /** research_history 캐시 조회. 캐시 있으면 복원 후 'cached', 비어있으면 'empty', 없으면 'none'. */
   loadFromHistory: (keyword: string, countryCode?: string) => Promise<LoadHistoryResult>
   /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
@@ -120,22 +130,9 @@ const initialState: ResearchState = {
   error: null,
   insights: null,
   geminiQuota: null,
-}
-
-function showToastForStep(step: string) {
-  if (step === 'news_start') {
-    toast.info('뉴스 수집 중.')
-  } else if (step === 'news_done') {
-    toast.success('뉴스 수집 완료. 분석을 시작합니다.')
-  } else if (step === 'gemini_start') {
-    toast.info('정보를 종합해 분석 중입니다.')
-  } else if (step === 'chart_ready') {
-    toast.info('차트를 생성하는 중입니다.')
-  } else if (step === 'gemini_done') {
-    toast.info('리포트를 정리하는 중입니다.')
-  } else if (step === 'result') {
-    toast.success('분석이 완료되었습니다.')
-  }
+  jobs: {},
+  jobOrder: [],
+  activeJobId: null,
 }
 
 export const useResearchStore = create<ResearchStore>()(
@@ -201,7 +198,7 @@ export const useResearchStore = create<ResearchStore>()(
                 key_metrics: km,
               } as ResearchResponse,
               error: null,
-              newsList: get().newsList,
+              newsList: (data.source_links ?? []) as NewsItem[],
             })
             return 'cached'
           }
@@ -238,7 +235,7 @@ export const useResearchStore = create<ResearchStore>()(
               source_links: report.source_links ?? [],
             } as ResearchResponse,
             error: null,
-            newsList: get().newsList,
+            newsList: (report.source_links ?? []) as NewsItem[],
           })
           return true
         } catch {
@@ -260,168 +257,162 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
-      startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => {
-    const { status, keyword: currentKeyword } = get()
-    if (!options?.fromRetry) retryScheduledForStream = false
-    const k = keyword?.trim()
-    if (!k) {
-      toast.error('검색어가 없습니다.')
-      set({ status: 'error', error: '검색어가 없습니다.' })
-      return
-    }
-    if (status === 'loading' && currentKeyword === k) {
-      toast.info('이미 분석이 진행 중입니다.')
-      return
-    }
-    if (status === 'done' && currentKeyword === k) {
-      return
-    }
-
-    set({
-      keyword: k,
-      status: 'loading',
-      newsList: [],
-      result: null,
-      error: null,
-      insights: null,
-    })
-
-    const run = async () => {
-      try {
-        const checkRes = await fetch('/api/settings')
-        if (checkRes.ok) {
-          const checkData = (await checkRes.json()) as { canSearch?: boolean }
-          if (checkData.canSearch === false) {
-            toast.error('설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.', {
-              action: {
-                label: '설정으로 이동',
-                onClick: () => { window.location.href = '/settings?tab=license' },
-              },
-            })
-            set({
-              status: 'error',
-              error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
-            })
-            return
+      refreshJobs: async () => {
+        try {
+          const res = await fetch('/api/research/jobs')
+          const data = (await res.json()) as { list?: AnalysisJob[] }
+          const list = data.list ?? []
+          const jobs: Record<string, AnalysisJob> = {}
+          const jobOrder: string[] = []
+          for (const job of list) {
+            jobs[job.id] = job
+            jobOrder.push(job.id)
           }
-        }
-        const countryCode = options?.country_code ?? 'KR'
-        const res = await fetch('/api/research/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword: k, country_code: countryCode }),
-          keepalive: true,
-        })
+          set({ jobs, jobOrder })
 
-        if (!res.ok || !res.body) {
-          const err = await res.json().catch(() => ({})) as Record<string, unknown>
-          showErrorToast({ ...err, status: res.status, statusText: res.statusText }, { fallbackMessage: '요청에 실패했어요.' })
-          set({
-            status: 'error',
-            error: (err as { error?: string }).error ?? '요청에 실패했어요.',
-          })
-          return
-        }
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let lastToastStep: string | null = null
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n\n')
-          buffer = lines.pop() ?? ''
-
-          for (const chunk of lines) {
-            const eventMatch = chunk.match(/^event:\s*(\w+)\ndata:\s*([\s\S]+)/)
-            if (!eventMatch) continue
-            const [, , dataStr] = eventMatch
-            try {
-              const payload = JSON.parse(dataStr) as StreamPayload
-              const step = payload.step
-
-              if (step === 'news_done' && 'news' in payload) {
-                set({ newsList: payload.news })
-                if (lastToastStep !== step) {
-                  lastToastStep = step
-                  showToastForStep(step)
-                }
-              } else if (step === 'news_start') {
-                if (lastToastStep !== step) {
-                  lastToastStep = step
-                  showToastForStep(step)
-                }
-              } else if (step === 'gemini_start' || step === 'gemini_done' || step === 'chart_ready') {
-                if (lastToastStep !== step) {
-                  lastToastStep = step
-                  showToastForStep(step)
-                }
-              } else if (step === 'result' && 'data' in payload) {
-                const data = payload.data as ResearchResponse
-                set({
-                  status: 'done',
-                  result: { ...data, updated_at: new Date().toISOString() },
-                  insights: data.publicReactionTrends ?? get().insights,
-                  keyword: get().keyword,
-                })
-                if (lastToastStep !== step) {
-                  lastToastStep = step
-                  showToastForStep(step)
-                }
-                get().fetchGeminiQuota()
-                return
-              } else if (step === 'error' && 'error' in payload) {
-                console.warn('[ResearchStore] 스트림 에러 수신 (초기 분석 단계)', { step: 'error', error: payload.error })
-                showErrorToast({ error: payload.error })
-                set({
-                  status: 'error',
-                  error: payload.error,
-                })
-                // Server may ask for one auto-retry after delay (e.g. 429); user sees toast and can also retry manually.
-                const delaySec = (payload as { retryDelay?: number }).retryDelay
-                if (
-                  typeof delaySec === 'number' &&
-                  delaySec > 0 &&
-                  !retryScheduledForStream
-                ) {
-                  retryScheduledForStream = true
-                  const k = get().keyword
-                  toast.info(`${delaySec}초 후 다시 시도합니다.`)
-                  setTimeout(() => {
-                    get().startResearch(k, { fromRetry: true })
-                  }, delaySec * 1000)
-                }
-                return
-              }
-            } catch (_) {
-              /* ignore parse errors */
+          const activeJobId = get().activeJobId ?? jobOrder[0] ?? null
+          if (!get().activeJobId && activeJobId) {
+            set({ activeJobId })
+          }
+          if (activeJobId && jobs[activeJobId]) {
+            const active = jobs[activeJobId]
+            const status = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
+            set({ status, error: active.error ?? null, keyword: active.keyword })
+            if (active.status === 'succeeded' && active.keyword) {
+              await get().loadFromHistory(active.keyword, active.country_code)
             }
           }
+        } catch {
+          /* ignore */
         }
+      },
 
-        if (get().status === 'loading') {
-          const msg = '응답이 완료되지 않았어요.'
-          showErrorToast(new Error(msg))
-          set({ status: 'error', error: msg })
+      setActiveJob: async (jobId: string | null) => {
+        const job = jobId ? get().jobs[jobId] : null
+        if (!jobId || !job) {
+          set({ activeJobId: null })
+          return
         }
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return
-        console.error('[ResearchStore] stream failed:', err)
-        const msg = '분석을 완료하지 못했어요. 다시 시도해 주세요.'
-        showErrorToast(err, { fallbackMessage: msg })
+        const status = job.status === 'succeeded' ? 'done' : job.status === 'failed' || job.status === 'cancelled' ? 'error' : 'loading'
         set({
-          status: 'error',
-          error: msg,
+          activeJobId: jobId,
+          keyword: job.keyword,
+          status,
+          error: job.error ?? null,
+          result: null,
+          newsList: [],
         })
-      }
-    }
+        if (job.status === 'succeeded') {
+          await get().loadFromHistory(job.keyword, job.country_code)
+        }
+      },
 
-    run()
-  },
+      setActiveJobByKeyword: async (keyword: string) => {
+        const k = keyword.trim()
+        if (!k) return
+        const { jobOrder, jobs } = get()
+        const foundId = jobOrder.find((id) => jobs[id]?.keyword === k) ?? null
+        if (foundId) {
+          await get().setActiveJob(foundId)
+          return
+        }
+        set({
+          keyword: k,
+          status: 'idle',
+          error: null,
+          result: null,
+          newsList: [],
+        })
+      },
+
+      retryJob: async (jobId: string) => {
+        try {
+          await fetch('/api/research/jobs/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId }),
+          })
+          toast.info('분석을 다시 시작했습니다.')
+        } catch (err) {
+          showErrorToast(err, { fallbackMessage: '재시도에 실패했습니다.' })
+        }
+      },
+
+      cancelJob: async (jobId: string) => {
+        try {
+          await fetch(`/api/research/jobs/${encodeURIComponent(jobId)}`, { method: 'PATCH' })
+          toast.info('분석을 취소했습니다.')
+          await get().refreshJobs()
+        } catch (err) {
+          showErrorToast(err, { fallbackMessage: '취소에 실패했습니다.' })
+        }
+      },
+
+      startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => {
+        const k = keyword?.trim()
+        if (!k) {
+          toast.error('검색어가 없습니다.')
+          set({ status: 'error', error: '검색어가 없습니다.' })
+          return
+        }
+        set({
+          keyword: k,
+          status: 'loading',
+          newsList: [],
+          result: null,
+          error: null,
+          insights: null,
+        })
+
+        const run = async () => {
+          try {
+            const checkRes = await fetch('/api/settings')
+            if (checkRes.ok) {
+              const checkData = (await checkRes.json()) as { canSearch?: boolean }
+              if (checkData.canSearch === false) {
+                toast.error('설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.', {
+                  action: {
+                    label: '설정으로 이동',
+                    onClick: () => { window.location.href = '/settings?tab=license' },
+                  },
+                })
+                set({
+                  status: 'error',
+                  error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
+                })
+                return
+              }
+            }
+
+            const countryCode = options?.country_code ?? 'KR'
+            const res = await fetch('/api/research/jobs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ keyword: k, country_code: countryCode }),
+            })
+            const data = (await res.json()) as { job?: AnalysisJob; error?: string }
+            if (!res.ok || !data.job) {
+              showErrorToast(data, { fallbackMessage: data.error ?? '요청에 실패했어요.' })
+              set({ status: 'error', error: data.error ?? '요청에 실패했어요.' })
+              return
+            }
+
+            const job = data.job
+            set((state) => ({
+              jobs: { ...state.jobs, [job.id]: job },
+              jobOrder: [job.id, ...state.jobOrder.filter((id) => id !== job.id)],
+            }))
+            await get().setActiveJob(job.id)
+          } catch (err) {
+            console.error('[ResearchStore] create job failed:', err)
+            const msg = '분석을 시작하지 못했어요. 다시 시도해 주세요.'
+            showErrorToast(err, { fallbackMessage: msg })
+            set({ status: 'error', error: msg })
+          }
+        }
+
+        void run()
+      },
 }),
     {
       name: 'rin-research-store',
