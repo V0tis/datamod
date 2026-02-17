@@ -42,8 +42,8 @@ export function ErrorState({
       className={cn(
         'rounded-xl border p-6 text-center max-w-lg mx-auto',
         isWarning
-          ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
-          : 'border-destructive/30 dark:border-rose-900/50 bg-destructive/5 dark:bg-rose-950/20',
+          ? 'border-warning/30 bg-warning/5'
+          : 'border-destructive/30 bg-destructive/5',
         className
       )}
       role="alert"
@@ -53,23 +53,23 @@ export function ErrorState({
         className={cn(
           'inline-flex items-center justify-center w-12 h-12 rounded-full mb-4',
           isWarning
-            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400'
-            : 'bg-destructive/10 dark:bg-rose-900/40 text-destructive dark:text-rose-400'
+            ? 'bg-warning/10 text-warning'
+            : 'bg-destructive/10 text-destructive'
         )}
       >
         <AlertCircle className="w-6 h-6" aria-hidden />
       </div>
-      <h2 className="text-base font-semibold text-foreground dark:text-slate-200 mb-2">
+      <h2 className="text-base font-semibold text-foreground mb-2">
         {title}
       </h2>
-      <p className="text-sm text-muted-foreground dark:text-slate-400 mb-4">
+      <p className="text-sm text-muted-foreground mb-4">
         {description}
       </p>
       {detail && (
         <p
           className={cn(
             'text-xs mb-4 break-words',
-            isWarning ? 'text-amber-700 dark:text-amber-300' : 'text-destructive dark:text-rose-400'
+            isWarning ? 'text-warning' : 'text-destructive'
           )}
         >
           {detail}

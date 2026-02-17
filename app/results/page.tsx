@@ -13,7 +13,7 @@ import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileDown, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
@@ -25,9 +25,11 @@ import { ErrorState } from '@/components/ui/error-state'
 import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
+import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { InsightSummary } from '@/components/research/InsightSummary'
 import { KeyFindings } from '@/components/research/KeyFindings'
 import type { TabAnalysisRecord } from '@/lib/research-types'
+import type { InsightSnapshot } from '@/lib/insights-types'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -81,7 +83,7 @@ function NewsDetailModal({
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-2">전략적 통찰</h4>
             {summary ? (
-              <div className="text-sm text-foreground dark:text-slate-200 whitespace-pre-wrap leading-relaxed rounded-lg bg-primary/5 dark:bg-[#00d19a]/10 border border-primary/20 dark:border-[#00d19a]/30 p-4">
+              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed rounded-lg bg-primary/5 border border-primary/20 p-4">
                 {summary}
               </div>
             ) : (
@@ -124,12 +126,12 @@ function NewsDetailModal({
                 <button
                   type="button"
                   onClick={() => setShowRawBody((v) => !v)}
-                  className="text-xs text-muted-foreground text-muted-foreground hover:text-foreground dark:hover:text-[#e1e3e6] underline"
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
                 >
                   {showRawBody ? '수집된 텍스트 접기' : '수집된 텍스트 보기'}
                 </button>
                 {showRawBody && (
-                  <div className="mt-2 text-xs text-muted-foreground text-muted-foreground whitespace-pre-wrap leading-relaxed rounded border border-border bg-muted/30 dark:bg-card p-3 max-h-48 overflow-y-auto">
+                  <div className="mt-2 text-xs text-muted-foreground text-muted-foreground whitespace-pre-wrap leading-relaxed rounded border border-border bg-muted/30 p-3 max-h-48 overflow-y-auto">
                     {item.content}
                   </div>
                 )}
@@ -220,6 +222,11 @@ function ResultsContent() {
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
   const [implicationOpen, setImplicationOpen] = useState(false)
+  /** Save as Insight modal */
+  const [saveInsightOpen, setSaveInsightOpen] = useState(false)
+  const [saveInsightName, setSaveInsightName] = useState('')
+  const [saveInsightNote, setSaveInsightNote] = useState('')
+  const [saveInsightSaving, setSaveInsightSaving] = useState(false)
 
   const currentKeyword = keyword ?? storeKeyword
   const urlKeyword = keyword?.trim() ?? null
@@ -729,17 +736,68 @@ function ResultsContent() {
     }
   }, [followUpQuestion, followUpLoading, currentKeyword, displayResult?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
 
+  const buildInsightSnapshot = useCallback((): InsightSnapshot => {
+    const summary =
+      consensusData?.strategicSummary?.summary?.trim() ||
+      (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
+      ''
+    return {
+      keyword: currentKeyword ?? '',
+      countryCode: countryFromUrl,
+      summary: summary || undefined,
+      strategicSummary: consensusData?.strategicSummary
+        ? {
+            summary: consensusData.strategicSummary.summary || undefined,
+            actionItems: consensusData.strategicSummary.actionItems,
+            opportunity: consensusData.strategicSummary.opportunity,
+            threat: consensusData.strategicSummary.threat,
+          }
+        : undefined,
+      reportId: displayResult?.reportId ?? null,
+      savedAt: new Date().toISOString(),
+    }
+  }, [consensusData, displayResult, currentKeyword, countryFromUrl])
+
+  const handleSaveInsightOpen = useCallback(() => {
+    setSaveInsightName((currentKeyword ?? '').trim() || '인사이트')
+    setSaveInsightNote('')
+    setSaveInsightOpen(true)
+  }, [currentKeyword])
+
+  const handleSaveInsightSubmit = useCallback(async () => {
+    const name = saveInsightName.trim()
+    if (!name || saveInsightSaving) return
+    setSaveInsightSaving(true)
+    try {
+      const res = await fetch('/api/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, note: saveInsightNote.trim() || undefined, snapshot: buildInsightSnapshot() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        showErrorToast(data, { fallbackMessage: (data as { error?: string }).error ?? '저장에 실패했습니다.' })
+        return
+      }
+      toast.success('인사이트로 저장했습니다.')
+      setSaveInsightOpen(false)
+    } catch (err) {
+      showErrorToast(err, { fallbackMessage: '저장에 실패했습니다.' })
+    } finally {
+      setSaveInsightSaving(false)
+    }
+  }, [saveInsightName, saveInsightNote, saveInsightSaving, buildInsightSnapshot])
+
   const showTabs = hasKeyword
   if (showTabs) {
     return (
       <div className="px-4 py-5 sm:px-6 sm:py-6 md:p-8 min-h-screen bg-background rin-doc">
-        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-          {/* Main: col-span-8 - 탭/뉴스 영역 배경 dark:bg-card */}
-          <div className="lg:col-span-8 space-y-4 sm:space-y-6 dark:bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading">
-        {/* What — analyzed context. Narrative: What → Why → So what. */}
-        <header className="mb-5 sm:mb-6">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>What — 분석 대상</p>
+        {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
+        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
+          <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
+        <div className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading reading-space-y-lg reading-text">
+        <header>
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5" aria-hidden>What — 분석 대상</p>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight break-words">
             &quot;{currentKeyword}&quot;
             {headerTitleKo && (
@@ -761,14 +819,15 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* Insight Summary — PM "insight first": one-line conclusion + key findings before any long content. */}
+        {/* Insight Summary — PM "insight first": one-line conclusion + key findings. Layer: hypothesis (AI interpretation). */}
         {displayStatus === 'done' && displayResult && (
-          <section id="insight-summary" className="mb-6 sm:mb-8 scroll-mt-4 rounded-xl border border-border/80 dark:border-slate-700/80 bg-card/50 dark:bg-slate-900/30 p-4 sm:p-5" aria-label="Insight summary">
+          <section id="insight-summary" className="scroll-mt-4 rounded-xl border border-border/80 bg-card/50 p-4 sm:p-5 reading-section-gap" aria-label="Insight summary">
             <div className="mb-3">
-              <h2 className="text-sm font-semibold text-foreground dark:text-slate-200">인사이트 요약</h2>
-              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">결론을 먼저 확인하세요. 상세 리포트는 아래에서 펼쳐볼 수 있습니다.</p>
+              <CognitiveLayerLabel layer="hypothesis" className="block mb-1" />
+              <h2 className="text-sm font-semibold text-foreground">인사이트 요약</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">결론을 먼저 확인하세요. 상세 리포트는 아래에서 펼쳐볼 수 있습니다.</p>
             </div>
-            <div className="space-y-4">
+            <div className="reading-space-y">
               <InsightSummary
                 summary={
                   consensusData?.strategicSummary?.summary?.trim() ||
@@ -778,6 +837,7 @@ function ResultsContent() {
                 sentimentScore={consensusData?.sentiment?.score ?? null}
                 trend={consensusData?.sentiment?.trend ?? 'stable'}
                 confidence={consensusData?.metadata?.confidence ?? null}
+                partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
                 loading={
                   ((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) &&
                   !consensusData &&
@@ -802,6 +862,10 @@ function ResultsContent() {
             <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
               <FileDown className="w-4 h-4" />
               PDF로 저장
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleSaveInsightOpen} className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10">
+              <Bookmark className="w-4 h-4" />
+              인사이트로 저장
             </Button>
             <Button
               type="button"
@@ -858,14 +922,14 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* So what? — Strategic insight (dominant). Decision-oriented. */}
-        <section className="mb-6 sm:mb-8" aria-labelledby="consensus-heading">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-1.5" aria-hidden>So what? — 전략 통찰</p>
-          <h2 id="consensus-heading" className="text-sm font-semibold uppercase tracking-wider text-foreground dark:text-slate-300 mb-3">
+        {/* So what? — Strategic insight (hypothesis layer). ConsensusInsight cards add their own layer labels. */}
+        <section className="reading-section-gap" aria-labelledby="consensus-heading">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5" aria-hidden>So what? — 전략 통찰</p>
+          <h2 id="consensus-heading" className="text-sm font-semibold uppercase tracking-wider text-foreground mb-3">
             전략 통찰
           </h2>
         {!displayResult ? (
-          <div className="no-print w-full rounded-xl border border-border dark:border-zinc-800 bg-card dark:bg-[#15171a] p-6">
+          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
             {displayStatus === 'error' && displayError ? (
               <ErrorState
                 title="분석을 완료하지 못했습니다"
@@ -878,18 +942,18 @@ function ResultsContent() {
               <div className="flex items-center gap-3 py-2">
                 <Loader2 className="w-5 h-5 shrink-0 animate-spin text-primary" aria-hidden />
                 <div>
-                  <p className="text-sm font-medium text-foreground dark:text-[#e1e3e6]">
+                  <p className="text-sm font-medium text-foreground">
                     {currentTask?.progress ?? '리포트 생성 중'}
                   </p>
-                  <p className="text-xs text-muted-foreground dark:text-slate-500">완료 후 전략 요약·감성·실행 권고가 여기에 표시됩니다.</p>
+                  <p className="text-xs text-muted-foreground">완료 후 전략 요약·감성·실행 권고가 여기에 표시됩니다.</p>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-3 py-1">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80 dark:bg-slate-800/80">
-                  <Lightbulb className="h-4 w-4 text-muted-foreground dark:text-slate-500" aria-hidden />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80">
+                  <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
                 </div>
-                <p className="text-sm text-muted-foreground dark:text-slate-500">
+                <p className="text-sm text-muted-foreground">
                   분석을 실행하면 전략 통찰이 여기에 표시됩니다.
                 </p>
               </div>
@@ -907,18 +971,19 @@ function ResultsContent() {
         )}
         </section>
 
-        {/* Evidence — long content deferred: news + full tab reports. Collapsed on small screens so insight stays first. */}
-        <div className="border-t-2 border-border dark:border-slate-700/80 pt-6 sm:pt-8 mb-6 sm:mb-8" role="separator" aria-hidden />
-        <section className="mb-6 sm:mb-8 rounded-xl bg-muted/30 dark:bg-slate-900/50 border border-border dark:border-slate-800 p-4 sm:p-5" aria-label="Evidence">
+        {/* Evidence — sourced content (fact layer). News and reports. */}
+        <div className="border-t-2 border-border pt-6 sm:pt-8 reading-section-gap" role="separator" aria-hidden />
+        <section className="reading-section-gap rounded-xl bg-muted/30 border border-border p-4 sm:p-5" aria-label="Evidence">
           <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
             <div>
-              <h3 className="text-sm font-semibold text-foreground dark:text-slate-200">뉴스 · 시장 분석 · 종합 리포트</h3>
-              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-0.5">긴 내용이 필요할 때만 펼쳐보세요. 요약만 보시려면 접어두셔도 됩니다.</p>
+              <CognitiveLayerLabel layer="fact" className="block mb-1" />
+              <h3 className="text-sm font-semibold text-foreground">뉴스 · 시장 분석 · 종합 리포트</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">긴 내용이 필요할 때만 펼쳐보세요. 요약만 보시려면 접어두셔도 됩니다.</p>
             </div>
             <button
               type="button"
               onClick={() => setEvidenceOpen((o) => !o)}
-              className="flex items-center gap-1.5 min-h-[44px] py-2.5 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 touch-manipulation rounded-md hover:bg-muted/60"
+              className="flex items-center gap-1.5 min-h-[44px] py-2.5 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground touch-manipulation rounded-md hover:bg-muted/60"
               aria-expanded={evidenceOpen}
               aria-controls="evidence-content"
             >
@@ -931,7 +996,7 @@ function ResultsContent() {
           {currentKeyword && (
             <div className="mb-6">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                   <Newspaper className="h-3.5 w-3.5 text-primary" />
                   실시간 뉴스
                   {rssNewsLoading && (
@@ -963,13 +1028,13 @@ function ResultsContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
-                      <div className="h-3.5 w-full bg-muted dark:bg-zinc-700/50 rounded mb-2" />
-                      <div className="h-3 w-3/4 bg-muted dark:bg-zinc-700/50 rounded" />
+                      <div className="h-3.5 w-full bg-muted rounded mb-2" />
+                      <div className="h-3 w-3/4 bg-muted rounded" />
                     </div>
                   ))}
                 </div>
               ) : rssNewsFetched && rssNews.length === 0 ? (
-                <p className="text-sm text-muted-foreground dark:text-slate-500 py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
+                <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
               ) : rssNews.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {rssNews.map((item, i) => (
@@ -990,13 +1055,13 @@ function ResultsContent() {
             </div>
           )}
 
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400 mb-2 sm:mb-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 sm:mb-3">
             시장 분석 · 인사이트 · 종합 리포트 (전문)
           </h3>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
           <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
             {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
-              <TabsTrigger key={id} value={id} className={cn('gap-1 sm:gap-2 text-xs sm:text-sm border border-transparent dark:data-[state=active]:bg-[#202226] dark:data-[state=active]:text-[#00d19a] dark:data-[state=active]:border-b-2 dark:data-[state=active]:border-[#00d19a] dark:data-[state=active]:rounded-b-none px-2 sm:px-3', theme)}>
+              <TabsTrigger key={id} value={id} className={cn('gap-1 sm:gap-2 text-xs sm:text-sm border border-transparent data-[state=active]:bg-background-elevated data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:rounded-b-none px-2 sm:px-3', theme)}>
                 <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span className="truncate">{label}</span>
               </TabsTrigger>
@@ -1029,7 +1094,7 @@ function ResultsContent() {
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
               {!historyCheckDone && !displayResult ? (
-                <div className="rounded-xl border border-border bg-muted/20 dark:bg-slate-900/30 py-4">
+                <div className="rounded-xl border border-border bg-muted/20 py-4">
                   <LoadingState
                     message="저장된 분석을 확인하는 중입니다."
                     detail="잠시만 기다려 주세요."
@@ -1039,8 +1104,8 @@ function ResultsContent() {
                 </div>
               ) : (
                 <>
-                  <h3 className="text-sm font-semibold text-foreground dark:text-[#e1e3e6] mb-3 sm:mb-4 tracking-tight">Groq · Gemini 분석</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 sm:mb-4 tracking-tight">Groq · Gemini 분석</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 reading-gap-lg">
                     <GroqAnalysis
                         tabId={id}
                       text={(id === 'logic' ? tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
@@ -1132,7 +1197,7 @@ function ResultsContent() {
 
         {/* Implication — collapsed on small screens; expand for next steps. */}
         {displayStatus === 'done' && displayResult && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
-          <section className="mb-6 sm:mb-8 pt-4 border-t border-border" aria-label="Implication">
+          <section className="reading-section-gap pt-4 border-t border-border" aria-label="Implication">
             <button
               type="button"
               onClick={() => setImplicationOpen((o) => !o)}
@@ -1140,26 +1205,27 @@ function ResultsContent() {
               aria-expanded={implicationOpen}
               aria-controls="implication-content"
             >
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500">다음 단계</p>
-              <span className="text-xs font-medium text-muted-foreground dark:text-slate-400">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">다음 단계</p>
+              <span className="text-xs font-medium text-muted-foreground">
                 {implicationOpen ? '접기' : '다음 단계 펼치기'}
                 {implicationOpen ? <ChevronUp className="w-4 h-4 inline-block ml-1 align-middle" /> : <ChevronDown className="w-4 h-4 inline-block ml-1 align-middle" />}
               </span>
             </button>
             <div className="hidden lg:block">
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-2" aria-hidden>So what? — 다음 단계</p>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground dark:text-slate-300 mb-2">다음 단계 (의사결정 참고)</h2>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2" aria-hidden>So what? — 다음 단계</p>
+              <CognitiveLayerLabel layer="assumption" className="block mb-1" />
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">다음 단계 (의사결정 참고)</h2>
             </div>
             <div id="implication-content" className={cn(implicationOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!implicationOpen}>
-              <ul className="space-y-1 list-none pl-0 text-sm text-foreground dark:text-slate-200">
+              <ul className="space-y-1 list-none pl-0 text-sm text-foreground">
                 {(consensusData?.strategicSummary?.actionItems ?? []).slice(0, 3).map((item, i) => (
                   <li key={i} className="flex gap-2">
-                    <span className="text-primary dark:text-[#00d19a] shrink-0">·</span>
+                    <span className="text-primary shrink-0">·</span>
                     <span className="break-words">{item}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-muted-foreground dark:text-slate-500 mt-2">추가 질문은 인사이트 탭에서 질문하기를 이용하세요.</p>
+              <p className="text-xs text-muted-foreground mt-2">추가 질문은 인사이트 탭에서 질문하기를 이용하세요.</p>
             </div>
           </section>
         )}
@@ -1169,7 +1235,7 @@ function ResultsContent() {
           <div className="lg:hidden flex justify-center py-3">
             <a
               href="#insight-summary"
-              className="text-xs font-medium text-muted-foreground hover:text-foreground dark:hover:text-slate-300 underline underline-offset-2"
+              className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
               요약으로 돌아가기
             </a>
@@ -1190,13 +1256,55 @@ function ResultsContent() {
             }}
           />
         )}
+
+        {saveInsightOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="save-insight-title">
+            <div className="absolute inset-0 bg-black/50" onClick={() => !saveInsightSaving && setSaveInsightOpen(false)} aria-hidden />
+            <div className="relative w-full max-w-md rounded-xl border border-border bg-card shadow-lg p-4 sm:p-5 flex flex-col gap-4">
+              <h2 id="save-insight-title" className="text-sm font-semibold text-foreground">인사이트로 저장</h2>
+              <p className="text-xs text-muted-foreground">현재 분석 요약을 이름과 메모와 함께 저장해 나중에 다시 볼 수 있습니다.</p>
+              <div>
+                <label htmlFor="save-insight-name" className="block text-xs font-medium text-foreground mb-1">이름 (필수)</label>
+                <Input
+                  id="save-insight-name"
+                  value={saveInsightName}
+                  onChange={(e) => setSaveInsightName(e.target.value)}
+                  placeholder="예: 2월 시장 전망"
+                  className="bg-background border-border text-foreground"
+                  disabled={saveInsightSaving}
+                />
+              </div>
+              <div>
+                <label htmlFor="save-insight-note" className="block text-xs font-medium text-foreground mb-1">메모 (선택)</label>
+                <textarea
+                  id="save-insight-note"
+                  value={saveInsightNote}
+                  onChange={(e) => setSaveInsightNote(e.target.value)}
+                  placeholder="나중에 참고할 짧은 메모"
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  disabled={saveInsightSaving}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => !saveInsightSaving && setSaveInsightOpen(false)} disabled={saveInsightSaving}>
+                  취소
+                </Button>
+                <Button type="button" size="sm" onClick={handleSaveInsightSubmit} disabled={!saveInsightName.trim() || saveInsightSaving} className="gap-1.5">
+                  {saveInsightSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bookmark className="w-4 h-4" />}
+                  저장
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
           </div>
 
           {/* 우측: 실시간 모멘텀 리포트 (PM 의사결정용). Mobile: collapsible to prioritize main content. */}
-          <div className="lg:col-span-4 space-y-3 sm:space-y-4 bg-[#F9FAFB] dark:bg-transparent rounded-xl p-0 sm:p-1 min-w-0">
+          <div className="lg:col-span-4 reading-space-y bg-transparent rounded-xl p-0 sm:p-1 min-w-0">
             {/* Mobile: toggle for secondary info (chart, trends, metrics, sources) */}
-            <div className="lg:hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm overflow-hidden">
+            <div className="lg:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <button
                 type="button"
                 onClick={() => setSidebarOpen((o) => !o)}
@@ -1209,8 +1317,8 @@ function ResultsContent() {
               </button>
             </div>
             {/* Sidebar content: collapsible on mobile (expand for comprehension), always visible on lg */}
-            <div id="results-sidebar-content" className={cn('space-y-3 sm:space-y-4', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
+            <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
+            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold text-foreground">실시간 모멘텀 리포트</h3>
                 <p className="text-xs text-muted-foreground text-muted-foreground mt-0.5">24시간 감성 추이 · 시장 온도</p>
@@ -1263,7 +1371,7 @@ function ResultsContent() {
                 )
               })()}
             </div>
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
+            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
                 실시간 트렌드
@@ -1273,11 +1381,11 @@ function ResultsContent() {
                   <ul className="space-y-3 mb-3">
                     {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
                       <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-lg border border-border bg-[#F9FAFB] dark:bg-card p-3 hover:bg-muted/50 hover:bg-muted transition-colors">
+                        <div className="rounded-lg border border-border bg-card p-3 hover:bg-muted/50 hover:bg-muted transition-colors">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Link
                               href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
-                              className="text-sm font-medium text-foreground truncate hover:text-primary dark:hover:text-[#00d19a]"
+                              className="text-sm font-medium text-foreground truncate hover:text-primary"
                             >
                               {item.keyword}
                             </Link>
@@ -1310,25 +1418,25 @@ function ResultsContent() {
               )}
             </div>
             {/* 핵심 수치 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
+            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground mb-3">핵심 수치</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">감성 지수</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? 0) : '—'}%</dd>
+                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? 0) : '—'}%</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">시장 뉴스</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
+                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground text-muted-foreground">페인포인트</dt>
-                  <dd className="font-semibold text-foreground dark:text-[#00d19a]">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
+                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
                 </div>
               </dl>
             </div>
             {/* 인용된 출처 리스트 */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
+            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
               <h3 className="text-sm font-semibold text-foreground mb-3">인용된 출처</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground text-muted-foreground text-xs">출처가 없습니다.</p>

@@ -76,7 +76,7 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-[60vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
+      <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-[60vh] bg-background">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <History className="h-6 w-6 text-primary" />
@@ -112,7 +112,7 @@ export default function HistoryPage() {
 
   if (error) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[40vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[40vh] bg-background">
         <ErrorState
           title="목록을 불러오지 못했습니다"
           description="일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
@@ -126,7 +126,7 @@ export default function HistoryPage() {
 
   if (records.length === 0) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] bg-[#F9FAFB] dark:bg-[#0f1113]">
+      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] bg-background">
         <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm max-w-md w-full">
           <CardContent className="p-6">
             <EmptyState
@@ -149,7 +149,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-screen bg-[#F9FAFB] dark:bg-[#0f1113]">
+    <div className="p-6 md:p-8 max-w-4xl mx-auto min-h-screen bg-background">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <History className="h-6 w-6 text-primary" />
@@ -164,18 +164,18 @@ export default function HistoryPage() {
         {records.map((record) => (
           <Card
             key={record.id}
-            className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm transition-colors dark:hover:bg-[#1c1e21]"
+            className="border border-border bg-card shadow-sm transition-colors hover:bg-background-elevated"
           >
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <Link
                   href={`/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`}
-                  className="flex-1 space-y-3 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-[#0f1113]"
+                  className="flex-1 space-y-3 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-3 flex-wrap">
                       <h3 className="text-lg font-bold text-foreground">{record.keyword}</h3>
-                      <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium bg-muted dark:bg-[#1c1e21] text-muted-foreground border border-border dark:border-zinc-700" title="트렌드 채택 국가">
+                      <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border border-border" title="트렌드 채택 국가">
                         {COUNTRY_LABELS[record.country_code] ?? record.country_code}
                       </span>
                       {record.updated_at && (

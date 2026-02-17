@@ -298,7 +298,7 @@ function SettingsPageInner() {
                             {badgeLabel && (
                               <Badge
                                 variant={badgeLabel === 'User' ? 'default' : 'secondary'}
-                                className="text-[10px] px-1.5 py-0 font-normal bg-gray-100 text-gray-600 border-0 data-[variant=default]:bg-primary/10 data-[variant=default]:text-primary"
+                                className="text-[10px] px-1.5 py-0 font-normal bg-muted text-muted-foreground border-0 data-[variant=default]:bg-primary/10 data-[variant=default]:text-primary"
                               >
                                 {badgeLabel}
                               </Badge>

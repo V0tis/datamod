@@ -5,10 +5,13 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* 프로 대시보드: 화이트 메인 + 다크 사이드바, 블루 악센트 */
   --rin-primary: #FFB800;
   --rin-bg: #FFFFFF;
   --rin-foreground: #1A1A1A;
+  --background: #FFFFFF;
+  --background-elevated: #FAFAFA;
+  --foreground: #1A1A1A;
+  --foreground-muted: #6b7280;
   --card: #FAFAFA;
   --card-foreground: #1A1A1A;
   --popover: #FFFFFF;
@@ -18,11 +21,18 @@
   --secondary: #f5f5f5;
   --secondary-foreground: #1A1A1A;
   --muted: #f3f4f6;
+  --muted-hover: #e5e7eb;
   --muted-foreground: #6b7280;
   --accent: #f0f7ff;
   --accent-foreground: #1A1A1A;
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --destructive-foreground: #FFFFFF;
+  --success: #10b981;
+  --success-foreground: #FFFFFF;
+  --warning: #e5a84b;
+  --warning-foreground: #1A1A1A;
+  --error: #ef4444;
+  --error-foreground: #FFFFFF;
   --border: #e5e7eb;
   --input: #e5e7eb;
   --ring: #2563EB;
@@ -32,12 +42,10 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.75rem;
-  /* 다크 사이드바 (프로 대시보드) */
   --sidebar-bg: #0f172a;
   --sidebar-fg: #f8fafc;
   --sidebar-fg-muted: #94a3b8;
   --sidebar-active: rgba(255, 255, 255, 0.08);
-  --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar: #0f172a;
   --sidebar-foreground: #f8fafc;
   --sidebar-primary: #2563EB;
@@ -46,14 +54,14 @@
   --sidebar-accent-foreground: #f8fafc;
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-ring: #2563EB;
-  --background: #FFFFFF;
-  --foreground: #1A1A1A;
 }
 
-/* 전역 다크 모드: Dashlite 스타일 #0f1113 배경 */
+/* Dark theme: PM-optimized (low eye strain, no pure #000/#fff). Single source for tokens. */
 .dark {
   --background: #0f1113;
+  --background-elevated: #15171a;
   --foreground: #e1e3e6;
+  --foreground-muted: #9ca3af;
   --card: #181a1d;
   --card-foreground: #e1e3e6;
   --popover: #181a1d;
@@ -63,11 +71,18 @@
   --secondary: #1c1e21;
   --secondary-foreground: #e1e3e6;
   --muted: #1c1e21;
+  --muted-hover: #2a2d32;
   --muted-foreground: #9ca3af;
   --accent: #1c1e21;
   --accent-foreground: #e1e3e6;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.637 0.237 25.331);
+  --success: #00d19a;
+  --success-foreground: #0f1113;
+  --warning: #e5a84b;
+  --warning-foreground: #0f1113;
+  --error: #f87171;
+  --error-foreground: #0f1113;
   --border: #2d2f34;
   --input: #33363b;
   --ring: #00d19a;
@@ -93,7 +108,9 @@
   --color-rin-bg: #FFFFFF;
   --shadow-rin-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
   --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -103,11 +120,18 @@
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
+  --color-muted-hover: var(--muted-hover);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -220,7 +244,7 @@
 .dark .prose h4,
 .dark .prose span,
 .dark .prose div {
-  color: #e1e3e6;
+  color: var(--foreground);
 }
 .dark .prose a {
   color: var(--primary);
@@ -240,6 +264,45 @@
 .rin-reading section + section {
   margin-top: 1.5rem;
 }
+
+/* Reading density: layout and typography scale with mode (compact = scan, focus = deep read). Default = focus. */
+body {
+  --reading-gap: 0.875rem;
+  --reading-gap-lg: 1.25rem;
+  --reading-space-y: 1.25rem;
+  --reading-space-y-lg: 1.75rem;
+  --reading-text: 1.0625rem;
+  --reading-text-lg: 1.125rem;
+  --reading-leading: 1.75;
+  --reading-section-gap: 1.5rem;
+}
+[data-reading-mode='compact'] {
+  --reading-gap: 0.5rem;
+  --reading-gap-lg: 0.75rem;
+  --reading-space-y: 0.75rem;
+  --reading-space-y-lg: 1rem;
+  --reading-text: 0.875rem;
+  --reading-text-lg: 1rem;
+  --reading-leading: 1.5;
+  --reading-section-gap: 1rem;
+}
+[data-reading-mode='focus'] {
+  --reading-gap: 0.875rem;
+  --reading-gap-lg: 1.25rem;
+  --reading-space-y: 1.25rem;
+  --reading-space-y-lg: 1.75rem;
+  --reading-text: 1.0625rem;
+  --reading-text-lg: 1.125rem;
+  --reading-leading: 1.75;
+  --reading-section-gap: 1.5rem;
+}
+.reading-gap { gap: var(--reading-gap); }
+.reading-gap-lg { gap: var(--reading-gap-lg); }
+.reading-space-y > * + * { margin-top: var(--reading-space-y); }
+.reading-space-y-lg > * + * { margin-top: var(--reading-space-y-lg); }
+.reading-text { font-size: var(--reading-text); line-height: var(--reading-leading); }
+.reading-text-lg { font-size: var(--reading-text-lg); line-height: var(--reading-leading); }
+.reading-section-gap { margin-top: var(--reading-section-gap); }
 
 /* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */
 @media print {

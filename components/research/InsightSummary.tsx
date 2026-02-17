@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react'
+import { getConfidenceDisplay } from '@/lib/confidence-display'
+import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
 
 export interface InsightSummaryProps {
   /** The "So what?" one-sentence interpretation. Visually dominant. */
@@ -11,16 +13,18 @@ export interface InsightSummaryProps {
   sentimentScore?: number | null
   /** Trend for context */
   trend?: 'rising' | 'falling' | 'stable'
-  /** Confidence 0..100 (optional) */
+  /** Confidence 0..100 (optional); displayed as qualitative label + rationale, no percentages */
   confidence?: number | null
+  /** When true, confidence is derived as low (e.g. partial data). */
+  partialData?: boolean
   /** Loading state: show placeholder */
   loading?: boolean
   className?: string
 }
 
 function TrendIcon({ trend }: { trend?: 'rising' | 'falling' | 'stable' }) {
-  if (trend === 'rising') return <TrendingUp className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-  if (trend === 'falling') return <TrendingDown className="w-4 h-4 text-rose-500 dark:text-rose-400" />
+  if (trend === 'rising') return <TrendingUp className="w-4 h-4 text-success" />
+  if (trend === 'falling') return <TrendingDown className="w-4 h-4 text-destructive" />
   return <Minus className="w-4 h-4 text-muted-foreground" />
 }
 
@@ -36,10 +40,15 @@ export function InsightSummary({
   sentimentScore = null,
   trend = 'stable',
   confidence = null,
+  partialData = false,
   loading = false,
   className,
 }: InsightSummaryProps) {
-  const hasMeta = sentimentScore != null || confidence != null
+  const confidenceDisplay = getConfidenceDisplay(confidence, {
+    partialData,
+    hasSummary: Boolean(summary?.trim()),
+  })
+  const hasMeta = sentimentScore != null || confidenceDisplay != null
   const trendLabel = trend === 'rising' ? '상승' : trend === 'falling' ? '하락' : '보합'
   const isLong = (summary?.length ?? 0) > SUMMARY_TRUNCATE_THRESHOLD
   const [expanded, setExpanded] = useState(false)
@@ -48,15 +57,15 @@ export function InsightSummary({
     return (
       <section
         className={cn(
-          'rounded-xl border border-primary/25 dark:border-emerald-500/40 bg-primary/5 dark:bg-emerald-500/5 border-l-4 border-l-primary dark:border-l-emerald-500 p-6 sm:p-7',
+          'rounded-xl border border-primary/25 bg-primary/5 border-l-4 border-l-primary p-6 sm:p-7',
           className
         )}
         aria-label="Insight summary"
         aria-busy="true"
       >
-        <p className="text-sm text-muted-foreground dark:text-slate-500 mb-3">한 줄 요약을 만드는 중입니다. 잠시만 기다려 주세요.</p>
-        <div className="h-6 w-3/4 max-w-xl bg-muted dark:bg-slate-700/50 rounded animate-pulse mb-3" />
-        <div className="h-4 w-1/2 max-w-sm bg-muted dark:bg-slate-700/40 rounded animate-pulse" />
+        <p className="text-sm text-muted-foreground mb-3">한 줄 요약을 만드는 중입니다. 잠시만 기다려 주세요.</p>
+        <div className="h-6 w-3/4 max-w-xl bg-muted rounded animate-pulse mb-3" />
+        <div className="h-4 w-1/2 max-w-sm bg-muted rounded animate-pulse" />
       </section>
     )
   }
@@ -64,17 +73,17 @@ export function InsightSummary({
   return (
     <section
       className={cn(
-        'rounded-xl border border-primary/25 dark:border-emerald-500/40 bg-primary/5 dark:bg-emerald-500/5 border-l-4 border-l-primary dark:border-l-emerald-500 pl-5 sm:pl-6 pr-5 sm:pr-6 py-6 sm:py-7',
+        'rounded-xl border border-primary/25 bg-primary/5 border-l-4 border-l-primary pl-5 sm:pl-6 pr-5 sm:pr-6 py-6 sm:py-7',
         className
       )}
       aria-label="Insight summary"
     >
-      <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground dark:text-slate-500 mb-3" aria-hidden>
+      <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-3" aria-hidden>
         So what? — 한 줄 결론
       </p>
       <p
         className={cn(
-          'text-lg sm:text-xl md:text-2xl font-semibold text-foreground dark:text-[#e1e3e6] leading-snug tracking-tight break-words',
+          'text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-snug tracking-tight break-words',
           isLong && !expanded && 'line-clamp-3 sm:line-clamp-none'
         )}
       >
@@ -84,27 +93,25 @@ export function InsightSummary({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-2.5 flex items-center gap-1 min-h-[44px] py-2 text-xs font-medium text-primary dark:text-emerald-400 hover:underline sm:hidden touch-manipulation"
+          className="mt-2.5 flex items-center gap-1 min-h-[44px] py-2 text-xs font-medium text-primary hover:underline sm:hidden touch-manipulation"
           aria-label="요약 전체 보기"
         >
           더 보기 <ChevronDown className="w-3.5 h-3.5" />
         </button>
       )}
       {hasMeta && (
-        <div className="mt-3 pt-3 border-t border-border/50 dark:border-slate-600/50 flex flex-wrap items-center gap-3 text-xs sm:text-sm text-muted-foreground dark:text-slate-400">
+        <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs sm:text-sm text-muted-foreground">
           {sentimentScore != null && (
             <span className="inline-flex items-center gap-1.5">
               <TrendIcon trend={trend} />
-              <span className="tabular-nums font-medium text-foreground dark:text-slate-300">
+              <span className="tabular-nums font-medium text-foreground">
                 감성 {sentimentScore > 0 ? '+' : ''}{sentimentScore}
               </span>
               <span className="text-xs">({trendLabel})</span>
             </span>
           )}
-          {confidence != null && (
-            <span className="tabular-nums">
-              신뢰도 <strong className="text-foreground dark:text-slate-300">{Math.round(confidence)}%</strong>
-            </span>
+          {confidenceDisplay != null && (
+            <ConfidenceIndicator display={confidenceDisplay} compact />
           )}
         </div>
       )}

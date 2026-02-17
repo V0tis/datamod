@@ -24,17 +24,21 @@ COMMENT ON TABLE analysis_jobs IS '비동기 분석 작업 큐';
 COMMENT ON COLUMN analysis_jobs.status IS 'queued|running|succeeded|failed|cancelled';
 COMMENT ON COLUMN analysis_jobs.progress_step IS 'news|gemini|parse_json|report_db|done|cached';
 
--- RLS: 본인 작업만 조회/수정
+-- RLS: 본인 작업만 조회/수정 (재실행 시 정책이 있으면 제거 후 생성)
 ALTER TABLE analysis_jobs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS analysis_jobs_select_own ON analysis_jobs;
 CREATE POLICY analysis_jobs_select_own ON analysis_jobs
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS analysis_jobs_insert_own ON analysis_jobs;
 CREATE POLICY analysis_jobs_insert_own ON analysis_jobs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS analysis_jobs_update_own ON analysis_jobs;
 CREATE POLICY analysis_jobs_update_own ON analysis_jobs
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS analysis_jobs_delete_own ON analysis_jobs;
 CREATE POLICY analysis_jobs_delete_own ON analysis_jobs
   FOR DELETE USING (auth.uid() = user_id);

@@ -197,19 +197,19 @@ function TrendsPageInner() {
   const items = trends[country] ?? []
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-[#F9FAFB] dark:bg-[#0f1113] min-h-screen">
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-background min-h-screen">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground dark:text-[#e1e3e6] flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground text-foreground flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />
           국가별 트렌드
         </h1>
-        <p className="text-muted-foreground dark:text-slate-400 text-sm mt-1">
+        <p className="text-muted-foreground text-sm mt-1">
           국가별 인기 검색어를 보고, 키워드를 클릭해 리서치를 시작하세요.
         </p>
       </header>
 
-      <Card className="border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-sm w-full transition-colors duration-200 dark:hover:bg-[#1c1e21]">
-        <div className="p-4 border-b border-border dark:border-[#2d2f34] space-y-3">
+      <Card className="border border-border bg-card shadow-sm w-full transition-colors duration-200 hover:bg-background-elevated">
+        <div className="p-4 border-b border-border space-y-3">
           <CountryChips
             value={country}
             onChange={setCountry}
@@ -217,7 +217,7 @@ function TrendsPageInner() {
             rightElement={
               <>
                 <span
-                  className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                  className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-warning/10 text-warning"
                   title="구글 트렌드 RSS 피드"
                 >
                   출처: 구글 트렌드 (RSS)
@@ -238,19 +238,19 @@ function TrendsPageInner() {
           />
         </div>
         <CardHeader>
-          <CardTitle className="text-lg dark:text-[#e1e3e6]">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
-          <CardDescription className="dark:text-slate-400">키워드 클릭 → 상세 패널에서 &quot;이 키워드로 분석하기&quot;로 바로 리서치</CardDescription>
-          <p className="text-amber-700/90 dark:text-amber-300/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
+          <CardTitle className="text-lg text-foreground">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
+          <CardDescription className="text-muted-foreground">키워드 클릭 → 상세 패널에서 &quot;이 키워드로 분석하기&quot;로 바로 리서치</CardDescription>
+          <p className="text-warning/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
         </CardHeader>
         <CardContent className="relative">
           {showingStaleRefresh && (
-            <div className="flex items-center justify-center gap-2 py-3 px-4 mb-3 rounded-lg bg-muted/50 dark:bg-card dark:text-[#e1e3e6] text-muted-foreground text-sm border border-border dark:border-[#2d2f34]">
+            <div className="flex items-center justify-center gap-2 py-3 px-4 mb-3 rounded-lg bg-muted/50 bg-card text-foreground text-muted-foreground text-sm border border-border">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               <span>정보가 오래되어 최신 트렌드를 불러오고 있습니다...</span>
             </div>
           )}
           {chipChanging && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 dark:bg-[#0f1113]/80 rounded-b-lg" aria-hidden>
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 rounded-b-lg" aria-hidden>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           )}
@@ -264,7 +264,7 @@ function TrendsPageInner() {
             />
           ) : (
             <>
-              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground dark:text-slate-400 border-b border-border dark:border-[#2d2f34] mb-1 items-center">
+              <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1 items-center">
                 <span className="col-span-1">순위</span>
                 <span className="col-span-7">키워드</span>
                 <span className="col-span-2 text-right">검색량</span>
@@ -275,34 +275,34 @@ function TrendsPageInner() {
                   const newsPreview = (item.news_items ?? []).slice(0, 2)
                   const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
-                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border dark:border-[#2d2f34] bg-muted/30 dark:bg-card overflow-hidden hover:bg-primary/5 dark:hover:bg-[#2a2d32] hover:border-primary/30 dark:hover:bg-[#1c1e21] transition-all transition-colors duration-300">
+                    <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 bg-card overflow-hidden hover:bg-primary/5 hover:bg-muted-hover hover:border-primary/30 transition-all transition-colors duration-300">
                       <button
                         type="button"
                         onClick={() => handleRowClick(item)}
                         className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
                       >
                         <span className="col-span-1 flex items-center">
-                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted dark:bg-[#2a2d32] text-xs font-medium text-muted-foreground dark:text-slate-400 tabular-nums">
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted-hover text-xs font-medium text-muted-foreground tabular-nums">
                             {item.rank}
                           </span>
                         </span>
                         <div className="col-span-7 min-w-0 flex flex-col gap-0.5">
                           {item.title_ko != null && item.keyword !== item.title_ko ? (
                             <>
-                              <p className="text-lg font-bold text-foreground dark:text-[#e1e3e6] truncate">{item.title_ko}</p>
-                              <p className="text-sm text-gray-500 dark:text-slate-400 truncate">{item.keyword}</p>
+                              <p className="text-lg font-bold text-foreground text-foreground truncate">{item.title_ko}</p>
+                              <p className="text-sm text-muted-foreground truncate">{item.keyword}</p>
                             </>
                           ) : (
-                            <p className="text-lg font-bold text-foreground dark:text-[#e1e3e6] truncate">{item.keyword}</p>
+                            <p className="text-lg font-bold text-foreground text-foreground truncate">{item.keyword}</p>
                           )}
                         </div>
-                        <span className="col-span-2 flex items-center justify-end text-muted-foreground dark:text-slate-400 text-xs tabular-nums">
+                        <span className="col-span-2 flex items-center justify-end text-muted-foreground text-xs tabular-nums">
                           {item.search_volume ?? '—'}
                         </span>
                         <span className="col-span-2 flex justify-end">
                           <TimeAgo
                             isoString={item.started_at}
-                            className="text-muted-foreground dark:text-slate-400 text-xs"
+                            className="text-muted-foreground text-xs"
                           />
                         </span>
                       </button>

@@ -32,8 +32,8 @@ export function LoadingState({
       {icon ?? (
         <Loader2 className={cn('animate-spin text-muted-foreground', sizeClasses[size])} aria-hidden />
       )}
-      <p className="text-sm font-medium text-foreground dark:text-slate-200">{message}</p>
-      {detail && <p className="text-xs text-muted-foreground dark:text-slate-500">{detail}</p>}
+      <p className="text-sm font-medium text-foreground">{message}</p>
+      {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
     </div>
   )
 }

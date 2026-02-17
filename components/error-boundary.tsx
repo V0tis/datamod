@@ -50,15 +50,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       const stack = error?.stack
 
       return (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 bg-[#F8F9FA] dark:bg-[#0f1113]">
-          <div className="rounded-2xl border border-border dark:border-[#2d2f34] bg-white dark:bg-card shadow-lg p-8 max-w-md w-full text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 mb-6">
+        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 bg-background">
+          <div className="rounded-2xl border border-border bg-card shadow-lg p-8 max-w-md w-full text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-warning/10 text-warning mb-6">
               <AlertCircle className="w-10 h-10" aria-hidden />
             </div>
-            <h1 className="text-xl font-bold text-foreground dark:text-[#e1e3e6] mb-2">
+            <h1 className="text-xl font-bold text-foreground mb-2">
               오류가 발생했습니다
             </h1>
-            <p className="text-muted-foreground dark:text-slate-400 text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-6">
               일시적인 오류가 발생했습니다. 아래 버튼으로 다시 시도하거나 새로고침해 주세요.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">

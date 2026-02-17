@@ -59,10 +59,10 @@ function GeminiAnalysisComponent({
   return (
     <Card
       className={cn(
-        'flex flex-col border-zinc-200 dark:border-zinc-800 bg-card dark:bg-card dark:hover:bg-[#1c1e21] transition-colors duration-200 min-h-[200px] sm:min-h-[240px] border-l-4 min-w-0',
-        status === 'loading' && 'border-l-amber-500',
-        status === 'error' && 'border-l-rose-500',
-        status === 'success' && 'border-l-emerald-500',
+        'flex flex-col border-border bg-card hover:bg-background-elevated transition-colors duration-200 min-h-[200px] sm:min-h-[240px] border-l-4 min-w-0',
+        status === 'loading' && 'border-l-warning',
+        status === 'error' && 'border-l-destructive',
+        status === 'success' && 'border-l-success',
         status === 'idle' && 'border-l-transparent'
       )}
     >
@@ -73,10 +73,10 @@ function GeminiAnalysisComponent({
             <span
               className={cn(
                 'text-xs font-medium',
-                status === 'success' && 'text-emerald-500 dark:text-emerald-400',
-                status === 'error' && 'text-rose-500 dark:text-rose-400',
-                status === 'loading' && 'text-amber-500 dark:text-amber-400',
-                status === 'idle' && 'text-slate-500 dark:text-slate-400'
+                status === 'success' && 'text-success',
+                status === 'error' && 'text-destructive',
+                status === 'loading' && 'text-warning',
+                status === 'idle' && 'text-muted-foreground'
               )}
             >
               {statusLabel}
@@ -85,7 +85,7 @@ function GeminiAnalysisComponent({
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-8 dark:border-[#00d19a] dark:text-[#00d19a] dark:hover:bg-[#00d19a]/10"
+            className="gap-1.5 h-8 border-primary text-primary hover:bg-primary/10"
             disabled={loading}
             onClick={onRetry}
           >
@@ -95,8 +95,8 @@ function GeminiAnalysisComponent({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[180px] px-4 sm:px-6 pb-4 sm:pb-6">
         {error ? (
-          <div className="rounded-lg border border-border dark:bg-[#0f1113] dark:border-[#00d19a] p-3 flex flex-col gap-2">
-            <p className="text-destructive text-sm dark:text-[#00d19a]">
+          <div className="rounded-lg border border-border border-primary/50 bg-background p-3 flex flex-col gap-2">
+            <p className="text-primary text-sm">
               {error === '무료 쿼터 초과'
                 ? '오늘 사용 한도를 모두 사용했습니다. 내일 다시 시도하거나, 잠시 후 재시도 버튼을 눌러 주세요.'
                 : retryCount >= 3

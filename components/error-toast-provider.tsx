@@ -7,11 +7,12 @@ export function ErrorToastProvider() {
   return (
     <>
       <Toaster
+        theme="dark"
         position="bottom-right"
         closeButton
         richColors
         toastOptions={{
-          className: 'shadow-lg rounded-xl border',
+          className: 'shadow-lg rounded-xl border border-border bg-card text-foreground',
         }}
       />
       <ErrorDetailModal />

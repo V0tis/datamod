@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { Home, History, LogOut, Menu, X, Settings, Cpu } from 'lucide-react'
+import { Home, History, Bookmark, LogOut, Menu, X, Settings, Cpu } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 const navItems = [
   { href: '/', label: '홈', icon: Home },
   { href: '/history', label: '내 리서치 기록', icon: History },
+  { href: '/insights', label: '저장한 인사이트', icon: Bookmark },
 ]
 
 export function Sidebar() {
@@ -82,8 +83,8 @@ export function Sidebar() {
     cn(
       'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
       isActive
-        ? 'bg-primary/10 text-primary dark:bg-[var(--sidebar-active)] dark:text-[var(--sidebar-primary)]'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]'
+        ? 'bg-primary/10 text-primary'
+        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
     )
 
   const sidebarContent = (
@@ -115,12 +116,12 @@ export function Sidebar() {
               <span>분석 상태</span>
               <div className="flex items-center gap-1">
                 {activeJobs.length > 0 && (
-                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-500">
+                  <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning">
                     진행 {activeJobs.length}
                   </span>
                 )}
                 {completedJobs.length > 0 && (
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-500">
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">
                     완료 {completedJobs.length}
                   </span>
                 )}
@@ -135,7 +136,7 @@ export function Sidebar() {
                   >
                     {job.keyword}
                   </Link>
-                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-500">
+                  <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
                     진행 중
                   </span>
                 </li>
@@ -148,7 +149,7 @@ export function Sidebar() {
                   >
                     {job.keyword}
                   </Link>
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-500">
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] text-success">
                     완료
                   </span>
                 </li>
@@ -165,7 +166,7 @@ export function Sidebar() {
           onClick={openSystemModal}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-[var(--sidebar-accent)] dark:hover:text-[var(--sidebar-foreground)]'
+            'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
           title="연결된 AI 모델 정보"
         >
@@ -185,8 +186,8 @@ export function Sidebar() {
               className={cn(
                 'mt-2 mb-2 truncate px-3',
                 displayName && displayName !== (user.email ?? '')
-                  ? 'text-sm font-bold text-foreground dark:text-[var(--sidebar-foreground)]'
-                  : 'text-xs text-muted-foreground dark:text-[var(--sidebar-fg-muted)]'
+                  ? 'text-sm font-bold text-foreground'
+                  : 'text-xs text-muted-foreground'
               )}
               title={user.email ?? ''}
             >
@@ -197,7 +198,7 @@ export function Sidebar() {
               onClick={handleSignOut}
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                'text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[var(--sidebar-fg-muted)] dark:hover:bg-rose-500/10 dark:hover:text-rose-400'
+                'text-muted-foreground hover:bg-muted hover:text-foreground hover:bg-destructive/10 hover:text-destructive'
               )}
             >
               <LogOut className="h-5 w-5 shrink-0" />
@@ -214,7 +215,7 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background dark:bg-sidebar text-foreground dark:text-sidebar-foreground shadow-sm lg:hidden"
+        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm lg:hidden"
         aria-label="메뉴 열기"
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
