@@ -12,6 +12,7 @@ import { getConfidenceDisplay } from '@/lib/confidence-display'
 import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
 import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { InsightCard } from '@/components/research/InsightCard'
+import { SentimentFactorBreakdown } from '@/components/research/sentiment-factor-breakdown'
 
 /** API/DB 신형 Consensus (PM 프레임워크) */
 export interface ConsensusImpactItem {
@@ -262,13 +263,27 @@ function ConsensusInsightComponent({
             <TrendIcon trend={trend} />
             <span className="text-xs text-muted-foreground">{trend === 'rising' ? '상승' : trend === 'falling' ? '하락' : '보합'}</span>
           </div>
-          {/* Confidence: qualitative label + rationale (no percentages) for PM decision transparency */}
           {confidenceDisplay != null && (
             <div className="shrink-0 w-full sm:min-w-[140px] sm:max-w-[200px]">
               <ConfidenceIndicator display={confidenceDisplay} />
             </div>
           )}
         </div>
+        {/* Evaluation rationale: why this score + interpretation guidance. */}
+        {data.sentiment?.ratio && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <p className="text-[11px] font-medium text-muted-foreground mb-2">Why this score?</p>
+            <SentimentFactorBreakdown factors={data.sentiment.ratio} />
+          </div>
+        )}
+        {!data.sentiment?.ratio && (
+          <p className="text-[11px] text-muted-foreground mt-4 pt-4 border-t border-border/50">
+            이 점수는 뉴스·시장 신호와 두 AI 통찰을 종합해 -100~100으로 산출했습니다.
+          </p>
+        )}
+        <p className="text-[11px] text-muted-foreground mt-2">
+          What this means for decision-making: 양수는 긍정적 시장 신호가 강함을, 음수는 리스크·부정 요인이 반영되었음을 나타냅니다. 전략 수립 시 참고 지표로 활용하세요.
+        </p>
       </div>
 
       {/* Why? — Evidence (fact layer): problem & signal. */}
@@ -347,9 +362,10 @@ function ConsensusInsightComponent({
             </div>
           </div>
         </div>
-        {/* Impact: list only (no chart) for report-style clarity. */}
+        {/* Impact: list with interpretation so PMs know how to use the scores. */}
         <div className={cn(CARD_CLASS)}>
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">비즈니스 임팩트</h4>
+          <h4 className="text-xs font-medium text-muted-foreground mb-1">비즈니스 임팩트</h4>
+          <p className="text-[11px] text-muted-foreground mb-2">How to read: 각 지표 0–10. 높을수록 해당 요인이 시장에 긍정적으로 작용한다고 해석됩니다. 우선순위·리소스 배분 참고용입니다.</p>
           {impactData.length > 0 ? (
             <ul className="space-y-1.5 list-none pl-0 text-sm text-foreground">
               {impactData.map((item, i) => (
@@ -365,12 +381,13 @@ function ConsensusInsightComponent({
         </div>
       </div>
 
-      {/* So what? — Implications (assumption layer): recommendations. */}
+      {/* So what? — Implications (assumption layer): recommendations + interpretation. */}
       <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 sm:p-5">
         <CognitiveLayerLabel layer="assumption" className="block mb-1.5" />
-        <div className="inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary mb-3">
+        <div className="inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary mb-2">
           다음 액션 — 의사결정 참고
         </div>
+        <p className="text-[11px] text-muted-foreground mb-3">AI가 통찰을 바탕으로 제안한 과제입니다. 우선순위와 실행 여부는 팀 판단으로 결정하세요.</p>
         {opportunity !== '—' && (
           <>
             <p className="text-xs font-semibold text-primary mb-1">Opportunity</p>
