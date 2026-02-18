@@ -12,8 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
-import { ResearchCharts } from '@/components/research-charts'
-import { FileDown, X, ExternalLink, TrendingUp, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
+import { FileDown, X, ExternalLink, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
@@ -212,10 +211,6 @@ function ResultsContent() {
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** 히스토리 조회가 끝난 뒤에만 분석 중 표시 (캐시 있으면 카드 먼저 보여주기) */
   const [historyCheckDone, setHistoryCheckDone] = useState(false)
-  /** 실시간 모멘텀 차트 마지막 시점(24h) 복합 점수 - 헤드라인과 동기화 (Consensus 없을 때 사용) */
-  const [lastChartScore, setLastChartScore] = useState<number | null>(null)
-  /** 차트 시계열 전일 대비 변동폭(%) - 헤드라인 옆 "전일 대비 X% 상승/하락" 표시 */
-  const [chartVariance, setChartVariance] = useState<number | null>(null)
   /** Mobile: collapse secondary sidebar (momentum, trends, metrics, sources) to reduce scroll; expand for comprehension. */
   const [sidebarOpen, setSidebarOpen] = useState(false)
   /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
@@ -236,13 +231,6 @@ function ResultsContent() {
   const displayResult = isViewingActiveJob ? result : null
   const displayStatus = isViewingActiveJob ? status : (urlKeyword ? 'loading' : status)
   const displayError = isViewingActiveJob ? error : null
-
-  useEffect(() => {
-    if (!(displayResult?.key_metrics?.chartData ?? displayResult?.chartData)) {
-      setLastChartScore(null)
-      setChartVariance(null)
-    }
-  }, [displayResult?.key_metrics?.chartData, displayResult?.chartData])
 
   // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
   useEffect(() => {
@@ -1301,9 +1289,8 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* 우측: 실시간 모멘텀 리포트 (PM 의사결정용). Mobile: collapsible to prioritize main content. */}
+          {/* 우측: 보조 맥락만 (트렌드, 수치, 출처). 메인 인사이트는 왼쪽 컬럼에만. */}
           <div className="lg:col-span-4 reading-space-y bg-transparent rounded-xl p-0 sm:p-1 min-w-0">
-            {/* Mobile: toggle for secondary info (chart, trends, metrics, sources) */}
             <div className="lg:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <button
                 type="button"
@@ -1312,76 +1299,42 @@ function ResultsContent() {
                 aria-expanded={sidebarOpen}
                 aria-controls="results-sidebar-content"
               >
-                <span className="text-sm font-semibold text-foreground">차트 · 트렌드 · 수치</span>
+                <span className="text-sm font-medium text-muted-foreground">참고: 트렌드 · 수치 · 출처</span>
                 {sidebarOpen ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
               </button>
             </div>
-            {/* Sidebar content: collapsible on mobile (expand for comprehension), always visible on lg */}
             <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
-            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold text-foreground">실시간 모멘텀 리포트</h3>
-                <p className="text-xs text-muted-foreground text-muted-foreground mt-0.5">24시간 감성 추이 · 시장 온도</p>
-              </div>
+            {/* 시장 온도: 텍스트만. 차트는 제거해 노이즈 감소. */}
+            <div className="rounded-xl border border-border bg-card/50 p-4">
+              <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
               {(() => {
-                const chartDataForUi = displayResult?.key_metrics?.chartData ?? displayResult?.chartData
                 const consensusScore = consensusData?.sentiment?.score
                 const consensusTrend = consensusData?.sentiment?.trend ?? 'stable'
                 const headlineScore =
                   typeof consensusScore === 'number'
                     ? consensusScore
-                    : lastChartScore != null
-                      ? lastChartScore
-                      : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
-                        ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
-                        : null
-                const trendLabel = consensusTrend === 'rising' ? '상승세' : consensusTrend === 'falling' ? '하락세' : '횡보'
-                const varianceLabel = chartVariance != null
-                  ? chartVariance > 0
-                    ? `전일 대비 ${chartVariance}% 상승`
-                    : chartVariance < 0
-                      ? `전일 대비 ${Math.abs(chartVariance)}% 하락`
+                    : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
+                      ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
                       : null
-                  : null
+                const trendLabel = consensusTrend === 'rising' ? '상승' : consensusTrend === 'falling' ? '하락' : '보합'
+                if (headlineScore == null) {
+                  return <p className="text-sm text-muted-foreground">분석 완료 후 표시됩니다.</p>
+                }
                 return (
-                  <>
-                    {headlineScore != null && (
-                      <p className="text-sm text-slate-300 mb-3 antialiased">
-                        현재 시장 온도는 <strong className="text-[#e1e3e6]">{headlineScore}</strong> ({trendLabel})
-                        {varianceLabel && <span className="text-slate-500 ml-1">· {varianceLabel}</span>}
-                        입니다.
-                      </p>
-                    )}
-                    {chartDataForUi ? (
-                      <ResearchCharts
-                        chartData={chartDataForUi}
-                        trend={consensusTrend}
-                        onLastPointScore={setLastChartScore}
-                        onVariance={setChartVariance}
-                        marketNews={displayResult?.marketNews ?? []}
-                      />
-                    ) : (
-                      <div className="min-h-[240px] rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col justify-center items-center gap-3 p-6 animate-pulse">
-                        <div className="h-3 w-32 bg-slate-600/50 rounded" />
-                        <div className="h-2 w-48 bg-slate-600/30 rounded" />
-                        <p className="text-slate-500 text-xs">분석이 끝나면 여기에 감성 추이 차트가 표시됩니다.</p>
-                      </div>
-                    )}
-                  </>
+                  <p className="text-sm text-foreground">
+                    <span className="font-semibold">{headlineScore}</span> · {trendLabel}
+                  </p>
                 )
               })()}
             </div>
-            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                실시간 트렌드
-              </h3>
+            <div className="rounded-xl border border-border bg-card/50 p-4">
+              <h3 className="text-xs font-medium text-muted-foreground mb-2">실시간 트렌드</h3>
               {(sharedTrends.KR.length + sharedTrends.US.length + sharedTrends.JP.length) > 0 ? (
                 <>
                   <ul className="space-y-3 mb-3">
                     {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
                       <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-lg border border-border bg-card p-3 hover:bg-muted/50 hover:bg-muted transition-colors">
+                        <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Link
                               href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
@@ -1417,29 +1370,27 @@ function ResultsContent() {
                 <p className="text-muted-foreground text-muted-foreground text-xs">트렌드 데이터를 불러오는 중입니다.</p>
               )}
             </div>
-            {/* 핵심 수치 */}
-            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground mb-3">핵심 수치</h3>
-              <dl className="space-y-2 text-sm">
+            <div className="rounded-xl border border-border bg-card/50 p-4">
+              <h3 className="text-xs font-medium text-muted-foreground mb-2">참고 수치</h3>
+              <dl className="space-y-1.5 text-sm text-muted-foreground">
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground text-muted-foreground">감성 지수</dt>
-                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? 0) : '—'}%</dd>
+                  <dt>감성 지수</dt>
+                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? '—') : '—'}%</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground text-muted-foreground">시장 뉴스</dt>
-                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
+                  <dt>시장 뉴스</dt>
+                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground text-muted-foreground">페인포인트</dt>
-                  <dd className="font-semibold text-primary">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
+                  <dt>페인포인트</dt>
+                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
                 </div>
               </dl>
             </div>
-            {/* 인용된 출처 리스트 */}
-            <div className="rounded-xl border border-border bg-card shadow-sm p-4 hover:bg-muted transition-colors duration-200">
-              <h3 className="text-sm font-semibold text-foreground mb-3">인용된 출처</h3>
+            <div className="rounded-xl border border-border bg-card/50 p-4">
+              <h3 className="text-xs font-medium text-muted-foreground mb-2">인용 출처</h3>
               {newsList.length === 0 ? (
-                <p className="text-muted-foreground text-muted-foreground text-xs">출처가 없습니다.</p>
+                <p className="text-muted-foreground text-xs">없음</p>
               ) : (
                 <ul className="space-y-1.5">
                   {newsList.map((item, i) => (

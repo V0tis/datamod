@@ -85,11 +85,43 @@ const PROGRESS_LABELS: Record<string, string> = {
   cached: '캐시 사용',
 }
 
-/** Derive AnalysisTask[] from current jobs (single source of truth). */
+/** State-machine order: running > queued > succeeded > failed/cancelled. Used to pick one task per keyword. */
+function jobStatusRank(status: JobStatus): number {
+  switch (status) {
+    case 'running': return 0
+    case 'queued': return 1
+    case 'succeeded': return 2
+    case 'failed':
+    case 'cancelled': return 3
+    default: return 4
+  }
+}
+
+/** Queue view: one visible task per keyword. Prefer running > queued > succeeded > failed; then latest by updated_at. */
+function pickOneJobIdPerKey(jobs: Record<string, AnalysisJob>, jobOrder: string[]): string[] {
+  const byKey = new Map<string, string>()
+  for (const id of jobOrder) {
+    const job = jobs[id]
+    if (!job) continue
+    const key = `${(job.keyword ?? '').trim()}|${(job.country_code ?? 'KR').trim() || 'KR'}`
+    const existingId = byKey.get(key)
+    const existing = existingId ? jobs[existingId] : null
+    const updated = job.updated_at ?? job.created_at ?? ''
+    const existingUpdated = existing?.updated_at ?? existing?.created_at ?? ''
+    const preferThis =
+      !existing ||
+      jobStatusRank(job.status) < jobStatusRank(existing.status) ||
+      (jobStatusRank(job.status) === jobStatusRank(existing.status) && updated >= existingUpdated)
+    if (preferThis) byKey.set(key, id)
+  }
+  return Array.from(byKey.values())
+}
+
+/** Derive AnalysisTask[] from store: one task per keyword (deduplicated queue view). */
 export function getTasksFromStore(): AnalysisTask[] {
   const state = useResearchStore.getState()
-  const order = state.jobOrder
   const jobs = state.jobs
+  const order = pickOneJobIdPerKey(jobs, state.jobOrder)
   return order.map((id) => {
     const job = jobs[id]
     if (!job) return null
@@ -316,21 +348,29 @@ export const useResearchStore = create<ResearchStore>()(
           const data = (await res.json()) as { list?: AnalysisJob[] }
           const list = data.list ?? []
           const jobs: Record<string, AnalysisJob> = {}
-          const jobOrder: string[] = []
+          const rawOrder: string[] = []
           for (const job of list) {
             jobs[job.id] = job
-            jobOrder.push(job.id)
+            rawOrder.push(job.id)
           }
+          const jobOrder = pickOneJobIdPerKey(jobs, rawOrder)
           set({ jobs, jobOrder })
+          // Keep active selection on current job when still in list; else first of queue.
+          const current = get()
+          const activeJobId = current.activeJobId && jobs[current.activeJobId]
+            ? current.activeJobId
+            : (jobOrder[0] ?? null)
+          if (!current.activeJobId && activeJobId) set({ activeJobId })
 
-          const activeJobId = get().activeJobId ?? jobOrder[0] ?? null
-          if (!get().activeJobId && activeJobId) {
-            set({ activeJobId })
-          }
           if (activeJobId && jobs[activeJobId]) {
             const active = jobs[activeJobId]
-            const status = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
-            set({ status, error: active.error ?? null, keyword: active.keyword })
+            const nextStatus = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
+            set({
+              status: nextStatus,
+              error: active.error ?? null,
+              keyword: active.keyword,
+              activeJobId,
+            })
             if (active.status === 'succeeded' && active.keyword) {
               await get().loadFromHistory(active.keyword, active.country_code)
             }
@@ -452,10 +492,18 @@ export const useResearchStore = create<ResearchStore>()(
             }
 
             const job = data.job
-            set((state) => ({
-              jobs: { ...state.jobs, [job.id]: job },
-              jobOrder: [job.id, ...state.jobOrder.filter((id) => id !== job.id)],
-            }))
+            set((state) => {
+              const key = `${job.keyword?.trim()}|${countryCode}`
+              const nextJobs = { ...state.jobs, [job.id]: job }
+              const toRemove = state.jobOrder.filter((id) => {
+                const j = state.jobs[id]
+                if (!j || id === job.id) return false
+                return `${(j.keyword ?? '').trim()}|${(j.country_code ?? 'KR').trim()}` === key
+              })
+              toRemove.forEach((id) => delete nextJobs[id])
+              const nextOrder = [job.id, ...state.jobOrder.filter((id) => id !== job.id && !toRemove.includes(id))]
+              return { jobs: nextJobs, jobOrder: nextOrder }
+            })
             await get().setActiveJob(job.id)
           } catch (err) {
             console.error('[ResearchStore] create job failed:', err)

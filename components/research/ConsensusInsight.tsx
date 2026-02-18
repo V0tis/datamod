@@ -12,15 +12,6 @@ import { getConfidenceDisplay } from '@/lib/confidence-display'
 import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
 import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { InsightCard } from '@/components/research/InsightCard'
-import {
-  ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  Tooltip,
-} from 'recharts'
 
 /** API/DB 신형 Consensus (PM 프레임워크) */
 export interface ConsensusImpactItem {
@@ -136,24 +127,10 @@ function TrendIcon({ trend }: { trend?: 'rising' | 'falling' | 'stable' }) {
   return <Minus className="w-5 h-5 text-muted-foreground" />
 }
 
-/** 감성 점수 -100~100 표시 */
-function SentimentGauge({ value }: { value: number }) {
+/** Sentiment as concise text (report-style); no gauge/chart. */
+function SentimentText({ value }: { value: number }) {
   const clamped = Math.max(-100, Math.min(100, value))
-  const isPos = clamped >= 0
-  const barPct = (clamped + 100) / 200 * 100
-  return (
-    <div className="flex flex-col items-center">
-      <span className={cn('text-2xl font-bold tabular-nums', isPos ? 'text-emerald-400' : 'text-rose-400')}>
-        {clamped}
-      </span>
-      <div className="w-20 h-1.5 mt-1 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn('h-full rounded-full transition-all duration-500', isPos ? 'bg-emerald-500' : 'bg-rose-500')}
-          style={{ width: `${barPct}%` }}
-        />
-      </div>
-    </div>
-  )
+  return <span className="text-sm font-semibold tabular-nums text-foreground">{clamped}</span>
 }
 
 function ConsensusInsightComponent({
@@ -165,11 +142,7 @@ function ConsensusInsightComponent({
   onRetry,
 }: ConsensusInsightProps) {
   const [contextTab, setContextTab] = useState<'news' | 'competitors' | 'pain'>('news')
-  /** Mobile: collapse Signal (market news / competitors) to reduce scroll; expand for comprehension. */
   const [signalOpen, setSignalOpen] = useState(false)
-  /** Mobile: collapse Impact radar (secondary detail). */
-  const [impactOpen, setImpactOpen] = useState(false)
-  /** Mobile: long insight summary — show line-clamp with expand for readability. */
   const [summaryExpanded, setSummaryExpanded] = useState(false)
   const summaryLong = (data?.strategicSummary?.summary?.length ?? 0) > 200
 
@@ -283,12 +256,11 @@ function ConsensusInsightComponent({
           </button>
         )}
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-6 items-stretch sm:items-center border-t border-border pt-4 sm:pt-5">
-          <div className="flex flex-col items-center justify-center shrink-0">
-            <SentimentGauge value={score} />
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <TrendIcon trend={trend} />
-              <span className="text-xs text-muted-foreground">{trend === 'rising' ? '상승' : trend === 'falling' ? '하락' : '보합'}</span>
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <SentimentText value={score} />
+            <span className="text-muted-foreground">·</span>
+            <TrendIcon trend={trend} />
+            <span className="text-xs text-muted-foreground">{trend === 'rising' ? '상승' : trend === 'falling' ? '하락' : '보합'}</span>
           </div>
           {/* Confidence: qualitative label + rationale (no percentages) for PM decision transparency */}
           {confidenceDisplay != null && (
@@ -375,46 +347,21 @@ function ConsensusInsightComponent({
             </div>
           </div>
         </div>
-        {/* Impact radar: collapsible on small screens (supporting detail). */}
+        {/* Impact: list only (no chart) for report-style clarity. */}
         <div className={cn(CARD_CLASS)}>
-          <button
-            type="button"
-            className="w-full flex items-center justify-between gap-2 min-h-[44px] py-2.5 px-3 text-left sm:pointer-events-none sm:block touch-manipulation"
-            onClick={() => setImpactOpen((o) => !o)}
-            aria-expanded={impactOpen}
-            aria-controls="consensus-impact-content"
-          >
-            <h4 className="text-sm font-semibold text-foreground">비즈니스 임팩트 (5대 지표)</h4>
-            <span className="sm:hidden shrink-0 text-muted-foreground">{impactOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</span>
-          </button>
-          <div id="consensus-impact-content" className={cn(impactOpen ? 'block' : 'hidden', 'sm:block')} aria-hidden={!impactOpen}>
-            {impactData.length > 0 ? (
-              <div className="h-[220px] sm:h-[260px] w-full antialiased mt-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="48%" outerRadius="55%" data={impactData} margin={{ top: 16, right: 40, bottom: 16, left: 40 }}>
-                    <PolarGrid stroke="var(--border)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
-                    <Radar name="영향력" dataKey="score" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.35} strokeWidth={2} />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.[0]) return null
-                        const p = payload[0].payload as { subject: string; score: number; reason?: string }
-                        return (
-                          <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-lg text-foreground">
-                            <p className="font-medium">{p.subject} · {p.score}</p>
-                            {p.reason && <p className="text-muted-foreground mt-1 break-words">{p.reason}</p>}
-                          </div>
-                        )
-                      }}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-[160px] sm:h-[200px] flex items-center justify-center text-muted-foreground text-sm">데이터 없음</div>
-            )}
-          </div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2">비즈니스 임팩트</h4>
+          {impactData.length > 0 ? (
+            <ul className="space-y-1.5 list-none pl-0 text-sm text-foreground">
+              {impactData.map((item, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span>{item.subject}</span>
+                  <span className="tabular-nums text-muted-foreground">{item.score}/10</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground text-sm">데이터 없음</p>
+          )}
         </div>
       </div>
 
