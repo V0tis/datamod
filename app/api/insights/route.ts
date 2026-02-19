@@ -72,9 +72,14 @@ export async function POST(req: Request) {
 
   const note = typeof body?.note === 'string' ? body.note.trim() || null : null
   const snapshot = body?.snapshot && typeof body.snapshot === 'object' ? body.snapshot : {}
+  const s = snapshot as Partial<InsightSnapshot>
   const snapshotWithTime: InsightSnapshot = {
-    ...snapshot,
-    savedAt: (snapshot as InsightSnapshot).savedAt ?? new Date().toISOString(),
+    keyword: s.keyword ?? '',
+    countryCode: s.countryCode,
+    summary: s.summary,
+    strategicSummary: s.strategicSummary,
+    reportId: s.reportId,
+    savedAt: s.savedAt ?? new Date().toISOString(),
   }
 
   const { data: row, error } = await supabase
