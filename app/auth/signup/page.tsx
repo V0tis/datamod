@@ -68,28 +68,28 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-1.5">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12 bg-background">
+      <div className="w-full max-w-sm space-y-8">
+        <div className="text-center space-y-2">
           <Link
             href="/"
-            className="inline-flex items-center justify-center gap-3 rounded-lg transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+            className="inline-flex items-center justify-center gap-2"
             aria-label="홈으로 이동"
           >
-            <RinLogo size={48} className="shrink-0" />
-            <span className="text-4xl font-bold tracking-tight text-foreground">Rin-AI</span>
+            <RinLogo size={32} className="shrink-0" />
+            <span className="text-xl font-semibold text-foreground">Rin</span>
           </Link>
-          <p className="text-muted-foreground text-sm">린과 함께 시작하세요</p>
+          <p className="text-sm text-muted-foreground">PM 의사결정을 위한 시장 분석 도구</p>
         </div>
 
-        <div className="rounded-3xl border border-border bg-card/95 p-8 shadow-xl backdrop-blur-sm">
+        <div className="rounded-xl border border-border/60 bg-card/50 p-6">
           <form onSubmit={handleSignup} className="space-y-5">
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-200"
+                className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-destructive"
               >
-                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-red-400" />
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
@@ -163,7 +163,7 @@ export default function SignupPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base shadow-md"
+              className="w-full h-11 rounded-lg"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin mx-auto" />
@@ -172,14 +172,8 @@ export default function SignupPage() {
               )}
             </Button>
 
-            <div className="text-center pt-1">
-              <span className="text-muted-foreground text-base">이미 계정이 있으신가요? </span>
-              <Link
-                href="/login"
-                className="text-base font-medium text-primary hover:text-primary/90 hover:underline focus:outline-none focus-visible:underline"
-              >
-                로그인
-              </Link>
+            <div className="text-center pt-2 text-sm text-muted-foreground">
+              이미 계정이 있으신가요? <Link href="/login" className="text-primary hover:underline">로그인</Link>
             </div>
           </form>
         </div>

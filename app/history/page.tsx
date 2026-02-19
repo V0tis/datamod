@@ -94,14 +94,14 @@ export default function HistoryPage() {
         />
         <div className="mt-6 space-y-2" aria-hidden>
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-xl border border-border dark:border-zinc-800 bg-card p-4 flex items-center justify-between gap-4">
+            <div key={i} className="rounded-xl border border-border/60 bg-card/50 p-4 flex items-center justify-between gap-4">
               <div className="flex-1 min-w-0 flex items-center gap-3">
-                <span className="h-5 w-24 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
-                <span className="h-4 w-16 bg-muted dark:bg-zinc-700 rounded animate-pulse shrink-0" />
+                <span className="h-5 w-24 bg-muted rounded animate-pulse shrink-0" />
+                <span className="h-4 w-16 bg-muted rounded animate-pulse shrink-0" />
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="h-4 w-20 bg-muted dark:bg-zinc-700 rounded animate-pulse" />
-                <span className="h-8 w-8 bg-muted dark:bg-zinc-700 rounded animate-pulse" />
+                <span className="h-4 w-20 bg-muted rounded animate-pulse" />
+                <span className="h-8 w-8 bg-muted rounded animate-pulse" />
               </div>
             </div>
           ))}
@@ -127,7 +127,7 @@ export default function HistoryPage() {
   if (records.length === 0) {
     return (
       <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] bg-background">
-        <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm max-w-md w-full">
+        <Card className="border border-border/60 bg-card/50 max-w-md w-full">
           <CardContent className="p-6">
             <EmptyState
               title="기록이 없습니다"
@@ -164,7 +164,7 @@ export default function HistoryPage() {
         {records.map((record) => (
           <Card
             key={record.id}
-            className="border border-border bg-card shadow-sm transition-colors hover:bg-background-elevated"
+            className="border border-border/60 bg-card/50 transition-colors hover:bg-muted/10"
           >
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">

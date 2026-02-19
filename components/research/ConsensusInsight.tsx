@@ -120,7 +120,7 @@ export interface ConsensusInsightProps {
   onRetry: () => void
 }
 
-const CARD_CLASS = 'rounded-xl border border-border bg-muted/30 p-4'
+const CARD_CLASS = 'rounded-xl border border-border/80 bg-muted/20 p-4'
 
 function TrendIcon({ trend }: { trend?: 'rising' | 'falling' | 'stable' }) {
   if (trend === 'rising') return <TrendingUp className="w-5 h-5 text-emerald-400" />
@@ -219,11 +219,11 @@ function ConsensusInsightComponent({
       transition={{ duration: 0.35, ease: 'easeOut' }}
     >
       {/* So what? — AI conclusion (hypothesis layer). Summary first for scanning. */}
-      <div className={cn(CARD_CLASS, 'p-4 sm:p-5 border-primary/30')}>
+      <div className={cn(CARD_CLASS, 'p-4 sm:p-5 border-primary/20')}>
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
           <span className="inline-flex flex-wrap items-center gap-2">
             <CognitiveLayerLabel layer="hypothesis" />
-            <span className="inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary">
+            <span className="inline-flex items-center rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary/90">
               So what? — 통찰
             </span>
           </span>
@@ -269,21 +269,15 @@ function ConsensusInsightComponent({
             </div>
           )}
         </div>
-        {/* Evaluation rationale: why this score + interpretation guidance. */}
-        {data.sentiment?.ratio && (
-          <div className="mt-4 pt-4 border-t border-border/50">
-            <p className="text-[11px] font-medium text-muted-foreground mb-2">Why this score?</p>
-            <SentimentFactorBreakdown factors={data.sentiment.ratio} />
+        <details className="mt-4 pt-4 border-t border-border/50 group" open>
+          <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
+            왜 이 점수가 나왔는가?
+          </summary>
+          <div className="mt-2">
+            {data.sentiment?.ratio ? <SentimentFactorBreakdown factors={data.sentiment.ratio} /> : <p className="text-[11px] text-muted-foreground">뉴스·시장 신호와 AI 통찰을 종합해 산출했습니다.</p>}
+            <p className="text-[11px] text-muted-foreground mt-2">양수: 긍정 신호 / 음수: 리스크. 전략 참고용.</p>
           </div>
-        )}
-        {!data.sentiment?.ratio && (
-          <p className="text-[11px] text-muted-foreground mt-4 pt-4 border-t border-border/50">
-            이 점수는 뉴스·시장 신호와 두 AI 통찰을 종합해 -100~100으로 산출했습니다.
-          </p>
-        )}
-        <p className="text-[11px] text-muted-foreground mt-2">
-          What this means for decision-making: 양수는 긍정적 시장 신호가 강함을, 음수는 리스크·부정 요인이 반영되었음을 나타냅니다. 전략 수립 시 참고 지표로 활용하세요.
-        </p>
+        </details>
       </div>
 
       {/* Why? — Evidence (fact layer): problem & signal. */}
@@ -321,7 +315,7 @@ function ConsensusInsightComponent({
             aria-controls="consensus-signal-content"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wider', 'text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10')}>
+              <span className={cn('inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider', 'text-amber-600/90 dark:text-amber-400/90 border-amber-500/30 bg-amber-500/5')}>
                 Signal
               </span>
               <span className="text-sm font-semibold text-foreground truncate">시장·경쟁 신호</span>
@@ -382,12 +376,12 @@ function ConsensusInsightComponent({
       </div>
 
       {/* So what? — Implications (assumption layer): recommendations + interpretation. */}
-      <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 sm:p-5">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <CognitiveLayerLabel layer="assumption" className="block mb-1.5" />
-        <div className="inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary mb-2">
+        <div className="inline-flex items-center rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary/90 mb-2">
           다음 액션 — 의사결정 참고
         </div>
-        <p className="text-[11px] text-muted-foreground mb-3">AI가 통찰을 바탕으로 제안한 과제입니다. 우선순위와 실행 여부는 팀 판단으로 결정하세요.</p>
+        <p className="text-[11px] text-muted-foreground mb-3">AI 제안 과제. 우선순위·실행은 팀 판단.</p>
         {opportunity !== '—' && (
           <>
             <p className="text-xs font-semibold text-primary mb-1">Opportunity</p>

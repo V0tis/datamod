@@ -25,7 +25,8 @@ import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
-import { SentimentFactorBreakdown } from '@/components/research/sentiment-factor-breakdown'
+import { MarketTemperature } from '@/components/research/market-temperature'
+import { SuggestedPMActions } from '@/components/research/suggested-pm-actions'
 import { InsightSummary } from '@/components/research/InsightSummary'
 import { KeyFindings } from '@/components/research/KeyFindings'
 import type { TabAnalysisRecord } from '@/lib/research-types'
@@ -842,10 +843,37 @@ function ResultsContent() {
                 return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
               })()}
             </div>
-            <p className="text-[11px] text-muted-foreground border-t border-border/50 pt-3 mt-3">
-              Interpretation: 이 요약은 수집된 뉴스와 AI 분석을 종합한 해석입니다. 전략 수립 시 참고용으로 활용하세요.
-            </p>
+            <details className="mt-3 pt-3 border-t border-border/50" open>
+              <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
+                근거 · 해석
+              </summary>
+              <p className="text-[11px] text-muted-foreground mt-2">수집 뉴스와 AI 분석 종합. 전략 참고용.</p>
+            </details>
           </section>
+        )}
+
+        {/* Suggested PM Actions: decision-support below summary. Derived from market temp, competition, confidence. */}
+        {displayStatus === 'done' && displayResult && (
+          <SuggestedPMActions
+            marketTempScore={
+              typeof consensusData?.sentiment?.score === 'number'
+                ? consensusData.sentiment.score
+                : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
+                  ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
+                  : null
+            }
+            competitionScore={
+              consensusData?.impactAnalysis?.find((i) => i.subject === '경쟁력')?.score ??
+              displayResult?.key_metrics?.chartData?.impact?.find((i) => i.subject === '경쟁력')?.score ??
+              null
+            }
+            signalConfidence={consensusData?.metadata?.confidence ?? null}
+            onSaveAsInsight={(actions) => {
+              setSaveInsightNote(actions.join('\n\n'))
+              setSaveInsightName((currentKeyword ?? '').trim() || 'PM 액션 제안')
+              setSaveInsightOpen(true)
+            }}
+          />
         )}
 
         {/* Actions: after summary so the fold is summary-first; details/actions below */}
@@ -1254,7 +1282,8 @@ function ResultsContent() {
             <div className="absolute inset-0 bg-black/50" onClick={() => !saveInsightSaving && setSaveInsightOpen(false)} aria-hidden />
             <div className="relative w-full max-w-md rounded-xl border border-border bg-card shadow-lg p-4 sm:p-5 flex flex-col gap-4">
               <h2 id="save-insight-title" className="text-sm font-semibold text-foreground">인사이트로 저장</h2>
-              <p className="text-xs text-muted-foreground">현재 분석 요약을 이름과 메모와 함께 저장해 나중에 다시 볼 수 있습니다.</p>
+              <p className="text-xs text-muted-foreground">이름과 메모와 함께 저장해 연구 노트처럼 나중에 참고할 수 있습니다.</p>
+              <p className="text-[11px] text-muted-foreground">저장 시점: {currentKeyword} · 시장 온도/요약 포함</p>
               <div>
                 <label htmlFor="save-insight-name" className="block text-xs font-medium text-foreground mb-1">이름 (필수)</label>
                 <Input
@@ -1308,52 +1337,29 @@ function ResultsContent() {
               </button>
             </div>
             <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
-            {/* Market temperature: score + why (factor breakdown) + how to read. */}
-            <div className="rounded-xl border border-border bg-card/50 p-4">
+            {/* Market temperature: 0-100 score, textual interpretation, expandable why. UX: PM explainability. */}
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
-              {(() => {
-                const consensusScore = consensusData?.sentiment?.score
-                const consensusTrend = consensusData?.sentiment?.trend ?? 'stable'
-                const headlineScore =
-                  typeof consensusScore === 'number'
-                    ? consensusScore
+              <MarketTemperature
+                score={
+                  typeof consensusData?.sentiment?.score === 'number'
+                    ? consensusData.sentiment.score
                     : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
                       ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
                       : null
-                const trendLabel = consensusTrend === 'rising' ? '상승' : consensusTrend === 'falling' ? '하락' : '보합'
-                const factors = consensusData?.sentiment?.ratio ?? displayResult?.key_metrics?.chartData?.sentiment ?? displayResult?.chartData?.sentiment
-                if (headlineScore == null) {
-                  return <p className="text-sm text-muted-foreground">분석 완료 후 표시됩니다.</p>
                 }
-                return (
-                  <div className="space-y-3">
-                    <p className="text-sm text-foreground">
-                      <span className="font-semibold">{headlineScore}</span> · {trendLabel}
-                    </p>
-                    {factors && (
-                      <>
-                        <p className="text-[11px] font-medium text-muted-foreground">Why this score?</p>
-                        <SentimentFactorBreakdown factors={factors} />
-                      </>
-                    )}
-                    {!factors && (
-                      <p className="text-[11px] text-muted-foreground">뉴스·시장 신호와 AI 통찰을 종합해 -100~100으로 산출했습니다.</p>
-                    )}
-                    <p className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 mt-2">
-                      How to read: 양수는 긍정적 신호가 강함을, 음수는 리스크·부정 요인이 반영되었음을 의미합니다. 의사결정 참고용 지표로 활용하세요.
-                    </p>
-                  </div>
-                )
-              })()}
+                factors={consensusData?.sentiment?.ratio ?? displayResult?.key_metrics?.chartData?.sentiment ?? displayResult?.chartData?.sentiment}
+                loading={showAnalyzing}
+              />
             </div>
-            <div className="rounded-xl border border-border bg-card/50 p-4">
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">실시간 트렌드</h3>
               {(sharedTrends.KR.length + sharedTrends.US.length + sharedTrends.JP.length) > 0 ? (
                 <>
-                  <ul className="space-y-3 mb-3">
+                  <ul className="space-y-2 mb-3">
                     {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
                       <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
+                        <div className="rounded-md border border-border/40 bg-muted/10 p-2.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Link
                               href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
@@ -1389,7 +1395,7 @@ function ResultsContent() {
                 <p className="text-muted-foreground text-muted-foreground text-xs">트렌드 데이터를 불러오는 중입니다.</p>
               )}
             </div>
-            <div className="rounded-xl border border-border bg-card/50 p-4">
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">참고 수치</h3>
               <dl className="space-y-1.5 text-sm text-muted-foreground">
                 <div className="flex justify-between">
@@ -1405,11 +1411,14 @@ function ResultsContent() {
                   <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
                 </div>
               </dl>
-              <p className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 mt-2">
-                Reasoning: 감성 지수는 분석에 반영된 뉴스·신호의 종합 톤, 시장 뉴스·페인포인트는 이 리포트에 사용된 항목 수입니다. 수치만으로 판단하지 말고 본문 통찰과 함께 보세요.
-              </p>
+              <details className="mt-2 pt-2 border-t border-border/50" open>
+                <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
+                  근거
+                </summary>
+                <p className="text-[11px] text-muted-foreground mt-2">감성: 뉴스·신호 종합 톤. 뉴스·페인포인트: 이 리포트에 반영된 항목 수. 본문 통찰과 함께 보세요.</p>
+              </details>
             </div>
-            <div className="rounded-xl border border-border bg-card/50 p-4">
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">인용 출처</h3>
               {newsList.length === 0 ? (
                 <p className="text-muted-foreground text-xs">없음</p>

@@ -39,9 +39,9 @@ export function SentimentFactorBreakdown({
   if (!norm) return null
 
   const rows = [
-    { label: '긍정 신호', value: norm.positive, barClass: 'bg-emerald-500/80 dark:bg-emerald-400/70' },
-    { label: '중립', value: norm.neutral, barClass: 'bg-muted-foreground/50' },
-    { label: '부정·리스크', value: norm.negative, barClass: 'bg-rose-500/80 dark:bg-rose-400/70' },
+    { label: '긍정 신호', value: norm.positive, barClass: 'bg-emerald-500/50 dark:bg-emerald-400/40' },
+    { label: '중립', value: norm.neutral, barClass: 'bg-muted-foreground/40' },
+    { label: '부정·리스크', value: norm.negative, barClass: 'bg-rose-500/50 dark:bg-rose-400/40' },
   ] as const
 
   return (

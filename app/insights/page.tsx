@@ -158,27 +158,32 @@ export default function InsightsPage() {
             const keyword = item.snapshot?.keyword ?? ''
             const country = item.snapshot?.countryCode ?? 'KR'
             const resultsHref = `/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`
-            const noteSnippet = item.note ? (item.note.slice(0, 80) + (item.note.length > 80 ? '…' : '')) : null
+            const summary = (item.snapshot?.summary ?? item.snapshot?.strategicSummary?.summary ?? '').trim()
+            const summarySnippet = summary ? (summary.slice(0, 120) + (summary.length > 120 ? '…' : '')) : null
             return (
               <li key={item.id}>
-                <Card className="border border-border bg-card shadow-sm transition-colors hover:bg-muted/30">
+                <Card className="border border-border/60 bg-card/50 transition-colors hover:bg-muted/10">
                   <CardContent className="p-4 sm:p-5">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <Link
                         href={resultsHref}
-                        className="flex-1 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                        className="flex-1 min-w-0 rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                       >
                         <h3 className="text-base font-semibold text-foreground break-words">{item.name}</h3>
-                        {noteSnippet && (
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{noteSnippet}</p>
+                        {item.note && (
+                          <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2" title="저장 이유">
+                            {item.note.slice(0, 100)}{item.note.length > 100 ? '…' : ''}
+                          </p>
                         )}
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          {keyword && (
-                            <span className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground">
-                              {keyword}
-                            </span>
-                          )}
-                          <TimeAgo isoString={item.created_at} className="text-xs text-muted-foreground" />
+                        {summarySnippet && (
+                          <p className="text-sm text-foreground/80 mt-1 line-clamp-2">
+                            {summarySnippet}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
+                          {keyword && <span>시장 맥락: {keyword}</span>}
+                          {keyword && <span>·</span>}
+                          <TimeAgo isoString={item.created_at} />
                         </div>
                       </Link>
                       <div className="flex gap-2 shrink-0">

@@ -85,12 +85,12 @@ const PROGRESS_LABELS: Record<string, string> = {
   cached: '캐시 사용',
 }
 
-/** State-machine order: running > queued > succeeded > failed/cancelled. Used to pick one task per keyword. */
+/** Prefer running > succeeded > queued > failed so completed results aren't hidden by a queued retry. */
 function jobStatusRank(status: JobStatus): number {
   switch (status) {
     case 'running': return 0
-    case 'queued': return 1
-    case 'succeeded': return 2
+    case 'succeeded': return 1
+    case 'queued': return 2
     case 'failed':
     case 'cancelled': return 3
     default: return 4
@@ -268,9 +268,15 @@ export const useResearchStore = create<ResearchStore>()(
           const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
           const km = parseJsonField(data.key_metrics) as ResearchResponse['key_metrics']
           if (data.reportId && (hasContent || hasAnalysis)) {
+            // UX: Only set status=done when store has no contradicting job. If active job is failed,
+            // refreshJobs/setActiveJob will overwrite with error. Prevents flicker: job status wins when present.
+            const state = get()
+            const hasFailedJobForKeyword = state.activeJobId && state.jobs[state.activeJobId] &&
+              (state.jobs[state.activeJobId].status === 'failed' || state.jobs[state.activeJobId].status === 'cancelled') &&
+              (state.jobs[state.activeJobId].keyword ?? '').trim() === k
             set({
               keyword: k,
-              status: 'done',
+              ...(hasFailedJobForKeyword ? {} : { status: 'done' as const }),
               result: {
                 ...(data.content ?? {}),
                 reportId: data.reportId,
@@ -344,6 +350,7 @@ export const useResearchStore = create<ResearchStore>()(
 
       refreshJobs: async () => {
         try {
+          const prevJobs = get().jobs
           const res = await fetch('/api/research/jobs')
           const data = (await res.json()) as { list?: AnalysisJob[] }
           const list = data.list ?? []
@@ -352,6 +359,16 @@ export const useResearchStore = create<ResearchStore>()(
           for (const job of list) {
             jobs[job.id] = job
             rawOrder.push(job.id)
+          }
+          // PM feedback: subtle toasts for lifecycle changes; panel remains source of truth.
+          for (const job of list) {
+            const prev = prevJobs[job.id]
+            if (job.status === 'succeeded' && prev && (prev.status === 'running' || prev.status === 'queued')) {
+              toast.success(`${job.keyword} 분석 완료`, { duration: 3000 })
+            }
+            if ((job.status === 'failed' || job.status === 'cancelled') && prev && prev.status === 'running') {
+              toast.error(`${job.keyword} 분석 실패`, { duration: 4000 })
+            }
           }
           const jobOrder = pickOneJobIdPerKey(jobs, rawOrder)
           set({ jobs, jobOrder })
@@ -492,6 +509,7 @@ export const useResearchStore = create<ResearchStore>()(
             }
 
             const job = data.job
+            toast.info('분석을 시작했습니다.', { duration: 2500 })
             set((state) => {
               const key = `${job.keyword?.trim()}|${countryCode}`
               const nextJobs = { ...state.jobs, [job.id]: job }

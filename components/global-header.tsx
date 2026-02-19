@@ -5,14 +5,13 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { Home, History, Bookmark, LogOut, Settings, ChevronDown, RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle, LayoutList, BookOpen } from 'lucide-react'
+import { Home, History, Bookmark, LogOut, Settings, ChevronDown, RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { showErrorToast } from '@/lib/error-toast'
 import { useAnalysisTasks } from '@/lib/hooks/use-analysis-tasks'
-import { useReadingModeStore } from '@/lib/stores/reading-mode-store'
 import type { AnalysisTask } from '@/lib/analysis-types'
 
 const navItems = [
@@ -21,25 +20,26 @@ const navItems = [
   { href: '/insights', label: 'Insights', icon: Bookmark },
 ]
 
+/** PM-friendly labels: status must reflect actual state so "완료" never shows as "대기". */
 const TASK_STATUS_LABEL: Record<AnalysisTask['status'], string> = {
-  idle: 'Pending',
-  analyzing: 'Analyzing',
-  completed: 'Completed',
-  failed: 'Failed',
+  idle: '대기중',
+  analyzing: '분석중',
+  completed: '분석완료',
+  failed: '분석실패',
 }
 
-/** Maps progress text to a high-level stage for at-a-glance PM UX. */
+/** Stage label for chip/strip: must match task.status so completed never shows as Pending. */
 function getStageLabel(task: AnalysisTask): string {
-  if (task.status === 'completed') return 'Completed'
-  if (task.status === 'failed') return 'Error'
-  const p = (task.progress ?? '').toLowerCase()
-  // Collecting: news fetch
-  if (p.includes('뉴스') || p.includes('news')) return 'Collecting'
-  // Analyzing: AI / insight generation
-  if (p.includes('ai') || p.includes('분석') || p.includes('인사이트')) return 'Analyzing'
-  // Finalizing: parse, report, done
-  if (p.includes('정리') || p.includes('저장') || p.includes('완료') || p.includes('캐시')) return 'Finalizing'
-  return task.status === 'analyzing' ? 'Analyzing' : 'Pending'
+  if (task.status === 'completed') return '분석완료'
+  if (task.status === 'failed') return '분석실패'
+  if (task.status === 'analyzing') {
+    const p = (task.progress ?? '').toLowerCase()
+    if (p.includes('뉴스') || p.includes('news')) return '뉴스 수집'
+    if (p.includes('ai') || p.includes('분석') || p.includes('인사이트')) return 'AI 분석'
+    if (p.includes('정리') || p.includes('저장') || p.includes('완료') || p.includes('캐시')) return '결과 정리'
+    return '분석중'
+  }
+  return '대기중'
 }
 
 function isTaskActive(t: AnalysisTask) {
@@ -57,8 +57,7 @@ export function GlobalHeader() {
   const { tasks, runningCount, setActiveJob, retryTask, cancelTask } = useAnalysisTasks()
   const hasTasks = tasks.length > 0
   const tasksForStrip = hasTasks ? tasks.slice(0, 6) : []
-  const readingMode = useReadingModeStore((s) => s.mode)
-  const setReadingMode = useReadingModeStore((s) => s.setMode)
+  const isResultsPage = pathname === '/results' || pathname?.startsWith('/results?')
 
   useEffect(() => {
     const supabase = createClient()
@@ -224,36 +223,6 @@ export function GlobalHeader() {
           )}
         </div>
 
-        {/* Reading density: compact = scan, focus = deep read; persists across navigation */}
-        <div className="hidden sm:flex items-center rounded-lg border border-border bg-muted/30 p-0.5" role="group" aria-label="Reading density">
-          <button
-            type="button"
-            onClick={() => setReadingMode('compact')}
-            className={cn(
-              'flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-              readingMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            )}
-            title="Compact — more content per screen"
-            aria-pressed={readingMode === 'compact'}
-          >
-            <LayoutList className="h-3.5 w-3.5" aria-hidden />
-            <span>Compact</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setReadingMode('focus')}
-            className={cn(
-              'flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-              readingMode === 'focus' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            )}
-            title="Focus — comfortable long-form reading"
-            aria-pressed={readingMode === 'focus'}
-          >
-            <BookOpen className="h-3.5 w-3.5" aria-hidden />
-            <span>Focus</span>
-          </button>
-        </div>
-
         <ThemeSwitcher className="shrink-0" />
         <Link href="/settings">
           <Button variant="ghost" size="icon" className="shrink-0" aria-label="Settings">
@@ -272,8 +241,8 @@ export function GlobalHeader() {
         ) : null}
       </header>
 
-      {/* Persistent activity strip: visible across all pages when any task exists; each keyword as a chip with stage */}
-      {hasTasks && (
+      {/* UX: Background analysis strip only on Results page to prioritize content elsewhere */}
+      {hasTasks && isResultsPage && (
         <div
           className="sticky top-14 z-20 flex items-center gap-2 border-b border-border bg-card/90 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/80"
           role="status"
@@ -281,7 +250,7 @@ export function GlobalHeader() {
           aria-label="Background analysis tasks"
         >
           <span className="text-xs font-medium text-muted-foreground shrink-0 hidden sm:inline">
-            Background analyses
+            백그라운드 분석
           </span>
           <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
             {tasksForStrip.map((task) => {

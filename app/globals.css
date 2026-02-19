@@ -56,49 +56,49 @@
   --sidebar-ring: #2563EB;
 }
 
-/* Dark theme: PM-optimized (low eye strain, no pure #000/#fff). Single source for tokens. */
+/* Dark theme: PM-optimized (low saturation, high clarity for long reading sessions) */
 .dark {
-  --background: #0f1113;
-  --background-elevated: #15171a;
-  --foreground: #e1e3e6;
+  --background: #111318;
+  --background-elevated: #171a20;
+  --foreground: #e4e6eb;
   --foreground-muted: #9ca3af;
-  --card: #181a1d;
-  --card-foreground: #e1e3e6;
-  --popover: #181a1d;
-  --popover-foreground: #e1e3e6;
-  --primary: #00d19a;
-  --primary-foreground: #0f1113;
-  --secondary: #1c1e21;
-  --secondary-foreground: #e1e3e6;
-  --muted: #1c1e21;
-  --muted-hover: #2a2d32;
+  --card: #1a1d24;
+  --card-foreground: #e4e6eb;
+  --popover: #1a1d24;
+  --popover-foreground: #e4e6eb;
+  --primary: #58b99d;
+  --primary-foreground: #0d0f12;
+  --secondary: #1c1f26;
+  --secondary-foreground: #e4e6eb;
+  --muted: #1c1f26;
+  --muted-hover: #252a33;
   --muted-foreground: #9ca3af;
-  --accent: #1c1e21;
-  --accent-foreground: #e1e3e6;
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --success: #00d19a;
-  --success-foreground: #0f1113;
+  --accent: #1c1f26;
+  --accent-foreground: #e4e6eb;
+  --destructive: oklch(0.65 0.18 25);
+  --destructive-foreground: oklch(0.95 0.02 25);
+  --success: #58b99d;
+  --success-foreground: #0d0f12;
   --warning: #e5a84b;
-  --warning-foreground: #0f1113;
+  --warning-foreground: #0d0f12;
   --error: #f87171;
-  --error-foreground: #0f1113;
+  --error-foreground: #0d0f12;
   --border: #2d2f34;
   --input: #33363b;
-  --ring: #00d19a;
-  --chart-1: #00d19a;
+  --ring: #58b99d;
+  --chart-1: #58b99d;
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #0f1113;
-  --sidebar-foreground: #e1e3e6;
-  --sidebar-primary: #00d19a;
-  --sidebar-primary-foreground: #0f1113;
-  --sidebar-accent: #1c1e21;
-  --sidebar-accent-foreground: #e1e3e6;
+  --sidebar: #111318;
+  --sidebar-foreground: #e4e6eb;
+  --sidebar-primary: #58b99d;
+  --sidebar-primary-foreground: #0d0f12;
+  --sidebar-accent: #1c1f26;
+  --sidebar-accent-foreground: #e4e6eb;
   --sidebar-border: #2d2f34;
-  --sidebar-ring: #00d19a;
+  --sidebar-ring: #58b99d;
 }
 
 @theme inline {
@@ -265,28 +265,8 @@
   margin-top: 1.5rem;
 }
 
-/* Reading density: layout and typography scale with mode (compact = scan, focus = deep read). Default = focus. */
+/* PM-focused layout: single density for clarity and long reading sessions */
 body {
-  --reading-gap: 0.875rem;
-  --reading-gap-lg: 1.25rem;
-  --reading-space-y: 1.25rem;
-  --reading-space-y-lg: 1.75rem;
-  --reading-text: 1.0625rem;
-  --reading-text-lg: 1.125rem;
-  --reading-leading: 1.75;
-  --reading-section-gap: 1.5rem;
-}
-[data-reading-mode='compact'] {
-  --reading-gap: 0.5rem;
-  --reading-gap-lg: 0.75rem;
-  --reading-space-y: 0.75rem;
-  --reading-space-y-lg: 1rem;
-  --reading-text: 0.875rem;
-  --reading-text-lg: 1rem;
-  --reading-leading: 1.5;
-  --reading-section-gap: 1rem;
-}
-[data-reading-mode='focus'] {
   --reading-gap: 0.875rem;
   --reading-gap-lg: 1.25rem;
   --reading-space-y: 1.25rem;
