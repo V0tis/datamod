@@ -4,7 +4,8 @@ import OpenAI from 'openai'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { getResearchKeysForInitialAnalysis } from '@/lib/research-keys'
-import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { parseInitialResearchResponse, type StructuredAnalysisFields } from '@/lib/research-parser'
+import { buildCacheKeyParts } from '@/lib/research-cache'
 import { generateResearchWithGrounding } from '@/lib/ai'
 import { GROUNDING_RESEARCH_SYSTEM } from '@/lib/ai/pm-analysis-prompts'
 
@@ -121,6 +122,8 @@ export async function POST(req: Request) {
     }
 
     const { summary: s } = parsed
+    const structured = parsed.ok && 'structured' in parsed ? (parsed.structured as StructuredAnalysisFields) : undefined
+    const countryCode = 'KR'
     const summary = {
       marketNews: s.marketNews,
       painPoints: s.painPoints,
@@ -144,8 +147,41 @@ export async function POST(req: Request) {
           })
           .select('id')
           .single()
-        if (!insertError && report?.id) reportId = report.id
-        else if (insertError) console.warn('[Research API] Report insert failed (컬럼 확인):', insertError.message)
+        if (!insertError && report?.id) {
+          reportId = report.id
+          const cacheKey = buildCacheKeyParts(user.id, keyword.trim(), countryCode)
+          const keyMetrics = {
+            chartData: summary.chartData,
+            keyConclusions: s.keyConclusions,
+            sentiment: summary.sentiment,
+            ...(structured && {
+              analysis_target: structured.analysis_target,
+              confidence_score: structured.confidence_score,
+              market_temperature_score: structured.market_temperature_score,
+              facts: structured.facts,
+              hypotheses: structured.hypotheses,
+              inferences: structured.inferences,
+              positive_signals: structured.positive_signals,
+              neutral_signals: structured.neutral_signals,
+              negative_risks: structured.negative_risks,
+              summary_insights: structured.summary_insights,
+            }),
+          }
+          const upsertPayload: Record<string, unknown> = {
+            user_id: cacheKey.userId,
+            keyword: cacheKey.keyword,
+            country_code: cacheKey.countryCode,
+            report_id: report.id,
+            key_metrics: keyMetrics,
+            analysis_status: 'completed',
+            updated_at: new Date().toISOString(),
+          }
+          if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
+          if (typeof structured?.confidence_score === 'number') upsertPayload.confidence_score = structured.confidence_score
+          if (typeof structured?.market_temperature_score === 'number') upsertPayload.market_temperature_score = structured.market_temperature_score
+          if (structured?.summary_insights) upsertPayload.summary_insights = structured.summary_insights
+          await supabase.from('research_history').upsert(upsertPayload, { onConflict: 'user_id,keyword,country_code' })
+        } else if (insertError) console.warn('[Research API] Report insert failed (컬럼 확인):', insertError.message)
       } catch (e) {
         console.warn('[Research API] Report insert:', e)
       }
@@ -154,6 +190,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...summary,
       reportId,
+      analysis_status: 'completed',
     })
   } catch (e) {
     console.error('[Research API] 분석 실패:', e)

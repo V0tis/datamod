@@ -842,10 +842,13 @@ function ResultsContent() {
                 }
               />
               {(() => {
+                const km = displayResult?.key_metrics
                 const keyFindingItems =
-                  (displayResult?.key_metrics?.keyConclusions?.length ?? displayResult?.keyConclusions?.length ?? 0) > 0
-                    ? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions ?? []).slice(0, 5)
-                    : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
+                  (km?.facts?.length ?? 0) > 0 || (km?.inferences?.length ?? 0) > 0
+                    ? [...(km?.facts ?? []), ...(km?.inferences ?? [])].slice(0, 5)
+                    : (km?.keyConclusions?.length ?? displayResult?.keyConclusions?.length ?? 0) > 0
+                      ? (km?.keyConclusions ?? displayResult?.keyConclusions ?? []).slice(0, 5)
+                      : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
                 if (keyFindingItems.length === 0) return null
                 return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
               })()}
@@ -1341,21 +1344,36 @@ function ResultsContent() {
                 </div>
               )
             })()}
-            {/* Market Temperature: score, trend, explanation always visible; charts collapsed by default. */}
+            {/* Market Temperature: score, trend, explanation from AI JSON (key_metrics) or consensus. */}
             <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
               <MarketTemperature
                 score={
                   typeof consensusData?.sentiment?.score === 'number'
                     ? consensusData.sentiment.score
-                    : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
-                      ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
-                      : null
+                    : displayResult?.key_metrics?.market_temperature_score != null
+                      ? (displayResult.key_metrics.market_temperature_score - 50) * 2
+                      : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
+                        ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
+                        : null
                 }
                 trend={consensusData?.sentiment?.trend ?? 'stable'}
                 factors={consensusData?.sentiment?.ratio ?? displayResult?.key_metrics?.chartData?.sentiment ?? displayResult?.chartData?.sentiment}
-                positiveSignals={consensusData?.marketNews?.slice(0, 3) ?? []}
-                negativeRisks={(consensusData?.painPoints ?? []).slice(0, 3)}
+                positiveSignals={
+                  (displayResult?.key_metrics?.positive_signals?.length ?? 0) > 0
+                    ? (displayResult?.key_metrics?.positive_signals ?? [])
+                    : (consensusData?.marketNews?.length ?? 0) > 0
+                      ? (consensusData?.marketNews ?? []).slice(0, 3)
+                      : []
+                }
+                neutralSignals={displayResult?.key_metrics?.neutral_signals ?? []}
+                negativeRisks={
+                  (displayResult?.key_metrics?.negative_risks?.length ?? 0) > 0
+                    ? (displayResult?.key_metrics?.negative_risks ?? [])
+                    : (consensusData?.painPoints?.length ?? 0) > 0
+                      ? (consensusData?.painPoints ?? []).slice(0, 3)
+                      : []
+                }
                 loading={showAnalyzing}
               />
             </div>

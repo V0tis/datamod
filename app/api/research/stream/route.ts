@@ -5,7 +5,7 @@ import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { logCacheEvent, buildCacheKeyParts } from '@/lib/research-cache'
 import { getGeminiKeyForRequest } from '@/lib/research-keys'
-import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { parseInitialResearchResponse, type StructuredAnalysisFields } from '@/lib/research-parser'
 import { generateText } from '@/lib/ai'
 import { INITIAL_RESEARCH_SYSTEM, buildInitialResearchUserPrompt } from '@/lib/ai/pm-analysis-prompts'
 
@@ -136,6 +136,19 @@ export async function POST(req: Request) {
           safeClose()
           return
         }
+        if (user?.id) {
+          const cacheKey = buildCacheKeyParts(user.id, keyword, countryCode)
+          await supabase.from('research_history').upsert(
+            {
+              user_id: cacheKey.userId,
+              keyword: cacheKey.keyword,
+              country_code: cacheKey.countryCode,
+              analysis_status: 'analyzing',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,keyword,country_code' }
+          )
+        }
         send('progress', { step: 'gemini_start' })
         if (isClosed) {
           safeClose()
@@ -197,6 +210,7 @@ export async function POST(req: Request) {
         }
 
         const s = parsed.summary
+        const structured = parsed.ok && 'structured' in parsed ? (parsed.structured as StructuredAnalysisFields) : undefined
         const articleSummaries = s.articleSummaries.slice(0, news.length)
         const summary = {
           marketNews: s.marketNews,
@@ -232,6 +246,18 @@ export async function POST(req: Request) {
                 chartData: summary.chartData,
                 keyConclusions: summary.keyConclusions,
                 sentiment: summary.sentiment,
+                ...(structured && {
+                  analysis_target: structured.analysis_target,
+                  confidence_score: structured.confidence_score,
+                  market_temperature_score: structured.market_temperature_score,
+                  facts: structured.facts,
+                  hypotheses: structured.hypotheses,
+                  inferences: structured.inferences,
+                  positive_signals: structured.positive_signals,
+                  neutral_signals: structured.neutral_signals,
+                  negative_risks: structured.negative_risks,
+                  summary_insights: structured.summary_insights,
+                }),
               }
               // Same cache key as insights/tab. TTL: RESEARCH_CACHE_TTL_MS (24h). Owner: research_history.
               const cacheKey = buildCacheKeyParts(user.id, keyword, countryCode)
@@ -247,28 +273,34 @@ export async function POST(req: Request) {
                 country_code: string
                 report_id: string | null
                 key_metrics: unknown
+                analysis_status: string
+                analysis_target?: string
+                confidence_score?: number
+                market_temperature_score?: number
+                summary_insights?: string
                 updated_at: string
               }
-              // State: persist analysis_status='completed'; UI trusts this, never infers.
-              await supabase.from('research_history').upsert(
-                {
-                  user_id: cacheKey.userId,
-                  keyword: cacheKey.keyword,
-                  country_code: cacheKey.countryCode,
-                  report_id: report.id,
-                  key_metrics: keyMetrics,
-                  analysis_status: 'completed',
-                  updated_at: new Date().toISOString(),
-                } as ResearchHistoryRow & { analysis_status: string },
-                { onConflict: 'user_id,keyword,country_code' }
-              )
+              const upsertPayload: ResearchHistoryRow = {
+                user_id: cacheKey.userId,
+                keyword: cacheKey.keyword,
+                country_code: cacheKey.countryCode,
+                report_id: report.id,
+                key_metrics: keyMetrics,
+                analysis_status: 'completed',
+                updated_at: new Date().toISOString(),
+              }
+              if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
+              if (typeof structured?.confidence_score === 'number') upsertPayload.confidence_score = structured.confidence_score
+              if (typeof structured?.market_temperature_score === 'number') upsertPayload.market_temperature_score = structured.market_temperature_score
+              if (structured?.summary_insights) upsertPayload.summary_insights = structured.summary_insights
+              await supabase.from('research_history').upsert(upsertPayload, { onConflict: 'user_id,keyword,country_code' })
             } else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)
           } catch (insertErr) {
             console.warn('[Research Stream] Report insert:', insertErr)
           }
         }
 
-        send('progress', { step: 'result', data: { ...summary, reportId, source_links: news } as Record<string, unknown> })
+        send('progress', { step: 'result', data: { ...summary, reportId, source_links: news, analysis_status: 'completed' } as Record<string, unknown> })
       } catch (e) {
         const stepLabels: Record<string, string> = {
           news: '뉴스 수집',
@@ -278,6 +310,19 @@ export async function POST(req: Request) {
         }
         const stepLabel = stepLabels[currentStep] ?? currentStep
         console.error('[Research Stream] Error at step:', stepLabel, currentStep, e)
+        if (user?.id) {
+          const failKey = buildCacheKeyParts(user.id, keyword, countryCode)
+          await supabase.from('research_history').upsert(
+            {
+              user_id: failKey.userId,
+              keyword: failKey.keyword,
+              country_code: failKey.countryCode,
+              analysis_status: 'failed',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,keyword,country_code' }
+          )
+        }
         send('progress', {
           step: 'error',
           error: '분석을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',

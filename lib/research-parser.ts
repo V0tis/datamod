@@ -21,6 +21,20 @@ export type InitialResearchSummary = {
   keyConclusions: string[]
 }
 
+/** Structured PM analysis fields for DB persistence and frontend parsing. */
+export type StructuredAnalysisFields = {
+  analysis_target?: string
+  confidence_score?: number
+  market_temperature_score?: number
+  facts?: string[]
+  hypotheses?: string[]
+  inferences?: string[]
+  positive_signals?: string[]
+  neutral_signals?: string[]
+  negative_risks?: string[]
+  summary_insights?: string
+}
+
 const DEFAULT_CHART_SENTIMENT: ChartSentiment = { positive: 65, neutral: 20, negative: 15 }
 const DEFAULT_IMPACT: ChartImpactItem[] = [
   { subject: '경제', score: 5 },
@@ -103,7 +117,25 @@ export function parseInitialResearchResponse(
 
   if (isPmAnalysisOutput(parsed)) {
     const summary = pmAnalysisToInitialSummary(parsed, options?.articleSummaries ?? [])
-    return { ok: true, summary }
+    const pm = parsed as PMAnalysisOutput
+    const exp = pm.market_temperature?.explanation ?? { positive_signals: [], neutral_signals: [], negative_risks: [] }
+    const structured: StructuredAnalysisFields = {
+      analysis_target: (pm.meta?.analysis_target as string) ?? undefined,
+      confidence_score: typeof pm.meta?.confidence_score === 'number' ? pm.meta.confidence_score : undefined,
+      market_temperature_score: typeof pm.market_temperature?.score === 'number' ? pm.market_temperature.score : undefined,
+      facts: Array.isArray(pm.insights?.facts) ? pm.insights.facts : undefined,
+      hypotheses: Array.isArray(pm.insights?.hypotheses) ? pm.insights.hypotheses : undefined,
+      inferences: Array.isArray(pm.insights?.inferences) ? pm.insights.inferences : undefined,
+      positive_signals: Array.isArray(exp.positive_signals) ? exp.positive_signals : undefined,
+      neutral_signals: Array.isArray(exp.neutral_signals) ? exp.neutral_signals : undefined,
+      negative_risks: Array.isArray(exp.negative_risks) ? exp.negative_risks : undefined,
+      summary_insights: [pm.insights?.facts, pm.insights?.inferences]
+        .flat()
+        .filter(Boolean)
+        .join('. ')
+        .slice(0, 500) || undefined,
+    }
+    return { ok: true, summary, structured }
   }
 
   const legacy = parsed as {

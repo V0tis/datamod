@@ -16,6 +16,7 @@ interface ResearchRecord {
   keyword: string
   country_code: string
   report_id: string | null
+  analysis_status?: 'queued' | 'analyzing' | 'completed' | 'failed'
   updated_at: string | null
   date: string
 }
@@ -41,7 +42,8 @@ export default function HistoryPage() {
         setError(data?.error ?? '목록을 불러오지 못했습니다.')
         return
       }
-      setRecords(data.list ?? [])
+      const list = (data.list ?? []) as ResearchRecord[]
+      setRecords(list.map((r) => ({ ...r, analysis_status: r.analysis_status ?? 'completed' })))
     } catch {
       setError('목록을 불러오지 못했습니다.')
     } finally {
@@ -206,6 +208,11 @@ export default function HistoryPage() {
                         >
                           {COUNTRY_LABELS[record.country_code] ?? record.country_code}
                         </span>
+                        {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
+                          <span className="text-[11px] text-amber-600 dark:text-amber-500 font-medium shrink-0">분석 중</span>
+                        ) : record.analysis_status === 'failed' ? (
+                          <span className="text-[11px] text-destructive font-medium shrink-0">실패</span>
+                        ) : null}
                         {record.updated_at && (
                           <span className="text-[11px] text-muted-foreground">
                             <TimeAgo isoString={record.updated_at} />

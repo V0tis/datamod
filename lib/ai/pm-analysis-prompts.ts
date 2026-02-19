@@ -1,24 +1,26 @@
 /**
  * Canonical PM analysis prompts.
- * - No conversational language, no questions, no markdown/emojis.
- * - AI infers analysis_target and analysis_scope from input.
- * - Output is strict JSON only.
+ * - Autonomous inference of analysis target from keyword/payload. Never ask user.
+ * - Strict JSON output contract: meta, market_temperature, insights, pm_actions.
+ * - No questions, no conversational language, no markdown/emojis.
  */
 import { PM_ANALYSIS_JSON_SCHEMA } from './pm-analysis-schema'
 
 export const PM_INPUT_RULES = `입력 처리:
-- 분석 대상을 사용자에게 묻지 않음. 페이로드와 키워드에서 추론.
+- 분석 대상을 사용자에게 묻지 않음. 키워드·페이로드에서 자율 추론.
 - analysis_target: product | company | market | person | policy | technology
 - analysis_scope: market | sentiment | momentum | risk | opportunity
-- 입력이 모호하면 최선의 추론을 진행하고 meta.confidence_score와 meta.analysis_quality로 불확실성 표시.
-- 질문하지 않음. "제공해 주세요" 등 대화형 표현 사용 금지.`
+- 입력이 모호하면 최선의 추론을 진행하고 meta.confidence_score·meta.analysis_quality로 불확실성 표시.
+- 질문 금지. "제공해 주세요" 등 대화형 표현 금지.`
 
 export const PM_OUTPUT_RULES = `출력 규칙:
-- JSON만 출력. 마크다운, 이모지, 추가 텍스트 금지.
-- facts: 검증 가능한 사실 또는 명확한 사실
-- hypotheses: 가정이며 검증 필요 (명시적 레이블)
+- JSON만 출력. 마크다운, 이모지, 추가 텍스트, 질문 금지.
+- 반드시 meta, market_temperature, insights, pm_actions 네 객체 포함.
+- facts: 검증 가능한 사실
+- hypotheses: 가정 (검증 필요)
 - inferences: 논리적 해석
-- 세 레이어를 혼용하지 않음.`
+- market_temperature.explanation: positive_signals, neutral_signals, negative_risks 각 배열.
+- 세 레이어(facts/hypotheses/inferences) 혼용 금지.`
 
 /** System instruction for initial news-based research. */
 export const INITIAL_RESEARCH_SYSTEM = `시장 리서치 전문가. 제공된 뉴스 제목만 참고하여 분석. JSON만 출력.

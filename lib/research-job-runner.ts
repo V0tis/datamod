@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { generateText, runTabAnalysis } from '@/lib/ai'
-import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { parseInitialResearchResponse, type StructuredAnalysisFields } from '@/lib/research-parser'
 import { INITIAL_RESEARCH_SYSTEM, buildInitialResearchUserPrompt } from '@/lib/ai/pm-analysis-prompts'
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
@@ -184,6 +184,7 @@ export async function runAnalysisJob(jobId: string) {
     }
 
     const s = parsed.summary
+    const structured = parsed.ok && 'structured' in parsed ? (parsed.structured as StructuredAnalysisFields) : undefined
     const articleSummaries = s.articleSummaries.slice(0, news.length)
     const summary = {
       marketNews: s.marketNews,
@@ -218,6 +219,18 @@ export async function runAnalysisJob(jobId: string) {
         chartData: summary.chartData,
         keyConclusions: summary.keyConclusions,
         sentiment: summary.sentiment,
+        ...(structured && {
+          analysis_target: structured.analysis_target,
+          confidence_score: structured.confidence_score,
+          market_temperature_score: structured.market_temperature_score,
+          facts: structured.facts,
+          hypotheses: structured.hypotheses,
+          inferences: structured.inferences,
+          positive_signals: structured.positive_signals,
+          neutral_signals: structured.neutral_signals,
+          negative_risks: structured.negative_risks,
+          summary_insights: structured.summary_insights,
+        }),
       }
       logCacheEvent('write', {
         scope: 'stream_report',
@@ -225,19 +238,20 @@ export async function runAnalysisJob(jobId: string) {
         countryCode: cacheKey.countryCode,
         detail: 'key_metrics',
       })
-      // State: persist analysis_status='completed'; UI trusts this, never infers from partial data.
-      await supabase.from('research_history').upsert(
-        {
-          user_id: cacheKey.userId,
-          keyword: cacheKey.keyword,
-          country_code: cacheKey.countryCode,
-          report_id: reportId,
-          key_metrics: keyMetrics,
-          analysis_status: 'completed',
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,keyword,country_code' }
-      )
+      const upsertPayload: Record<string, unknown> = {
+        user_id: cacheKey.userId,
+        keyword: cacheKey.keyword,
+        country_code: cacheKey.countryCode,
+        report_id: reportId,
+        key_metrics: keyMetrics,
+        analysis_status: 'completed',
+        updated_at: new Date().toISOString(),
+      }
+      if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
+      if (typeof structured?.confidence_score === 'number') upsertPayload.confidence_score = structured.confidence_score
+      if (typeof structured?.market_temperature_score === 'number') upsertPayload.market_temperature_score = structured.market_temperature_score
+      if (structured?.summary_insights) upsertPayload.summary_insights = structured.summary_insights
+      await supabase.from('research_history').upsert(upsertPayload, { onConflict: 'user_id,keyword,country_code' })
     }
 
     // Creative analysis: run tab analysis in background and write to research_history.

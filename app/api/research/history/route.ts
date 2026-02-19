@@ -8,6 +8,10 @@ export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
 type HistoryRow = {
   report_id: string | null
   analysis_status?: string | null
+  analysis_target?: string | null
+  confidence_score?: number | null
+  market_temperature_score?: number | null
+  summary_insights?: string | null
   key_metrics: unknown
   analysis_groq: unknown
   analysis_gemini: unknown
@@ -52,7 +56,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ list })
     }
 
-    const selectCols = 'report_id, analysis_status, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
+    const selectCols = 'report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
     const baseQuery = () =>
       supabase
         .from('research_history')
@@ -88,39 +92,38 @@ export async function GET(req: Request) {
       .eq('id', row.report_id)
       .maybeSingle()
 
-    if (reportError || !report) {
-      return NextResponse.json({
-        cached: true,
-        cacheExpired,
-        reportId: row.report_id,
-        keyword,
-        analysis_status: ensureAnalysisStatus(row.analysis_status),
-        content: {},
-        source_links: [],
-        ai_responses: {},
-        updated_at: row.updated_at,
-        analysis_groq: ensureTabAnalysisRecord(row.analysis_groq) ?? undefined,
-        analysis_gemini: ensureTabAnalysisRecord(row.analysis_gemini) ?? undefined,
-        analysis_results: ensureObject(row.analysis_results),
-        key_metrics: ensureObject(row.key_metrics),
-      })
-    }
-
-    const content = (report.content ?? {}) as Record<string, unknown>
-    return NextResponse.json({
+    const basePayload = {
       cached: true,
       cacheExpired,
-      reportId: report.id,
+      reportId: row.report_id ?? report?.id,
       keyword,
       analysis_status: ensureAnalysisStatus(row.analysis_status),
-      content,
-      source_links: (report as { source_links?: unknown }).source_links ?? [],
-      ai_responses: (report as { ai_responses?: Record<string, string> }).ai_responses ?? {},
+      analysis_target: row.analysis_target ?? undefined,
+      confidence_score: typeof row.confidence_score === 'number' ? row.confidence_score : undefined,
+      market_temperature_score: typeof row.market_temperature_score === 'number' ? row.market_temperature_score : undefined,
+      summary_insights: typeof row.summary_insights === 'string' ? row.summary_insights : undefined,
       updated_at: row.updated_at,
       analysis_groq: ensureTabAnalysisRecord(row.analysis_groq) ?? undefined,
       analysis_gemini: ensureTabAnalysisRecord(row.analysis_gemini) ?? undefined,
       analysis_results: ensureObject(row.analysis_results),
       key_metrics: ensureObject(row.key_metrics),
+    }
+    if (reportError || !report) {
+      return NextResponse.json({
+        ...basePayload,
+        content: {},
+        source_links: [],
+        ai_responses: {},
+      })
+    }
+
+    const content = (report.content ?? {}) as Record<string, unknown>
+    return NextResponse.json({
+      ...basePayload,
+      reportId: report.id,
+      content,
+      source_links: (report as { source_links?: unknown }).source_links ?? [],
+      ai_responses: (report as { ai_responses?: Record<string, string> }).ai_responses ?? {},
     })
   } catch (e) {
     console.error('[Research History] GET:', e)

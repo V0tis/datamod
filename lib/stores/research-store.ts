@@ -54,8 +54,22 @@ export interface ResearchResponse {
   analysis_gemini?: Record<string, string>
   /** AI Insight Consensus (research_history.analysis_results). summary, sentiment, strategic_insight, action_item, confidence */
   analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
-  /** research_history.key_metrics (chartData, keyConclusions, sentiment) */
-  key_metrics?: { chartData?: ChartData; keyConclusions?: string[]; sentiment?: number }
+  /** research_history.key_metrics (chartData, keyConclusions, sentiment, structured PM fields) */
+  key_metrics?: {
+    chartData?: ChartData
+    keyConclusions?: string[]
+    sentiment?: number
+    facts?: string[]
+    hypotheses?: string[]
+    inferences?: string[]
+    positive_signals?: string[]
+    neutral_signals?: string[]
+    negative_risks?: string[]
+    market_temperature_score?: number
+    confidence_score?: number
+    analysis_target?: string
+    summary_insights?: string
+  }
 }
 
 type ResearchStatus = 'idle' | 'loading' | 'done' | 'error'
