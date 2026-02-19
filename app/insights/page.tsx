@@ -181,6 +181,12 @@ export default function InsightsPage() {
                           </p>
                         )}
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
+                          {item.snapshot?.qualityScore && (
+                            <>
+                              <span>품질 {item.snapshot.qualityScore.score}/100 · {item.snapshot.qualityScore.label}</span>
+                              <span>·</span>
+                            </>
+                          )}
                           {keyword && <span>시장 맥락: {keyword}</span>}
                           {keyword && <span>·</span>}
                           <TimeAgo isoString={item.created_at} />

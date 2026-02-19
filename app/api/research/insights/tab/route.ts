@@ -16,6 +16,7 @@ import {
 } from '@/lib/research-cache'
 import { getTabProviderKeys } from '@/lib/research-keys'
 import type { TabAnalysisRecord } from '@/lib/research-types'
+import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 import {
   type Consensus,
   type ConsensusImpactItem,
@@ -34,9 +35,11 @@ export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrat
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
 const CACHE_SCOPE: ResearchCacheScope = 'insight_tab'
 
-/** Gemini·Groq 공통: 시장 분석 및 인사이트를 마크다운 형식으로 요약 */
-const UNIFIED_SYSTEM_PROMPT =
-  '시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.'
+/** Gemini·Groq 공통: PM 분석 프레임워크 + 시장 분석·인사이트 마크다운 요약 */
+const UNIFIED_SYSTEM_PROMPT = `${PM_ANALYSIS_PRINCIPLES}
+
+시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.
+Facts/Hypotheses/Inferences 구분이 가능한 경우 해당 레이블을 사용하세요.`
 
 export type TabType = 'logic' | 'creative' | 'fact'
 

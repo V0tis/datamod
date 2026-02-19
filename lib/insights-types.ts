@@ -3,6 +3,13 @@
  * Snapshot is a structured copy of analysis at save time; no link to live analysis generation.
  */
 
+/** Stored quality score; label is string for JSON/DB compatibility. */
+export interface InsightQualityScore {
+  score: number
+  label: string
+  explanation: string
+}
+
 export interface InsightSnapshot {
   keyword: string
   countryCode?: string
@@ -15,6 +22,8 @@ export interface InsightSnapshot {
   }
   reportId?: string | null
   savedAt: string
+  /** Trustworthiness score (0–100) at save time; not factual correctness. */
+  qualityScore?: InsightQualityScore
 }
 
 export interface SavedInsight {

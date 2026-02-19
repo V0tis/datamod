@@ -3,6 +3,7 @@
  * PM-oriented Consensus (marketNews, painPoints, strategicSummary, etc.).
  * Single responsibility: build prompt, call Gemini, parse and normalize JSON.
  */
+import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 import {
   requestGenerateContent,
   parseGenerateContentResponse,
@@ -37,7 +38,10 @@ export type Consensus = {
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
 const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 
-const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 분석가입니다.
+const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 시니어 수준 분석가입니다.
+
+${PM_ANALYSIS_PRINCIPLES}
+
 아래 [Gemini 분석]과 [Groq 분석]에 **제공된 텍스트만**을 바탕으로 정보를 추출하세요. 검색이나 외부 데이터를 사용하지 마세요.
 반드시 제공된 데이터에 근거하여 아래 JSON 구조로만 출력하세요. 다른 텍스트는 포함하지 마세요.
 각 항목(marketNews, reason, summary 등)은 1~2문장으로 간결히 작성하세요.

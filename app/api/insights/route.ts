@@ -80,6 +80,9 @@ export async function POST(req: Request) {
     strategicSummary: s.strategicSummary,
     reportId: s.reportId,
     savedAt: s.savedAt ?? new Date().toISOString(),
+    qualityScore: s.qualityScore && typeof s.qualityScore === 'object' && typeof s.qualityScore.score === 'number'
+      ? { score: s.qualityScore.score, label: String(s.qualityScore.label ?? ''), explanation: String(s.qualityScore.explanation ?? '') }
+      : undefined,
   }
 
   const { data: row, error } = await supabase

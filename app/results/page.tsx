@@ -27,10 +27,12 @@ import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/
 import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { SuggestedPMActions } from '@/components/research/suggested-pm-actions'
+import { AnalysisQualityIndicator } from '@/components/research/analysis-quality-indicator'
 import { InsightSummary } from '@/components/research/InsightSummary'
+import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { KeyFindings } from '@/components/research/KeyFindings'
 import type { TabAnalysisRecord } from '@/lib/research-types'
-import type { InsightSnapshot } from '@/lib/insights-types'
+import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
 const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
@@ -731,6 +733,17 @@ function ResultsContent() {
       consensusData?.strategicSummary?.summary?.trim() ||
       (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
       ''
+    const qualityInput = {
+      marketNews: displayResult?.marketNews ?? consensusData?.marketNews,
+      painPoints: displayResult?.painPoints ?? consensusData?.painPoints,
+      competitorTrends: displayResult?.competitorTrends ?? consensusData?.competitorTrends,
+      sentiment: consensusData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
+      impactAnalysis: consensusData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
+      strategicSummary: consensusData?.strategicSummary,
+      metadata: consensusData?.metadata,
+    }
+    const q = computeAnalysisQualityScore(qualityInput)
+    const qualityScore: InsightQualityScore = { score: q.score, label: q.label, explanation: q.explanation }
     return {
       keyword: currentKeyword ?? '',
       countryCode: countryFromUrl,
@@ -745,6 +758,7 @@ function ResultsContent() {
         : undefined,
       reportId: displayResult?.reportId ?? null,
       savedAt: new Date().toISOString(),
+      qualityScore,
     }
   }, [consensusData, displayResult, currentKeyword, countryFromUrl])
 
@@ -1337,6 +1351,25 @@ function ResultsContent() {
               </button>
             </div>
             <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
+            {/* Analysis quality: trustworthiness score (fact coverage, signal consistency, hypothesis discipline, uncertainty disclosure). */}
+            {displayStatus === 'done' && displayResult && (() => {
+              const qualityInput = {
+                marketNews: displayResult?.marketNews ?? consensusData?.marketNews,
+                painPoints: displayResult?.painPoints ?? consensusData?.painPoints,
+                competitorTrends: displayResult?.competitorTrends ?? consensusData?.competitorTrends,
+                sentiment: consensusData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
+                impactAnalysis: consensusData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
+                strategicSummary: consensusData?.strategicSummary,
+                metadata: consensusData?.metadata,
+              }
+              const quality = computeAnalysisQualityScore(qualityInput)
+              return (
+                <div className="rounded-xl border border-border/60 bg-card/50 p-4">
+                  <h3 className="text-xs font-medium text-muted-foreground mb-2">분석 품질</h3>
+                  <AnalysisQualityIndicator quality={quality} compact />
+                </div>
+              )
+            })()}
             {/* Market temperature: 0-100 score, textual interpretation, expandable why. UX: PM explainability. */}
             <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
