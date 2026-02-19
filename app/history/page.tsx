@@ -11,12 +11,25 @@ import { Search, Trash2, Loader2 } from 'lucide-react'
 import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 
+const TARGET_LABELS: Record<string, string> = {
+  product: '제품',
+  company: '기업',
+  market: '시장',
+  person: '인물',
+  policy: '정책',
+  technology: '기술',
+}
+
 interface ResearchRecord {
   id: string
   keyword: string
   country_code: string
   report_id: string | null
   analysis_status?: 'queued' | 'analyzing' | 'completed' | 'failed'
+  analysis_target?: string | null
+  market_temperature_score?: number | null
+  summary_insights?: string | null
+  top_risk?: string | null
   updated_at: string | null
   date: string
 }
@@ -194,31 +207,46 @@ export default function HistoryPage() {
             const resultsHref = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
             return (
               <li key={record.id}>
-                <article className="group rounded-lg border border-border/50 bg-background py-4 px-4 sm:px-5 transition-colors hover:border-border hover:bg-muted/5">
-                  <div className="flex items-center justify-between gap-4">
+                <article className="group rounded-xl border border-border/60 bg-card py-4 px-4 sm:px-5 transition-colors hover:border-border hover:shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
                     <Link
                       href={resultsHref}
                       className="flex-1 min-w-0 rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-medium text-foreground">{record.keyword}</h3>
-                        <span
-                          className="text-[11px] text-muted-foreground border border-border/60 rounded px-1.5 py-0.5 shrink-0"
-                          title="분석 대상 시장"
-                        >
+                        <h3 className="text-base font-semibold text-foreground">{record.keyword}</h3>
+                        <span className="text-[11px] text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 shrink-0">
                           {COUNTRY_LABELS[record.country_code] ?? record.country_code}
                         </span>
+                        {record.analysis_target && (
+                          <span className="text-[11px] text-muted-foreground shrink-0">
+                            {TARGET_LABELS[record.analysis_target] ?? record.analysis_target}
+                          </span>
+                        )}
                         {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
                           <span className="text-[11px] text-amber-600 dark:text-amber-500 font-medium shrink-0">분석 중</span>
                         ) : record.analysis_status === 'failed' ? (
                           <span className="text-[11px] text-destructive font-medium shrink-0">실패</span>
                         ) : null}
-                        {record.updated_at && (
-                          <span className="text-[11px] text-muted-foreground">
-                            <TimeAgo isoString={record.updated_at} />
-                          </span>
-                        )}
                       </div>
+                      {record.updated_at && (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          <TimeAgo isoString={record.updated_at} />
+                        </p>
+                      )}
+                      {record.market_temperature_score != null && record.analysis_status === 'completed' && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          시장 온도 {record.market_temperature_score}/100
+                        </p>
+                      )}
+                      {record.summary_insights && record.analysis_status === 'completed' && (
+                        <p className="text-sm text-foreground mt-2 line-clamp-2">{record.summary_insights}</p>
+                      )}
+                      {record.top_risk && record.analysis_status === 'completed' && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                          리스크: {record.top_risk}
+                        </p>
+                      )}
                     </Link>
                     <div className="flex shrink-0 gap-1">
                       <Link

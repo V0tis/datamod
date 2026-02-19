@@ -3,7 +3,7 @@
  * Supports PM analysis schema (new) and legacy format for backward compatibility.
  */
 import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
-import type { PMAnalysisOutput } from '@/lib/ai/pm-analysis-schema'
+import type { PMAnalysisOutput, RecommendedAction } from '@/lib/ai/pm-analysis-schema'
 import { pmAnalysisToInitialSummary } from '@/lib/ai/pm-analysis-adapter'
 
 export type ChartSentiment = { positive: number; neutral: number; negative: number }
@@ -21,6 +21,14 @@ export type InitialResearchSummary = {
   keyConclusions: string[]
 }
 
+/** Structured recommended action for PM layer. */
+export type StructuredRecommendedAction = {
+  title: string
+  reasoning?: string
+  urgency_level?: 'low' | 'medium' | 'high'
+  related_risk?: string
+}
+
 /** Structured PM analysis fields for DB persistence and frontend parsing. */
 export type StructuredAnalysisFields = {
   analysis_target?: string
@@ -33,6 +41,11 @@ export type StructuredAnalysisFields = {
   neutral_signals?: string[]
   negative_risks?: string[]
   summary_insights?: string
+  pm_actions?: {
+    recommended_actions?: StructuredRecommendedAction[]
+    monitoring_points?: string[]
+    decision_risks?: string[]
+  }
 }
 
 const DEFAULT_CHART_SENTIMENT: ChartSentiment = { positive: 65, neutral: 20, negative: 15 }
@@ -91,8 +104,8 @@ function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
 export function parseInitialResearchResponse(
   responseText: string,
   options?: { repair?: boolean; articleSummaries?: string[] }
-): { ok: true; summary: InitialResearchSummary } | { ok: false; error: string } {
-  let rawJson = extractJsonFromText(responseText)
+): { ok: true; summary: InitialResearchSummary; structured?: StructuredAnalysisFields } | { ok: false; error: string } {
+  const rawJson = extractJsonFromText(responseText)
   let parsed: unknown
 
   try {
@@ -134,6 +147,31 @@ export function parseInitialResearchResponse(
         .filter(Boolean)
         .join('. ')
         .slice(0, 500) || undefined,
+      pm_actions: (() => {
+        const pa = pm.pm_actions
+        if (!pa) return undefined
+        const rawRec = pa.recommended_actions ?? []
+        const normalized = rawRec
+          .map((a) => {
+            if (typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string') {
+              const r = a as RecommendedAction
+              return {
+                title: r.title,
+                reasoning: typeof r.reasoning === 'string' ? r.reasoning : undefined,
+                urgency_level: r.urgency_level === 'low' || r.urgency_level === 'medium' || r.urgency_level === 'high' ? r.urgency_level : undefined,
+                related_risk: typeof r.related_risk === 'string' ? r.related_risk : undefined,
+              }
+            }
+            if (typeof a === 'string' && a.trim()) return { title: a.trim() }
+            return null
+          })
+          .filter((x): x is NonNullable<typeof x> => x != null)
+        return {
+          recommended_actions: normalized,
+          monitoring_points: Array.isArray(pa.monitoring_points) ? pa.monitoring_points.filter((s): s is string => typeof s === 'string') : undefined,
+          decision_risks: Array.isArray(pa.decision_risks) ? pa.decision_risks.filter((s): s is string => typeof s === 'string') : undefined,
+        }
+      })(),
     }
     return { ok: true, summary, structured }
   }

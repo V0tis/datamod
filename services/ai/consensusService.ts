@@ -3,7 +3,7 @@
  * PM-oriented Consensus. Outputs PM analysis schema; maps to Consensus for storage/frontend.
  */
 import { CONSENSUS_SYNTHESIS_SYSTEM } from '@/lib/ai/pm-analysis-prompts'
-import type { PMAnalysisOutput, TrendValue } from '@/lib/ai/pm-analysis-schema'
+import type { PMAnalysisOutput, TrendValue, RecommendedAction } from '@/lib/ai/pm-analysis-schema'
 import {
   requestGenerateContent,
   parseGenerateContentResponse,
@@ -56,7 +56,7 @@ function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
 const CONSENSUS_SYSTEM = `${CONSENSUS_SYNTHESIS_SYSTEM}
 
 [Gemini 분석]과 [Groq 분석] 텍스트에서 정보 추출. 검색·외부 데이터 사용 금지. 제공된 데이터만 근거로 JSON만 출력.
-규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개, recommended_actions 2~4개, meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
+규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개. recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }. meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
 
 function trendToSentimentRatio(trend: TrendValue, score: number): { positive: number; neutral: number; negative: number } {
   const s = Math.min(100, Math.max(0, score))
@@ -105,7 +105,10 @@ function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
       summary: insights.inferences?.join(' ').slice(0, 500) ?? '',
       opportunity: exp.positive_signals?.join(' ').slice(0, 300) ?? '—',
       threat: exp.negative_risks?.join(' ').slice(0, 300) ?? '—',
-      actionItems: pm_actions.recommended_actions?.slice(0, 5) ?? [],
+      actionItems: (pm_actions.recommended_actions ?? [])
+        .slice(0, 5)
+        .map((a) => (typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string' ? (a as RecommendedAction).title : typeof a === 'string' ? a : ''))
+        .filter(Boolean),
     },
     metadata: { confidence: meta.confidence_score, dataPeriod: '최근 24시간' },
   }

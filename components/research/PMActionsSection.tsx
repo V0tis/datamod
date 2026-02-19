@@ -1,0 +1,94 @@
+'use client'
+
+import { cn } from '@/lib/utils'
+
+export type RecommendedAction = {
+  title: string
+  reasoning?: string
+  urgency_level?: 'low' | 'medium' | 'high'
+  related_risk?: string
+}
+
+function normalizeAction(
+  a: RecommendedAction | string
+): RecommendedAction | null {
+  if (typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string') {
+    return a as RecommendedAction
+  }
+  if (typeof a === 'string' && a.trim()) {
+    return { title: a.trim(), urgency_level: 'low' }
+  }
+  return null
+}
+
+export interface PMActionsSectionProps {
+  /** Structured actions or legacy string[] */
+  actions: (RecommendedAction | string)[]
+  className?: string
+}
+
+const URGENCY_STYLES = {
+  high: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
+  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  low: 'bg-muted/60 text-muted-foreground border-border/60',
+} as const
+
+const URGENCY_LABELS = {
+  high: '높음',
+  medium: '보통',
+  low: '낮음',
+} as const
+
+export function PMActionsSection({ actions, className }: PMActionsSectionProps) {
+  const normalized = (actions ?? [])
+    .map(normalizeAction)
+    .filter((x): x is RecommendedAction => x != null)
+  if (!normalized.length) return null
+
+  return (
+    <section className={cn('space-y-3', className)}>
+      <h3 className="text-sm font-semibold text-foreground">Recommended PM Actions</h3>
+      <div className="space-y-2">
+        {normalized.map((a, i) => {
+          const urgency = a.urgency_level && (a.urgency_level === 'low' || a.urgency_level === 'medium' || a.urgency_level === 'high')
+            ? a.urgency_level
+            : 'low'
+          const badgeStyle = URGENCY_STYLES[urgency]
+          const badgeLabel = URGENCY_LABELS[urgency]
+
+          return (
+            <div
+              key={i}
+              className={cn(
+                'rounded-lg border p-3 text-sm',
+                urgency === 'high' && 'border-red-500/20',
+                urgency === 'medium' && 'border-amber-500/20',
+                urgency === 'low' && 'border-border/60'
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-foreground">{a.title}</span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium',
+                    badgeStyle
+                  )}
+                >
+                  {badgeLabel}
+                </span>
+              </div>
+              {a.reasoning && (
+                <p className="mt-1.5 text-muted-foreground leading-relaxed">{a.reasoning}</p>
+              )}
+              {a.related_risk && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="font-medium">관련 리스크:</span> {a.related_risk}
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}

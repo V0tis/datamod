@@ -39,7 +39,12 @@ export function buildInitialResearchUserPrompt(keyword: string, newsTitles: stri
       : ''
   return `${newsBlock}키워드 "${keyword}"에 대해 위 뉴스만 바탕으로 분석. JSON만 출력.
 
-규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개, recommended_actions 2~4개, positive_signals/neutral_signals/negative_risks 각 1~3개, meta.generated_at은 현재 시각 ISO 8601.`
+규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개.
+- recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }
+- monitoring_points: 1~3개, decision_risks: 1~3개
+- positive_signals/neutral_signals/negative_risks 각 1~3개.
+- meta.generated_at: 현재 시각 ISO 8601.
+- 질문 금지. 컨텍스트 자율 추론.`
 }
 
 /** System instruction for consensus synthesis (Gemini + Groq markdown). */

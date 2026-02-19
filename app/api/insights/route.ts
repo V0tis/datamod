@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim()?.toLowerCase() ?? ''
 
-  let query = supabase
+  const query = supabase
     .from('saved_insights')
     .select('id, name, note, snapshot, created_at')
     .eq('user_id', user.id)

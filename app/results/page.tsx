@@ -30,6 +30,7 @@ import { AnalysisQualityIndicator } from '@/components/research/analysis-quality
 import { InsightSummary } from '@/components/research/InsightSummary'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { KeyFindings } from '@/components/research/KeyFindings'
+import { ResultsReportView } from '@/components/research/ResultsReportView'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
@@ -162,6 +163,7 @@ function ResultsContent() {
   const {
     keyword: storeKeyword,
     status,
+    analysisStatus,
     newsList,
     result,
     error,
@@ -234,6 +236,7 @@ function ResultsContent() {
   const displayResult = isViewingActiveJob ? result : null
   const displayStatus = isViewingActiveJob ? status : (urlKeyword ? 'loading' : status)
   const displayError = isViewingActiveJob ? error : null
+  const canonicalStatus = isViewingActiveJob ? analysisStatus : (urlKeyword ? ('analyzing' as const) : analysisStatus)
 
   // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
   useEffect(() => {
@@ -323,8 +326,7 @@ function ResultsContent() {
       })
   }, [keyword, storeKeyword, newsDays])
 
-  // State: render from displayStatus only; no inference from hasResult, displayError, etc.
-  const loading = displayStatus === 'loading'
+  const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
   const showAnalyzing = historyCheckDone && loading && !quotaExceeded
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
@@ -810,18 +812,49 @@ function ResultsContent() {
             )}
           </h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            {showAnalyzing
-              ? (currentTask?.progress ? currentTask.progress : '분석 중')
-              : displayStatus === 'done' && displayResult?.updated_at
+            {canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
+              ? (currentTask?.progress ?? '분석 중')
+              : canonicalStatus === 'completed' && displayResult?.updated_at
                 ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
-                : displayResult?.updated_at
-                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+                : canonicalStatus === 'failed'
+                  ? '분석 실패'
                   : null}
           </p>
         </header>
 
-        {/* Insight Summary: one-line conclusion + key findings. Document flow. */}
-        {displayStatus === 'done' && displayResult && (
+        {/* Render from canonicalStatus only. No heuristic inference. */}
+        {canonicalStatus === 'failed' && (
+          <div className="py-6">
+            <ErrorState
+              title="분석을 완료하지 못했습니다"
+              description="서버가 바쁘거나 일시적인 오류일 수 있습니다."
+              recoveryLabel="다시 분석하기"
+              onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              detail={displayError ?? undefined}
+            />
+          </div>
+        )}
+        {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') && (
+          <div className="py-6">
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
+              <p className="text-sm text-muted-foreground">{currentTask?.progress ?? '분석 중'}</p>
+            </div>
+          </div>
+        )}
+        {canonicalStatus === 'completed' && displayResult && (
+          <ResultsReportView
+            keyword={currentKeyword ?? ''}
+            result={displayResult}
+            onPrint={printReportAsPdf}
+            onSaveInsight={handleSaveInsightOpen}
+            onReanalyze={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+            reanalyzing={loading}
+          />
+        )}
+
+        {/* Legacy blocks hidden: ResultsReportView provides summary + actions when completed. */}
+        {false && (
           <section id="insight-summary" className="scroll-mt-4 rounded-lg border border-border/60 bg-background/50 p-4 sm:p-5 reading-section-gap" aria-label="Insight summary">
             <h2 className="text-sm font-medium text-foreground mb-3">요약</h2>
             <div className="reading-space-y">
@@ -856,15 +889,17 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* Suggested PM Actions: decision-support below summary. Derived from market temp, competition, confidence. */}
-        {displayStatus === 'done' && displayResult && (
+        {/* Suggested PM Actions: hidden when using ResultsReportView. */}
+        {false && displayStatus === 'done' && displayResult && (
           <SuggestedPMActions
             marketTempScore={
-              typeof consensusData?.sentiment?.score === 'number'
-                ? consensusData.sentiment.score
-                : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
+              ((): number | null => {
+                const s = consensusData?.sentiment?.score
+                if (typeof s === 'number') return s as number
+                return (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
                   ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
                   : null
+              })()
             }
             competitionScore={
               consensusData?.impactAnalysis?.find((i) => i.subject === '경쟁력')?.score ??
@@ -880,8 +915,8 @@ function ResultsContent() {
           />
         )}
 
-        {/* Actions: after summary so the fold is summary-first; details/actions below */}
-        {displayStatus === 'done' && displayResult && (
+        {/* Actions: hidden when using ResultsReportView. */}
+        {false && displayStatus === 'done' && displayResult && (
           <div className="no-print flex flex-wrap items-center gap-2 sm:gap-3 mb-6 pb-4 border-b border-border">
             <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
               <FileDown className="w-4 h-4" />
@@ -946,10 +981,10 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Strategic insight: Facts, Hypotheses, Inferences. */}
+        {/* Evidence & raw analysis: collapsible. Shown when completed. */}
         <section className="reading-section-gap" aria-labelledby="consensus-heading">
           <h2 id="consensus-heading" className="text-sm font-medium text-foreground mb-3">
-            전략 통찰
+            상세 분석
           </h2>
         {!displayResult ? (
           <div className="no-print w-full rounded-xl border border-border bg-card p-6">

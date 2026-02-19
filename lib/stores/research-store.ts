@@ -10,7 +10,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import type { AnalysisTask } from '@/lib/analysis-types'
+import type { AnalysisTask, AnalysisStatus } from '@/lib/analysis-types'
 import { jobStatusToTaskStatus } from '@/lib/analysis-types'
 
 export interface NewsItem {
@@ -69,10 +69,18 @@ export interface ResearchResponse {
     confidence_score?: number
     analysis_target?: string
     summary_insights?: string
+    pm_actions?: {
+      recommended_actions?: Array<{ title: string; reasoning?: string; urgency_level?: 'low' | 'medium' | 'high'; related_risk?: string }>
+      monitoring_points?: string[]
+      decision_risks?: string[]
+    }
   }
 }
 
 type ResearchStatus = 'idle' | 'loading' | 'done' | 'error'
+
+/** Canonical analysis status for UI. Single source of truth. */
+export type CanonicalAnalysisStatus = AnalysisStatus
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -173,6 +181,8 @@ export interface GeminiQuota {
 interface ResearchState {
   keyword: string
   status: ResearchStatus
+  /** Canonical status for UI. Render ONLY from this. */
+  analysisStatus: CanonicalAnalysisStatus
   newsList: NewsItem[]
   result: ResearchResponse | null
   error: string | null
@@ -224,6 +234,7 @@ interface ResearchStore extends ResearchState {
 const initialState: ResearchState = {
   keyword: '',
   status: 'idle',
+  analysisStatus: 'queued',
   newsList: [],
   result: null,
   error: null,
@@ -250,7 +261,7 @@ export const useResearchStore = create<ResearchStore>()(
           set({ geminiQuota: null })
         }
       },
-      reset: () => set(initialState),
+      reset: () => set({ ...initialState, analysisStatus: 'queued' }),
 
       loadFromHistory: async (keyword: string, countryCode = 'KR') => {
         const k = keyword?.trim()
@@ -280,7 +291,7 @@ export const useResearchStore = create<ResearchStore>()(
           const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
           const km = parseJsonField(data.key_metrics) as ResearchResponse['key_metrics']
           // State: use analysis_status from API; never infer from partial data. Legacy: no analysis_status → completed.
-          const analysisStatus = ((data as { analysis_status?: string }).analysis_status as 'queued' | 'analyzing' | 'completed' | 'failed' | undefined) ?? 'completed'
+          const analysisStatus = ((data as { analysis_status?: string }).analysis_status as CanonicalAnalysisStatus | undefined) ?? 'completed'
           if (data.reportId) {
             const statusFromBackend =
               analysisStatus === 'completed' ? 'done' as const
@@ -290,6 +301,7 @@ export const useResearchStore = create<ResearchStore>()(
             set({
               keyword: k,
               status: statusFromBackend,
+              analysisStatus,
               result: {
                 ...(data.content ?? {}),
                 reportId: data.reportId,
@@ -332,6 +344,7 @@ export const useResearchStore = create<ResearchStore>()(
           set({
             keyword: k,
             status: 'done',
+            analysisStatus: 'completed',
             result: {
               ...content,
               reportId: report.id,
@@ -395,8 +408,10 @@ export const useResearchStore = create<ResearchStore>()(
           if (activeJobId && jobs[activeJobId]) {
             const active = jobs[activeJobId]
             const nextStatus = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
+            const nextAnalysisStatus = jobStatusToTaskStatus(active.status)
             set({
               status: nextStatus,
+              analysisStatus: nextAnalysisStatus,
               error: active.error ?? null,
               keyword: active.keyword,
               activeJobId,
@@ -419,10 +434,12 @@ export const useResearchStore = create<ResearchStore>()(
         const state = get()
         const isSameJob = state.activeJobId === jobId && (state.keyword?.trim() ?? '') === (job.keyword?.trim() ?? '')
         const status = job.status === 'succeeded' ? 'done' : job.status === 'failed' || job.status === 'cancelled' ? 'error' : 'loading'
+        const analysisStatus = jobStatusToTaskStatus(job.status)
         set({
           activeJobId: jobId,
           keyword: job.keyword,
           status,
+          analysisStatus,
           error: job.error ?? null,
           ...(isSameJob ? {} : { result: null, newsList: [] }),
         })
@@ -443,6 +460,7 @@ export const useResearchStore = create<ResearchStore>()(
         set({
           keyword: k,
           status: 'idle',
+          analysisStatus: 'queued',
           error: null,
           result: null,
           newsList: [],
@@ -482,6 +500,7 @@ export const useResearchStore = create<ResearchStore>()(
         set({
           keyword: k,
           status: 'loading',
+          analysisStatus: 'analyzing',
           newsList: [],
           result: null,
           error: null,
@@ -549,6 +568,20 @@ export const useResearchStore = create<ResearchStore>()(
 }),
     {
       name: 'rin-research-store',
+      migrate: (persisted: unknown) => {
+        const p = persisted as { state?: Partial<ResearchState> }
+        if (p?.state && !('analysisStatus' in (p.state ?? {}))) {
+          const s = p.state as ResearchState
+          const derived: CanonicalAnalysisStatus =
+            s.status === 'done' ? 'completed'
+            : s.status === 'error' ? 'failed'
+            : s.status === 'loading' ? 'analyzing'
+            : 'queued'
+          return { ...p, state: { ...s, analysisStatus: derived } }
+        }
+        return persisted as { state: ResearchState; version?: number }
+      },
+      version: 1,
       storage: {
         getItem: (name: string) => {
           if (typeof window === 'undefined') return null
@@ -583,6 +616,7 @@ export const useResearchStore = create<ResearchStore>()(
       partialize: (state) => ({
         keyword: state.keyword,
         status: state.status,
+        analysisStatus: state.analysisStatus,
         newsList: state.newsList,
         result: state.result,
         error: state.error,

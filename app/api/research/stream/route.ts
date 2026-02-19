@@ -224,8 +224,6 @@ export async function POST(req: Request) {
         }
 
         currentStep = 'report_db'
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
         let reportId: string | null = null
         if (user?.id) {
           try {
@@ -257,6 +255,7 @@ export async function POST(req: Request) {
                   neutral_signals: structured.neutral_signals,
                   negative_risks: structured.negative_risks,
                   summary_insights: structured.summary_insights,
+                  pm_actions: structured.pm_actions,
                 }),
               }
               // Same cache key as insights/tab. TTL: RESEARCH_CACHE_TTL_MS (24h). Owner: research_history.

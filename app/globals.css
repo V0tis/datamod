@@ -56,13 +56,13 @@
   --sidebar-ring: #2563EB;
 }
 
-/* Dark theme: PM-optimized (low saturation, high clarity for long reading sessions) */
+/* Dark theme: softer charcoal, not pure black. PM decision-support. */
 .dark {
-  --background: #111318;
-  --background-elevated: #171a20;
+  --background: #1c1f26;
+  --background-elevated: #23262e;
   --foreground: #e4e6eb;
   --foreground-muted: #9ca3af;
-  --card: #1a1d24;
+  --card: #23262e;
   --card-foreground: #e4e6eb;
   --popover: #1a1d24;
   --popover-foreground: #e4e6eb;

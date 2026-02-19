@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     if (!keyword) {
       const { data: rows, error } = await supabase
         .from('research_history')
-        .select('id, keyword, country_code, report_id, analysis_status, updated_at')
+        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, market_temperature_score, summary_insights, key_metrics, updated_at')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
 
@@ -44,15 +44,25 @@ export async function GET(req: Request) {
         console.error('[Research History] list:', error)
         return NextResponse.json({ list: [], error: error.message }, { status: 500 })
       }
-      const list = (rows ?? []).map((r) => ({
-        id: r.id,
-        keyword: r.keyword ?? '',
-        country_code: r.country_code ?? 'KR',
-        report_id: r.report_id ?? null,
-        analysis_status: ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status),
-        updated_at: r.updated_at ?? null,
-        date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
-      }))
+      const list = (rows ?? []).map((r) => {
+        const km = (r as { key_metrics?: { negative_risks?: string[] } }).key_metrics
+        const topRisk = Array.isArray(km?.negative_risks) && km.negative_risks.length > 0 ? km.negative_risks[0] : null
+        return {
+          id: r.id,
+          keyword: r.keyword ?? '',
+          country_code: r.country_code ?? 'KR',
+          report_id: r.report_id ?? null,
+          analysis_status: ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status),
+          analysis_target: (r as { analysis_target?: string }).analysis_target ?? null,
+          market_temperature_score: typeof (r as { market_temperature_score?: number }).market_temperature_score === 'number'
+            ? (r as { market_temperature_score: number }).market_temperature_score
+            : null,
+          summary_insights: (r as { summary_insights?: string }).summary_insights ?? null,
+          top_risk: topRisk,
+          updated_at: r.updated_at ?? null,
+          date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
+        }
+      })
       return NextResponse.json({ list })
     }
 

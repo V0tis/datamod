@@ -2,7 +2,7 @@
  * Adapters: PMAnalysisOutput -> legacy formats.
  * pmAnalysisToConsensus lives in consensusService to avoid circular deps.
  */
-import type { PMAnalysisOutput, TrendValue } from './pm-analysis-schema'
+import type { PMAnalysisOutput, TrendValue, RecommendedAction } from './pm-analysis-schema'
 import type { InitialResearchSummary, ChartData } from '@/lib/research-parser'
 
 function trendToSentimentRatio(trend: TrendValue, score: number): { positive: number; neutral: number; negative: number } {
@@ -30,7 +30,14 @@ export function pmAnalysisToInitialSummary(
   const facts = insights?.facts ?? []
   const inferences = insights?.inferences ?? []
   const hypotheses = insights?.hypotheses ?? []
-  const recActions = pm_actions?.recommended_actions ?? []
+  const rawRecActions = pm_actions?.recommended_actions ?? []
+  const recActions: string[] = rawRecActions.map((a) =>
+    typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string'
+      ? (a as RecommendedAction).title
+      : typeof a === 'string'
+        ? a
+        : ''
+  ).filter(Boolean)
 
   const marketNews = [...facts, ...(exp.positive_signals ?? [])].slice(0, 5)
   const painPoints = [...(exp.negative_risks ?? []), ...hypotheses].filter(Boolean).slice(0, 5)

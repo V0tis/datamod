@@ -165,6 +165,7 @@ export async function POST(req: Request) {
               neutral_signals: structured.neutral_signals,
               negative_risks: structured.negative_risks,
               summary_insights: structured.summary_insights,
+              pm_actions: structured.pm_actions,
             }),
           }
           const upsertPayload: Record<string, unknown> = {

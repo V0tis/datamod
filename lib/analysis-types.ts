@@ -1,10 +1,17 @@
 /**
- * Analysis task model: first-class entity for a single keyword analysis.
- * Authoritative status from backend (research_history.analysis_status or job status).
- * UI renders ONLY from status; no boolean inference (isLoading, hasResult, etc).
- * One-directional: queued → analyzing → completed | failed
+ * Canonical analysis status. Single source of truth for UI.
+ * UI renders ONLY from this; no heuristic inference (hasResult, isLoading, etc).
+ * Transitions: queued → analyzing → completed | failed (never revert).
  */
 export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
+
+/** Display label for analysis_status */
+export const ANALYSIS_STATUS_LABELS: Record<AnalysisStatus, string> = {
+  queued: '대기 중',
+  analyzing: '분석 중',
+  completed: '완료',
+  failed: '실패',
+}
 
 export interface AnalysisTask {
   id: string

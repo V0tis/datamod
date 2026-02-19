@@ -34,8 +34,18 @@ export interface PMAnalysisInsights {
   inferences: string[]
 }
 
+export type UrgencyLevel = 'low' | 'medium' | 'high'
+
+export interface RecommendedAction {
+  title: string
+  reasoning: string
+  urgency_level: UrgencyLevel
+  related_risk?: string
+}
+
+/** recommended_actions: structured (title, reasoning, urgency_level) or legacy string[]. */
 export interface PMActions {
-  recommended_actions: string[]
+  recommended_actions: (RecommendedAction | string)[]
   monitoring_points: string[]
   decision_risks: string[]
 }
@@ -71,7 +81,7 @@ export const PM_ANALYSIS_JSON_SCHEMA = `{
     "inferences": string[]
   },
   "pm_actions": {
-    "recommended_actions": string[],
+    "recommended_actions": [{ "title": string, "reasoning": string, "urgency_level": "low"|"medium"|"high", "related_risk"?: string }],
     "monitoring_points": string[],
     "decision_risks": string[]
   }

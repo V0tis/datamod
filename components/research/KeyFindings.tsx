@@ -27,11 +27,11 @@ export function KeyFindings({
   maxItems = 5,
   className,
 }: KeyFindingsProps) {
+  const [showAll, setShowAll] = useState(false)
   const list = items.slice(0, maxItems).filter(Boolean)
   if (list.length === 0) return null
 
   const hasMore = list.length > INITIAL_VISIBLE_ITEMS
-  const [showAll, setShowAll] = useState(false)
   const visibleList = showAll || !hasMore ? list : list.slice(0, INITIAL_VISIBLE_ITEMS)
 
   return (
