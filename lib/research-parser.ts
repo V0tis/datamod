@@ -1,8 +1,10 @@
 /**
  * Single responsibility: parse and normalize initial research JSON from AI responses.
- * Used by both research/route and research/stream so transformation logic is not duplicated.
+ * Supports PM analysis schema (new) and legacy format for backward compatibility.
  */
 import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
+import type { PMAnalysisOutput } from '@/lib/ai/pm-analysis-schema'
+import { pmAnalysisToInitialSummary } from '@/lib/ai/pm-analysis-adapter'
 
 export type ChartSentiment = { positive: number; neutral: number; negative: number }
 export type ChartImpactItem = { subject: string; score: number }
@@ -52,36 +54,42 @@ function normalizeChartImpact(raw: Array<{ subject?: string; score?: number }> |
   return impactList.length > 0 ? impactList : DEFAULT_IMPACT
 }
 
+function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
+  if (!o || typeof o !== 'object') return false
+  const p = o as Record<string, unknown>
+  return (
+    p.meta != null &&
+    typeof p.meta === 'object' &&
+    p.market_temperature != null &&
+    typeof p.market_temperature === 'object' &&
+    p.insights != null &&
+    typeof p.insights === 'object' &&
+    p.pm_actions != null &&
+    typeof p.pm_actions === 'object'
+  )
+}
+
 /**
  * Parse AI response text into normalized InitialResearchSummary.
- * Uses extractJsonFromText; options.repair tries to fix truncated JSON (common when AI hits token limit).
- * Single responsibility: data transformation only.
+ * Accepts PM analysis schema (preferred) or legacy format.
+ * Uses extractJsonFromText; options.repair tries to fix truncated JSON.
  */
 export function parseInitialResearchResponse(
   responseText: string,
-  options?: { repair?: boolean }
+  options?: { repair?: boolean; articleSummaries?: string[] }
 ): { ok: true; summary: InitialResearchSummary } | { ok: false; error: string } {
   let rawJson = extractJsonFromText(responseText)
-  let parsed: {
-    marketNews?: string[]
-    painPoints?: string[]
-    competitorTrends?: string
-    sentiment?: number
-    publicReactionTrends?: string
-    chartData?: { sentiment?: ChartSentiment; impact?: ChartImpactItem[] }
-    articleSummaries?: string[]
-    keyConclusions?: string[]
-  }
+  let parsed: unknown
 
   try {
-    parsed = JSON.parse(rawJson) as typeof parsed
+    parsed = JSON.parse(rawJson)
   } catch (parseErr) {
     if (options?.repair) {
       const err = parseErr instanceof Error ? parseErr : new Error(String(parseErr))
       const repaired = tryRepairTruncatedJson(rawJson, err)
       if (repaired) {
         try {
-          parsed = JSON.parse(repaired) as typeof parsed
+          parsed = JSON.parse(repaired)
         } catch {
           return { ok: false, error: '분석 결과 형식이 올바르지 않아요.' }
         }
@@ -93,25 +101,41 @@ export function parseInitialResearchResponse(
     }
   }
 
+  if (isPmAnalysisOutput(parsed)) {
+    const summary = pmAnalysisToInitialSummary(parsed, options?.articleSummaries ?? [])
+    return { ok: true, summary }
+  }
+
+  const legacy = parsed as {
+    marketNews?: string[]
+    painPoints?: string[]
+    competitorTrends?: string
+    sentiment?: number
+    publicReactionTrends?: string
+    chartData?: { sentiment?: ChartSentiment; impact?: ChartImpactItem[] }
+    articleSummaries?: string[]
+    keyConclusions?: string[]
+  }
+
   const sentiment =
-    typeof parsed.sentiment === 'number' ? Math.min(100, Math.max(0, parsed.sentiment)) : 0
-  const chartSentiment = normalizeChartSentiment(parsed.chartData?.sentiment)
-  const chartImpact = normalizeChartImpact(parsed.chartData?.impact)
+    typeof legacy.sentiment === 'number' ? Math.min(100, Math.max(0, legacy.sentiment)) : 0
+  const chartSentiment = normalizeChartSentiment(legacy.chartData?.sentiment)
+  const chartImpact = normalizeChartImpact(legacy.chartData?.impact)
   const chartData: ChartData = { sentiment: chartSentiment, impact: chartImpact }
 
-  const articleSummaries = Array.isArray(parsed.articleSummaries)
-    ? parsed.articleSummaries.filter((s): s is string => typeof s === 'string')
+  const articleSummaries = Array.isArray(legacy.articleSummaries)
+    ? legacy.articleSummaries.filter((s): s is string => typeof s === 'string')
     : []
-  const keyConclusions = Array.isArray(parsed.keyConclusions)
-    ? parsed.keyConclusions.filter((s): s is string => typeof s === 'string').slice(0, 3)
-    : (Array.isArray(parsed.marketNews) ? parsed.marketNews : []).slice(0, 3)
+  const keyConclusions = Array.isArray(legacy.keyConclusions)
+    ? legacy.keyConclusions.filter((s): s is string => typeof s === 'string').slice(0, 3)
+    : (Array.isArray(legacy.marketNews) ? legacy.marketNews : []).slice(0, 3)
 
   const summary: InitialResearchSummary = {
-    marketNews: Array.isArray(parsed.marketNews) ? parsed.marketNews : [],
-    painPoints: Array.isArray(parsed.painPoints) ? parsed.painPoints : [],
-    competitorTrends: typeof parsed.competitorTrends === 'string' ? parsed.competitorTrends : '',
+    marketNews: Array.isArray(legacy.marketNews) ? legacy.marketNews : [],
+    painPoints: Array.isArray(legacy.painPoints) ? legacy.painPoints : [],
+    competitorTrends: typeof legacy.competitorTrends === 'string' ? legacy.competitorTrends : '',
     sentiment,
-    publicReactionTrends: typeof parsed.publicReactionTrends === 'string' ? parsed.publicReactionTrends : '',
+    publicReactionTrends: typeof legacy.publicReactionTrends === 'string' ? legacy.publicReactionTrends : '',
     chartData,
     articleSummaries,
     keyConclusions,

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { runAnalysisJob } from '@/lib/research-job-runner'
 
+/** Authoritative analysis status. UI renders ONLY from this. */
+type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
+
 type JobRow = {
   id: string
   keyword: string
@@ -12,6 +15,18 @@ type JobRow = {
   report_id: string | null
   created_at: string
   updated_at: string
+}
+
+/** Map job status to canonical analysis_status. One-directional: queued→analyzing→completed|failed */
+function jobStatusToAnalysisStatus(status: string): AnalysisStatus {
+  switch (status) {
+    case 'queued': return 'queued'
+    case 'running': return 'analyzing'
+    case 'succeeded': return 'completed'
+    case 'failed':
+    case 'cancelled': return 'failed'
+    default: return 'queued'
+  }
 }
 
 export async function GET() {
@@ -34,7 +49,10 @@ export async function GET() {
       return NextResponse.json({ list: [], error: error.message }, { status: 500 })
     }
 
-    const list = (rows ?? []) as JobRow[]
+    const list = ((rows ?? []) as JobRow[]).map((job) => ({
+      ...job,
+      analysis_status: jobStatusToAnalysisStatus(job.status),
+    }))
     return NextResponse.json({ list })
   } catch (e) {
     console.error('[Jobs API] GET:', e)

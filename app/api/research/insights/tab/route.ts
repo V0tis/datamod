@@ -35,11 +35,10 @@ export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrat
 const GROQ_QUOTA_MESSAGE = 'Groq 엔진 사용량 초과. 잠시 후 재시도해 주세요.'
 const CACHE_SCOPE: ResearchCacheScope = 'insight_tab'
 
-/** Gemini·Groq 공통: PM 분석 프레임워크 + 시장 분석·인사이트 마크다운 요약 */
+/** Gemini·Groq 공통: PM 분석 프레임워크 + 시장 분석 마크다운. 대화형 표현 금지. */
 const UNIFIED_SYSTEM_PROMPT = `${PM_ANALYSIS_PRINCIPLES}
 
-시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.
-Facts/Hypotheses/Inferences 구분이 가능한 경우 해당 레이블을 사용하세요.`
+시장 분석 및 인사이트를 마크다운으로 요약. 중요 키워드 **강조**. Facts/Hypotheses/Inferences 구분 사용. 질문·이모지 금지.`
 
 export type TabType = 'logic' | 'creative' | 'fact'
 

@@ -6,11 +6,10 @@ import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, Newspaper, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getConfidenceDisplay } from '@/lib/confidence-display'
 import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
-import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { InsightCard } from '@/components/research/InsightCard'
 import { SentimentFactorBreakdown } from '@/components/research/sentiment-factor-breakdown'
 
@@ -120,12 +119,13 @@ export interface ConsensusInsightProps {
   onRetry: () => void
 }
 
-const CARD_CLASS = 'rounded-xl border border-border/80 bg-muted/20 p-4'
+/** Document-style block: subtle border, no heavy colors. */
+const BLOCK_CLASS = 'rounded-lg border border-border/60 bg-background/50 p-4'
 
 function TrendIcon({ trend }: { trend?: 'rising' | 'falling' | 'stable' }) {
-  if (trend === 'rising') return <TrendingUp className="w-5 h-5 text-emerald-400" />
-  if (trend === 'falling') return <TrendingDown className="w-5 h-5 text-rose-400" />
-  return <Minus className="w-5 h-5 text-muted-foreground" />
+  if (trend === 'rising') return <TrendingUp className="w-4 h-4 text-muted-foreground" />
+  if (trend === 'falling') return <TrendingDown className="w-4 h-4 text-muted-foreground" />
+  return <Minus className="w-4 h-4 text-muted-foreground" />
 }
 
 /** Sentiment as concise text (report-style); no gauge/chart. */
@@ -149,7 +149,7 @@ function ConsensusInsightComponent({
 
   if (bothFailed) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[200px]')} role="alert" aria-live="assertive">
+      <div className={cn('no-print w-full mb-6 antialiased', BLOCK_CLASS, 'min-h-[200px]')} role="alert" aria-live="assertive">
         <h2 className="text-sm font-semibold text-foreground mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
           <p className="text-sm text-destructive">두 엔진 모두 분석에 실패했습니다. 전략 통찰을 만들 수 없습니다. 아래 버튼으로 다시 시도해 주세요.</p>
@@ -163,7 +163,7 @@ function ConsensusInsightComponent({
 
   if (loading) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS, 'min-h-[320px]')}>
+      <div className={cn('no-print w-full mb-6 antialiased', BLOCK_CLASS, 'min-h-[320px]')}>
         <h2 className="text-sm font-semibold text-foreground mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <LoadingState
           message="두 엔진 결과를 종합해 전략 통찰을 만드는 중입니다"
@@ -178,7 +178,7 @@ function ConsensusInsightComponent({
 
   if (!data) {
     return (
-      <div className={cn('no-print w-full mb-6 antialiased', CARD_CLASS)}>
+      <div className={cn('no-print w-full mb-6 antialiased', BLOCK_CLASS)}>
         <h2 className="text-sm font-semibold text-foreground mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <EmptyState
           title="아직 전략 통찰이 없어요"
@@ -212,21 +212,11 @@ function ConsensusInsightComponent({
   })
 
   return (
-    <motion.div
-      className="no-print w-full mb-6 space-y-6 antialiased"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-    >
-      {/* So what? — AI conclusion (hypothesis layer). Summary first for scanning. */}
-      <div className={cn(CARD_CLASS, 'p-4 sm:p-5 border-primary/20')}>
-        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <CognitiveLayerLabel layer="hypothesis" />
-            <span className="inline-flex items-center rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary/90">
-              So what? — 통찰
-            </span>
-          </span>
+    <div className="no-print w-full mb-6 space-y-6 antialiased">
+      {/* Hypotheses: AI interpretation. Summary first, then score/trend. */}
+      <div className={cn(BLOCK_CLASS, 'border-l-2 border-l-border')}>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Hypotheses</span>
           {partialData && (
             <span
               className="text-xs px-2 py-0.5 rounded-md bg-warning/20 text-warning border border-warning/40"
@@ -251,7 +241,7 @@ function ConsensusInsightComponent({
           <button
             type="button"
             onClick={() => setSummaryExpanded(true)}
-            className="mb-4 sm:mb-5 flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline"
+            className="mb-4 sm:mb-5 flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
           >
             전체 보기
           </button>
@@ -280,15 +270,15 @@ function ConsensusInsightComponent({
         </details>
       </div>
 
-      {/* Why? — Evidence (fact layer): problem & signal. */}
-      <CognitiveLayerLabel layer="fact" className="block pt-2 pb-0.5" />
-      <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground pt-0.5 pb-1" aria-hidden>Why? — 근거·맥락</p>
+      {/* Facts: evidence blocks. Subtle labels, no heavy icons. */}
+      <div className={cn(BLOCK_CLASS)}>
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">Facts — 근거</span>
       <InsightCard label="Problem" title="페인포인트·리스크">
         {painPoints.length > 0 ? (
           <ul className="space-y-2 list-none pl-0">
             {painPoints.map((item, i) => (
               <li key={i} className="flex gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-400/80 shrink-0 mt-0.5" />
+                <span className="text-muted-foreground shrink-0">·</span>
                 <span>{item}</span>
               </li>
             ))}
@@ -298,15 +288,15 @@ function ConsensusInsightComponent({
         )}
         {threat !== '—' && (
           <>
-            <p className="text-xs font-semibold text-rose-400 mt-4 mb-1">Threat</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4 mb-1">Threat</p>
             <p className="leading-relaxed">{threat}</p>
           </>
         )}
       </InsightCard>
 
-      {/* Signal — market news, competitor trends. Collapsible on small screens (secondary detail). */}
-      <div className="space-y-3 sm:space-y-4">
-        <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+      {/* Signal: market news, competitor trends. */}
+      <div className="mt-4 space-y-3">
+        <div className={cn(BLOCK_CLASS, 'bg-muted/20')}>
           <button
             type="button"
             className="w-full flex items-center justify-between gap-2 min-h-[44px] p-3 sm:p-4 text-left hover:bg-muted-hover transition-colors sm:pointer-events-none sm:hover:bg-transparent touch-manipulation"
@@ -315,7 +305,7 @@ function ConsensusInsightComponent({
             aria-controls="consensus-signal-content"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span className={cn('inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider', 'text-amber-600/90 dark:text-amber-400/90 border-amber-500/30 bg-amber-500/5')}>
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Signal
               </span>
               <span className="text-sm font-semibold text-foreground truncate">시장·경쟁 신호</span>
@@ -345,7 +335,7 @@ function ConsensusInsightComponent({
                 <ul className="space-y-2 list-none pl-0">
                   {marketNews.map((item, i) => (
                     <li key={i} className="flex gap-2">
-                      <Newspaper className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <span className="text-muted-foreground shrink-0">·</span>
                       <span className="break-words text-sm text-foreground">{item}</span>
                     </li>
                   ))}
@@ -356,10 +346,12 @@ function ConsensusInsightComponent({
             </div>
           </div>
         </div>
-        {/* Impact: list with interpretation so PMs know how to use the scores. */}
-        <div className={cn(CARD_CLASS)}>
-          <h4 className="text-xs font-medium text-muted-foreground mb-1">비즈니스 임팩트</h4>
-          <p className="text-[11px] text-muted-foreground mb-2">How to read: 각 지표 0–10. 높을수록 해당 요인이 시장에 긍정적으로 작용한다고 해석됩니다. 우선순위·리소스 배분 참고용입니다.</p>
+        {/* Impact: secondary; collapsed by default for document flow. */}
+        <details className={cn(BLOCK_CLASS)}>
+          <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
+            비즈니스 임팩트 (0–10)
+          </summary>
+          <p className="text-[11px] text-muted-foreground mb-2 mt-2">높을수록 해당 요인이 시장에 긍정적으로 작용. 참고용.</p>
           {impactData.length > 0 ? (
             <ul className="space-y-1.5 list-none pl-0 text-sm text-foreground">
               {impactData.map((item, i) => (
@@ -372,28 +364,26 @@ function ConsensusInsightComponent({
           ) : (
             <p className="text-muted-foreground text-sm">데이터 없음</p>
           )}
-        </div>
+        </details>
+      </div>
       </div>
 
-      {/* So what? — Implications (assumption layer): recommendations + interpretation. */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
-        <CognitiveLayerLabel layer="assumption" className="block mb-1.5" />
-        <div className="inline-flex items-center rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary/90 mb-2">
-          다음 액션 — 의사결정 참고
-        </div>
+      {/* Inferences: recommendations. Subtle border, no primary color. */}
+      <div className={cn(BLOCK_CLASS, 'border-l-2 border-l-muted-foreground/30')}>
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">Inferences — 다음 액션</span>
         <p className="text-[11px] text-muted-foreground mb-3">AI 제안 과제. 우선순위·실행은 팀 판단.</p>
         {opportunity !== '—' && (
           <>
-            <p className="text-xs font-semibold text-primary mb-1">Opportunity</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Opportunity</p>
             <p className="text-sm leading-relaxed mb-4 text-foreground">{opportunity}</p>
           </>
         )}
         {actionItems.length > 0 ? (
-          <ul className="space-y-2.5 list-none pl-0">
+          <ul className="space-y-2 list-none pl-0">
             {actionItems.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <CheckCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" aria-hidden />
-                <span className="text-sm font-medium text-foreground">{item}</span>
+              <li key={i} className="flex gap-2">
+                <span className="text-muted-foreground shrink-0">·</span>
+                <span className="text-sm text-foreground">{item}</span>
               </li>
             ))}
           </ul>
@@ -401,7 +391,7 @@ function ConsensusInsightComponent({
           <p className="text-muted-foreground text-sm">과제가 없습니다.</p>
         )}
       </div>
-    </motion.div>
+    </div>
   )
 }
 

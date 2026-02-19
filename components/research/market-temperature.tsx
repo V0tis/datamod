@@ -1,14 +1,15 @@
 'use client'
 
+import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SentimentFactorBreakdown, type SentimentFactors } from '@/components/research/sentiment-factor-breakdown'
 
-/** Map -100~100 to 0–100 for PM-friendly display. No algorithm change. */
+/** Map -100~100 to 0–100 for PM-friendly display. */
 function toZeroHundred(score: number): number {
   return Math.round(Math.max(0, Math.min(100, (score + 100) / 2)))
 }
 
-/** Textual interpretation: subtle, scannable. No strong colors. */
+/** Textual interpretation: subtle, no strong colors. */
 function getInterpretation(normalized: number): string {
   if (normalized < 25) return '냉랭'
   if (normalized < 50) return '선선함'
@@ -16,7 +17,14 @@ function getInterpretation(normalized: number): string {
   return '뜨거움'
 }
 
-/** One-line reasoning: readable in <5s. */
+/** Trend label for PM report. */
+function getTrendLabel(trend?: 'rising' | 'falling' | 'stable'): string {
+  if (trend === 'rising') return '상승'
+  if (trend === 'falling') return '하락'
+  return '보합'
+}
+
+/** One-line reasoning for score. */
 function getReasoningSummary(
   normalized: number,
   factors: SentimentFactors | null | undefined
@@ -25,97 +33,121 @@ function getReasoningSummary(
   if (factors && typeof factors.positive === 'number' && typeof factors.negative === 'number') {
     const p = Math.round(Number(factors.positive) || 0)
     const n = Math.round(Number(factors.negative) || 0)
-    if (p > n) return `긍정 신호가 부정보다 강해 ${interp} 구간입니다. 수요·성장 지표가 상대적으로 양호합니다.`
-    if (n > p) return `부정·리스크가 반영되어 ${interp} 구간입니다. 경쟁·변동성 등을 고려했습니다.`
+    if (p > n) return `긍정 신호가 부정보다 강해 ${interp} 구간입니다.`
+    if (n > p) return `부정·리스크가 반영되어 ${interp} 구간입니다.`
   }
-  return `뉴스·시장 신호와 AI 통찰을 종합해 ${interp} 구간으로 산출했습니다. 참고용 지표입니다.`
-}
-
-/** Skeleton for "Why this score?" during analysis. Keeps layout stable. */
-function WhySkeleton() {
-  return (
-    <div className="space-y-2 pt-2 border-t border-border/40">
-      <p className="text-[11px] font-medium text-muted-foreground">왜 이 점수가 나왔는가?</p>
-      <div className="space-y-2 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-20 shrink-0 text-muted-foreground">긍정 신호</span>
-          <div className="flex-1 h-1.5 rounded-full bg-muted animate-pulse" />
-          <span className="w-8 shrink-0" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-20 shrink-0 text-muted-foreground">중립</span>
-          <div className="flex-1 h-1.5 rounded-full bg-muted animate-pulse" />
-          <span className="w-8 shrink-0" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-20 shrink-0 text-muted-foreground">부정·리스크</span>
-          <div className="flex-1 h-1.5 rounded-full bg-muted animate-pulse" />
-          <span className="w-8 shrink-0" />
-        </div>
-      </div>
-      <div className="h-3 w-full rounded bg-muted/60 animate-pulse mt-2" />
-    </div>
-  )
+  return `뉴스·시장 신호를 종합해 ${interp} 구간으로 산출했습니다.`
 }
 
 interface MarketTemperatureProps {
-  /** Raw score -100~100 from consensus or key_metrics */
   score: number | null
+  trend?: 'rising' | 'falling' | 'stable'
   factors?: SentimentFactors | null
-  /** Show skeleton "Why" section during analysis. UX: always visible, no layout shift. */
+  /** Positive/neutral/negative signal texts (PM schema). Shown persistently when provided. */
+  positiveSignals?: string[]
+  neutralSignals?: string[]
+  negativeRisks?: string[]
   loading?: boolean
   className?: string
 }
 
 /**
- * PM explainable component: score + "Why this score?" (positive/neutral/negative).
- * Always show Why section—skeleton during analysis to avoid layout shift.
+ * Market Temperature: score, trend, explanation always visible.
+ * Charts/factor bars are secondary and collapsed by default.
  */
 export function MarketTemperature({
   score,
+  trend = 'stable',
   factors,
+  positiveSignals = [],
+  neutralSignals = [],
+  negativeRisks = [],
   loading = false,
   className,
 }: MarketTemperatureProps) {
   const hasScore = score != null && Number.isFinite(score)
+  const norm = hasScore ? toZeroHundred(score) : null
+  const hasSignals = positiveSignals.length > 0 || neutralSignals.length > 0 || negativeRisks.length > 0
 
   return (
-    <div className={cn('space-y-2', className)}>
-      <div className="flex items-baseline gap-2">
+    <div className={cn('space-y-3', className)}>
+      {/* Score + trend: primary, always visible */}
+      <div className="flex flex-wrap items-baseline gap-2">
         {hasScore ? (
           <>
-            <span className="text-lg font-semibold tabular-nums text-foreground">{toZeroHundred(score)}</span>
+            <span className="text-lg font-semibold tabular-nums text-foreground">{norm}</span>
             <span className="text-muted-foreground">/ 100</span>
-            <span className="text-sm text-muted-foreground">· {getInterpretation(toZeroHundred(score))}</span>
+            <span className="text-sm text-muted-foreground">· {getInterpretation(norm!)}</span>
+            <span className="text-xs text-muted-foreground">· {getTrendLabel(trend)}</span>
           </>
         ) : (
           <>
-            <span className="h-6 w-12 rounded bg-muted animate-pulse" />
+            <span className="h-6 w-12 rounded bg-muted/60" aria-hidden />
             <span className="text-muted-foreground">/ 100</span>
             {loading && <span className="text-sm text-muted-foreground">분석 중</span>}
           </>
         )}
       </div>
-      {/* UX: Always show "Why" section. During analysis: skeleton. After: real factors + reasoning. */}
-      <div className="mt-1">
+
+      {/* Explanation: persistently visible (no details). Positive / neutral / negative. */}
+      <div className="space-y-2 text-sm">
         {loading && !hasScore ? (
-          <WhySkeleton />
+          <div className="space-y-2 text-muted-foreground">
+            <p className="h-4 w-full rounded bg-muted/40" />
+            <p className="h-4 w-4/5 rounded bg-muted/40" />
+          </div>
+        ) : hasSignals ? (
+          <>
+            {positiveSignals.length > 0 && (
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">긍정 신호</span>
+                <ul className="mt-1 space-y-0.5 list-none pl-0 text-foreground">
+                  {positiveSignals.slice(0, 3).map((s, i) => (
+                    <li key={i} className="leading-relaxed">{s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {neutralSignals.length > 0 && (
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">중립</span>
+                <ul className="mt-1 space-y-0.5 list-none pl-0 text-foreground">
+                  {neutralSignals.slice(0, 2).map((s, i) => (
+                    <li key={i} className="leading-relaxed">{s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {negativeRisks.length > 0 && (
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">부정·리스크</span>
+                <ul className="mt-1 space-y-0.5 list-none pl-0 text-foreground">
+                  {negativeRisks.slice(0, 3).map((s, i) => (
+                    <li key={i} className="leading-relaxed">{s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         ) : hasScore ? (
-          <details className="group" open>
-            <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
-              왜 이 점수가 나왔는가?
-            </summary>
-            <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
-              {factors && <SentimentFactorBreakdown factors={factors} />}
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {getReasoningSummary(toZeroHundred(score), factors)}
-              </p>
-            </div>
-          </details>
+          <p className="text-muted-foreground leading-relaxed">{getReasoningSummary(norm!, factors)}</p>
         ) : (
-          <p className="text-[11px] text-muted-foreground">분석 완료 후 표시됩니다.</p>
+          <p className="text-muted-foreground text-sm">분석 완료 후 표시됩니다.</p>
         )}
       </div>
+
+      {/* Charts: secondary, collapsed by default. UX: explanation first; bars optional. */}
+      {factors && hasScore && (
+        <details className="group border-t border-border/50 pt-2">
+          <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden flex items-center gap-1">
+            <ChevronDown className="w-3.5 h-3.5 group-open:rotate-180 transition-transform" />
+            참고: 감성 비율
+          </summary>
+          <div className="mt-2">
+            <SentimentFactorBreakdown factors={factors} />
+          </div>
+        </details>
+      )}
     </div>
   )
 }

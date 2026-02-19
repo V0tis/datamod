@@ -6,14 +6,13 @@ import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { getResearchKeysForInitialAnalysis } from '@/lib/research-keys'
 import { parseInitialResearchResponse } from '@/lib/research-parser'
 import { generateResearchWithGrounding } from '@/lib/ai'
+import { GROUNDING_RESEARCH_SYSTEM } from '@/lib/ai/pm-analysis-prompts'
 
-const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. Google Search로 최신 웹 정보를 참고한 뒤, 반드시 JSON 형식으로만 답변하세요."
+function buildGroundingUserPrompt(keyword: string): string {
+  return `키워드 "${keyword}"에 대한 최신 트렌드·뉴스·유저 반응을 검색하여 분석. JSON만 출력.
 
-const USER_PROMPT_TEMPLATE = (keyword: string) =>
-  `"${keyword}"에 대한 최신 트렌드·뉴스·유저 반응을 검색해서 분석한 뒤, 아래 JSON 구조로만 출력해줘. ` +
-  `JSON: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] } }. ` +
-  `positive+neutral+negative 합계 100, impact는 경제/사회/기술/정치/환경 등 5개 정도, publicReactionTrends는 1~2문단으로.`
+규칙: meta.analysis_target과 meta.analysis_scope를 키워드에서 추론. facts 3~5개, hypotheses 0~3개, inferences 2~4개, recommended_actions 2~4개, meta.generated_at은 현재 시각 ISO 8601.`
+}
 
 /** 디버깅: API 키로 사용 가능한 모델 목록을 콘솔에 출력 (404/모델 없음 시 호출) */
 async function logAvailableModels(apiKey: string): Promise<void> {
@@ -57,7 +56,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const prompt = USER_PROMPT_TEMPLATE(keyword.trim())
+    const prompt = buildGroundingUserPrompt(keyword.trim())
     let responseText: string | null = null
     let sourceLinks: Array<{ title: string; url: string }> = []
 
@@ -66,7 +65,7 @@ export async function POST(req: Request) {
         const result = await generateResearchWithGrounding({
           apiKey: keys.gemini,
           prompt,
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: GROUNDING_RESEARCH_SYSTEM,
           maxOutputTokens: 1500,
           model: GEMINI_MODEL,
           isRetryable: (err) => {
@@ -94,7 +93,7 @@ export async function POST(req: Request) {
         const completion = await openai.chat.completions.create({
           model: process.env.OPENAI_FALLBACK_MODEL ?? 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: SYSTEM_INSTRUCTION },
+            { role: 'system', content: GROUNDING_RESEARCH_SYSTEM },
             { role: 'user', content: prompt },
           ],
           max_tokens: 1500,

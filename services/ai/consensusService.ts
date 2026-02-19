@@ -1,9 +1,9 @@
 /**
  * Research insight consensus: synthesize Gemini + Groq analyses into a single
- * PM-oriented Consensus (marketNews, painPoints, strategicSummary, etc.).
- * Single responsibility: build prompt, call Gemini, parse and normalize JSON.
+ * PM-oriented Consensus. Outputs PM analysis schema; maps to Consensus for storage/frontend.
  */
-import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
+import { CONSENSUS_SYNTHESIS_SYSTEM } from '@/lib/ai/pm-analysis-prompts'
+import type { PMAnalysisOutput, TrendValue } from '@/lib/ai/pm-analysis-schema'
 import {
   requestGenerateContent,
   parseGenerateContentResponse,
@@ -38,44 +38,78 @@ export type Consensus = {
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
 const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 
-const CONSENSUS_SYSTEM = `당신은 PM(Product Manager) 전략 수립을 돕는 시니어 수준 분석가입니다.
+function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
+  if (!o || typeof o !== 'object') return false
+  const p = o as Record<string, unknown>
+  return (
+    p.meta != null &&
+    typeof p.meta === 'object' &&
+    p.market_temperature != null &&
+    typeof p.market_temperature === 'object' &&
+    p.insights != null &&
+    typeof p.insights === 'object' &&
+    p.pm_actions != null &&
+    typeof p.pm_actions === 'object'
+  )
+}
 
-${PM_ANALYSIS_PRINCIPLES}
+const CONSENSUS_SYSTEM = `${CONSENSUS_SYNTHESIS_SYSTEM}
 
-아래 [Gemini 분석]과 [Groq 분석]에 **제공된 텍스트만**을 바탕으로 정보를 추출하세요. 검색이나 외부 데이터를 사용하지 마세요.
-반드시 제공된 데이터에 근거하여 아래 JSON 구조로만 출력하세요. 다른 텍스트는 포함하지 마세요.
-각 항목(marketNews, reason, summary 등)은 1~2문장으로 간결히 작성하세요.
+[Gemini 분석]과 [Groq 분석] 텍스트에서 정보 추출. 검색·외부 데이터 사용 금지. 제공된 데이터만 근거로 JSON만 출력.
+규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개, recommended_actions 2~4개, meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
 
-JSON 구조:
-{
-  "marketNews": ["수집된 데이터에서 가장 비중 있게 다뤄진 핵심 뉴스 3~5개 요약 (문자열 배열)"],
-  "painPoints": ["유저의 구체적 불편함 및 미충족 니즈 (문자열 배열)"],
-  "competitorTrends": "주요 경쟁사 동향 요약 문자열 (없을 시 '정보 부족' 기재)",
-  "sentiment": {
-    "score": -100~100 숫자 (음수=부정, 양수=긍정, 0=중립),
-    "trend": "rising" | "falling" | "stable",
-    "ratio": { "positive": 0~100, "neutral": 0~100, "negative": 0~100 }
-  },
-  "impactAnalysis": [
-    { "subject": "시장성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "기술성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "반응성", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "규제/환경", "score": 0~10, "reason": "점수 근거 한 줄" },
-    { "subject": "경쟁력", "score": 0~10, "reason": "점수 근거 한 줄" }
-  ],
-  "strategicSummary": {
-    "summary": "시장 상황 PM 관점 요약 (150자 이내)",
-    "opportunity": "즉시 활용 가능한 기회 요소",
-    "threat": "잠재적 리스크 및 위협",
-    "actionItems": ["PM 우선순위 과제 1", "과제 2", "과제 3"]
-  },
-  "metadata": {
-    "confidence": 0~100 (두 AI 의견 일치도),
-    "dataPeriod": "최근 24시간"
+function trendToSentimentRatio(trend: TrendValue, score: number): { positive: number; neutral: number; negative: number } {
+  const s = Math.min(100, Math.max(0, score))
+  if (trend === 'rising') return { positive: Math.min(100, s + 20), neutral: 20, negative: Math.max(0, 80 - s) }
+  if (trend === 'declining') return { positive: Math.max(0, s - 20), neutral: 20, negative: Math.min(100, 100 - s + 20) }
+  return {
+    positive: Math.round(s * 0.5),
+    neutral: Math.round((100 - s) * 0.3),
+    negative: Math.round((100 - s) * 0.7),
   }
 }
 
-impactAnalysis의 subject는 반드시 시장성, 기술성, 반응성, 규제/환경, 경쟁력 5개만 사용하세요.`
+function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
+  const { meta, market_temperature, insights, pm_actions } = pm
+  const exp = market_temperature.explanation
+  const score100 = Math.min(100, Math.max(0, market_temperature.score))
+  const sentimentScore = score100 * 2 - 100
+  const ratio = trendToSentimentRatio(market_temperature.trend, market_temperature.score)
+  const sum = ratio.positive + ratio.neutral + ratio.negative
+  const normRatio =
+    sum > 0
+      ? {
+          positive: Math.round((ratio.positive / sum) * 100),
+          neutral: Math.round((ratio.neutral / sum) * 100),
+          negative: Math.round((ratio.negative / sum) * 100),
+        }
+      : undefined
+  const trendMap = { rising: 'rising' as const, stable: 'stable' as const, declining: 'falling' as const }
+  return {
+    marketNews: insights.facts?.slice(0, 5) ?? [],
+    painPoints: exp.negative_risks?.slice(0, 5) ?? [],
+    competitorTrends: insights.inferences?.[0] ?? '',
+    sentiment: {
+      score: sentimentScore,
+      trend: trendMap[market_temperature.trend] ?? 'stable',
+      ratio: normRatio,
+    },
+    impactAnalysis: [
+      { subject: '시장성', score: 5, reason: exp.positive_signals?.[0] ?? '—' },
+      { subject: '기술성', score: 5, reason: exp.neutral_signals?.[0] ?? '—' },
+      { subject: '반응성', score: 5, reason: exp.negative_risks?.[0] ?? '—' },
+      { subject: '규제/환경', score: 5, reason: insights.hypotheses?.[0] ?? '—' },
+      { subject: '경쟁력', score: 5, reason: insights.inferences?.[0] ?? '—' },
+    ],
+    strategicSummary: {
+      summary: insights.inferences?.join(' ').slice(0, 500) ?? '',
+      opportunity: exp.positive_signals?.join(' ').slice(0, 300) ?? '—',
+      threat: exp.negative_risks?.join(' ').slice(0, 300) ?? '—',
+      actionItems: pm_actions.recommended_actions?.slice(0, 5) ?? [],
+    },
+    metadata: { confidence: meta.confidence_score, dataPeriod: '최근 24시간' },
+  }
+}
 
 function legacyToConsensus(o: Record<string, unknown>): Consensus {
   const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 500) : '분석 불가. 데이터가 부족합니다.'
@@ -117,10 +151,10 @@ const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
   confidence: 0,
 })
 
-/** Normalize raw (legacy or new) payload from DB/cache into Consensus */
+/** Normalize raw (legacy or new PM schema) payload from DB/cache into Consensus */
 export function normalizeConsensus(raw: unknown): Consensus | null {
   if (!raw || typeof raw !== 'object') return null
-  // API/DB consensus shape: strategicSummary.summary required; sentiment/metadata optional.
+  if (isPmAnalysisOutput(raw)) return pmAnalysisToConsensus(raw)
   const o = raw as Record<string, unknown>
   if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
     const ss = o.strategicSummary as Record<string, unknown>
@@ -189,7 +223,7 @@ export function parseConsensusFromRawText(rawText: string): Consensus {
   const raw = stripJsonCodeBlock(rawText || '')
   if (!raw) return FALLBACK_CONSENSUS
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const parsed = JSON.parse(raw) as unknown
     const normalized = normalizeConsensus(parsed)
     return normalized ?? FALLBACK_CONSENSUS
   } catch (parseErr) {

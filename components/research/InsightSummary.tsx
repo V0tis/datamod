@@ -73,14 +73,11 @@ export function InsightSummary({
   return (
     <section
       className={cn(
-        'rounded-xl border border-primary/25 bg-primary/5 border-l-4 border-l-primary pl-5 sm:pl-6 pr-5 sm:pr-6 py-6 sm:py-7',
+        'rounded-lg border border-border/60 bg-background/50 pl-5 sm:pl-6 pr-5 sm:pr-6 py-5 sm:py-6',
         className
       )}
       aria-label="Insight summary"
     >
-      <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-3" aria-hidden>
-        So what? — 한 줄 결론
-      </p>
       <p
         className={cn(
           'text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-snug tracking-tight break-words',
@@ -93,7 +90,7 @@ export function InsightSummary({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-2.5 flex items-center gap-1 min-h-[44px] py-2 text-xs font-medium text-primary hover:underline sm:hidden touch-manipulation"
+          className="mt-2.5 flex items-center gap-1 min-h-[44px] py-2 text-xs font-medium text-muted-foreground hover:text-foreground sm:hidden touch-manipulation"
           aria-label="요약 전체 보기"
         >
           더 보기 <ChevronDown className="w-3.5 h-3.5" />

@@ -19,7 +19,7 @@ export function useAnalysisTasks() {
 
   const tasks: AnalysisTask[] = useMemo(() => getTasksFromStore(), [jobs, jobOrder])
   const runningCount = useMemo(
-    () => tasks.filter((t) => t.status === 'idle' || t.status === 'analyzing').length,
+    () => tasks.filter((t) => t.status === 'queued' || t.status === 'analyzing').length,
     [tasks]
   )
 

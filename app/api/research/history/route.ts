@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isCacheValid, RESEARCH_CACHE_TTL_MS } from '@/lib/research-cache'
 
+/** Authoritative analysis status. UI renders ONLY from this; no inference from partial data. */
+export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
+
 type HistoryRow = {
   report_id: string | null
+  analysis_status?: string | null
   key_metrics: unknown
   analysis_groq: unknown
   analysis_gemini: unknown
@@ -28,7 +32,7 @@ export async function GET(req: Request) {
     if (!keyword) {
       const { data: rows, error } = await supabase
         .from('research_history')
-        .select('id, keyword, country_code, report_id, updated_at')
+        .select('id, keyword, country_code, report_id, analysis_status, updated_at')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
 
@@ -41,13 +45,14 @@ export async function GET(req: Request) {
         keyword: r.keyword ?? '',
         country_code: r.country_code ?? 'KR',
         report_id: r.report_id ?? null,
+        analysis_status: ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status),
         updated_at: r.updated_at ?? null,
         date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
       }))
       return NextResponse.json({ list })
     }
 
-    const selectCols = 'report_id, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
+    const selectCols = 'report_id, analysis_status, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
     const baseQuery = () =>
       supabase
         .from('research_history')
@@ -89,6 +94,7 @@ export async function GET(req: Request) {
         cacheExpired,
         reportId: row.report_id,
         keyword,
+        analysis_status: ensureAnalysisStatus(row.analysis_status),
         content: {},
         source_links: [],
         ai_responses: {},
@@ -106,6 +112,7 @@ export async function GET(req: Request) {
       cacheExpired,
       reportId: report.id,
       keyword,
+      analysis_status: ensureAnalysisStatus(row.analysis_status),
       content,
       source_links: (report as { source_links?: unknown }).source_links ?? [],
       ai_responses: (report as { ai_responses?: Record<string, string> }).ai_responses ?? {},
@@ -149,6 +156,13 @@ export async function DELETE(req: Request) {
     console.error('[Research History] DELETE:', e)
     return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
   }
+}
+
+/** Normalize analysis_status; fallback for legacy rows without column. */
+function ensureAnalysisStatus(value: unknown): AnalysisStatus {
+  const s = typeof value === 'string' ? value : ''
+  if (s === 'queued' || s === 'analyzing' || s === 'completed' || s === 'failed') return s
+  return 'completed'
 }
 
 /** Normalize DB JSON/string into a plain object for API response; returns undefined if not an object. */

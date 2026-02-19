@@ -263,20 +263,19 @@ export const useResearchStore = create<ResearchStore>()(
           }
           if (!data.cached) return 'none'
           if (data.emptyAnalysis) return 'empty'
-          const hasContent = data.content != null || data.ai_responses
-          const hasAnalysis = data.analysis_groq != null || data.analysis_gemini != null
           const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
           const km = parseJsonField(data.key_metrics) as ResearchResponse['key_metrics']
-          if (data.reportId && (hasContent || hasAnalysis)) {
-            // UX: Only set status=done when store has no contradicting job. If active job is failed,
-            // refreshJobs/setActiveJob will overwrite with error. Prevents flicker: job status wins when present.
-            const state = get()
-            const hasFailedJobForKeyword = state.activeJobId && state.jobs[state.activeJobId] &&
-              (state.jobs[state.activeJobId].status === 'failed' || state.jobs[state.activeJobId].status === 'cancelled') &&
-              (state.jobs[state.activeJobId].keyword ?? '').trim() === k
+          // State: use analysis_status from API; never infer from partial data. Legacy: no analysis_status → completed.
+          const analysisStatus = ((data as { analysis_status?: string }).analysis_status as 'queued' | 'analyzing' | 'completed' | 'failed' | undefined) ?? 'completed'
+          if (data.reportId) {
+            const statusFromBackend =
+              analysisStatus === 'completed' ? 'done' as const
+              : analysisStatus === 'failed' ? 'error' as const
+              : analysisStatus === 'analyzing' || analysisStatus === 'queued' ? 'loading' as const
+              : 'done' as const
             set({
               keyword: k,
-              ...(hasFailedJobForKeyword ? {} : { status: 'done' as const }),
+              status: statusFromBackend,
               result: {
                 ...(data.content ?? {}),
                 reportId: data.reportId,
@@ -360,7 +359,7 @@ export const useResearchStore = create<ResearchStore>()(
             jobs[job.id] = job
             rawOrder.push(job.id)
           }
-          // PM feedback: subtle toasts for lifecycle changes; panel remains source of truth.
+          // Toast on status transitions: analyzing→completed, analyzing→failed (one-directional).
           for (const job of list) {
             const prev = prevJobs[job.id]
             if (job.status === 'succeeded' && prev && (prev.status === 'running' || prev.status === 'queued')) {

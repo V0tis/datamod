@@ -24,7 +24,6 @@ import { ErrorState } from '@/components/ui/error-state'
 import { GroqAnalysis } from '@/components/research/GroqAnalysis'
 import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
 import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
-import { CognitiveLayerLabel } from '@/components/research/cognitive-layer-label'
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { SuggestedPMActions } from '@/components/research/suggested-pm-actions'
 import { AnalysisQualityIndicator } from '@/components/research/analysis-quality-indicator'
@@ -324,9 +323,9 @@ function ResultsContent() {
       })
   }, [keyword, storeKeyword, newsDays])
 
+  // State: render from displayStatus only; no inference from hasResult, displayError, etc.
   const loading = displayStatus === 'loading'
-  /** 히스토리 확인 후, 스트림 분석 중일 때만 분석 중 표시. result 있으면(캐시 포함) 탭·카드 표시 */
-  const showAnalyzing = historyCheckDone && loading && !quotaExceeded && !displayError && !displayResult
+  const showAnalyzing = historyCheckDone && loading && !quotaExceeded
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
@@ -800,9 +799,9 @@ function ResultsContent() {
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
           <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
         <div className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading reading-space-y-lg reading-text">
-        <header>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5" aria-hidden>What — 분석 대상</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight break-words">
+        {/* Single primary context header. No stacked labels. */}
+        <header className="pb-4 border-b border-border/60">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight break-words">
             &quot;{currentKeyword}&quot;
             {headerTitleKo && (
               <span className="ml-2 text-base font-normal text-muted-foreground" title="한국어 번역">
@@ -810,27 +809,21 @@ function ResultsContent() {
               </span>
             )}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-muted-foreground text-sm mt-1.5">
             {showAnalyzing
-              ? (currentTask?.progress
-                  ? `분석 중: ${currentTask.progress}. 완료되면 요약부터 표시됩니다.`
-                  : '뉴스를 수집하고 분석 중입니다. 완료되면 요약부터 표시됩니다.')
-              : displayStatus === 'done' && displayResult?.updated_at ? (
-              <>아래 요약과 핵심 정리부터 보시고, 상세 내용은 필요할 때 펼쳐보세요. · 마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
-            ) : displayResult?.updated_at ? (
-              <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
-            ) : '분석이 끝나면 한 줄 요약과 핵심 정리가 먼저 표시됩니다.'}
+              ? (currentTask?.progress ? currentTask.progress : '분석 중')
+              : displayStatus === 'done' && displayResult?.updated_at
+                ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+                : displayResult?.updated_at
+                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+                  : null}
           </p>
         </header>
 
-        {/* Insight Summary — PM "insight first": one-line conclusion + key findings. Layer: hypothesis (AI interpretation). */}
+        {/* Insight Summary: one-line conclusion + key findings. Document flow. */}
         {displayStatus === 'done' && displayResult && (
-          <section id="insight-summary" className="scroll-mt-4 rounded-xl border border-border/80 bg-card/50 p-4 sm:p-5 reading-section-gap" aria-label="Insight summary">
-            <div className="mb-3">
-              <CognitiveLayerLabel layer="hypothesis" className="block mb-1" />
-              <h2 className="text-sm font-semibold text-foreground">인사이트 요약</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">결론을 먼저 확인하세요. 상세 리포트는 아래에서 펼쳐볼 수 있습니다.</p>
-            </div>
+          <section id="insight-summary" className="scroll-mt-4 rounded-lg border border-border/60 bg-background/50 p-4 sm:p-5 reading-section-gap" aria-label="Insight summary">
+            <h2 className="text-sm font-medium text-foreground mb-3">요약</h2>
             <div className="reading-space-y">
               <InsightSummary
                 summary={
@@ -857,12 +850,6 @@ function ResultsContent() {
                 return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
               })()}
             </div>
-            <details className="mt-3 pt-3 border-t border-border/50" open>
-              <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
-                근거 · 해석
-              </summary>
-              <p className="text-[11px] text-muted-foreground mt-2">수집 뉴스와 AI 분석 종합. 전략 참고용.</p>
-            </details>
           </section>
         )}
 
@@ -956,10 +943,9 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* So what? — Strategic insight (hypothesis layer). ConsensusInsight cards add their own layer labels. */}
+        {/* Strategic insight: Facts, Hypotheses, Inferences. */}
         <section className="reading-section-gap" aria-labelledby="consensus-heading">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5" aria-hidden>So what? — 전략 통찰</p>
-          <h2 id="consensus-heading" className="text-sm font-semibold uppercase tracking-wider text-foreground mb-3">
+          <h2 id="consensus-heading" className="text-sm font-medium text-foreground mb-3">
             전략 통찰
           </h2>
         {!displayResult ? (
@@ -973,14 +959,11 @@ function ResultsContent() {
                 detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError}
               />
             ) : showAnalyzing ? (
-              <div className="flex items-center gap-3 py-2">
-                <Loader2 className="w-5 h-5 shrink-0 animate-spin text-primary" aria-hidden />
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {currentTask?.progress ?? '리포트 생성 중'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">완료 후 전략 요약·감성·실행 권고가 여기에 표시됩니다.</p>
-                </div>
+              <div className="flex items-center gap-3 py-4">
+                <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
+                <p className="text-sm text-muted-foreground">
+                  {currentTask?.progress ?? '분석 중'}
+                </p>
               </div>
             ) : (
               <div className="flex items-center gap-3 py-1">
@@ -1005,24 +988,19 @@ function ResultsContent() {
         )}
         </section>
 
-        {/* Evidence — sourced content (fact layer). News and reports. */}
-        <div className="border-t-2 border-border pt-6 sm:pt-8 reading-section-gap" role="separator" aria-hidden />
-        <section className="reading-section-gap rounded-xl bg-muted/30 border border-border p-4 sm:p-5" aria-label="Evidence">
-          <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
-            <div>
-              <CognitiveLayerLabel layer="fact" className="block mb-1" />
-              <h3 className="text-sm font-semibold text-foreground">뉴스 · 시장 분석 · 종합 리포트</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">긴 내용이 필요할 때만 펼쳐보세요. 요약만 보시려면 접어두셔도 됩니다.</p>
-            </div>
+        {/* Evidence: news, market analysis, reports. Collapsed by default for document flow. */}
+        <section className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5" aria-label="Evidence">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h3 className="text-sm font-medium text-foreground">뉴스 · 시장 분석 · 종합 리포트</h3>
             <button
               type="button"
               onClick={() => setEvidenceOpen((o) => !o)}
-              className="flex items-center gap-1.5 min-h-[44px] py-2.5 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground touch-manipulation rounded-md hover:bg-muted/60"
+              className="flex items-center gap-1.5 min-h-[44px] py-2 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground touch-manipulation rounded"
               aria-expanded={evidenceOpen}
               aria-controls="evidence-content"
             >
-              {evidenceOpen ? '접기' : '상세 펼치기'}
-              {evidenceOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+              {evidenceOpen ? '접기' : '펼치기'}
+              {evidenceOpen ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
             </button>
           </div>
           <div id="evidence-content" className={evidenceOpen ? 'block' : 'hidden'} aria-hidden={!evidenceOpen}>
@@ -1089,9 +1067,7 @@ function ResultsContent() {
             </div>
           )}
 
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 sm:mb-3">
-            시장 분석 · 인사이트 · 종합 리포트 (전문)
-          </h3>
+          <p className="text-[11px] text-muted-foreground mb-3">시장 분석 · 인사이트 · 종합 리포트</p>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
           <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
             {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
@@ -1229,26 +1205,21 @@ function ResultsContent() {
           </div>
         </section>
 
-        {/* Implication — collapsed on small screens; expand for next steps. */}
+        {/* Next steps: concise list. */}
         {displayStatus === 'done' && displayResult && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
-          <section className="reading-section-gap pt-4 border-t border-border" aria-label="Implication">
+          <section className="reading-section-gap pt-4 border-t border-border/60" aria-label="Next steps">
             <button
               type="button"
               onClick={() => setImplicationOpen((o) => !o)}
-              className="lg:sr-only w-full flex items-center justify-between gap-2 min-h-[44px] py-2.5 text-left mb-2 touch-manipulation"
+              className="lg:sr-only w-full flex items-center justify-between gap-2 min-h-[44px] py-2 text-left mb-2 touch-manipulation text-sm text-muted-foreground"
               aria-expanded={implicationOpen}
               aria-controls="implication-content"
             >
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">다음 단계</p>
-              <span className="text-xs font-medium text-muted-foreground">
-                {implicationOpen ? '접기' : '다음 단계 펼치기'}
-                {implicationOpen ? <ChevronUp className="w-4 h-4 inline-block ml-1 align-middle" /> : <ChevronDown className="w-4 h-4 inline-block ml-1 align-middle" />}
-              </span>
+              다음 단계
+              {implicationOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
-            <div className="hidden lg:block">
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2" aria-hidden>So what? — 다음 단계</p>
-              <CognitiveLayerLabel layer="assumption" className="block mb-1" />
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">다음 단계 (의사결정 참고)</h2>
+            <div className="hidden lg:block mb-2">
+              <h2 className="text-sm font-medium text-foreground">다음 단계</h2>
             </div>
             <div id="implication-content" className={cn(implicationOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!implicationOpen}>
               <ul className="space-y-1 list-none pl-0 text-sm text-foreground">
@@ -1259,7 +1230,7 @@ function ResultsContent() {
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-muted-foreground mt-2">추가 질문은 인사이트 탭에서 질문하기를 이용하세요.</p>
+              <p className="text-[11px] text-muted-foreground mt-2">추가 질문은 인사이트 탭에서 이용하세요.</p>
             </div>
           </section>
         )}
@@ -1370,7 +1341,7 @@ function ResultsContent() {
                 </div>
               )
             })()}
-            {/* Market temperature: 0-100 score, textual interpretation, expandable why. UX: PM explainability. */}
+            {/* Market Temperature: score, trend, explanation always visible; charts collapsed by default. */}
             <div className="rounded-xl border border-border/60 bg-card/50 p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
               <MarketTemperature
@@ -1381,7 +1352,10 @@ function ResultsContent() {
                       ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
                       : null
                 }
+                trend={consensusData?.sentiment?.trend ?? 'stable'}
                 factors={consensusData?.sentiment?.ratio ?? displayResult?.key_metrics?.chartData?.sentiment ?? displayResult?.chartData?.sentiment}
+                positiveSignals={consensusData?.marketNews?.slice(0, 3) ?? []}
+                negativeRisks={(consensusData?.painPoints ?? []).slice(0, 3)}
                 loading={showAnalyzing}
               />
             </div>

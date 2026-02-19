@@ -7,28 +7,13 @@ import { logCacheEvent, buildCacheKeyParts } from '@/lib/research-cache'
 import { getGeminiKeyForRequest } from '@/lib/research-keys'
 import { parseInitialResearchResponse } from '@/lib/research-parser'
 import { generateText } from '@/lib/ai'
+import { INITIAL_RESEARCH_SYSTEM, buildInitialResearchUserPrompt } from '@/lib/ai/pm-analysis-prompts'
 
 export const runtime = 'nodejs'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-
-const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. 제공된 실시간 뉴스 제목들만 참고하여 분석한 뒤, 반드시 JSON 형식으로만 답변하세요."
-
-function buildUserPrompt(keyword: string, newsTitles: string[]): string {
-  const newsBlock =
-    newsTitles.length > 0
-      ? `\n\n[실시간 뉴스 제목 (news_items_ko)]\n${newsTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
-      : '\n\n'
-  return (
-    `"${keyword}"에 대해 위 실시간 뉴스 제목들을 참고하여 분석한 뒤, 아래 JSON만 출력해줘.` +
-    newsBlock +
-    `JSON 형식: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. ` +
-    `규칙: keyConclusions 3개 문장, articleSummaries는 뉴스 순서대로 1문단씩(없으면 빈 배열), positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.`
-  )
-}
 
 type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
@@ -159,13 +144,13 @@ export async function POST(req: Request) {
 
         currentStep = 'gemini'
         const newsTitles = news.map((n) => n.title)
-        const prompt = buildUserPrompt(keyword, newsTitles)
+        const prompt = buildInitialResearchUserPrompt(keyword, newsTitles)
         let responseText: string | null = null
         try {
           responseText = await generateText({
             apiKey,
             prompt,
-            systemInstruction: SYSTEM_INSTRUCTION,
+            systemInstruction: INITIAL_RESEARCH_SYSTEM,
             maxOutputTokens: 3500,
             model: GEMINI_MODEL,
           })
@@ -201,8 +186,10 @@ export async function POST(req: Request) {
         await trackUsage('gemini')
 
         currentStep = 'parse_json'
-        // repair: true — AI sometimes returns truncated JSON; try closing brackets/strings before failing.
-        const parsed = parseInitialResearchResponse(responseText, { repair: true })
+        const parsed = parseInitialResearchResponse(responseText, {
+          repair: true,
+          articleSummaries: news.map(() => ''),
+        })
         if (!parsed.ok) {
           send('progress', { step: 'error', error: `${parsed.error} 다시 시도해 주세요.` })
           safeClose()
@@ -262,6 +249,7 @@ export async function POST(req: Request) {
                 key_metrics: unknown
                 updated_at: string
               }
+              // State: persist analysis_status='completed'; UI trusts this, never infers.
               await supabase.from('research_history').upsert(
                 {
                   user_id: cacheKey.userId,
@@ -269,8 +257,9 @@ export async function POST(req: Request) {
                   country_code: cacheKey.countryCode,
                   report_id: report.id,
                   key_metrics: keyMetrics,
+                  analysis_status: 'completed',
                   updated_at: new Date().toISOString(),
-                } as ResearchHistoryRow,
+                } as ResearchHistoryRow & { analysis_status: string },
                 { onConflict: 'user_id,keyword,country_code' }
               )
             } else if (insertError) console.warn('[Research Stream] Report insert failed (컬럼 확인):', insertError.message)

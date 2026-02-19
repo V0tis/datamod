@@ -7,7 +7,7 @@ import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 
 const FOLLOW_UP_SYSTEM = `${PM_ANALYSIS_PRINCIPLES}
 
-당신은 시장 리서치와 대중 반응 분석 전문가입니다. 사용자가 유저 반응 분석 내용에 대해 추가로 질문했을 때, **앞서 제시된 유저 반응 요약과 맥락**만 바탕으로 간결하고 명확하게 답변해주세요. 질문이 모호하면 합리적으로 추론해 답변하고, 가정은 [Hypothesis]로 표시하세요. 1~3문단 이내로 작성해주세요.`
+시장·대중 반응 분석 전문가. 앞서 제시된 유저 반응 요약·맥락만 근거로 답변. 질문이 모호하면 추론 후 가정은 [Hypothesis]로 표시. 1~3문단. 질문·대화형 표현 금지.`
 
 /** Follow-up Q&A on previous insights; uses system Gemini key only. */
 export async function POST(req: Request) {

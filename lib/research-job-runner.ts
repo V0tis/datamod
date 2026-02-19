@@ -4,32 +4,18 @@ import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { generateText, runTabAnalysis } from '@/lib/ai'
 import { parseInitialResearchResponse } from '@/lib/research-parser'
+import { INITIAL_RESEARCH_SYSTEM, buildInitialResearchUserPrompt } from '@/lib/ai/pm-analysis-prompts'
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const SYSTEM_INSTRUCTION =
-  "당신은 시장 리서치 전문가 '린'입니다. 제공된 실시간 뉴스 제목들만 참고하여 분석한 뒤, 반드시 JSON 형식으로만 답변하세요."
 const TAB_SYSTEM_PROMPT =
-  '시장 분석 및 인사이트를 마크다운 형식으로 요약해달라. 중요 키워드는 **강조**하고, 요청에 맞게 간결하게 답변하세요.'
+  '시장 분석 및 인사이트를 마크다운 형식으로 요약. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
 
 type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
-
-function buildUserPrompt(keyword: string, newsTitles: string[]): string {
-  const newsBlock =
-    newsTitles.length > 0
-      ? `\n\n[실시간 뉴스 제목 (news_items_ko)]\n${newsTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
-      : '\n\n'
-  return (
-    `"${keyword}"에 대해 위 실시간 뉴스 제목들을 참고하여 분석한 뒤, 아래 JSON만 출력해줘.` +
-    newsBlock +
-    `JSON 형식: { marketNews: [], painPoints: [], competitorTrends: "", sentiment: 0~100, publicReactionTrends: "", chartData: { sentiment: { positive: 0~100, neutral: 0~100, negative: 0~100 }, impact: [ { subject: "분야명", score: 0~10 } ] }, articleSummaries: [], keyConclusions: [] }. ` +
-    `규칙: keyConclusions 3개 문장, articleSummaries는 뉴스 순서대로 1문단씩(없으면 빈 배열), positive+neutral+negative 합계 100, impact 5개, publicReactionTrends 1~2문단.`
-  )
-}
 
 function buildCreativePrompt(keyword: string, summary: string, newsHeadlines: string): string {
   const newsBlock = newsHeadlines ? `\n\n실시간 뉴스 헤드라인 (news_items_ko):\n${newsHeadlines}\n\n` : ''
@@ -178,17 +164,20 @@ export async function runAnalysisJob(jobId: string) {
     await updateJob(jobId, { progress_step: 'gemini' })
 
     const newsTitles = news.map((n) => n.title)
-    const prompt = buildUserPrompt(keyword, newsTitles)
+    const prompt = buildInitialResearchUserPrompt(keyword, newsTitles)
     const responseText = await generateText({
       apiKey: gemini,
       prompt,
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction: INITIAL_RESEARCH_SYSTEM,
       maxOutputTokens: 3500,
       model: GEMINI_MODEL,
     })
 
     await updateJob(jobId, { progress_step: 'parse_json' })
-    const parsed = parseInitialResearchResponse(responseText ?? '', { repair: true })
+    const parsed = parseInitialResearchResponse(responseText ?? '', {
+      repair: true,
+      articleSummaries: news.map(() => ''),
+    })
     if (!parsed.ok) {
       await updateJob(jobId, { status: 'failed', error: `${parsed.error} 다시 시도해 주세요.` })
       return
@@ -236,6 +225,7 @@ export async function runAnalysisJob(jobId: string) {
         countryCode: cacheKey.countryCode,
         detail: 'key_metrics',
       })
+      // State: persist analysis_status='completed'; UI trusts this, never infers from partial data.
       await supabase.from('research_history').upsert(
         {
           user_id: cacheKey.userId,
@@ -243,6 +233,7 @@ export async function runAnalysisJob(jobId: string) {
           country_code: cacheKey.countryCode,
           report_id: reportId,
           key_metrics: keyMetrics,
+          analysis_status: 'completed',
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,keyword,country_code' }
@@ -300,6 +291,7 @@ export async function runAnalysisJob(jobId: string) {
             analysis_groq: nextGroq,
             analysis_gemini: nextGemini,
             analysis_insight: analysisInsight,
+            analysis_status: 'completed',
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id,keyword,country_code' }

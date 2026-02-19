@@ -1,9 +1,10 @@
 /**
  * Analysis task model: first-class entity for a single keyword analysis.
- * Backing store and API use analysis_jobs; this type is the public contract for UI.
- * Status aligns with product: idle → analyzing → completed | failed.
+ * Authoritative status from backend (research_history.analysis_status or job status).
+ * UI renders ONLY from status; no boolean inference (isLoading, hasResult, etc).
+ * One-directional: queued → analyzing → completed | failed
  */
-export type AnalysisStatus = 'idle' | 'analyzing' | 'completed' | 'failed'
+export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
 
 export interface AnalysisTask {
   id: string
@@ -23,19 +24,14 @@ export interface AnalysisTask {
   error?: string | null
 }
 
-/** Map API job status to AnalysisTask status. */
+/** Map API job status to AnalysisTask status. Backend is source of truth. */
 export function jobStatusToTaskStatus(status: string): AnalysisStatus {
   switch (status) {
-    case 'queued':
-      return 'idle'
-    case 'running':
-      return 'analyzing'
-    case 'succeeded':
-      return 'completed'
+    case 'queued': return 'queued'
+    case 'running': return 'analyzing'
+    case 'succeeded': return 'completed'
     case 'failed':
-    case 'cancelled':
-      return 'failed'
-    default:
-      return 'idle'
+    case 'cancelled': return 'failed'
+    default: return 'queued'
   }
 }

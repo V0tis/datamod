@@ -20,15 +20,15 @@ const navItems = [
   { href: '/insights', label: 'Insights', icon: Bookmark },
 ]
 
-/** PM-friendly labels: status must reflect actual state so "완료" never shows as "대기". */
+/** PM-friendly labels: render from task.status only; backend is source of truth. */
 const TASK_STATUS_LABEL: Record<AnalysisTask['status'], string> = {
-  idle: '대기중',
+  queued: '대기중',
   analyzing: '분석중',
   completed: '분석완료',
   failed: '분석실패',
 }
 
-/** Stage label for chip/strip: must match task.status so completed never shows as Pending. */
+/** Stage label for chip/strip: derived from task.status only (no inference). */
 function getStageLabel(task: AnalysisTask): string {
   if (task.status === 'completed') return '분석완료'
   if (task.status === 'failed') return '분석실패'
@@ -42,8 +42,9 @@ function getStageLabel(task: AnalysisTask): string {
   return '대기중'
 }
 
+/** Active = queued or analyzing (one-directional flow). */
 function isTaskActive(t: AnalysisTask) {
-  return t.status === 'idle' || t.status === 'analyzing'
+  return t.status === 'queued' || t.status === 'analyzing'
 }
 
 export function GlobalHeader() {
