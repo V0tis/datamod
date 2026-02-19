@@ -8,6 +8,8 @@ export interface DecisionSummaryBlockProps {
   marketDirection?: 'rising' | 'stable' | 'declining'
   interpretation?: string
   loading?: boolean
+  /** Large one-line style for executive summary */
+  executiveStyle?: boolean
   className?: string
 }
 
@@ -17,6 +19,7 @@ export function DecisionSummaryBlock({
   marketDirection = 'stable',
   interpretation,
   loading = false,
+  executiveStyle = false,
   className,
 }: DecisionSummaryBlockProps) {
   const directionLabels = { rising: '상승', stable: '보합', declining: '하락' }
@@ -36,7 +39,7 @@ export function DecisionSummaryBlock({
 
   return (
     <section className={cn('rounded-lg border border-border/60 bg-background/50 p-4 sm:p-5', className)} aria-label="Decision summary">
-      <p className="text-sm sm:text-base text-foreground leading-relaxed">{summary || '—'}</p>
+      <p className={cn('text-foreground leading-relaxed', executiveStyle ? 'text-lg sm:text-xl font-semibold' : 'text-sm sm:text-base')}>{summary || '—'}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <DirectionIcon className="w-4 h-4" aria-hidden />

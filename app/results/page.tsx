@@ -31,7 +31,6 @@ import { InsightSummary } from '@/components/research/InsightSummary'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { KeyFindings } from '@/components/research/KeyFindings'
 import { ResultsReportView } from '@/components/research/ResultsReportView'
-import { ResultsReportSkeleton } from '@/components/research/ResultsReportSkeleton'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
@@ -168,11 +167,10 @@ function ResultsContent() {
     newsList,
     result,
     error,
-    startResearch,
+    startStreamingResearch,
     loadFromHistory,
     mergeResultAnalysis,
   } = useResearchStore()
-  const jobs = useResearchStore((s) => s.jobs)
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
   /** 탭별 Groq / Gemini 2엔진 결과 */
@@ -250,7 +248,7 @@ function ResultsContent() {
     return () => mq.removeEventListener('change', setOpen)
   }, [])
 
-  // URL keyword·country: load from history or start new task. useCurrentTask syncs active task.
+  // URL keyword·country: load from history or start streaming analysis.
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
@@ -262,18 +260,15 @@ function ResultsContent() {
         if (historyStatus === 'cached') return
         if (historyStatus === 'error') return
         if (historyStatus === 'empty' || historyStatus === 'none') {
-          const hasRunningJob = Object.values(jobs).some(
-            (job) => job.keyword === k && (job.status === 'queued' || job.status === 'running')
-          )
-          if (hasRunningJob) return
           const state = useResearchStore.getState()
           if (state.result?.reportId && state.keyword === k) return
-          startResearch(k, { country_code: countryCode })
+          if (state.analysisStatus === 'analyzing' && state.keyword === k) return
+          startStreamingResearch(k, { country_code: countryCode })
         }
       })
       .finally(() => { /* sync handled by store */ })
     return () => { cancelled = true }
-  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch, jobs])
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startStreamingResearch])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -817,29 +812,27 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* Render from canonicalStatus only. No heuristic inference. */}
-        {canonicalStatus === 'failed' && (
+        {/* Full layout always renders. Failed shows ErrorState; otherwise ResultsReportView with section-level loading. */}
+        {canonicalStatus === 'failed' ? (
           <div className="py-6">
             <ErrorState
               title="분석을 완료하지 못했습니다"
               description="서버가 바쁘거나 일시적인 오류일 수 있습니다."
               recoveryLabel="다시 분석하기"
-              onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              onRecovery={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
               detail={displayError ?? undefined}
             />
           </div>
-        )}
-        {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') && (
-          <ResultsReportSkeleton showLongMessageAfterMs={5000} />
-        )}
-        {canonicalStatus === 'completed' && (
+        ) : (
           <ResultsReportView
             keyword={currentKeyword ?? ''}
-            result={displayResult ?? ({} as ResearchResponse)}
+            result={displayResult}
+            analysisStatus={canonicalStatus}
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
-            onReanalyze={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+            onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
             reanalyzing={loading}
+            progress={currentTask?.progress ?? null}
           />
         )}
 
@@ -922,7 +915,7 @@ function ResultsContent() {
               size="sm"
               className="gap-2"
               disabled={loading}
-              onClick={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
               aria-label="전체 리포트를 새 데이터로 다시 생성"
               aria-busy={loading}
             >
@@ -982,7 +975,7 @@ function ResultsContent() {
               title="분석을 완료하지 못했습니다"
               description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
               recoveryLabel="다시 분석하기"
-              onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              onRecovery={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
               detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError ?? undefined}
             />
           </div>

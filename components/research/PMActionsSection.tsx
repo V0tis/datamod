@@ -30,6 +30,7 @@ export interface PMActionsSectionProps {
   /** Optional reanalyze button (shown in section header) */
   onReanalyze?: () => void
   reanalyzing?: boolean
+  loading?: boolean
 }
 
 const URGENCY_STYLES = {
@@ -46,7 +47,25 @@ const URGENCY_LABELS = {
 
 const URGENCY_ORDER = { high: 0, medium: 1, low: 2 }
 
-export function PMActionsSection({ actions, className, onReanalyze, reanalyzing = false }: PMActionsSectionProps) {
+export function PMActionsSection({ actions, className, onReanalyze, reanalyzing = false, loading = false }: PMActionsSectionProps) {
+  if (loading) {
+    return (
+      <section className={cn('space-y-3', className)}>
+        <div className="h-4 w-40 rounded bg-muted/60 animate-pulse" />
+        <div className="space-y-2">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="rounded-lg border border-border/60 p-3">
+              <div className="flex justify-between gap-2">
+                <div className="h-4 flex-1 rounded bg-muted/60 animate-pulse" />
+                <div className="h-5 w-12 rounded bg-muted/40 animate-pulse shrink-0" />
+              </div>
+              <div className="mt-2 h-3 w-full rounded bg-muted/40 animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
   const normalized = (actions ?? [])
     .map(normalizeAction)
     .filter((x): x is RecommendedAction => x != null)
@@ -56,7 +75,7 @@ export function PMActionsSection({ actions, className, onReanalyze, reanalyzing 
       return URGENCY_ORDER[ua] - URGENCY_ORDER[ub]
     })
   const hasActions = normalized.length > 0
-  const showSection = hasActions || onReanalyze
+  const showSection = hasActions || onReanalyze || loading
   if (!showSection) return null
 
   return (

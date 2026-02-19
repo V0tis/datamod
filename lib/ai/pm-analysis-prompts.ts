@@ -15,6 +15,7 @@ export const PM_INPUT_RULES = `입력 처리:
 
 export const PM_OUTPUT_RULES = `출력 규칙:
 - 모든 문자열(텍스트) 값은 반드시 한국어로 작성. Output language: Korean only.
+- 결정적·실행 수준 문장 사용. "~인 것으로 보인다", "~할 수 있다", "잠재적으로" 등 회피.
 - JSON만 출력. 마크다운, 이모지, 추가 텍스트, 질문 금지.
 - 반드시 meta, market_temperature, insights, pm_actions 네 객체 포함.
 - facts: 검증 가능한 사실

@@ -294,7 +294,26 @@ function parseJsonField<T>(value: unknown): T | undefined {
   return value as T
 }
 
+/** Streaming update payload from parsed sections + metadata. */
+export type StreamingUpdatePayload = {
+  summary?: string
+  temperature?: number
+  insightLines?: string[]
+  actionLines?: Array<{ title: string; reasoning: string; urgency: 'low' | 'medium' | 'high' }>
+  /** Append single insight (NDJSON streaming) */
+  appendInsight?: string
+  /** Append single action (NDJSON streaming) */
+  appendAction?: { title: string; reasoning: string; urgency: 'low' | 'medium' | 'high' }
+  reportId?: string | null
+  newsList?: NewsItem[]
+  error?: string
+}
+
 interface ResearchStore extends ResearchState {
+  /** Apply streaming section updates. Composes result from sections. */
+  applyStreamingUpdate: (payload: StreamingUpdatePayload) => void
+  /** Start analysis via streaming API (replaces job polling). */
+  startStreamingResearch: (keyword: string, options?: { country_code?: string }) => Promise<void>
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
   refreshJobs: () => Promise<void>
   setActiveJob: (jobId: string | null) => Promise<void>
@@ -348,6 +367,283 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
       reset: () => set({ ...initialState, analysisStatus: 'queued' }),
+
+      applyStreamingUpdate: (payload: StreamingUpdatePayload) => {
+        const state = get()
+        const prevSummary = state.summarySection
+        const prevMarket = state.marketTemperatureSection
+        const prevActions = state.recommendedActionsSection
+        const prevInsights = state.insightsSection
+
+        const trend: 'rising' | 'stable' | 'declining' =
+          typeof payload.temperature === 'number'
+            ? payload.temperature > 50
+              ? 'rising'
+              : payload.temperature < 50
+                ? 'declining'
+                : 'stable'
+            : prevMarket?.trend ?? 'stable'
+
+        const summarySection: SummarySection | null =
+          payload.summary != null || payload.reportId != null || payload.newsList
+            ? {
+                summaryText: payload.summary ?? prevSummary?.summaryText ?? '',
+                trend: prevSummary?.trend ?? trend,
+                confidence: prevSummary?.confidence ?? null,
+                analysis_target: prevSummary?.analysis_target ?? null,
+                updated_at: payload.reportId ? new Date().toISOString() : prevSummary?.updated_at ?? null,
+                reportId: payload.reportId ?? prevSummary?.reportId ?? null,
+                keyConclusions: payload.insightLines?.length ? payload.insightLines.slice(0, 5) : prevSummary?.keyConclusions ?? [],
+                marketNews: payload.insightLines?.length ? payload.insightLines.slice(0, 5) : prevSummary?.marketNews ?? [],
+                painPoints: prevSummary?.painPoints ?? [],
+                competitorTrends: prevSummary?.competitorTrends ?? '',
+                sentiment: typeof payload.temperature === 'number' ? payload.temperature : prevSummary?.sentiment ?? null,
+                chartData: prevSummary?.chartData ?? null,
+                source_links: payload.newsList ?? prevSummary?.source_links ?? [],
+                analysis_groq: prevSummary?.analysis_groq,
+                analysis_gemini: prevSummary?.analysis_gemini,
+                analysis_results: prevSummary?.analysis_results,
+              }
+            : prevSummary
+
+        const marketTemperatureSection: MarketTemperatureSection | null =
+          typeof payload.temperature === 'number'
+            ? {
+                score: payload.temperature,
+                trend,
+                positiveSignals: prevMarket?.positiveSignals ?? [],
+                neutralSignals: prevMarket?.neutralSignals ?? [],
+                negativeRisks: prevMarket?.negativeRisks ?? [],
+              }
+            : prevMarket
+
+        const insightsSection: InsightsSection | null =
+          payload.insightLines?.length
+            ? (() => {
+                const lines = payload.insightLines
+                const facts = lines.filter((l) => /^(fact|사실)/i.test(l) || !/^(hypothesis|가설|inference|추론)/i.test(l))
+                const hypotheses = lines.filter((l) => /^(hypothesis|가설)/i.test(l))
+                const inferences = lines.filter((l) => /^(inference|추론)/i.test(l))
+                return {
+                  facts: facts.length ? facts : lines.slice(0, 5),
+                  hypotheses: hypotheses.length ? hypotheses : [],
+                  inferences: inferences.length ? inferences : [],
+                }
+              })()
+            : payload.appendInsight != null
+              ? (() => {
+                  const prev = prevInsights ?? { facts: [], hypotheses: [], inferences: [] }
+                  const merged = [...prev.facts, ...prev.hypotheses, ...prev.inferences]
+                  if (!merged.includes(payload.appendInsight!)) merged.push(payload.appendInsight!)
+                  const facts = merged.filter((l) => /^(fact|사실)/i.test(l) || !/^(hypothesis|가설|inference|추론)/i.test(l))
+                  const hypotheses = merged.filter((l) => /^(hypothesis|가설)/i.test(l))
+                  const inferences = merged.filter((l) => /^(inference|추론)/i.test(l))
+                  return {
+                    facts: facts.length ? facts : merged.slice(0, 5),
+                    hypotheses: hypotheses.length ? hypotheses : [],
+                    inferences: inferences.length ? inferences : [],
+                  }
+                })()
+              : prevInsights
+
+        const recommendedActionsSection: RecommendedActionsSection | null =
+          payload.actionLines?.length
+            ? {
+                actions: payload.actionLines.map((a) => ({
+                  title: a.title,
+                  reasoning: a.reasoning,
+                  urgency_level: a.urgency,
+                })),
+                monitoring_points: prevActions?.monitoring_points ?? [],
+              }
+            : payload.appendAction != null
+              ? {
+                  actions: [...(prevActions?.actions ?? []), {
+                    title: payload.appendAction.title,
+                    reasoning: payload.appendAction.reasoning,
+                    urgency_level: payload.appendAction.urgency,
+                  }],
+                  monitoring_points: prevActions?.monitoring_points ?? [],
+                }
+              : prevActions
+
+        const result = composeResultFromSections(
+          summarySection,
+          marketTemperatureSection,
+          recommendedActionsSection,
+          insightsSection
+        )
+
+        set({
+          summarySection,
+          marketTemperatureSection,
+          recommendedActionsSection,
+          insightsSection,
+          result,
+          newsList: payload.newsList ?? state.newsList,
+          ...(payload.reportId ? { status: 'done' as const, analysisStatus: 'completed' as const, error: null } : {}),
+          ...(payload.error ? { status: 'error' as const, analysisStatus: 'failed' as const, error: payload.error } : {}),
+        })
+      },
+
+      startStreamingResearch: async (keyword: string, options?: { country_code?: string }) => {
+        const k = keyword?.trim()
+        if (!k) {
+          toast.error('검색어가 없습니다.')
+          set({ status: 'error', error: '검색어가 없습니다.' })
+          return
+        }
+
+        const countryCode = options?.country_code ?? 'KR'
+
+        set({
+          keyword: k,
+          status: 'loading',
+          analysisStatus: 'analyzing',
+          newsList: [],
+          result: null,
+          summarySection: null,
+          marketTemperatureSection: null,
+          recommendedActionsSection: null,
+          insightsSection: null,
+          error: null,
+          insights: null,
+        })
+
+        try {
+          const checkRes = await fetch('/api/settings')
+          if (checkRes.ok) {
+            const checkData = (await checkRes.json()) as { canSearch?: boolean }
+            if (checkData.canSearch === false) {
+              toast.error('설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.')
+              set({
+                status: 'error',
+                error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
+              })
+              return
+            }
+          }
+
+          const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keyword: k, country_code: countryCode }),
+          })
+
+          if (!res.ok) {
+            const errData = (await res.json().catch(() => ({}))) as { error?: string }
+            const msg = errData.error ?? '분석 요청에 실패했어요.'
+            set({ status: 'error', analysisStatus: 'failed', error: msg })
+            toast.error(msg)
+            return
+          }
+
+          const reader = res.body?.getReader()
+          if (!reader) {
+            set({ status: 'error', analysisStatus: 'failed', error: '스트림을 읽을 수 없습니다.' })
+            return
+          }
+
+          const decoder = new TextDecoder()
+          let buffer = ''
+          let streamEnded = false
+          const applyUpdate = get().applyStreamingUpdate
+
+          while (!streamEnded) {
+            const { done, value } = await reader.read()
+            if (done) streamEnded = true
+            else buffer += decoder.decode(value, { stream: true })
+
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed) continue
+              try {
+                const event = JSON.parse(trimmed) as { type?: string; content?: string; reportId?: string; error?: string; source_links?: Array<{ title?: string; url?: string; publisher?: string }> }
+                const type = String(event.type ?? '').toLowerCase()
+                const content = typeof event.content === 'string' ? event.content : ''
+
+                if (type === 'summary') {
+                  applyUpdate({ summary: content })
+                } else if (type === 'temperature') {
+                  const n = parseInt(content, 10)
+                  if (!isNaN(n)) applyUpdate({ temperature: Math.min(100, Math.max(0, n)) })
+                } else if (type === 'insight' && content) {
+                  applyUpdate({ appendInsight: content })
+                } else if (type === 'action' && content) {
+                  const parts = content.split('|').map((p) => p.trim())
+                  const title = parts[0] ?? ''
+                  const reasoning = parts[1] ?? ''
+                  const urg = (parts[2] ?? 'low').toLowerCase()
+                  const urgency = urg === 'high' || urg === 'medium' ? urg : 'low'
+                  if (title) applyUpdate({ appendAction: { title, reasoning, urgency } })
+                } else if (type === 'done') {
+                  const newsList = Array.isArray(event.source_links)
+                    ? event.source_links.map((l) => ({
+                        title: l.title ?? '',
+                        url: l.url ?? '',
+                        publisher: l.publisher,
+                      }))
+                    : undefined
+                  applyUpdate({ reportId: event.reportId ?? null, newsList })
+                  streamEnded = true
+                  break
+                } else if (type === 'error') {
+                  applyUpdate({ error: event.error ?? '분석 중 오류가 발생했습니다.' })
+                  streamEnded = true
+                  break
+                }
+              } catch {
+                applyUpdate({ error: '잘못된 응답 형식입니다.' })
+                streamEnded = true
+                break
+              }
+            }
+          }
+
+          if (buffer.trim()) {
+            try {
+              const event = JSON.parse(buffer.trim()) as { type?: string; content?: string; reportId?: string; error?: string; source_links?: unknown[] }
+              const type = String(event.type ?? '').toLowerCase()
+              const content = typeof event.content === 'string' ? event.content : ''
+              if (type === 'summary') applyUpdate({ summary: content })
+              else if (type === 'temperature') {
+                const n = parseInt(content, 10)
+                if (!isNaN(n)) applyUpdate({ temperature: Math.min(100, Math.max(0, n)) })
+              } else if (type === 'insight' && content) applyUpdate({ appendInsight: content })
+              else if (type === 'action' && content) {
+                const parts = content.split('|').map((p) => p.trim())
+                const title = parts[0] ?? ''
+                if (title) {
+                  const reasoning = parts[1] ?? ''
+                  const urg = (parts[2] ?? 'low').toLowerCase()
+                  applyUpdate({ appendAction: { title, reasoning, urgency: urg === 'high' || urg === 'medium' ? urg : 'low' } })
+                }
+              } else if (type === 'done') {
+                const links = event.source_links
+                const newsList = Array.isArray(links)
+                  ? (links as Array<{ title?: string; url?: string; publisher?: string }>).map((l) => ({
+                      title: l.title ?? '',
+                      url: l.url ?? '',
+                      publisher: l.publisher,
+                    }))
+                  : undefined
+                applyUpdate({ reportId: event.reportId ?? null, newsList })
+              } else if (type === 'error') {
+                applyUpdate({ error: event.error ?? '분석 중 오류가 발생했습니다.' })
+              }
+            } catch {
+              get().applyStreamingUpdate({ error: '잘못된 응답 형식입니다.' })
+            }
+          }
+        } catch (err) {
+          const msg = (err as Error)?.message ?? '분석을 시작하지 못했어요.'
+          showErrorToast(err, { fallbackMessage: msg })
+          set({ status: 'error', analysisStatus: 'failed', error: msg })
+        }
+      },
 
       loadFromHistory: async (keyword: string, countryCode = 'KR') => {
         const k = keyword?.trim()
@@ -551,9 +847,11 @@ export const useResearchStore = create<ResearchStore>()(
                 keyword: active.keyword,
                 activeJobId,
               })
-              if (active.status === 'succeeded' && active.keyword) {
+              if (active.keyword) {
                 const alreadyHaveResult = prev.result?.reportId && (prev.keyword?.trim() ?? '') === (active.keyword?.trim() ?? '')
-                if (!alreadyHaveResult) await get().loadFromHistory(active.keyword, active.country_code)
+                const isActiveJob = (prev.keyword?.trim() ?? '') === (active.keyword?.trim() ?? '')
+                if (active.status === 'succeeded' && !alreadyHaveResult) await get().loadFromHistory(active.keyword, active.country_code)
+                if (active.status === 'running' && active.report_id && isActiveJob && !alreadyHaveResult) await get().loadFromHistory(active.keyword, active.country_code)
               }
             } else {
               set({ activeJobId, keyword: active.keyword })

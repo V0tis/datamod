@@ -71,6 +71,37 @@ export type GenerateTextOptions = {
 }
 
 /**
+ * Stream text via Gemini SDK. Yields incremental text chunks.
+ * No retry wrapper; caller handles errors.
+ */
+export async function* generateTextStream(options: GenerateTextOptions): AsyncGenerator<string, void, unknown> {
+  const {
+    apiKey,
+    prompt,
+    systemInstruction,
+    maxOutputTokens = 2048,
+    model = GEMINI_TAB_MODEL,
+  } = options
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const modelConfig: {
+    model: string
+    systemInstruction?: string
+    generationConfig?: { maxOutputTokens: number }
+  } = { model, generationConfig: { maxOutputTokens } }
+  if (systemInstruction) modelConfig.systemInstruction = systemInstruction
+  const geminiModel = genAI.getGenerativeModel(modelConfig)
+  const { stream } = await geminiModel.generateContentStream(prompt)
+  for await (const chunk of stream) {
+    try {
+      const text = (chunk as { text?: () => string }).text?.()
+      if (typeof text === 'string' && text.length > 0) yield text
+    } catch {
+      /* skip chunk if text() throws */
+    }
+  }
+}
+
+/**
  * Generate text via Gemini SDK with exponential backoff.
  * Single responsibility: call model, return text. Throws on failure.
  */

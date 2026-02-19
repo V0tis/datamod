@@ -3,8 +3,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { generateText, runTabAnalysis } from '@/lib/ai'
-import { parseInitialResearchResponse, type StructuredAnalysisFields } from '@/lib/research-parser'
-import { INITIAL_RESEARCH_SYSTEM, buildInitialResearchUserPrompt } from '@/lib/ai/pm-analysis-prompts'
+import { PASS1_SYSTEM, buildPass1Prompt, PASS2_SYSTEM, buildPass2Prompt } from '@/lib/ai/pm-analysis-two-pass'
+import {
+  parsePass1Response,
+  parsePass2Response,
+  pass1ToSummary,
+  mergePass1Pass2,
+} from '@/lib/research-parser-two-pass'
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 
@@ -164,28 +169,23 @@ export async function runAnalysisJob(jobId: string) {
     await updateJob(jobId, { progress_step: 'gemini' })
 
     const newsTitles = news.map((n) => n.title)
-    const prompt = buildInitialResearchUserPrompt(keyword, newsTitles)
-    const responseText = await generateText({
+    const pass1Prompt = buildPass1Prompt(keyword, newsTitles)
+    const pass1Text = await generateText({
       apiKey: gemini,
-      prompt,
-      systemInstruction: INITIAL_RESEARCH_SYSTEM,
-      maxOutputTokens: 3500,
+      prompt: pass1Prompt,
+      systemInstruction: PASS1_SYSTEM,
+      maxOutputTokens: 600,
       model: GEMINI_MODEL,
     })
 
     await updateJob(jobId, { progress_step: 'parse_json' })
-    const parsed = parseInitialResearchResponse(responseText ?? '', {
-      repair: true,
-      articleSummaries: news.map(() => ''),
-    })
-    if (!parsed.ok) {
-      await updateJob(jobId, { status: 'failed', error: `${parsed.error} 다시 시도해 주세요.` })
+    const pass1 = parsePass1Response(typeof pass1Text === 'string' ? pass1Text : '')
+    if (!pass1) {
+      await updateJob(jobId, { status: 'failed', error: '1차 분석 형식이 올바르지 않아요. 다시 시도해 주세요.' })
       return
     }
 
-    const s = parsed.summary
-    const structured = parsed.ok && 'structured' in parsed ? (parsed.structured as StructuredAnalysisFields) : undefined
-    const articleSummaries = s.articleSummaries.slice(0, news.length)
+    const s = pass1ToSummary(pass1, news.map(() => ''))
     const summary = {
       marketNews: s.marketNews,
       painPoints: s.painPoints,
@@ -193,8 +193,17 @@ export async function runAnalysisJob(jobId: string) {
       sentiment: s.sentiment,
       publicReactionTrends: s.publicReactionTrends,
       chartData: s.chartData,
-      articleSummaries,
+      articleSummaries: s.articleSummaries,
       keyConclusions: s.keyConclusions,
+    }
+
+    const keyMetricsPass1 = {
+      chartData: summary.chartData,
+      keyConclusions: summary.keyConclusions,
+      sentiment: summary.sentiment,
+      market_temperature_score: pass1.temperature,
+      summary_insights: pass1.summary,
+      facts: pass1.insights,
     }
 
     await updateJob(jobId, { progress_step: 'report_db' })
@@ -215,23 +224,59 @@ export async function runAnalysisJob(jobId: string) {
     await trackUsage('gemini')
 
     if (reportId) {
+      await supabase.from('research_history').upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          report_id: reportId,
+          key_metrics: keyMetricsPass1,
+          analysis_status: 'analyzing',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+      await updateJob(jobId, { report_id: reportId, progress_step: 'pass2' })
+    }
+
+    const pass2Prompt = buildPass2Prompt(keyword, newsTitles, pass1.summary)
+    const pass2Text = await generateText({
+      apiKey: gemini,
+      prompt: pass2Prompt,
+      systemInstruction: PASS2_SYSTEM,
+      maxOutputTokens: 1200,
+      model: GEMINI_MODEL,
+    })
+
+    const pass2 = parsePass2Response(typeof pass2Text === 'string' ? pass2Text : '')
+    await trackUsage('gemini')
+    const { summary: fullSummary, structured } = mergePass1Pass2(pass1, pass2)
+    const articleSummaries = fullSummary.articleSummaries.slice(0, news.length)
+    const fullSum = {
+      marketNews: fullSummary.marketNews,
+      painPoints: fullSummary.painPoints,
+      competitorTrends: fullSummary.competitorTrends,
+      sentiment: fullSummary.sentiment,
+      publicReactionTrends: fullSummary.publicReactionTrends,
+      chartData: fullSummary.chartData,
+      articleSummaries,
+      keyConclusions: fullSummary.keyConclusions,
+    }
+
+    if (reportId) {
       const keyMetrics = {
-        chartData: summary.chartData,
-        keyConclusions: summary.keyConclusions,
-        sentiment: summary.sentiment,
-        ...(structured && {
-          analysis_target: structured.analysis_target,
-          confidence_score: structured.confidence_score,
-          market_temperature_score: structured.market_temperature_score,
-          facts: structured.facts,
-          hypotheses: structured.hypotheses,
-          inferences: structured.inferences,
-          positive_signals: structured.positive_signals,
-          neutral_signals: structured.neutral_signals,
-          negative_risks: structured.negative_risks,
-          summary_insights: structured.summary_insights,
-          pm_actions: structured.pm_actions,
-        }),
+        chartData: fullSum.chartData,
+        keyConclusions: fullSum.keyConclusions,
+        sentiment: fullSum.sentiment,
+        market_temperature_score: structured.market_temperature_score,
+        summary_insights: structured.summary_insights,
+        facts: structured.facts,
+        hypotheses: structured.hypotheses,
+        inferences: structured.inferences,
+        positive_signals: structured.positive_signals,
+        neutral_signals: structured.neutral_signals,
+        negative_risks: structured.negative_risks,
+        pm_actions: structured.pm_actions,
       }
       logCacheEvent('write', {
         scope: 'stream_report',
@@ -253,6 +298,7 @@ export async function runAnalysisJob(jobId: string) {
       if (typeof structured?.market_temperature_score === 'number') upsertPayload.market_temperature_score = structured.market_temperature_score
       if (structured?.summary_insights) upsertPayload.summary_insights = structured.summary_insights
       await supabase.from('research_history').upsert(upsertPayload, { onConflict: 'user_id,keyword,country_code' })
+      await supabase.from('reports').update({ content: fullSum }).eq('id', reportId)
     }
 
     // Creative analysis: run tab analysis in background and write to research_history.
@@ -267,7 +313,7 @@ export async function runAnalysisJob(jobId: string) {
             : 'none'
     if (provider !== 'none') {
       await updateJob(jobId, { progress_step: 'creative' })
-      const summaryText = buildSummaryText(summary)
+      const summaryText = buildSummaryText(fullSum)
       const newsHeadlines = news.map((n) => n.title).join('\n')
       const userPrompt = buildCreativePrompt(keyword, summaryText, newsHeadlines)
       const creative = await runTabAnalysis({

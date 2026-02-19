@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { FileDown, RefreshCw, Loader2, Bookmark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TimeAgo } from '@/components/time-ago'
@@ -21,42 +22,75 @@ const TARGET_LABELS: Record<string, string> = {
 
 export interface ResultsReportViewProps {
   keyword: string
-  result: ResearchResponse
+  result: ResearchResponse | null
+  analysisStatus: 'queued' | 'analyzing' | 'completed' | 'failed'
   onPrint?: () => void
   onSaveInsight?: () => void
   onReanalyze?: () => void
   reanalyzing?: boolean
+  progress?: string | null
 }
 
-/** PM decision-support report layout. Structured, interpretation-first. */
+/** Full layout always renders. Each section handles its own loading. No monolithic result block. */
 export function ResultsReportView({
   keyword,
   result,
+  analysisStatus,
   onPrint,
   onSaveInsight,
   onReanalyze,
   reanalyzing = false,
+  progress = null,
 }: ResultsReportViewProps) {
-  const km = result.key_metrics ?? {}
-  const consensus = result.analysis_results
+  const isAnalyzing = analysisStatus === 'queued' || analysisStatus === 'analyzing'
+  const [showLongMessage, setShowLongMessage] = useState(false)
+  useEffect(() => {
+    if (!isAnalyzing) return
+    const t = setTimeout(() => setShowLongMessage(true), 5000)
+    return () => clearTimeout(t)
+  }, [isAnalyzing])
+  const km = result?.key_metrics ?? {}
+  const consensus = result?.analysis_results
   const summaryText =
-    typeof consensus?.strategic_insight === 'string' && consensus.strategic_insight.trim()
+    (typeof consensus?.strategic_insight === 'string' && consensus.strategic_insight.trim())
       ? consensus.strategic_insight
-      : result.key_metrics?.summary_insights ??
-        (result.key_metrics?.keyConclusions?.[0] ?? result.keyConclusions?.[0]) ??
-        ''
+      : (result?.key_metrics?.summary_insights ??
+        (result?.key_metrics?.keyConclusions?.[0] ?? result?.keyConclusions?.[0]) ??
+        '')
   const marketScore = km.market_temperature_score ?? km.sentiment ?? 50
   const trend: 'rising' | 'stable' | 'declining' =
-    (consensus?.sentiment != null && consensus.sentiment > 0)
-      ? 'rising'
-      : (consensus?.sentiment != null && consensus.sentiment < 0)
-        ? 'declining'
+    consensus?.sentiment != null
+      ? consensus.sentiment > 0
+        ? 'rising'
+        : consensus.sentiment < 0
+          ? 'declining'
+          : 'stable'
+      : typeof marketScore === 'number'
+        ? marketScore > 50
+          ? 'rising'
+          : marketScore < 50
+            ? 'declining'
+            : 'stable'
         : 'stable'
   const confidence = typeof consensus?.confidence === 'number' ? consensus.confidence : km.confidence_score
   const targetLabel = km.analysis_target ? (TARGET_LABELS[km.analysis_target] ?? km.analysis_target) : null
 
+  const isFullyLoaded = Boolean(result?.reportId)
+  const loadingSummary = isAnalyzing && !(summaryText && summaryText !== '—')
+  const loadingTemperature = isAnalyzing && km.market_temperature_score == null && !isFullyLoaded
+  const hasInsights = (km.facts?.length ?? 0) + (km.hypotheses?.length ?? 0) + (km.inferences?.length ?? 0) > 0
+  const loadingInsights = isAnalyzing && !hasInsights && !isFullyLoaded
+  const loadingActions = isAnalyzing && !(km.pm_actions?.recommended_actions?.length ?? 0) && !isFullyLoaded
+  const loadingMonitoring = isAnalyzing && !isFullyLoaded
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-10 animate-in fade-in duration-300">
+      {showLongMessage && isAnalyzing && (
+        <p className="text-sm text-muted-foreground animate-in fade-in duration-300" role="status">
+          시장 동향·경쟁사를 분석해 PM 관점 요약을 만들고 있어요
+        </p>
+      )}
+
       {/* Header: target, timestamp, confidence */}
       <header className="pb-4 border-b border-border/60">
         <div className="flex flex-wrap items-center gap-2">
@@ -74,48 +108,51 @@ export function ResultsReportView({
             </span>
           )}
         </div>
-        {result.updated_at && (
-          <p className="text-muted-foreground text-sm mt-1.5">
-            <TimeAgo isoString={result.updated_at} />
-          </p>
-        )}
+        <p className="text-muted-foreground text-sm mt-1.5">
+          {isAnalyzing ? (progress ?? '분석 중') : result?.updated_at ? <TimeAgo isoString={result.updated_at} /> : null}
+        </p>
       </header>
 
-      {/* 1. Decision Summary (TOP PRIORITY) */}
+      {/* 1. Executive Summary (one-line, strong weight) */}
       <DecisionSummaryBlock
         summary={summaryText || '—'}
         marketDirection={trend}
-        interpretation={
-          marketScore >= 70 ? '시장 기회가 유의미합니다.' : marketScore <= 40 ? '리스크 관리가 권장됩니다.' : undefined
-        }
+        interpretation={loadingSummary ? undefined : (marketScore >= 70 ? '시장 기회가 유의미합니다.' : marketScore <= 40 ? '리스크 관리가 권장됩니다.' : undefined)}
+        loading={loadingSummary}
+        executiveStyle={!loadingSummary}
       />
 
-      {/* 2. Recommended PM Actions (high urgency first) */}
-      <PMActionsSection
-        actions={km.pm_actions?.recommended_actions ?? []}
-        onReanalyze={onReanalyze}
-        reanalyzing={reanalyzing}
-      />
-
-      {/* 3. Market Temperature: score, trend, explanation always visible; chart as sparkline */}
+      {/* 2. Market Temperature */}
       <ReportMarketTemperature
-        score={marketScore}
+        score={loadingTemperature ? null : marketScore}
         trend={trend}
         positiveSignals={km.positive_signals ?? []}
         neutralSignals={km.neutral_signals ?? []}
         negativeRisks={km.negative_risks ?? []}
         showSparkline
+        loading={loadingTemperature}
       />
 
-      {/* 4. Insights: Fact, Hypothesis, Inference */}
+      {/* 3. Top 3 Key Insights */}
       <InsightBlocks
         facts={km.facts ?? []}
         hypotheses={km.hypotheses ?? []}
         inferences={km.inferences ?? []}
+        maxItems={3}
+        loading={loadingInsights}
+        labels="ko"
+      />
+
+      {/* 4. Recommended Actions */}
+      <PMActionsSection
+        actions={km.pm_actions?.recommended_actions ?? []}
+        onReanalyze={onReanalyze}
+        reanalyzing={reanalyzing}
+        loading={loadingActions}
       />
 
       {/* Things to Watch */}
-      <MonitoringSection items={km.pm_actions?.monitoring_points ?? []} />
+      <MonitoringSection items={km.pm_actions?.monitoring_points ?? []} loading={loadingMonitoring} />
 
       {/* Actions */}
       <div className="no-print flex flex-wrap gap-2 pt-4 border-t border-border/60">
