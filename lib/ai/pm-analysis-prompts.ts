@@ -14,6 +14,7 @@ export const PM_INPUT_RULES = `입력 처리:
 - 질문 금지. "제공해 주세요" 등 대화형 표현 금지.`
 
 export const PM_OUTPUT_RULES = `출력 규칙:
+- 모든 문자열(텍스트) 값은 반드시 한국어로 작성. Output language: Korean only.
 - JSON만 출력. 마크다운, 이모지, 추가 텍스트, 질문 금지.
 - 반드시 meta, market_temperature, insights, pm_actions 네 객체 포함.
 - facts: 검증 가능한 사실
@@ -37,7 +38,7 @@ export function buildInitialResearchUserPrompt(keyword: string, newsTitles: stri
     newsTitles.length > 0
       ? `[뉴스 제목]\n${newsTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
       : ''
-  return `${newsBlock}키워드 "${keyword}"에 대해 위 뉴스만 바탕으로 분석. JSON만 출력.
+  return `${newsBlock}키워드 "${keyword}"에 대해 위 뉴스만 바탕으로 분석. JSON만 출력. 모든 텍스트는 반드시 한국어로 작성.
 
 규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개.
 - recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }

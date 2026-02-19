@@ -1133,14 +1133,14 @@ function ResultsContent() {
           ) : (
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
-              {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') && !displayResult ? (
+              {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') ? (
                 <div className="rounded-xl border border-border bg-muted/20 py-4">
-                  <LoadingState
-                    message="저장된 분석을 확인하는 중입니다."
-                    detail="잠시만 기다려 주세요."
-                    size="md"
-                    icon={<RinAnimation variant="loading" size={100} className="shrink-0" />}
-                  />
+                  <div className="flex items-center gap-3 py-4">
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
+                    <p className="text-sm text-muted-foreground">
+                      {currentTask?.progress ?? '분석 중'}
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1149,7 +1149,7 @@ function ResultsContent() {
                     <GroqAnalysis
                         tabId={id}
                       text={(id === 'logic' ? tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || (loading && !displayResult))}
+                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || loading)}
                       error={tabErrorGroq[id === 'logic' ? 'creative' : id]}
                       retryCount={retryCountTabGroq[id === 'logic' ? 'creative' : id] ?? 0}
                       onRetry={() => {
@@ -1165,7 +1165,7 @@ function ResultsContent() {
                     <GeminiAnalysis
                         tabId={id}
                       text={(id === 'logic' ? tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative : tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || (loading && !displayResult))}
+                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || loading)}
                       error={tabErrorGemini[id === 'logic' ? 'creative' : id]}
                       retryCount={retryCountTabGemini[id === 'logic' ? 'creative' : id] ?? 0}
                       quotaExceeded={geminiQuotaExceeded}

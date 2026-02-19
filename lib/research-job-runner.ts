@@ -12,7 +12,7 @@ const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const TAB_SYSTEM_PROMPT =
-  '시장 분석 및 인사이트를 마크다운 형식으로 요약. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
+  '시장 분석 및 인사이트를 마크다운 형식으로 요약. 반드시 한국어로 작성. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
 
 type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })

@@ -91,7 +91,11 @@ export function ResultsReportView({
       />
 
       {/* 2. Recommended PM Actions (high urgency first) */}
-      <PMActionsSection actions={km.pm_actions?.recommended_actions ?? []} />
+      <PMActionsSection
+        actions={km.pm_actions?.recommended_actions ?? []}
+        onReanalyze={onReanalyze}
+        reanalyzing={reanalyzing}
+      />
 
       {/* 3. Market Temperature: score, trend, explanation always visible; chart as sparkline */}
       <ReportMarketTemperature
