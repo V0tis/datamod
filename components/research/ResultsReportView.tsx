@@ -56,7 +56,7 @@ export function ResultsReportView({
   const targetLabel = km.analysis_target ? (TARGET_LABELS[km.analysis_target] ?? km.analysis_target) : null
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-300">
       {/* Header: target, timestamp, confidence */}
       <header className="pb-4 border-b border-border/60">
         <div className="flex flex-wrap items-center gap-2">

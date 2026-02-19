@@ -4,11 +4,14 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useResearchStore } from '@/lib/stores/research-store'
 
-/** Poll ONLY while status === 'running'. Single source of truth. */
+/** Poll ONLY while status === 'running' and analysis is not terminal (completed/failed). */
 export function AnalysisJobSync() {
   const refreshJobs = useResearchStore((s) => s.refreshJobs)
   const jobs = useResearchStore((s) => s.jobs)
+  const analysisStatus = useResearchStore((s) => s.analysisStatus)
   const hasRunning = Object.values(jobs).some((j) => j.status === 'running')
+  const isTerminal = analysisStatus === 'completed' || analysisStatus === 'failed'
+  const shouldPoll = hasRunning && !isTerminal
 
   useEffect(() => {
     const supabase = createClient()
@@ -61,10 +64,10 @@ export function AnalysisJobSync() {
   }, [refreshJobs])
 
   useEffect(() => {
-    if (!hasRunning) return
+    if (!shouldPoll) return
     const id = window.setInterval(() => void refreshJobs(), 8000)
     return () => window.clearInterval(id)
-  }, [hasRunning, refreshJobs])
+  }, [shouldPoll, refreshJobs])
 
   return null
 }

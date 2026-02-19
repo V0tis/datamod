@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Search, Trash2, Loader2 } from 'lucide-react'
+import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
 import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 
@@ -99,7 +99,7 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-2xl mx-auto min-h-[60vh] bg-background">
+      <div className="p-6 md:p-8 max-w-2xl mx-auto min-h-screen bg-background">
         <header className="mb-8">
           <h1 className="text-xl font-semibold text-foreground tracking-tight">
             과거 결정과 신호
@@ -108,25 +108,7 @@ export default function HistoryPage() {
             최근 분석한 시장 — 결과로 바로 이동합니다.
           </p>
         </header>
-        <LoadingState
-          message="리서치 기록을 불러오는 중입니다"
-          detail="잠시만 기다려 주세요."
-          size="lg"
-          className="py-8"
-        />
-        <div className="mt-6 space-y-1" aria-hidden>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-lg border border-border/50 py-4 px-4 flex items-center justify-between gap-4">
-              <div className="flex-1 min-w-0 flex items-center gap-3">
-                <span className="h-5 w-32 bg-muted/60 rounded animate-pulse shrink-0" />
-                <span className="h-4 w-14 bg-muted/60 rounded animate-pulse shrink-0" />
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="h-4 w-12 bg-muted/60 rounded animate-pulse" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <HistoryCardSkeletonList count={5} />
       </div>
     )
   }

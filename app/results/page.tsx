@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useResearchStore, type NewsItem } from '@/lib/stores/research-store'
+import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { FileDown, X, ExternalLink, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
@@ -31,6 +31,7 @@ import { InsightSummary } from '@/components/research/InsightSummary'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { KeyFindings } from '@/components/research/KeyFindings'
 import { ResultsReportView } from '@/components/research/ResultsReportView'
+import { ResultsReportSkeleton } from '@/components/research/ResultsReportSkeleton'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
@@ -829,17 +830,12 @@ function ResultsContent() {
           </div>
         )}
         {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') && (
-          <div className="py-6">
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
-              <p className="text-sm text-muted-foreground">{currentTask?.progress ?? '분석 중'}</p>
-            </div>
-          </div>
+          <ResultsReportSkeleton showLongMessageAfterMs={5000} />
         )}
-        {canonicalStatus === 'completed' && displayResult && (
+        {canonicalStatus === 'completed' && (
           <ResultsReportView
             keyword={currentKeyword ?? ''}
-            result={displayResult}
+            result={displayResult ?? ({} as ResearchResponse)}
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
             onReanalyze={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}

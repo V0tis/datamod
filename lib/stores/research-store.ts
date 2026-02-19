@@ -184,7 +184,13 @@ interface ResearchState {
   /** Canonical status for UI. Render ONLY from this. */
   analysisStatus: CanonicalAnalysisStatus
   newsList: NewsItem[]
+  /** Composed from sections; do not set directly. */
   result: ResearchResponse | null
+  /** Section-level state; updates independent of full result. */
+  summarySection: SummarySection | null
+  marketTemperatureSection: MarketTemperatureSection | null
+  recommendedActionsSection: RecommendedActionsSection | null
+  insightsSection: InsightsSection | null
   error: string | null
   insights: string | null
   /** Gemini 오늘 사용량 (에너지 바용). null이면 아직 로드 안 함 */
@@ -192,6 +198,82 @@ interface ResearchState {
   jobs: Record<string, AnalysisJob>
   jobOrder: string[]
   activeJobId: string | null
+}
+
+/** Section-level state to avoid monolithic setResult; each section updates independently. */
+export interface SummarySection {
+  summaryText: string
+  trend: 'rising' | 'stable' | 'declining'
+  confidence: number | null
+  analysis_target: string | null
+  updated_at: string | null
+  reportId: string | null
+  keyConclusions: string[]
+  marketNews: string[]
+  painPoints: string[]
+  competitorTrends: string
+  sentiment: number | null
+  chartData: ChartData | null
+  source_links: Array<{ title?: string; url?: string }>
+  analysis_groq?: ResearchResponse['analysis_groq']
+  analysis_gemini?: ResearchResponse['analysis_gemini']
+  analysis_results?: ResearchResponse['analysis_results']
+}
+export interface MarketTemperatureSection {
+  score: number
+  trend: 'rising' | 'stable' | 'declining'
+  positiveSignals: string[]
+  neutralSignals: string[]
+  negativeRisks: string[]
+}
+export interface RecommendedActionsSection {
+  actions: Array<{ title: string; reasoning?: string; urgency_level?: 'low' | 'medium' | 'high'; related_risk?: string }>
+  monitoring_points: string[]
+}
+export interface InsightsSection {
+  facts: string[]
+  hypotheses: string[]
+  inferences: string[]
+}
+
+/** Build ResearchResponse from section state so we never setResult(fullObject). */
+function composeResultFromSections(
+  summary: SummarySection | null,
+  market: MarketTemperatureSection | null,
+  actions: RecommendedActionsSection | null,
+  insights: InsightsSection | null
+): ResearchResponse | null {
+  if (!summary) return null
+  return {
+    reportId: summary.reportId,
+    updated_at: summary.updated_at ?? undefined,
+    keyConclusions: summary.keyConclusions,
+    marketNews: summary.marketNews,
+    painPoints: summary.painPoints,
+    competitorTrends: summary.competitorTrends,
+    sentiment: summary.sentiment ?? undefined,
+    chartData: summary.chartData ?? undefined,
+    source_links: summary.source_links,
+    analysis_groq: summary.analysis_groq,
+    analysis_gemini: summary.analysis_gemini,
+    analysis_results: summary.analysis_results,
+    key_metrics: {
+      ...(summary.analysis_results ? {} : {}),
+      analysis_target: summary.analysis_target ?? undefined,
+      confidence_score: summary.confidence ?? undefined,
+      summary_insights: summary.summaryText || undefined,
+      keyConclusions: summary.keyConclusions,
+      market_temperature_score: market?.score ?? undefined,
+      sentiment: summary.sentiment ?? undefined,
+      positive_signals: market?.positiveSignals,
+      neutral_signals: market?.neutralSignals,
+      negative_risks: market?.negativeRisks,
+      facts: insights?.facts,
+      hypotheses: insights?.hypotheses,
+      inferences: insights?.inferences,
+      pm_actions: actions ? { recommended_actions: actions.actions, monitoring_points: actions.monitoring_points, decision_risks: [] } : undefined,
+    },
+  }
 }
 
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음, 'none' = 기록 없음, 'error' = 요청 실패(스트림 시작 금지) */
@@ -237,6 +319,10 @@ const initialState: ResearchState = {
   analysisStatus: 'queued',
   newsList: [],
   result: null,
+  summarySection: null,
+  marketTemperatureSection: null,
+  recommendedActionsSection: null,
+  insightsSection: null,
   error: null,
   insights: null,
   geminiQuota: null,
@@ -298,21 +384,63 @@ export const useResearchStore = create<ResearchStore>()(
               : analysisStatus === 'failed' ? 'error' as const
               : analysisStatus === 'analyzing' || analysisStatus === 'queued' ? 'loading' as const
               : 'done' as const
+            const content = (data.content ?? {}) as Record<string, unknown>
+            const trend = (ar?.sentiment != null && ar.sentiment > 0) ? 'rising' as const : (ar?.sentiment != null && ar.sentiment < 0) ? 'declining' as const : 'stable' as const
+            const summarySection: SummarySection = {
+              summaryText: (km?.summary_insights ?? (Array.isArray(km?.keyConclusions) ? km.keyConclusions[0] : '') ?? '') as string,
+              trend,
+              confidence: typeof km?.confidence_score === 'number' ? km.confidence_score : null,
+              analysis_target: (km?.analysis_target as string) ?? null,
+              updated_at: data.updated_at ?? null,
+              reportId: data.reportId,
+              keyConclusions: (km?.keyConclusions ?? []) as string[],
+              marketNews: (content.marketNews ?? []) as string[],
+              painPoints: (content.painPoints ?? []) as string[],
+              competitorTrends: (content.competitorTrends ?? '') as string,
+              sentiment: (km?.sentiment ?? content.sentiment) as number | null,
+              chartData: (km?.chartData ?? content.chartData) as ChartData | null,
+              source_links: data.source_links ?? [],
+              analysis_groq: data.analysis_groq,
+              analysis_gemini: data.analysis_gemini,
+              analysis_results: ar,
+            }
+            const marketTemperatureSection: MarketTemperatureSection = {
+              score: typeof km?.market_temperature_score === 'number' ? km.market_temperature_score : (typeof km?.sentiment === 'number' ? km.sentiment : 50),
+              trend,
+              positiveSignals: (km?.positive_signals ?? []) as string[],
+              neutralSignals: (km?.neutral_signals ?? []) as string[],
+              negativeRisks: (km?.negative_risks ?? []) as string[],
+            }
+            const pa = km?.pm_actions
+            const recommendedActionsSection: RecommendedActionsSection = {
+              actions: (pa?.recommended_actions ?? []).map((a: unknown) => typeof a === 'object' && a != null && typeof (a as { title?: string }).title === 'string' ? { title: (a as { title: string }).title, reasoning: (a as { reasoning?: string }).reasoning, urgency_level: (a as { urgency_level?: string }).urgency_level as 'low' | 'medium' | 'high' | undefined, related_risk: (a as { related_risk?: string }).related_risk } : { title: String(a) }),
+              monitoring_points: (pa?.monitoring_points ?? []) as string[],
+            }
+            const insightsSection: InsightsSection = {
+              facts: (km?.facts ?? []) as string[],
+              hypotheses: (km?.hypotheses ?? []) as string[],
+              inferences: (km?.inferences ?? []) as string[],
+            }
+            const fullResult: ResearchResponse = {
+              ...(data.content ?? {}),
+              reportId: data.reportId,
+              ai_responses: data.ai_responses ?? {},
+              source_links: data.source_links ?? [],
+              updated_at: data.updated_at,
+              analysis_groq: data.analysis_groq,
+              analysis_gemini: data.analysis_gemini,
+              analysis_results: ar,
+              key_metrics: km,
+            } as ResearchResponse
             set({
               keyword: k,
               status: statusFromBackend,
               analysisStatus,
-              result: {
-                ...(data.content ?? {}),
-                reportId: data.reportId,
-                ai_responses: data.ai_responses ?? {},
-                source_links: data.source_links ?? [],
-                updated_at: data.updated_at,
-                analysis_groq: data.analysis_groq,
-                analysis_gemini: data.analysis_gemini,
-                analysis_results: ar,
-                key_metrics: km,
-              } as ResearchResponse,
+              summarySection,
+              marketTemperatureSection,
+              recommendedActionsSection,
+              insightsSection,
+              result: fullResult,
               error: null,
               newsList: (data.source_links ?? []) as NewsItem[],
             })
@@ -362,15 +490,18 @@ export const useResearchStore = create<ResearchStore>()(
 
       mergeResultAnalysis: (tabId, groqText, geminiText) => {
         const current = get().result
+        const summary = get().summarySection
         if (!current?.reportId) return
         const prevGroq = (current.analysis_groq as Record<string, string> | undefined) ?? {}
         const prevGemini = (current.analysis_gemini ?? {}) as Record<string, string>
+        const nextResult = {
+          ...current,
+          analysis_groq: groqText !== null ? { ...prevGroq, [tabId]: groqText } : current.analysis_groq,
+          analysis_gemini: geminiText !== null ? { ...prevGemini, [tabId]: geminiText } : current.analysis_gemini,
+        } as ResearchResponse
         set({
-          result: {
-            ...current,
-            analysis_groq: groqText !== null ? { ...prevGroq, [tabId]: groqText } : current.analysis_groq,
-            analysis_gemini: geminiText !== null ? { ...prevGemini, [tabId]: geminiText } : current.analysis_gemini,
-          } as ResearchResponse,
+          result: nextResult,
+          summarySection: summary ? { ...summary, analysis_groq: nextResult.analysis_groq, analysis_gemini: nextResult.analysis_gemini } : null,
         })
       },
 
@@ -409,15 +540,23 @@ export const useResearchStore = create<ResearchStore>()(
             const active = jobs[activeJobId]
             const nextStatus = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
             const nextAnalysisStatus = jobStatusToTaskStatus(active.status)
-            set({
-              status: nextStatus,
-              analysisStatus: nextAnalysisStatus,
-              error: active.error ?? null,
-              keyword: active.keyword,
-              activeJobId,
-            })
-            if (active.status === 'succeeded' && active.keyword) {
-              await get().loadFromHistory(active.keyword, active.country_code)
+            const prev = get()
+            const isTerminal = prev.analysisStatus === 'completed' || prev.analysisStatus === 'failed'
+            const wouldRevert = isTerminal && (nextAnalysisStatus === 'queued' || nextAnalysisStatus === 'analyzing')
+            if (!wouldRevert) {
+              set({
+                status: nextStatus,
+                analysisStatus: nextAnalysisStatus,
+                error: active.error ?? null,
+                keyword: active.keyword,
+                activeJobId,
+              })
+              if (active.status === 'succeeded' && active.keyword) {
+                const alreadyHaveResult = prev.result?.reportId && (prev.keyword?.trim() ?? '') === (active.keyword?.trim() ?? '')
+                if (!alreadyHaveResult) await get().loadFromHistory(active.keyword, active.country_code)
+              }
+            } else {
+              set({ activeJobId, keyword: active.keyword })
             }
           }
         } catch {
@@ -441,7 +580,7 @@ export const useResearchStore = create<ResearchStore>()(
           status,
           analysisStatus,
           error: job.error ?? null,
-          ...(isSameJob ? {} : { result: null, newsList: [] }),
+          ...(isSameJob ? {} : { result: null, newsList: [], summarySection: null, marketTemperatureSection: null, recommendedActionsSection: null, insightsSection: null }),
         })
         if (job.status === 'succeeded') {
           await get().loadFromHistory(job.keyword, job.country_code)
@@ -463,6 +602,10 @@ export const useResearchStore = create<ResearchStore>()(
           analysisStatus: 'queued',
           error: null,
           result: null,
+          summarySection: null,
+          marketTemperatureSection: null,
+          recommendedActionsSection: null,
+          insightsSection: null,
           newsList: [],
         })
       },
@@ -503,6 +646,10 @@ export const useResearchStore = create<ResearchStore>()(
           analysisStatus: 'analyzing',
           newsList: [],
           result: null,
+          summarySection: null,
+          marketTemperatureSection: null,
+          recommendedActionsSection: null,
+          insightsSection: null,
           error: null,
           insights: null,
         })
@@ -568,20 +715,23 @@ export const useResearchStore = create<ResearchStore>()(
 }),
     {
       name: 'rin-research-store',
-      migrate: (persisted: unknown) => {
-        const p = persisted as { state?: Partial<ResearchState> }
-        if (p?.state && !('analysisStatus' in (p.state ?? {}))) {
-          const s = p.state as ResearchState
+      migrate: (persisted: unknown, version: number) => {
+        const p = persisted as { state?: Partial<ResearchState>; version?: number }
+        const s = p?.state as Partial<ResearchState> | undefined
+        if (!s) return persisted as { state: ResearchState; version?: number }
+        let next = { ...s }
+        if (version < 1 || !('analysisStatus' in next)) {
           const derived: CanonicalAnalysisStatus =
-            s.status === 'done' ? 'completed'
-            : s.status === 'error' ? 'failed'
-            : s.status === 'loading' ? 'analyzing'
+            next.status === 'done' ? 'completed'
+            : next.status === 'error' ? 'failed'
+            : next.status === 'loading' ? 'analyzing'
             : 'queued'
-          return { ...p, state: { ...s, analysisStatus: derived } }
+          next = { ...next, analysisStatus: derived }
         }
-        return persisted as { state: ResearchState; version?: number }
+        if (!('summarySection' in next)) next = { ...next, summarySection: null, marketTemperatureSection: null, recommendedActionsSection: null, insightsSection: null }
+        return { ...p, state: next as ResearchState }
       },
-      version: 1,
+      version: 2,
       storage: {
         getItem: (name: string) => {
           if (typeof window === 'undefined') return null
@@ -619,6 +769,10 @@ export const useResearchStore = create<ResearchStore>()(
         analysisStatus: state.analysisStatus,
         newsList: state.newsList,
         result: state.result,
+        summarySection: state.summarySection,
+        marketTemperatureSection: state.marketTemperatureSection,
+        recommendedActionsSection: state.recommendedActionsSection,
+        insightsSection: state.insightsSection,
         error: state.error,
         insights: state.insights,
       }),
