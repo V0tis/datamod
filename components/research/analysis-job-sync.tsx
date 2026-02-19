@@ -4,8 +4,11 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useResearchStore } from '@/lib/stores/research-store'
 
+/** Poll ONLY while status === 'running'. Single source of truth. */
 export function AnalysisJobSync() {
   const refreshJobs = useResearchStore((s) => s.refreshJobs)
+  const jobs = useResearchStore((s) => s.jobs)
+  const hasRunning = Object.values(jobs).some((j) => j.status === 'running')
 
   useEffect(() => {
     const supabase = createClient()
@@ -50,17 +53,18 @@ export function AnalysisJobSync() {
 
     void tick()
     void subscribe()
-    const id = window.setInterval(() => {
-      void tick()
-    }, 8000)
-
     return () => {
       mounted = false
-      window.clearInterval(id)
       if (channel) supabase.removeChannel(channel)
       auth.subscription.unsubscribe()
     }
   }, [refreshJobs])
+
+  useEffect(() => {
+    if (!hasRunning) return
+    const id = window.setInterval(() => void refreshJobs(), 8000)
+    return () => window.clearInterval(id)
+  }, [hasRunning, refreshJobs])
 
   return null
 }

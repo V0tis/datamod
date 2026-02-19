@@ -28,8 +28,8 @@ export interface PMActionsSectionProps {
 }
 
 const URGENCY_STYLES = {
-  high: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
-  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  high: 'bg-red-500/10 text-red-600 dark:text-red-400/90 border-red-500/20',
+  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400/90 border-amber-500/20',
   low: 'bg-muted/60 text-muted-foreground border-border/60',
 } as const
 
@@ -39,10 +39,17 @@ const URGENCY_LABELS = {
   low: '낮음',
 } as const
 
+const URGENCY_ORDER = { high: 0, medium: 1, low: 2 }
+
 export function PMActionsSection({ actions, className }: PMActionsSectionProps) {
   const normalized = (actions ?? [])
     .map(normalizeAction)
     .filter((x): x is RecommendedAction => x != null)
+    .sort((a, b) => {
+      const ua = a.urgency_level && (a.urgency_level === 'high' || a.urgency_level === 'medium' || a.urgency_level === 'low') ? a.urgency_level : 'low'
+      const ub = b.urgency_level && (b.urgency_level === 'high' || b.urgency_level === 'medium' || b.urgency_level === 'low') ? b.urgency_level : 'low'
+      return URGENCY_ORDER[ua] - URGENCY_ORDER[ub]
+    })
   if (!normalized.length) return null
 
   return (

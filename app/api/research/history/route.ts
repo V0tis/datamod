@@ -45,8 +45,19 @@ export async function GET(req: Request) {
         return NextResponse.json({ list: [], error: error.message }, { status: 500 })
       }
       const list = (rows ?? []).map((r) => {
-        const km = (r as { key_metrics?: { negative_risks?: string[] } }).key_metrics
-        const topRisk = Array.isArray(km?.negative_risks) && km.negative_risks.length > 0 ? km.negative_risks[0] : null
+        const km = (r as { key_metrics?: { negative_risks?: string[]; decision_risks?: string[]; pm_actions?: { recommended_actions?: Array<{ title?: string; urgency_level?: string }> } } }).key_metrics
+        const topRisk = Array.isArray(km?.negative_risks) && km.negative_risks.length > 0
+          ? km.negative_risks[0]
+          : Array.isArray(km?.decision_risks) && km.decision_risks.length > 0
+            ? km.decision_risks[0]
+            : null
+        const recs = km?.pm_actions?.recommended_actions ?? []
+        const topAction = recs.find((a) => typeof a === 'object' && (a as { urgency_level?: string }).urgency_level === 'high')
+          ?? recs.find((a) => typeof a === 'object' && (a as { urgency_level?: string }).urgency_level === 'medium')
+          ?? recs.find((a) => typeof a === 'object' && (a as { title?: string }).title)
+        const topActionLine = typeof topAction === 'object' && topAction != null && typeof (topAction as { title?: string }).title === 'string'
+          ? (topAction as { title: string }).title
+          : null
         return {
           id: r.id,
           keyword: r.keyword ?? '',
@@ -59,6 +70,7 @@ export async function GET(req: Request) {
             : null,
           summary_insights: (r as { summary_insights?: string }).summary_insights ?? null,
           top_risk: topRisk,
+          top_action: topActionLine,
           updated_at: r.updated_at ?? null,
           date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
         }

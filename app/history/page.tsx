@@ -30,6 +30,7 @@ interface ResearchRecord {
   market_temperature_score?: number | null
   summary_insights?: string | null
   top_risk?: string | null
+  top_action?: string | null
   updated_at: string | null
   date: string
 }
@@ -234,18 +235,27 @@ export default function HistoryPage() {
                           <TimeAgo isoString={record.updated_at} />
                         </p>
                       )}
-                      {record.market_temperature_score != null && record.analysis_status === 'completed' && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          시장 온도 {record.market_temperature_score}/100
-                        </p>
-                      )}
-                      {record.summary_insights && record.analysis_status === 'completed' && (
-                        <p className="text-sm text-foreground mt-2 line-clamp-2">{record.summary_insights}</p>
-                      )}
-                      {record.top_risk && record.analysis_status === 'completed' && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                          리스크: {record.top_risk}
-                        </p>
+                      {record.analysis_status === 'completed' && (
+                        <div className="mt-2 space-y-1">
+                          {record.market_temperature_score != null && (
+                            <p className="text-xs text-muted-foreground">
+                              시장 온도 {record.market_temperature_score}/100
+                            </p>
+                          )}
+                          {record.summary_insights && (
+                            <p className="text-sm text-foreground line-clamp-1">{record.summary_insights}</p>
+                          )}
+                          {record.top_action && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              우선 액션: {record.top_action}
+                            </p>
+                          )}
+                          {record.top_risk && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              리스크: {record.top_risk}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </Link>
                     <div className="flex shrink-0 gap-1">

@@ -214,8 +214,6 @@ function ResultsContent() {
   const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
-  /** 히스토리 조회가 끝난 뒤에만 분석 중 표시 (캐시 있으면 카드 먼저 보여주기) */
-  const [historyCheckDone, setHistoryCheckDone] = useState(false)
   /** Mobile: collapse secondary sidebar (momentum, trends, metrics, sources) to reduce scroll; expand for comprehension. */
   const [sidebarOpen, setSidebarOpen] = useState(false)
   /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
@@ -255,7 +253,6 @@ function ResultsContent() {
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) return
-    setHistoryCheckDone(false)
     let cancelled = false
     const countryCode = countryFromUrl
     loadFromHistory(k, countryCode)
@@ -273,9 +270,7 @@ function ResultsContent() {
           startResearch(k, { country_code: countryCode })
         }
       })
-      .finally(() => {
-        if (!cancelled) setHistoryCheckDone(true)
-      })
+      .finally(() => { /* sync handled by store */ })
     return () => { cancelled = true }
   }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startResearch, jobs])
 
@@ -327,7 +322,6 @@ function ResultsContent() {
   }, [keyword, storeKeyword, newsDays])
 
   const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
-  const showAnalyzing = historyCheckDone && loading && !quotaExceeded
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
@@ -986,35 +980,26 @@ function ResultsContent() {
           <h2 id="consensus-heading" className="text-sm font-medium text-foreground mb-3">
             상세 분석
           </h2>
-        {!displayResult ? (
+        {canonicalStatus === 'failed' ? (
           <div className="no-print w-full rounded-xl border border-border bg-card p-6">
-            {displayStatus === 'error' && displayError ? (
-              <ErrorState
-                title="분석을 완료하지 못했습니다"
-                description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
-                recoveryLabel="다시 분석하기"
-                onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-                detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError}
-              />
-            ) : showAnalyzing ? (
-              <div className="flex items-center gap-3 py-4">
-                <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
-                <p className="text-sm text-muted-foreground">
-                  {currentTask?.progress ?? '분석 중'}
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80">
-                  <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  분석을 실행하면 전략 통찰이 여기에 표시됩니다.
-                </p>
-              </div>
-            )}
+            <ErrorState
+              title="분석을 완료하지 못했습니다"
+              description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
+              recoveryLabel="다시 분석하기"
+              onRecovery={() => startResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError ?? undefined}
+            />
           </div>
-        ) : (
+        ) : canonicalStatus === 'queued' || canonicalStatus === 'analyzing' ? (
+          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
+            <div className="flex items-center gap-3 py-4">
+              <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
+              <p className="text-sm text-muted-foreground">
+                {currentTask?.progress ?? '분석 중'}
+              </p>
+            </div>
+          </div>
+        ) : canonicalStatus === 'completed' && displayResult ? (
           <ConsensusInsight
             data={consensusData}
             loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
@@ -1023,6 +1008,17 @@ function ResultsContent() {
             errorMessage={displayResult?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
             onRetry={retryConsensus}
           />
+        ) : (
+          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80">
+                <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                분석을 실행하면 전략 통찰이 여기에 표시됩니다.
+              </p>
+            </div>
+          </div>
         )}
         </section>
 
@@ -1141,7 +1137,7 @@ function ResultsContent() {
           ) : (
           AI_TABS.map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
-              {!historyCheckDone && !displayResult ? (
+              {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') && !displayResult ? (
                 <div className="rounded-xl border border-border bg-muted/20 py-4">
                   <LoadingState
                     message="저장된 분석을 확인하는 중입니다."
@@ -1409,7 +1405,7 @@ function ResultsContent() {
                       ? (consensusData?.painPoints ?? []).slice(0, 3)
                       : []
                 }
-                loading={showAnalyzing}
+                loading={loading}
               />
             </div>
             <div className="rounded-xl border border-border/60 bg-card/50 p-4">

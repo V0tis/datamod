@@ -56,7 +56,7 @@ export function ResultsReportView({
   const targetLabel = km.analysis_target ? (TARGET_LABELS[km.analysis_target] ?? km.analysis_target) : null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header: target, timestamp, confidence */}
       <header className="pb-4 border-b border-border/60">
         <div className="flex flex-wrap items-center gap-2">
@@ -81,7 +81,7 @@ export function ResultsReportView({
         )}
       </header>
 
-      {/* Decision Summary */}
+      {/* 1. Decision Summary (TOP PRIORITY) */}
       <DecisionSummaryBlock
         summary={summaryText || '—'}
         marketDirection={trend}
@@ -90,7 +90,10 @@ export function ResultsReportView({
         }
       />
 
-      {/* Market Temperature */}
+      {/* 2. Recommended PM Actions (high urgency first) */}
+      <PMActionsSection actions={km.pm_actions?.recommended_actions ?? []} />
+
+      {/* 3. Market Temperature: score, trend, explanation always visible; chart as sparkline */}
       <ReportMarketTemperature
         score={marketScore}
         trend={trend}
@@ -100,15 +103,12 @@ export function ResultsReportView({
         showSparkline
       />
 
-      {/* Insights: Fact, Hypothesis, Inference */}
+      {/* 4. Insights: Fact, Hypothesis, Inference */}
       <InsightBlocks
         facts={km.facts ?? []}
         hypotheses={km.hypotheses ?? []}
         inferences={km.inferences ?? []}
       />
-
-      {/* Recommended PM Actions */}
-      <PMActionsSection actions={km.pm_actions?.recommended_actions ?? []} />
 
       {/* Things to Watch */}
       <MonitoringSection items={km.pm_actions?.monitoring_points ?? []} />
