@@ -1,3 +1,6 @@
+/**
+ * @deprecated Job-based polling will be replaced by streaming. Use /api/research/run for new analyses.
+ */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { runAnalysisJob } from '@/lib/research-job-runner'

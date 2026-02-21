@@ -1,6 +1,7 @@
 /**
  * Groq chat completion for research tab insight (logic/creative/fact).
  * Single responsibility: send messages, return text or quota error.
+ * @deprecated Prefer using lib/ai for new code. Will be merged into lib/ai/providers.
  */
 import { withExponentialBackoff } from '@/lib/gemini-retry'
 

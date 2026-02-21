@@ -1,6 +1,8 @@
 /**
  * Single responsibility: parse and normalize initial research JSON from AI responses.
  * Supports PM analysis schema (new) and legacy format for backward compatibility.
+ * @deprecated Types are used by lib/ai/runResearch.ts. Parsing logic has been inlined.
+ * This file will be removed once all API routes migrate to the new streaming architecture.
  */
 import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
 import type { PMAnalysisOutput, RecommendedAction } from '@/lib/ai/pm-analysis-schema'

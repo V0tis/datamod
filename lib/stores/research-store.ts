@@ -524,7 +524,7 @@ export const useResearchStore = create<ResearchStore>()(
             }
           }
 
-          const res = await fetch('/api/analyze', {
+          const res = await fetch('/api/research/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keyword: k, country_code: countryCode }),
@@ -561,37 +561,79 @@ export const useResearchStore = create<ResearchStore>()(
               const trimmed = line.trim()
               if (!trimmed) continue
               try {
-                const event = JSON.parse(trimmed) as { type?: string; content?: string; reportId?: string; error?: string; source_links?: Array<{ title?: string; url?: string; publisher?: string }> }
-                const type = String(event.type ?? '').toLowerCase()
-                const content = typeof event.content === 'string' ? event.content : ''
+                const event = JSON.parse(trimmed) as {
+                  type: string
+                  items?: Array<{ title: string; url: string; publisher?: string }>
+                  summary?: string
+                  temperature?: number
+                  insights?: string[]
+                  structured?: {
+                    market_temperature_score?: number
+                    summary_insights?: string
+                    facts?: string[]
+                    hypotheses?: string[]
+                    inferences?: string[]
+                    positive_signals?: string[]
+                    neutral_signals?: string[]
+                    negative_risks?: string[]
+                    pm_actions?: {
+                      recommended_actions?: Array<{ title: string; reasoning?: string; urgency_level?: string }>
+                      monitoring_points?: string[]
+                    }
+                  }
+                  groqText?: string | null
+                  geminiText?: string | null
+                  reportId?: string
+                  sourceLinks?: Array<{ title: string; url: string; publisher?: string }>
+                  message?: string
+                }
+                const type = event.type
 
-                if (type === 'summary') {
-                  applyUpdate({ summary: content })
-                } else if (type === 'temperature') {
-                  const n = parseInt(content, 10)
-                  if (!isNaN(n)) applyUpdate({ temperature: Math.min(100, Math.max(0, n)) })
-                } else if (type === 'insight' && content) {
-                  applyUpdate({ appendInsight: content })
-                } else if (type === 'action' && content) {
-                  const parts = content.split('|').map((p) => p.trim())
-                  const title = parts[0] ?? ''
-                  const reasoning = parts[1] ?? ''
-                  const urg = (parts[2] ?? 'low').toLowerCase()
-                  const urgency = urg === 'high' || urg === 'medium' ? urg : 'low'
-                  if (title) applyUpdate({ appendAction: { title, reasoning, urgency } })
+                if (type === 'news') {
+                  const newsList = (event.items ?? []).map((n) => ({
+                    title: n.title,
+                    url: n.url,
+                    publisher: n.publisher,
+                  }))
+                  set({ newsList })
+                } else if (type === 'pass1') {
+                  applyUpdate({
+                    summary: event.summary ?? '',
+                    temperature: event.temperature ?? 50,
+                    insightLines: event.insights ?? [],
+                  })
+                } else if (type === 'pass2') {
+                  const s = event.structured
+                  if (s) {
+                    const actionLines = (s.pm_actions?.recommended_actions ?? []).map((a) => ({
+                      title: a.title,
+                      reasoning: a.reasoning ?? '',
+                      urgency: (a.urgency_level === 'high' || a.urgency_level === 'medium' ? a.urgency_level : 'low') as 'low' | 'medium' | 'high',
+                    }))
+                    applyUpdate({
+                      temperature: s.market_temperature_score ?? get().marketTemperatureSection?.score ?? 50,
+                      insightLines: [...(s.facts ?? []), ...(s.hypotheses ?? []), ...(s.inferences ?? [])],
+                      actionLines,
+                    })
+                  }
+                } else if (type === 'creative') {
+                  // Creative analysis updates analysis_groq/analysis_gemini - handled by loadFromHistory after done
                 } else if (type === 'done') {
-                  const newsList = Array.isArray(event.source_links)
-                    ? event.source_links.map((l) => ({
-                        title: l.title ?? '',
-                        url: l.url ?? '',
-                        publisher: l.publisher,
-                      }))
-                    : undefined
-                  applyUpdate({ reportId: event.reportId ?? null, newsList })
+                  const newsList = (event.sourceLinks ?? []).map((l) => ({
+                    title: l.title ?? '',
+                    url: l.url ?? '',
+                    publisher: l.publisher,
+                  }))
+                  applyUpdate({ reportId: event.reportId ?? null, newsList: newsList.length ? newsList : undefined })
+                  streamEnded = true
+                  break
+                } else if (type === 'cached') {
+                  set({ status: 'done', analysisStatus: 'completed', error: null })
+                  await get().loadFromHistory(k, countryCode)
                   streamEnded = true
                   break
                 } else if (type === 'error') {
-                  applyUpdate({ error: event.error ?? '분석 중 오류가 발생했습니다.' })
+                  applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
                   streamEnded = true
                   break
                 }
@@ -605,34 +647,16 @@ export const useResearchStore = create<ResearchStore>()(
 
           if (buffer.trim()) {
             try {
-              const event = JSON.parse(buffer.trim()) as { type?: string; content?: string; reportId?: string; error?: string; source_links?: unknown[] }
-              const type = String(event.type ?? '').toLowerCase()
-              const content = typeof event.content === 'string' ? event.content : ''
-              if (type === 'summary') applyUpdate({ summary: content })
-              else if (type === 'temperature') {
-                const n = parseInt(content, 10)
-                if (!isNaN(n)) applyUpdate({ temperature: Math.min(100, Math.max(0, n)) })
-              } else if (type === 'insight' && content) applyUpdate({ appendInsight: content })
-              else if (type === 'action' && content) {
-                const parts = content.split('|').map((p) => p.trim())
-                const title = parts[0] ?? ''
-                if (title) {
-                  const reasoning = parts[1] ?? ''
-                  const urg = (parts[2] ?? 'low').toLowerCase()
-                  applyUpdate({ appendAction: { title, reasoning, urgency: urg === 'high' || urg === 'medium' ? urg : 'low' } })
-                }
-              } else if (type === 'done') {
-                const links = event.source_links
-                const newsList = Array.isArray(links)
-                  ? (links as Array<{ title?: string; url?: string; publisher?: string }>).map((l) => ({
-                      title: l.title ?? '',
-                      url: l.url ?? '',
-                      publisher: l.publisher,
-                    }))
-                  : undefined
-                applyUpdate({ reportId: event.reportId ?? null, newsList })
-              } else if (type === 'error') {
-                applyUpdate({ error: event.error ?? '분석 중 오류가 발생했습니다.' })
+              const event = JSON.parse(buffer.trim()) as { type: string; reportId?: string; message?: string; sourceLinks?: Array<{ title?: string; url?: string; publisher?: string }> }
+              if (event.type === 'done') {
+                const newsList = (event.sourceLinks ?? []).map((l) => ({
+                  title: l.title ?? '',
+                  url: l.url ?? '',
+                  publisher: l.publisher,
+                }))
+                applyUpdate({ reportId: event.reportId ?? null, newsList: newsList.length ? newsList : undefined })
+              } else if (event.type === 'error') {
+                applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
               }
             } catch {
               get().applyStreamingUpdate({ error: '잘못된 응답 형식입니다.' })
@@ -801,6 +825,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
+      /** @deprecated Job polling will be replaced by streaming. Use startStreamingResearch for new analyses. */
       refreshJobs: async () => {
         try {
           const prevJobs = get().jobs
@@ -908,6 +933,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
+      /** @deprecated Use startStreamingResearch instead. Will be removed after job system migration. */
       retryJob: async (jobId: string) => {
         try {
           await fetch('/api/research/jobs/run', {
@@ -921,6 +947,7 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
 
+      /** @deprecated Use startStreamingResearch instead. Will be removed after job system migration. */
       cancelJob: async (jobId: string) => {
         try {
           await fetch(`/api/research/jobs/${encodeURIComponent(jobId)}`, { method: 'PATCH' })
@@ -931,6 +958,7 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
 
+      /** @deprecated Use startStreamingResearch instead. Job-based polling will be removed. */
       startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => {
         const k = keyword?.trim()
         if (!k) {

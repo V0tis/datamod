@@ -1,3 +1,7 @@
+/**
+ * @deprecated Job-based execution will be replaced by lib/ai/runResearch.ts streaming.
+ * Use POST /api/research/run for new analyses.
+ */
 import Parser from 'rss-parser'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'

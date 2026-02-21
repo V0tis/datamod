@@ -9,7 +9,7 @@ import {
   parseConsensusFromRawText,
   FALLBACK_CONSENSUS,
   normalizeConsensus,
-} from '@/services/ai/consensusService'
+} from './consensus'
 import {
   createGeminiTextProvider,
   createGeminiGroundingProvider,

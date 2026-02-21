@@ -1,16 +1,10 @@
 /**
- * Research insight consensus: synthesize Gemini + Groq analyses into a single
- * PM-oriented Consensus. Outputs PM analysis schema; maps to Consensus for storage/frontend.
+ * Consensus types and utilities for PM-oriented analysis synthesis.
+ * Migrated from services/ai/consensusService.ts for unified AI layer.
  */
-import { CONSENSUS_SYNTHESIS_SYSTEM } from '@/lib/ai/pm-analysis-prompts'
-import type { PMAnalysisOutput, TrendValue, RecommendedAction } from '@/lib/ai/pm-analysis-schema'
-import {
-  requestGenerateContent,
-  parseGenerateContentResponse,
-  getConsensusModel,
-} from '@/services/ai/geminiClient'
+import { CONSENSUS_SYNTHESIS_SYSTEM } from './pm-analysis-prompts'
+import type { PMAnalysisOutput, TrendValue, RecommendedAction } from './pm-analysis-schema'
 
-/** PM framework format (API response and DB storage) */
 export type ConsensusImpactItem = { subject: string; score: number; reason?: string }
 export type ConsensusSentiment = {
   score: number
@@ -38,6 +32,11 @@ export type Consensus = {
 const CONSENSUS_USER_PREFIX = '--- Gemini 분석 ---\n'
 const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 
+const CONSENSUS_SYSTEM = `${CONSENSUS_SYNTHESIS_SYSTEM}
+
+[Gemini 분석]과 [Groq 분석] 텍스트에서 정보 추출. 검색·외부 데이터 사용 금지. 제공된 데이터만 근거로 JSON만 출력.
+규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개. recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }. meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
+
 function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
   if (!o || typeof o !== 'object') return false
   const p = o as Record<string, unknown>
@@ -53,15 +52,15 @@ function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
   )
 }
 
-const CONSENSUS_SYSTEM = `${CONSENSUS_SYNTHESIS_SYSTEM}
-
-[Gemini 분석]과 [Groq 분석] 텍스트에서 정보 추출. 검색·외부 데이터 사용 금지. 제공된 데이터만 근거로 JSON만 출력.
-규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개. recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }. meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
-
-function trendToSentimentRatio(trend: TrendValue, score: number): { positive: number; neutral: number; negative: number } {
+function trendToSentimentRatio(
+  trend: TrendValue,
+  score: number
+): { positive: number; neutral: number; negative: number } {
   const s = Math.min(100, Math.max(0, score))
-  if (trend === 'rising') return { positive: Math.min(100, s + 20), neutral: 20, negative: Math.max(0, 80 - s) }
-  if (trend === 'declining') return { positive: Math.max(0, s - 20), neutral: 20, negative: Math.min(100, 100 - s + 20) }
+  if (trend === 'rising')
+    return { positive: Math.min(100, s + 20), neutral: 20, negative: Math.max(0, 80 - s) }
+  if (trend === 'declining')
+    return { positive: Math.max(0, s - 20), neutral: 20, negative: Math.min(100, 100 - s + 20) }
   return {
     positive: Math.round(s * 0.5),
     neutral: Math.round((100 - s) * 0.3),
@@ -84,7 +83,11 @@ function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
           negative: Math.round((ratio.negative / sum) * 100),
         }
       : undefined
-  const trendMap = { rising: 'rising' as const, stable: 'stable' as const, declining: 'falling' as const }
+  const trendMap = {
+    rising: 'rising' as const,
+    stable: 'stable' as const,
+    declining: 'falling' as const,
+  }
   return {
     marketNews: insights.facts?.slice(0, 5) ?? [],
     painPoints: exp.negative_risks?.slice(0, 5) ?? [],
@@ -107,7 +110,13 @@ function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
       threat: exp.negative_risks?.join(' ').slice(0, 300) ?? '—',
       actionItems: (pm_actions.recommended_actions ?? [])
         .slice(0, 5)
-        .map((a) => (typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string' ? (a as RecommendedAction).title : typeof a === 'string' ? a : ''))
+        .map((a) =>
+          typeof a === 'object' && a != null && typeof (a as RecommendedAction).title === 'string'
+            ? (a as RecommendedAction).title
+            : typeof a === 'string'
+              ? a
+              : ''
+        )
         .filter(Boolean),
     },
     metadata: { confidence: meta.confidence_score, dataPeriod: '최근 24시간' },
@@ -115,9 +124,14 @@ function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
 }
 
 function legacyToConsensus(o: Record<string, unknown>): Consensus {
-  const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 500) : '분석 불가. 데이터가 부족합니다.'
-  const sentimentScore = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
-  const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
+  const summary =
+    typeof o.summary === 'string'
+      ? o.summary.trim().slice(0, 500)
+      : '분석 불가. 데이터가 부족합니다.'
+  const sentimentScore =
+    typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
+  const confidence =
+    typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
   const action_item = o.action_item
   const actionItems = Array.isArray(action_item)
     ? (action_item as string[]).filter((s): s is string => typeof s === 'string').slice(0, 5)
@@ -138,7 +152,8 @@ function legacyToConsensus(o: Record<string, unknown>): Consensus {
     ],
     strategicSummary: {
       summary,
-      opportunity: typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—',
+      opportunity:
+        typeof o.strategic_insight === 'string' ? o.strategic_insight.trim().slice(0, 300) : '—',
       threat: '—',
       actionItems,
     },
@@ -146,7 +161,7 @@ function legacyToConsensus(o: Record<string, unknown>): Consensus {
   }
 }
 
-const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
+export const FALLBACK_CONSENSUS: Consensus = legacyToConsensus({
   summary: '분석 불가. 데이터가 부족합니다.',
   sentiment: 0,
   strategic_insight: '—',
@@ -159,12 +174,18 @@ export function normalizeConsensus(raw: unknown): Consensus | null {
   if (!raw || typeof raw !== 'object') return null
   if (isPmAnalysisOutput(raw)) return pmAnalysisToConsensus(raw)
   const o = raw as Record<string, unknown>
-  if (o.strategicSummary && typeof o.strategicSummary === 'object' && typeof (o.strategicSummary as Record<string, unknown>).summary === 'string') {
+  if (
+    o.strategicSummary &&
+    typeof o.strategicSummary === 'object' &&
+    typeof (o.strategicSummary as Record<string, unknown>).summary === 'string'
+  ) {
     const ss = o.strategicSummary as Record<string, unknown>
     const sent = o.sentiment as Record<string, unknown> | undefined
-    const score = typeof sent?.score === 'number' ? Math.max(-100, Math.min(100, sent.score as number)) : 0
+    const score =
+      typeof sent?.score === 'number' ? Math.max(-100, Math.min(100, sent.score as number)) : 0
     const meta = o.metadata as Record<string, unknown> | undefined
-    const confidence = typeof meta?.confidence === 'number' ? Math.max(0, Math.min(100, meta.confidence as number)) : 0
+    const confidence =
+      typeof meta?.confidence === 'number' ? Math.max(0, Math.min(100, meta.confidence as number)) : 0
     const impact = Array.isArray(o.impactAnalysis)
       ? (o.impactAnalysis as ConsensusImpactItem[]).map((i) => ({
           subject: typeof i.subject === 'string' ? i.subject : '—',
@@ -173,30 +194,46 @@ export function normalizeConsensus(raw: unknown): Consensus | null {
         }))
       : FALLBACK_CONSENSUS.impactAnalysis ?? []
     return {
-      marketNews: Array.isArray(o.marketNews) ? (o.marketNews as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
-      painPoints: Array.isArray(o.painPoints) ? (o.painPoints as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
-      competitorTrends: typeof o.competitorTrends === 'string' ? o.competitorTrends.trim().slice(0, 500) : '',
+      marketNews: Array.isArray(o.marketNews)
+        ? (o.marketNews as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10)
+        : [],
+      painPoints: Array.isArray(o.painPoints)
+        ? (o.painPoints as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10)
+        : [],
+      competitorTrends:
+        typeof o.competitorTrends === 'string' ? o.competitorTrends.trim().slice(0, 500) : '',
       sentiment: {
         score,
-        trend: sent?.trend === 'rising' || sent?.trend === 'falling' || sent?.trend === 'stable' ? sent.trend : 'stable',
-        ratio: typeof sent?.ratio === 'object' && sent.ratio ? sent.ratio as { positive?: number; neutral?: number; negative?: number } : undefined,
+        trend:
+          sent?.trend === 'rising' || sent?.trend === 'falling' || sent?.trend === 'stable'
+            ? sent.trend
+            : 'stable',
+        ratio:
+          typeof sent?.ratio === 'object' && sent.ratio
+            ? (sent.ratio as { positive?: number; neutral?: number; negative?: number })
+            : undefined,
       },
       impactAnalysis: impact.length >= 5 ? impact : (FALLBACK_CONSENSUS.impactAnalysis ?? []),
       strategicSummary: {
         summary: typeof ss.summary === 'string' ? ss.summary.trim().slice(0, 500) : '—',
         opportunity: typeof ss.opportunity === 'string' ? ss.opportunity.trim().slice(0, 300) : '—',
         threat: typeof ss.threat === 'string' ? ss.threat.trim().slice(0, 300) : '—',
-        actionItems: Array.isArray(ss.actionItems) ? (ss.actionItems as string[]).filter((s): s is string => typeof s === 'string').slice(0, 10) : [],
+        actionItems: Array.isArray(ss.actionItems)
+          ? (ss.actionItems as string[])
+              .filter((s): s is string => typeof s === 'string')
+              .slice(0, 10)
+          : [],
       },
-      metadata: { confidence, dataPeriod: typeof meta?.dataPeriod === 'string' ? meta.dataPeriod : '최근 24시간' },
+      metadata: {
+        confidence,
+        dataPeriod: typeof meta?.dataPeriod === 'string' ? meta.dataPeriod : '최근 24시간',
+      },
     }
   }
   if (typeof o.summary === 'string' && o.summary.trim() !== '') return legacyToConsensus(o)
   if (typeof o.sentiment === 'number') return legacyToConsensus(o)
   return null
 }
-
-export { FALLBACK_CONSENSUS }
 
 function stripJsonCodeBlock(raw: string): string {
   const codeBlockMatch = raw.match(/^```(?:json)?\s*\n?([\s\S]*?)```\s*$/m)
@@ -234,63 +271,6 @@ export function parseConsensusFromRawText(rawText: string): Consensus {
       parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
       rawLength: raw.length,
     })
-    return FALLBACK_CONSENSUS
-  }
-}
-
-/**
- * Synthesize Gemini + Groq analyses into one Consensus. Call after both analyses are available.
- * Returns fallback Consensus on parse/API errors; never throws.
- */
-export async function synthesizeConsensus(
-  apiKey: string,
-  geminiAnalysis: string,
-  groqAnalysis: string
-): Promise<Consensus> {
-  const g = String(geminiAnalysis ?? '').trim()
-  const r = String(groqAnalysis ?? '').trim()
-  if (g.length < 20 && r.length < 20) return FALLBACK_CONSENSUS
-
-  const partialNote =
-    g.length < 20 || r.length < 20
-      ? '\n\n[참고: 한쪽 AI 분석만 사용되었거나 일부 데이터만으로 종합한 결과입니다.]'
-      : ''
-  const prompt = `${CONSENSUS_SYSTEM}${partialNote}\n\n${CONSENSUS_USER_PREFIX}${g.slice(0, 3000)}${CONSENSUS_USER_SUFFIX}${r.slice(0, 3000)}`
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 8192 },
-  }
-  try {
-    const res = await requestGenerateContent(apiKey, body, getConsensusModel())
-    const data = (await res.json().catch(() => ({}))) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-      error?: { message?: string }
-    }
-    console.log('[Research Tab] Gemini Consensus synthesis', { status: res.status, errorMessage: data?.error?.message ?? null })
-    if (!res.ok) return FALLBACK_CONSENSUS
-    let raw = parseGenerateContentResponse(data)
-    if (!raw) {
-      console.warn('[AI Insight Consensus] synthesizeConsensus: Gemini 응답 텍스트 없음', {
-        hasCandidates: !!data?.candidates?.length,
-      })
-      return FALLBACK_CONSENSUS
-    }
-    raw = stripJsonCodeBlock(raw)
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>
-    } catch (parseErr) {
-      console.error('[AI Insight Consensus] synthesizeConsensus JSON 파싱 실패', {
-        parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
-        rawLength: raw.length,
-        rawSnippet: raw.slice(0, 500),
-      })
-      return FALLBACK_CONSENSUS
-    }
-    const normalized = normalizeConsensus(parsed)
-    return normalized ?? FALLBACK_CONSENSUS
-  } catch (e) {
-    console.warn('[Research Tab] Consensus synthesis', e)
     return FALLBACK_CONSENSUS
   }
 }

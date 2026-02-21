@@ -1,6 +1,7 @@
 /**
  * Centralized Gemini API access for research, insight, and consensus flows.
  * All calls use exponential backoff (lib/gemini-retry); routes stay thin.
+ * @deprecated Prefer using lib/ai for new code. Will be merged into lib/ai/providers.
  */
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL, GEMINI_MODEL } from '@/lib/gemini-config'

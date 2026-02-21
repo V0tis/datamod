@@ -1,6 +1,7 @@
 /**
  * Single responsibility: run Groq and/or Gemini for tab insight (logic/creative/fact).
  * Isolates AI communication; routes handle cache, DB, and consensus.
+ * @deprecated Prefer using lib/ai/unified-ai-service.ts runTabAnalysis for new code.
  */
 import { sleep, REQUEST_GAP_MS } from '@/lib/gemini-retry'
 import { requestGenerateContent, parseGenerateContentResponse, getTabModel } from '@/services/ai/geminiClient'

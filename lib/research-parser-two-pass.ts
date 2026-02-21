@@ -1,6 +1,8 @@
 /**
  * Parse two-pass minimal JSON into full research format.
  * Keeps UI contract unchanged; adapts minimal schema to existing structures.
+ * @deprecated Logic has been inlined into lib/ai/runResearch.ts.
+ * This file will be removed once all API routes migrate to the new streaming architecture.
  */
 import { extractJsonFromText } from '@/lib/extract-json'
 import type { InitialResearchSummary, ChartData, StructuredAnalysisFields } from '@/lib/research-parser'
