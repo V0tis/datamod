@@ -26,7 +26,7 @@ export const RESEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 export const RESEARCH_CACHE_TTL_HOURS = 24
 
 /** Logical scope for logging; DB key is always (user_id, keyword, country_code). */
-export type ResearchCacheScope = 'insight_tab' | 'stream_report'
+export type ResearchCacheScope = 'insight_tab' | 'stream_report' | 'run_research'
 
 /**
  * Standardized cache key parts. Matches DB columns (user_id, keyword, country_code).
@@ -92,7 +92,7 @@ export type CacheLogMeta = {
  * Lightweight request metadata log: one line per event, no payloads.
  * Use for cost attribution (cache hit vs miss) and debugging duplicate calls.
  */
-export function logCacheEvent(event: 'hit' | 'miss' | 'expired' | 'write', meta: CacheLogMeta): void {
+export function logCacheEvent(event: 'hit' | 'miss' | 'expired' | 'write' | 'run_research', meta: CacheLogMeta): void {
   const { scope, keyword, countryCode, tab, source, detail, skippedAi, updatedAt } = meta
   const parts = [
     '[ResearchCache]',
