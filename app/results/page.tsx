@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
+import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
 import { FileDown, X, ExternalLink, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
@@ -164,10 +165,13 @@ function ResultsContent() {
     keyword: storeKeyword,
     status,
     analysisStatus,
+    analysisMode,
+    streamingState,
     newsList,
     result,
     error,
     startStreamingResearch,
+    abortAnalysis,
     loadFromHistory,
     mergeResultAnalysis,
   } = useResearchStore()
@@ -831,8 +835,11 @@ function ResultsContent() {
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
             onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+            onAbort={abortAnalysis}
             reanalyzing={loading}
             progress={currentTask?.progress ?? null}
+            analysisMode={analysisMode}
+            streamingState={streamingState}
           />
         )}
 

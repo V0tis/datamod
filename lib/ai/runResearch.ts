@@ -108,6 +108,15 @@ async function fetchNewsTitles(keyword: string): Promise<NewsItem[]> {
   }
 }
 
+type ValidationError = {
+  field: string
+  message: string
+}
+
+type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; errors: ValidationError[] }
+
 function parseJson<T>(text: string): T | null {
   const raw = extractJsonFromText(text)
   try {
@@ -117,21 +126,110 @@ function parseJson<T>(text: string): T | null {
   }
 }
 
-function parsePass1Response(text: string): Pass1Result | null {
-  const p = parseJson<Pass1Result>(text)
-  if (!p || typeof p.summary !== 'string') return null
-  const temp =
-    typeof p.temperature === 'number' ? Math.min(100, Math.max(0, p.temperature)) : 50
-  const insights = Array.isArray(p.insights)
-    ? p.insights.filter((s): s is string => typeof s === 'string').slice(0, 3)
+function validatePass1(data: unknown): ValidationResult<Pass1Result> {
+  const errors: ValidationError[] = []
+
+  if (!data || typeof data !== 'object') {
+    return { success: false, errors: [{ field: 'root', message: '응답이 유효한 객체가 아닙니다.' }] }
+  }
+
+  const obj = data as Record<string, unknown>
+
+  if (typeof obj.summary !== 'string' || obj.summary.trim().length === 0) {
+    errors.push({ field: 'summary', message: '요약이 비어있거나 문자열이 아닙니다.' })
+  }
+
+  const temp = typeof obj.temperature === 'number'
+    ? Math.min(100, Math.max(0, obj.temperature))
+    : 50
+
+  if (typeof obj.temperature !== 'number') {
+    errors.push({ field: 'temperature', message: '온도 값이 숫자가 아닙니다. 기본값(50)을 사용합니다.' })
+  }
+
+  const insights = Array.isArray(obj.insights)
+    ? obj.insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
     : []
-  return { summary: p.summary.trim(), temperature: temp, insights }
+
+  if (!Array.isArray(obj.insights) || insights.length === 0) {
+    errors.push({ field: 'insights', message: '인사이트 배열이 비어있거나 유효하지 않습니다.' })
+  }
+
+  if (errors.some((e) => e.field === 'summary')) {
+    return { success: false, errors }
+  }
+
+  return {
+    success: true,
+    data: {
+      summary: (obj.summary as string).trim(),
+      temperature: temp,
+      insights,
+    },
+  }
+}
+
+function validatePass2(data: unknown): ValidationResult<Pass2Result> {
+  if (!data || typeof data !== 'object') {
+    return { success: false, errors: [{ field: 'root', message: '응답이 유효한 객체가 아닙니다.' }] }
+  }
+
+  const obj = data as Record<string, unknown>
+  const result: Pass2Result = {}
+
+  if (obj.insights && typeof obj.insights === 'object') {
+    const ins = obj.insights as Record<string, unknown>
+    result.insights = {
+      facts: Array.isArray(ins.facts) ? ins.facts.filter((s): s is string => typeof s === 'string') : [],
+      hypotheses: Array.isArray(ins.hypotheses) ? ins.hypotheses.filter((s): s is string => typeof s === 'string') : [],
+      inferences: Array.isArray(ins.inferences) ? ins.inferences.filter((s): s is string => typeof s === 'string') : [],
+    }
+  }
+
+  if (Array.isArray(obj.actions)) {
+    result.actions = obj.actions
+      .filter((a): a is object => a != null && typeof a === 'object')
+      .map((a) => {
+        const act = a as Record<string, unknown>
+        return {
+          title: typeof act.title === 'string' ? act.title : undefined,
+          reasoning: typeof act.reasoning === 'string' ? act.reasoning : undefined,
+          urgency: typeof act.urgency === 'string' ? act.urgency : undefined,
+        }
+      })
+      .filter((a) => a.title)
+  }
+
+  if (obj.signals && typeof obj.signals === 'object') {
+    const sig = obj.signals as Record<string, unknown>
+    result.signals = {
+      pos: Array.isArray(sig.pos) ? sig.pos.filter((s): s is string => typeof s === 'string') : [],
+      neu: Array.isArray(sig.neu) ? sig.neu.filter((s): s is string => typeof s === 'string') : [],
+      neg: Array.isArray(sig.neg) ? sig.neg.filter((s): s is string => typeof s === 'string') : [],
+    }
+  }
+
+  return { success: true, data: result }
+}
+
+function parsePass1Response(text: string): Pass1Result | null {
+  const parsed = parseJson<unknown>(text)
+  if (!parsed) return null
+  const validation = validatePass1(parsed)
+  return validation.success ? validation.data : null
 }
 
 function parsePass2Response(text: string): Pass2Result | null {
-  const p = parseJson<Pass2Result>(text)
-  if (!p || typeof p !== 'object') return null
-  return p
+  const parsed = parseJson<unknown>(text)
+  if (!parsed) return null
+  const validation = validatePass2(parsed)
+  return validation.success ? validation.data : null
+}
+
+const FALLBACK_PASS1: Pass1Result = {
+  summary: '분석 중 일부 데이터를 처리하지 못했습니다. 다시 시도해 주세요.',
+  temperature: 50,
+  insights: ['데이터 수집 완료', '분석 진행 중'],
 }
 
 function defaultChartData(): ChartData {

@@ -1,10 +1,12 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { PageTransition } from '@/components/common/PageTransition'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { GlobalHeader } from '@/components/global-header'
 import { AnalysisJobSync } from '@/components/research/analysis-job-sync'
+import { useResearchStore } from '@/lib/stores/research-store'
 
 const isAuthOnlyPath = (path: string) =>
   path === '/login' ||
@@ -15,6 +17,23 @@ const isAuthOnlyPath = (path: string) =>
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthPage = isAuthOnlyPath(pathname ?? '')
+  const prevPathnameRef = useRef(pathname)
+  const abortAnalysis = useResearchStore((s) => s.abortAnalysis)
+  const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
+
+  useEffect(() => {
+    const prevPath = prevPathnameRef.current
+    prevPathnameRef.current = pathname
+
+    if (prevPath !== pathname) {
+      const wasOnResults = prevPath?.startsWith('/results')
+      const isLeavingResults = wasOnResults && !pathname?.startsWith('/results')
+
+      if (isLeavingResults && isAnalyzingNow()) {
+        abortAnalysis()
+      }
+    }
+  }, [pathname, abortAnalysis, isAnalyzingNow])
 
   if (isAuthPage) {
     return (

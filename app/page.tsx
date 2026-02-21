@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
+import { CompactModeSelector, AnalysisPreview } from '@/components/research/analysis-mode-selector'
+import { type AnalysisMode, ANALYSIS_MODE_CONFIG } from '@/lib/types/analysis-modes'
 
 const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
@@ -88,8 +90,13 @@ function RinAISearchInner() {
   const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const jobs = useResearchStore((s) => s.jobs)
-  const startResearch = useResearchStore((s) => s.startResearch)
-  const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running')
+  const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
+  const abortAnalysis = useResearchStore((s) => s.abortAnalysis)
+  const analysisMode = useResearchStore((s) => s.analysisMode)
+  const setAnalysisMode = useResearchStore((s) => s.setAnalysisMode)
+  const streamingState = useResearchStore((s) => s.streamingState)
+  const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
+  const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running') || isAnalyzingNow()
 
   useEffect(() => {
     const supabase = createClient()
@@ -187,9 +194,13 @@ function RinAISearchInner() {
       setError('검색어를 입력해 주세요.')
       return
     }
+    if (isAnalyzingNow()) {
+      toast.warning('이미 분석이 진행 중입니다.')
+      return
+    }
     setError(null)
     setSearching(true)
-    startResearch(k, { country_code: trendCountry })
+    startStreamingResearch(k, { country_code: trendCountry, mode: analysisMode })
     if (user) {
       try {
         const reportRes = await fetch('/api/reports', {
@@ -218,6 +229,23 @@ function RinAISearchInner() {
     router.push(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(trendCountry)}`)
   }
 
+  const handleAbort = () => {
+    abortAnalysis()
+    setSearching(false)
+  }
+
+  const getButtonLabel = () => {
+    if (searching || isAnalyzingNow()) {
+      const state = streamingState
+      if (state.status === 'running' || state.status === 'streaming') {
+        const modeConfig = ANALYSIS_MODE_CONFIG[analysisMode]
+        return `분석 중... (${state.currentStep + 1}/${state.totalSteps})`
+      }
+      return '분석 중...'
+    }
+    return `${ANALYSIS_MODE_CONFIG[analysisMode].labelKo} 시작`
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header: 로고 | 검색창(중앙, 수평 정렬) | 로그인 */}
@@ -232,12 +260,12 @@ function RinAISearchInner() {
           <form
             onSubmit={handleSearch}
             className="flex flex-1 max-w-xl mx-auto items-stretch gap-2 min-w-0 justify-center h-12"
-            aria-busy={searching}
+            aria-busy={searching || isAnalyzingNow()}
           >
             <div
               className={cn(
                 'relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 h-full focus-within:bg-muted/60 focus-within:ring-2 focus-within:ring-primary/20 overflow-hidden min-h-[2.75rem]',
-                searching && 'opacity-80 pointer-events-none'
+                (searching || isAnalyzingNow()) && 'opacity-80 pointer-events-none'
               )}
             >
               <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground" aria-hidden>
@@ -252,10 +280,10 @@ function RinAISearchInner() {
                   setQuery(e.target.value)
                   setError(null)
                 }}
-                disabled={searching}
+                disabled={searching || isAnalyzingNow()}
                 className="border-0 bg-transparent pl-9 pr-9 h-full py-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
               />
-              {query.length > 0 && !searching && (
+              {query.length > 0 && !searching && !isAnalyzingNow() && (
                 <button
                   type="button"
                   onClick={() => setQuery('')}
@@ -266,15 +294,27 @@ function RinAISearchInner() {
                 </button>
               )}
             </div>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={searching}
-              aria-busy={searching}
-              className="shrink-0 h-full min-h-[2.75rem] px-4"
-            >
-              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : '검색'}
-            </Button>
+            {(searching || isAnalyzingNow()) ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleAbort}
+                className="shrink-0 h-full min-h-[2.75rem] px-4"
+              >
+                <X className="h-4 w-4 mr-1" />
+                중단
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!query.trim()}
+                className="shrink-0 h-full min-h-[2.75rem] px-4"
+              >
+                검색
+              </Button>
+            )}
           </form>
           <div className="w-[72px] sm:w-20 shrink-0 flex justify-end">
             {!user && (
@@ -328,8 +368,122 @@ function RinAISearchInner() {
               </div>
             )}
 
+            {/* Hero Search Section */}
+            <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="max-w-2xl mx-auto space-y-5">
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-foreground mb-2">PM Strategy Console</h1>
+                  <p className="text-muted-foreground text-sm">
+                    키워드로 시장 인사이트를 확인하고, AI 기반 전략 분석을 시작하세요.
+                  </p>
+                </div>
+
+                {/* Large Search Input */}
+                <form onSubmit={handleSearch} className="space-y-4">
+                  <div
+                    className={cn(
+                      'relative flex items-center rounded-xl border-2 border-border bg-background h-14 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 overflow-hidden transition-all',
+                      (searching || isAnalyzingNow()) && 'opacity-80'
+                    )}
+                  >
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground" aria-hidden>
+                      <Search className="h-5 w-5 shrink-0" />
+                    </span>
+                    <Input
+                      type="search"
+                      aria-label="검색 키워드"
+                      placeholder="분석할 키워드를 입력하세요..."
+                      value={query}
+                      onChange={(e) => {
+                        setQuery(e.target.value)
+                        setError(null)
+                      }}
+                      disabled={searching || isAnalyzingNow()}
+                      className="border-0 bg-transparent pl-12 pr-4 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                    />
+                    {query.length > 0 && !searching && !isAnalyzingNow() && (
+                      <button
+                        type="button"
+                        onClick={() => setQuery('')}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        aria-label="검색어 지우기"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <CompactModeSelector
+                      value={analysisMode}
+                      onChange={setAnalysisMode}
+                      disabled={searching || isAnalyzingNow()}
+                      className="flex-1 sm:flex-none"
+                    />
+                    <div className="flex-1 hidden sm:block" />
+                    {(searching || isAnalyzingNow()) ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleAbort}
+                        className="h-10 px-6"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        분석 중단
+                      </Button>
+                    ) : (
+                      <Button
+                        type="submit"
+                        disabled={!query.trim()}
+                        className="h-10 px-6"
+                      >
+                        {getButtonLabel()}
+                      </Button>
+                    )}
+                  </div>
+                </form>
+
+                {/* Analysis Preview */}
+                {query.trim() && !searching && !isAnalyzingNow() && (
+                  <AnalysisPreview mode={analysisMode} className="pt-2" />
+                )}
+
+                {/* Progress Indicator */}
+                {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {getButtonLabel()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {ANALYSIS_MODE_CONFIG[analysisMode].descriptionKo}
+                        </p>
+                      </div>
+                    </div>
+                    {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                          <span>진행률</span>
+                          <span>{Math.round(((streamingState.currentStep + 1) / streamingState.totalSteps) * 100)}%</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-500"
+                            style={{ width: `${((streamingState.currentStep + 1) / streamingState.totalSteps) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <p className="text-muted-foreground text-sm mb-4 max-w-2xl">
-              키워드로 시장 인사이트를 확인하고, 실시간 트렌드와 리서치 기록을 한눈에 보세요.
+              실시간 트렌드와 리서치 기록을 한눈에 보세요.
             </p>
 
             {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
@@ -518,7 +672,7 @@ function RinAISearchInner() {
               onOpenChange={setTrendPanelOpen}
               selectedItem={selectedTrendItem}
               onAnalyze={(keyword) => {
-                startResearch(keyword, { country_code: trendCountry })
+                startStreamingResearch(keyword, { country_code: trendCountry, mode: analysisMode })
                 router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
               }}
             />
