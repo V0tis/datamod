@@ -13,6 +13,7 @@ import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
 import { type AnalysisMode, ANALYSIS_MODE_CONFIG } from '@/lib/types/analysis-modes'
+import { useResearchStore } from '@/lib/stores/research-store'
 import { ComparisonView } from '@/components/research/comparison-view'
 
 const TARGET_LABELS: Record<string, string> = {
@@ -95,15 +96,6 @@ export default function HistoryPage() {
       return next
     })
   }, [])
-
-  const selectAllOnPage = useCallback(() => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      const start = (page - 1) * PAGE_SIZE
-      filteredRecords.slice(start, start + PAGE_SIZE).forEach((r) => next.add(r.id))
-      return next
-    })
-  }, [page, filteredRecords])
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
