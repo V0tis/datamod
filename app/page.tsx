@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, ChevronRight, KeyRound, CheckCircle2, XCircle, Loader2, X } from 'lucide-react'
+import { Search, TrendingUp, History, ChevronRight, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -87,7 +87,6 @@ function RinAISearchInner() {
     setTrendCountryState(code)
     router.replace(`/?country=${code}`)
   }
-  const [apiStatus, setApiStatus] = useState<{ gemini: boolean; supabase: boolean } | null>(null)
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const jobs = useResearchStore((s) => s.jobs)
   const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
@@ -105,16 +104,6 @@ function RinAISearchInner() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null))
     return () => subscription.unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    fetch('/api/health')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { gemini?: boolean; supabase?: boolean } | null) => {
-        if (data) setApiStatus({ gemini: !!data.gemini, supabase: !!data.supabase })
-        else setApiStatus(null)
-      })
-      .catch(() => setApiStatus(null))
   }, [])
 
   useEffect(() => {
@@ -150,7 +139,7 @@ function RinAISearchInner() {
       .then((res) => res.json())
       .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
         const list = data?.list ?? []
-        setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
+        setRecentReports(list.slice(0, 3).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
       })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했습니다.' })
@@ -210,12 +199,12 @@ function RinAISearchInner() {
         })
         if (reportRes.ok) {
           const now = new Date().toISOString()
-          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
+          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry }, ...prev.filter((r) => r.keyword !== k)].slice(0, 3))
           fetch('/api/research/history')
             .then((res) => res.json())
             .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
               const list = data?.list ?? []
-              setRecentReports(list.slice(0, 5).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
+              setRecentReports(list.slice(0, 3).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
             })
             .catch(() => {})
         } else {
@@ -248,75 +237,14 @@ function RinAISearchInner() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header: 로고 | 검색창(중앙, 수평 정렬) | 로그인 */}
+      {/* Header: 로고 | 로그인 (검색바 제거, 단일 진입점으로 통합) */}
       <header className="sticky top-0 z-20 border-b border-border bg-card px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <div className="flex items-center shrink-0">
-            <Link href="/" className="flex items-center gap-2">
-              <RinLogo size={28} className="shrink-0 opacity-95" />
-              <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
-            </Link>
-          </div>
-          <form
-            onSubmit={handleSearch}
-            className="flex flex-1 max-w-xl mx-auto items-stretch gap-2 min-w-0 justify-center h-12"
-            aria-busy={searching || isAnalyzingNow()}
-          >
-            <div
-              className={cn(
-                'relative flex-1 flex items-center rounded-lg border border-border bg-muted/40 h-full focus-within:bg-muted/60 focus-within:ring-2 focus-within:ring-primary/20 overflow-hidden min-h-[2.75rem]',
-                (searching || isAnalyzingNow()) && 'opacity-80 pointer-events-none'
-              )}
-            >
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground" aria-hidden>
-                <Search className="h-4 w-4 shrink-0" />
-              </span>
-              <Input
-                type="search"
-                aria-label="검색 키워드"
-                placeholder="키워드 검색..."
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                  setError(null)
-                }}
-                disabled={searching || isAnalyzingNow()}
-                className="border-0 bg-transparent pl-9 pr-9 h-full py-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0 min-h-0"
-              />
-              {query.length > 0 && !searching && !isAnalyzingNow() && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted-hover transition-colors"
-                  aria-label="검색어 지우기"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            {(searching || isAnalyzingNow()) ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={handleAbort}
-                className="shrink-0 h-full min-h-[2.75rem] px-4"
-              >
-                <X className="h-4 w-4 mr-1" />
-                중단
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!query.trim()}
-                className="shrink-0 h-full min-h-[2.75rem] px-4"
-              >
-                검색
-              </Button>
-            )}
-          </form>
-          <div className="w-[72px] sm:w-20 shrink-0 flex justify-end">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <RinLogo size={28} className="shrink-0 opacity-95" />
+            <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
+          </Link>
+          <div className="shrink-0 flex justify-end">
             {!user && (
               <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`}>
                 <Button variant="outline" size="sm" className="h-8 text-sm">
@@ -368,13 +296,13 @@ function RinAISearchInner() {
               </div>
             )}
 
-            {/* Hero Search Section */}
+            {/* Primary Analysis Input */}
             <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
               <div className="max-w-2xl mx-auto space-y-5">
                 <div className="text-center">
-                  <h1 className="text-2xl font-bold text-foreground mb-2">PM Strategy Console</h1>
+                  <h1 className="text-2xl font-bold text-foreground mb-2">Analyze a Market or Product</h1>
                   <p className="text-muted-foreground text-sm">
-                    키워드로 시장 인사이트를 확인하고, AI 기반 전략 분석을 시작하세요.
+                    시장이나 제품을 입력하고, PM 전략 분석을 시작하세요.
                   </p>
                 </div>
 
@@ -482,18 +410,72 @@ function RinAISearchInner() {
               </div>
             </div>
 
-            <p className="text-muted-foreground text-sm mb-4 max-w-2xl">
-              실시간 트렌드와 리서치 기록을 한눈에 보세요.
-            </p>
+            {/* Decision flow: Primary Analysis | Recent Analyses (3) | Market Trends Snapshot */}
+            <div className="mx-auto max-w-6xl space-y-6">
+              {/* Recent Analyses (latest 3) */}
+              <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-colors duration-200 hover:bg-background-elevated">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <History className="h-5 w-5 text-primary" />
+                    Recent Analyses
+                  </h2>
+                  <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
+                    전체 <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                {user ? (
+                  recentReportsLoading ? (
+                    <div className="space-y-2" aria-busy="true" aria-label="최근 분석 불러오는 중">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <span className="h-4 w-28 bg-muted rounded animate-pulse" />
+                            <span className="h-3 w-8 bg-muted rounded animate-pulse shrink-0" />
+                          </div>
+                          <span className="h-3 w-12 bg-muted rounded animate-pulse shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentReports.length > 0 ? (
+                    <ul className="space-y-2">
+                      {recentReports.map((r, i) => (
+                        <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
+                          <Link
+                            href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
+                            className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted-hover transition-colors"
+                          >
+                            <span className="min-w-0 flex items-center gap-2">
+                              <span className="font-medium text-foreground truncate">{r.keyword}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground" title="트렌드 채택 국가">
+                                {COUNTRY_LABELS[r.country_code] ?? r.country_code}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-1 shrink-0">
+                              <TimeAgo isoString={r.created_at} className="text-muted-foreground text-xs" />
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground text-sm py-6 text-center">
+                      아직 분석 기록이 없어요. 위에서 분석을 시작하세요.
+                    </p>
+                  )
+                ) : (
+                  <p className="text-muted-foreground text-sm py-6 text-center">
+                    로그인하면 최근 분석이 표시됩니다.
+                  </p>
+                )}
+              </div>
 
-            {/* 대시보드 그리드: 실시간 트렌드 넓게, 나머지 2열 */}
-            <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
-              {/* 카드 1: 실시간 트렌드 - 국가 칩 + Top 5~10 (번역 후 / 번역 전 함께 표시) */}
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-5 transition-colors duration-200 hover:bg-background-elevated">
+              {/* Market Trends Snapshot */}
+              <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-colors duration-200 hover:bg-background-elevated">
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-primary" />
-                    실시간 트렌드 분석
+                    Market Trends Snapshot
                   </h2>
                   <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
                     전체 <ChevronRight className="h-4 w-4" />
@@ -573,97 +555,6 @@ function RinAISearchInner() {
                 <p className="text-muted-foreground text-xs mt-2 text-center text-warning/90">
                   RSS 데이터는 실시간 업데이트 주기를 따릅니다.
                 </p>
-              </div>
-
-              {/* 카드 2: 나의 리서치 활동 */}
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-4 transition-colors duration-200 hover:bg-background-elevated">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-foreground flex items-center gap-2">
-                    <History className="h-5 w-5 text-primary" />
-                    나의 리서치 활동
-                  </h2>
-                  <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
-                    전체 <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                {user ? (
-                  recentReportsLoading ? (
-                    <div className="space-y-2" aria-busy="true" aria-label="리서치 기록 불러오는 중">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <span className="h-4 w-28 bg-muted rounded animate-pulse" />
-                            <span className="h-3 w-8 bg-muted rounded animate-pulse shrink-0" />
-                          </div>
-                          <span className="h-3 w-12 bg-muted rounded animate-pulse shrink-0" />
-                        </div>
-                      ))}
-                      <p className="text-xs text-muted-foreground text-center pt-1">불러오는 중...</p>
-                    </div>
-                  ) : recentReports.length > 0 ? (
-                    <ul className="space-y-2">
-                      {recentReports.map((r, i) => (
-                        <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
-                          <Link
-                            href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                            className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted-hover transition-colors"
-                          >
-                            <span className="min-w-0 flex items-center gap-2">
-                              <span className="font-medium text-foreground truncate">{r.keyword}</span>
-                              <span className="shrink-0 text-xs text-muted-foreground" title="트렌드 채택 국가">
-                                {COUNTRY_LABELS[r.country_code] ?? r.country_code}
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-1 shrink-0">
-                              <TimeAgo isoString={r.created_at} className="text-muted-foreground text-xs" />
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            </span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-muted-foreground text-sm py-6 text-center">
-                      아직 검색 기록이 없어요.
-                    </p>
-                  )
-                ) : (
-                  <p className="text-muted-foreground text-sm py-6 text-center">
-                    로그인하면 최근 검색 키워드가 표시돼요.
-                  </p>
-                )}
-              </div>
-
-              {/* 카드 3: API 키 연결 상태 */}
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-3 transition-colors duration-200 hover:bg-background-elevated">
-                <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
-                  <KeyRound className="h-5 w-5 text-primary" />
-                  API 연결 상태
-                </h2>
-                <ul className="space-y-3">
-                  {apiStatus ? (
-                    <>
-                      <li className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-muted-foreground">Gemini</span>
-                        {apiStatus.gemini ? (
-                          <span className="flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4 shrink-0" /> 연결됨</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
-                        )}
-                      </li>
-                      <li className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-muted-foreground">Supabase</span>
-                        {apiStatus.supabase ? (
-                          <span className="flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4 shrink-0" /> 연결됨</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-muted-foreground"><XCircle className="h-4 w-4" /> 미설정</span>
-                        )}
-                      </li>
-                    </>
-                  ) : (
-                    <li className="text-sm text-muted-foreground">연결 상태 확인 중...</li>
-                  )}
-                </ul>
               </div>
             </div>
 

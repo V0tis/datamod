@@ -5,7 +5,7 @@
  * Used throughout the app to customize analysis behavior and UI presentation.
  */
 
-export type AnalysisMode = 'quick' | 'deep' | 'competitive' | 'action'
+export type AnalysisMode = 'standard' | 'quick' | 'deep' | 'competitive' | 'action'
 
 export type AnalysisModeStep = {
   id: string
@@ -25,6 +25,12 @@ export type AnalysisModeConfig = {
 }
 
 export const ANALYSIS_MODE_STEPS: Record<AnalysisMode, AnalysisModeStep[]> = {
+  standard: [
+    { id: 'news', label: 'News Collection', description: '뉴스 수집' },
+    { id: 'pass1', label: 'Initial Analysis', description: '1차 분석' },
+    { id: 'pass2', label: 'Deep Analysis', description: '심층 분석' },
+    { id: 'creative', label: 'Insight Generation', description: '인사이트 생성' },
+  ],
   quick: [
     { id: 'news', label: 'News Collection', description: '뉴스 수집' },
     { id: 'summary', label: 'Quick Summary', description: '빠른 요약' },
@@ -48,13 +54,32 @@ export const ANALYSIS_MODE_STEPS: Record<AnalysisMode, AnalysisModeStep[]> = {
   ],
 }
 
+/** Hover tooltip descriptions for PM clarity */
+export const ANALYSIS_MODE_TOOLTIPS: Record<AnalysisMode, string> = {
+  standard: '전체 분석 파이프라인 실행 (추천)',
+  quick: '5분 내 시장 신호 개요',
+  deep: '시장 구조, 리스크, 전략 방향',
+  competitive: '경쟁사 포지셔닝과 차별화',
+  action: '실행 가능한 액션 플랜',
+}
+
 export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
+  standard: {
+    id: 'standard',
+    label: 'Standard Analysis',
+    labelKo: '표준 분석 (추천)',
+    description: 'Full analysis pipeline – market structure, signals, actions',
+    descriptionKo: '전체 분석 파이프라인 실행',
+    steps: ANALYSIS_MODE_STEPS.standard,
+    duration: '~2분',
+    outputs: ['시장 점수', '시그널', '경쟁 환경', '전략 액션', '리포트'],
+  },
   quick: {
     id: 'quick',
     label: 'Quick Snapshot',
     labelKo: '빠른 스냅샷',
-    description: 'Get a fast overview of market signals in under 30 seconds',
-    descriptionKo: '30초 내 시장 신호 빠른 개요',
+    description: 'High-level market signals in under 5 minutes',
+    descriptionKo: '5분 내 시장 신호 개요',
     steps: ANALYSIS_MODE_STEPS.quick,
     duration: '~30초',
     outputs: ['시장 요약', '핵심 신호'],
@@ -73,8 +98,8 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
     id: 'competitive',
     label: 'Competitive Mode',
     labelKo: '경쟁 분석',
-    description: 'Focus on competitor landscape and positioning',
-    descriptionKo: '경쟁 환경 및 포지셔닝 집중 분석',
+    description: 'Competitor positioning and differentiation',
+    descriptionKo: '경쟁사 포지셔닝과 차별화',
     steps: ANALYSIS_MODE_STEPS.competitive,
     duration: '~2분',
     outputs: ['경쟁사 동향', '시장 점유율', '차별화 포인트', '위협 요소'],
@@ -83,15 +108,15 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
     id: 'action',
     label: 'Action-Focused',
     labelKo: '액션 중심',
-    description: 'Prioritize actionable recommendations for immediate use',
-    descriptionKo: '즉시 실행 가능한 추천 사항 우선',
+    description: 'Execution-ready action plan',
+    descriptionKo: '실행 가능한 액션 플랜',
     steps: ANALYSIS_MODE_STEPS.action,
     duration: '~1분',
     outputs: ['우선순위 액션', '리스크 경고', '다음 단계'],
   },
 }
 
-export const DEFAULT_ANALYSIS_MODE: AnalysisMode = 'deep'
+export const DEFAULT_ANALYSIS_MODE: AnalysisMode = 'standard'
 
 export function getAnalysisModeConfig(mode: AnalysisMode): AnalysisModeConfig {
   return ANALYSIS_MODE_CONFIG[mode]

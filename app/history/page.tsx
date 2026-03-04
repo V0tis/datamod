@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Search, Trash2, Loader2, Filter, X, Check, ChevronDown, Columns, Calendar } from 'lucide-react'
+import { Search, Trash2, Loader2, Filter, Check, ChevronDown, ChevronLeft, ChevronRight, Columns, RefreshCw } from 'lucide-react'
 import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
 import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
@@ -41,6 +42,15 @@ interface ResearchRecord {
 
 type DateFilterOption = 'all' | 'today' | 'week' | 'month'
 type TempFilterOption = 'all' | 'hot' | 'warm' | 'cold'
+type StatusFilterOption = 'all' | 'completed' | 'failed'
+
+const STATUS_FILTER_OPTIONS: { value: StatusFilterOption; label: string }[] = [
+  { value: 'all', label: '전체' },
+  { value: 'completed', label: '성공' },
+  { value: 'failed', label: '실패' },
+]
+
+const PAGE_SIZE = 10
 
 const DATE_FILTER_OPTIONS: { value: DateFilterOption; label: string }[] = [
   { value: 'all', label: '전체 기간' },
@@ -57,32 +67,43 @@ const TEMP_FILTER_OPTIONS: { value: TempFilterOption; label: string; range: [num
 ]
 
 export default function HistoryPage() {
+  const router = useRouter()
+  const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
   const [records, setRecords] = useState<ResearchRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [showFilters, setShowFilters] = useState(false)
   const [modeFilter, setModeFilter] = useState<AnalysisMode | 'all'>('all')
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('all')
   const [tempFilter, setTempFilter] = useState<TempFilterOption>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all')
+
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showComparison, setShowComparison] = useState(false)
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        if (next.size >= 3) return prev
-        next.add(id)
-      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
+
+  const selectAllOnPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      const start = (page - 1) * PAGE_SIZE
+      filteredRecords.slice(start, start + PAGE_SIZE).forEach((r) => next.add(r.id))
+      return next
+    })
+  }, [page, filteredRecords])
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
@@ -133,25 +154,37 @@ export default function HistoryPage() {
       }
     }
 
+    if (statusFilter !== 'all') {
+      result = result.filter((r) => (r.analysis_status ?? 'completed') === statusFilter)
+    }
+
     return result
-  }, [records, filter, modeFilter, dateFilter, tempFilter])
+  }, [records, filter, modeFilter, dateFilter, tempFilter, statusFilter])
 
   const selectedRecords = useMemo(() =>
     records.filter((r) => selectedIds.has(r.id)),
     [records, selectedIds]
   )
 
-  const hasActiveFilters = modeFilter !== 'all' || dateFilter !== 'all' || tempFilter !== 'all'
+  const totalPages = Math.ceil(filteredRecords.length / PAGE_SIZE)
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filteredRecords.slice(start, start + PAGE_SIZE)
+  }, [filteredRecords, page])
+
+  const hasActiveFilters = modeFilter !== 'all' || dateFilter !== 'all' || tempFilter !== 'all' || statusFilter !== 'all'
 
   const clearFilters = useCallback(() => {
     setModeFilter('all')
     setDateFilter('all')
     setTempFilter('all')
+    setStatusFilter('all')
+    setPage(1)
   }, [])
 
-  const fetchList = useCallback(async () => {
+  const fetchList = useCallback(async (offset = 0) => {
     try {
-      const res = await fetch('/api/research/history')
+      const res = await fetch(`/api/research/history?limit=200&offset=${offset}`)
       const data = await res.json()
       if (!res.ok) {
         setError(data?.error ?? '목록을 불러오지 못했습니다.')
@@ -159,6 +192,7 @@ export default function HistoryPage() {
       }
       const list = (data.list ?? []) as ResearchRecord[]
       setRecords(list.map((r) => ({ ...r, analysis_status: r.analysis_status ?? 'completed' })))
+      setTotalCount(typeof data.total === 'number' ? data.total : list.length)
     } catch {
       setError('목록을 불러오지 못했습니다.')
     } finally {
@@ -180,7 +214,7 @@ export default function HistoryPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 리서치 기록을 삭제할까요?')) return
-    setDeletingId(id)
+    setDeletingIds((prev) => new Set(prev).add(id))
     try {
       const res = await fetch('/api/research/history', {
         method: 'DELETE',
@@ -189,12 +223,58 @@ export default function HistoryPage() {
       })
       if (res.ok) {
         setRecords((prev) => prev.filter((r) => r.id !== id))
+        setSelectedIds((prev) => { const s = new Set(prev); s.delete(id); return s })
       } else {
         const data = await res.json().catch(() => ({}))
         setError((data as { error?: string }).error ?? '삭제에 실패했습니다.')
       }
     } finally {
-      setDeletingId(null)
+      setDeletingIds((prev) => { const s = new Set(prev); s.delete(id); return s })
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`선택한 ${selectedIds.size}개 기록을 삭제할까요?`)) return
+    const ids = Array.from(selectedIds)
+    setDeletingIds(new Set(ids))
+    try {
+      const res = await fetch('/api/research/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (res.ok) {
+        setRecords((prev) => prev.filter((r) => !selectedIds.has(r.id)))
+        setSelectedIds(new Set())
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError((data as { error?: string }).error ?? '삭제에 실패했습니다.')
+      }
+    } finally {
+      setDeletingIds(new Set())
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    if (filteredRecords.length === 0) return
+    if (!confirm(`표시된 ${filteredRecords.length}개 기록을 모두 삭제할까요?`)) return
+    const ids = filteredRecords.map((r) => r.id)
+    try {
+      const res = await fetch('/api/research/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (res.ok) {
+        setRecords((prev) => prev.filter((r) => !ids.includes(r.id)))
+        setSelectedIds(new Set())
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError((data as { error?: string }).error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      setError('삭제에 실패했습니다.')
     }
   }
 
@@ -289,20 +369,21 @@ export default function HistoryPage() {
               필터
               {hasActiveFilters && (
                 <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                  {[modeFilter !== 'all', dateFilter !== 'all', tempFilter !== 'all'].filter(Boolean).length}
+                  {[modeFilter !== 'all', dateFilter !== 'all', tempFilter !== 'all', statusFilter !== 'all'].filter(Boolean).length}
                 </span>
               )}
             </Button>
             {selectedIds.size > 0 && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => setShowComparison(true)}
-                className="gap-1.5 h-9"
-              >
-                <Columns className="h-4 w-4" />
-                비교 ({selectedIds.size})
-              </Button>
+              <>
+                <Button variant="default" size="sm" onClick={() => setShowComparison(true)} className="gap-1.5 h-9">
+                  <Columns className="h-4 w-4" />
+                  비교 ({selectedIds.size})
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="gap-1.5 h-9">
+                  <Trash2 className="h-4 w-4" />
+                  선택 삭제 ({selectedIds.size})
+                </Button>
+              </>
             )}
           </div>
 
@@ -321,7 +402,7 @@ export default function HistoryPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground">분석 모드</label>
                   <div className="relative">
@@ -356,6 +437,21 @@ export default function HistoryPage() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">상태</label>
+                  <div className="relative">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => { setStatusFilter(e.target.value as StatusFilterOption); setPage(1) }}
+                      className="w-full h-9 rounded-md border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {STATUS_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground">시장 온도</label>
                   <div className="relative">
                     <select
@@ -374,20 +470,22 @@ export default function HistoryPage() {
             </div>
           )}
 
-          {selectedIds.size > 0 && (
-            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
-              <span className="text-sm text-foreground">
-                {selectedIds.size}개 선택됨 (최대 3개)
-              </span>
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                선택 해제
-              </button>
-            </div>
-          )}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            {selectedIds.size > 0 ? (
+              <>
+                <span className="text-sm text-foreground">{selectedIds.size}개 선택됨</span>
+                <button type="button" onClick={clearSelection} className="text-xs text-muted-foreground hover:text-foreground">
+                  선택 해제
+                </button>
+              </>
+            ) : (
+              <span />
+            )}
+            <Button variant="outline" size="sm" onClick={handleDeleteAll} disabled={filteredRecords.length === 0} className="gap-1.5 h-8 text-destructive border-destructive/50 hover:bg-destructive/10">
+              <Trash2 className="h-3.5 w-3.5" />
+              전체 삭제
+            </Button>
+          </div>
         </div>
       )}
 
@@ -396,8 +494,9 @@ export default function HistoryPage() {
           검색어에 맞는 기록이 없습니다.
         </p>
       ) : (
+        <>
         <ul className="space-y-1 list-none p-0 m-0">
-          {filteredRecords.map((record) => {
+          {paginatedRecords.map((record) => {
             const resultsHref = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
             const isSelected = selectedIds.has(record.id)
             return (
@@ -412,13 +511,11 @@ export default function HistoryPage() {
                     <button
                       type="button"
                       onClick={() => toggleSelection(record.id)}
-                      disabled={!isSelected && selectedIds.size >= 3}
                       className={cn(
                         'mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
                         isSelected
                           ? 'bg-primary border-primary text-primary-foreground'
                           : 'border-border bg-background hover:border-primary/50',
-                        !isSelected && selectedIds.size >= 3 && 'opacity-50 cursor-not-allowed'
                       )}
                       aria-label={isSelected ? '선택 해제' : '비교 선택'}
                     >
@@ -478,7 +575,20 @@ export default function HistoryPage() {
                           </div>
                         )}
                       </Link>
-                      <div className="flex shrink-0 gap-1">
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1 text-xs"
+                          onClick={() => {
+                            startStreamingResearch(record.keyword, { country_code: record.country_code, mode: record.analysis_mode ?? 'standard' })
+                            router.push(`/results?keyword=${encodeURIComponent(record.keyword)}&country=${encodeURIComponent(record.country_code)}`)
+                          }}
+                          aria-label="다시 분석"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Re-run
+                        </Button>
                         <Link
                           href={resultsHref}
                           className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline py-2 px-2 -m-2"
@@ -492,11 +602,11 @@ export default function HistoryPage() {
                             e.preventDefault()
                             handleDelete(record.id)
                           }}
-                          disabled={deletingId === record.id}
+                          disabled={deletingIds.has(record.id)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/5"
                           aria-label="기록 삭제"
                         >
-                          {deletingId === record.id ? (
+                          {deletingIds.has(record.id) ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <Trash2 className="w-4 h-4" />
@@ -510,6 +620,35 @@ export default function HistoryPage() {
             )
           })}
         </ul>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              이전
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="gap-1"
+            >
+              다음
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        </>
       )}
 
       {filteredRecords.length > 0 && (

@@ -48,6 +48,14 @@ export type StructuredAnalysisFields = {
     monitoring_points?: string[]
     decision_risks?: string[]
   }
+  competitive_landscape?: Array<{ name?: string; positioning?: string; strength?: string; weakness?: string }>
+  market_structure?: { competition_density?: string; summary?: string }
+  market_phase?: string
+  strategic_actions?: {
+    immediate?: Array<{ action?: string; priority?: string; expected_impact?: string }>
+    mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>
+    risk_mitigation?: Array<{ action?: string; priority?: string; risk_addressed?: string }>
+  }
 }
 
 const DEFAULT_CHART_SENTIMENT: ChartSentiment = { positive: 65, neutral: 20, negative: 15 }

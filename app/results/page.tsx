@@ -252,27 +252,26 @@ function ResultsContent() {
     return () => mq.removeEventListener('change', setOpen)
   }, [])
 
-  // URL keyword·country: load from history or start streaming analysis.
+  // URL keyword·country: load from history only. NEVER auto-run analysis.
+  // Analysis runs only when user explicitly clicks "Run Analysis" (home or results page).
+  const [historyLoadDone, setHistoryLoadDone] = useState(false)
+  const [hasCachedResult, setHasCachedResult] = useState<boolean | null>(null)
+
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
-    if (!k) return
-    let cancelled = false
+    if (!k) {
+      setHistoryLoadDone(true)
+      setHasCachedResult(null)
+      return
+    }
+    setHistoryLoadDone(false)
+    setHasCachedResult(null)
     const countryCode = countryFromUrl
-    loadFromHistory(k, countryCode)
-      .then((historyStatus) => {
-        if (cancelled) return
-        if (historyStatus === 'cached') return
-        if (historyStatus === 'error') return
-        if (historyStatus === 'empty' || historyStatus === 'none') {
-          const state = useResearchStore.getState()
-          if (state.result?.reportId && state.keyword === k) return
-          if (state.analysisStatus === 'analyzing' && state.keyword === k) return
-          startStreamingResearch(k, { country_code: countryCode })
-        }
-      })
-      .finally(() => { /* sync handled by store */ })
-    return () => { cancelled = true }
-  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, startStreamingResearch])
+    loadFromHistory(k, countryCode).then((status) => {
+      setHistoryLoadDone(true)
+      setHasCachedResult(status === 'cached')
+    })
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -323,6 +322,7 @@ function ResultsContent() {
 
   const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
+  const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
     countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
@@ -816,16 +816,49 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* Full layout always renders. Failed shows ErrorState; otherwise ResultsReportView with section-level loading. */}
-        {canonicalStatus === 'failed' ? (
-          <div className="py-6">
-            <ErrorState
-              title="분석을 완료하지 못했습니다"
-              description="서버가 바쁘거나 일시적인 오류일 수 있습니다."
-              recoveryLabel="다시 분석하기"
-              onRecovery={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-              detail={displayError ?? undefined}
-            />
+        {/* No cache + not analyzing: show Run Analysis CTA. Analysis only runs on explicit user click. */}
+        {needsRunAction ? (
+          <div className="py-12 flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
+            <p className="text-muted-foreground text-sm mb-4">
+              &quot;{currentKeyword}&quot;에 대한 분석이 없습니다. 실행하려면 아래 버튼을 클릭하세요.
+            </p>
+            <Button
+              size="lg"
+              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Run Analysis
+            </Button>
+          </div>
+        ) : canonicalStatus === 'failed' ? (
+          <div className="py-12 flex flex-col items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+            <h2 className="text-lg font-semibold text-foreground mb-2">Analysis Failed</h2>
+            <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+              {displayError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : loading ? (
+          <div className="space-y-6 py-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                {streamingState.status === 'running' || streamingState.status === 'streaming'
+                  ? `분석 중 (${streamingState.currentStep + 1}/${streamingState.totalSteps})`
+                  : '분석 중...'}
+              </p>
+            </div>
+            <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+            <div className="h-32 bg-muted rounded-xl animate-pulse" />
+            <div className="h-24 bg-muted rounded-xl animate-pulse" />
+            <div className="h-24 bg-muted rounded-xl animate-pulse" />
+            <div className="h-40 bg-muted rounded-xl animate-pulse" />
           </div>
         ) : (
           <ResultsReportView

@@ -1,13 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   type AnalysisMode,
   ANALYSIS_MODE_CONFIG,
+  ANALYSIS_MODE_TOOLTIPS,
 } from '@/lib/types/analysis-modes'
-import { Zap, Target, Users, ListTodo, Clock, CheckCircle2 } from 'lucide-react'
+import { Zap, Target, Users, ListTodo, Clock, CheckCircle2, Play } from 'lucide-react'
 
 const MODE_ICONS: Record<AnalysisMode, React.ElementType> = {
+  standard: Play,
   quick: Zap,
   deep: Target,
   competitive: Users,
@@ -165,34 +168,56 @@ export function CompactModeSelector({
   disabled = false,
   className,
 }: CompactModeSelectorProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const modes = Object.values(ANALYSIS_MODE_CONFIG)
+  const selectedConfig = ANALYSIS_MODE_CONFIG[value]
 
   return (
-    <div className={cn('flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border', className)}>
-      {modes.map((mode) => {
-        const Icon = MODE_ICONS[mode.id]
-        const isSelected = value === mode.id
-        return (
-          <button
-            key={mode.id}
-            type="button"
-            onClick={() => onChange(mode.id)}
-            disabled={disabled}
-            title={`${mode.labelKo} (${mode.duration})`}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              isSelected
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            )}
-          >
-            <Icon className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">{mode.labelKo}</span>
-          </button>
-        )
-      })}
+    <div className={cn('space-y-2', className)}>
+      <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border">
+        {modes.map((mode) => {
+          const Icon = MODE_ICONS[mode.id]
+          const isSelected = value === mode.id
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => onChange(mode.id)}
+              disabled={disabled}
+              title={ANALYSIS_MODE_TOOLTIPS[mode.id]}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                isSelected
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden sm:inline">{mode.labelKo}</span>
+            </button>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => setAdvancedOpen((o) => !o)}
+        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+      >
+        {advancedOpen ? 'Advanced (접기)' : 'Advanced (모듈 선택)'}
+      </button>
+      {advancedOpen && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground mb-2">선택된 모드: {selectedConfig.labelKo}</p>
+          <p className="mb-2">실행되는 단계:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {selectedConfig.steps.map((s) => (
+              <li key={s.id}>{s.description}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

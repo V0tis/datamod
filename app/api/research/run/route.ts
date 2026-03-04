@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'
+import { getGeminiKeyForRequest, getGroqKeyForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 
 export const runtime = 'nodejs'
@@ -38,16 +38,17 @@ export async function POST(req: Request) {
     }
 
     const adminClient = createAdminClient()
-    const { gemini, canSearch } = await getGeminiKeyForRequest(adminClient, user.id)
+    const [geminiResult, groqKey] = await Promise.all([
+      getGeminiKeyForRequest(adminClient, user.id),
+      getGroqKeyForRequest(adminClient, user.id),
+    ])
+    const { gemini, canSearch } = geminiResult
     if (!canSearch || !gemini) {
       return NextResponse.json(
-        { error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
+        { error: '설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
         { status: 400 }
       )
     }
-
-    const tabKeys = getTabProviderKeys()
-    const groqKey = tabKeys.groq || null
 
     const abortSignal = req.signal
     const encoder = new TextEncoder()

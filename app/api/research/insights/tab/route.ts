@@ -14,7 +14,7 @@ import {
   buildCacheKeyParts,
   type ResearchCacheScope,
 } from '@/lib/research-cache'
-import { getTabProviderKeys } from '@/lib/research-keys'
+import { getTabProviderKeysForUser } from '@/lib/research-keys'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 import {
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       ? body.provider
       : 'all'
 
-  const tabKeys = getTabProviderKeys()
+  const tabKeys = await getTabProviderKeysForUser(supabase, user.id)
 
   if (!tab || !['logic', 'creative', 'fact'].includes(tab)) {
     return NextResponse.json({ error: 'tab must be one of logic, creative, fact' }, { status: 400 })

@@ -88,9 +88,42 @@ export async function getResearchKeysForInitialAnalysis(
 }
 
 /**
- * Tab insight API uses server env only (Groq + Gemini). No user keys.
- * Single place for env var names used by insights/tab route.
+ * Resolve Groq key for a request: user key from DB if logged in, else system env.
  */
+export async function getGroqKeyForRequest(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<string> {
+  let userGroq: string | null = null
+  if (userId) {
+    const { data: row } = await supabase
+      .from('user_settings')
+      .select('groq_api_key')
+      .eq('user_id', userId)
+      .maybeSingle()
+    userGroq = (row as { groq_api_key?: string } | null)?.groq_api_key ?? null
+  }
+  const systemGroq = (process.env.GROQ_API_KEY ?? '').trim()
+  const hasUser = !!(userGroq && userGroq.trim())
+  return hasUser ? userGroq!.trim() : systemGroq
+}
+
+/**
+ * Tab insight API: prefer user keys, fallback to server env.
+ */
+export async function getTabProviderKeysForUser(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<{ groq: string; gemini: string }> {
+  const [groq, geminiResult] = await Promise.all([
+    getGroqKeyForRequest(supabase, userId),
+    getGeminiKeyForRequest(supabase, userId),
+  ])
+  const gemini = geminiResult.gemini || (process.env.GOOGLE_GENAI_API_KEY ?? '').trim()
+  return { groq, gemini }
+}
+
+/** @deprecated Use getTabProviderKeysForUser for user-based keys. Server env fallback. */
 export function getTabProviderKeys(): { groq: string; gemini: string } {
   return {
     groq: (process.env.GROQ_API_KEY ?? '').trim(),

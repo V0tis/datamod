@@ -8,11 +8,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { generateText, runTabAnalysis } from './unified-ai-service'
 import {
-  PASS1_SYSTEM,
-  buildPass1Prompt,
-  PASS2_SYSTEM,
-  buildPass2Prompt,
-} from './pm-analysis-two-pass'
+  STRATEGIC_FULL_SYSTEM,
+  buildStrategicPrompt,
+} from './pm-strategic-prompt'
 import { extractJsonFromText } from '@/lib/extract-json'
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
@@ -226,6 +224,113 @@ function parsePass2Response(text: string): Pass2Result | null {
   return validation.success ? validation.data : null
 }
 
+/** Strategic prompt output shape */
+type StrategicAnalysisResult = {
+  market_score?: number
+  market_phase?: string
+  confidence_level?: string
+  summary?: string
+  signal_breakdown?: {
+    positive_signals?: Array<{ signal?: string; impact?: string; explanation?: string }>
+    neutral_signals?: Array<{ signal?: string; impact?: string; explanation?: string }>
+    risk_signals?: Array<{ signal?: string; severity?: string; explanation?: string }>
+  }
+  market_structure?: { summary?: string }
+  competitive_landscape?: Array<{ name?: string; positioning?: string; strength?: string; weakness?: string }>
+  strategic_actions?: {
+    immediate?: Array<{ action?: string; priority?: string; expected_impact?: string }>
+    mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>
+    risk_mitigation?: Array<{ action?: string; priority?: string; risk_addressed?: string }>
+  }
+  key_uncertainties?: string[]
+  full_report?: string
+}
+
+function parseStrategicResponse(text: string): StrategicAnalysisResult | null {
+  const parsed = parseJson<StrategicAnalysisResult>(text)
+  if (!parsed || typeof parsed !== 'object') return null
+  if (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string') return null
+  return parsed
+}
+
+function buildStructuredFromStrategic(
+  s: StrategicAnalysisResult
+): { pass1: Pass1Result; summary: InitialResearchSummary; structured: StructuredAnalysisFields } {
+  const score = typeof s.market_score === 'number' ? Math.min(100, Math.max(0, s.market_score)) : 50
+  const summaryText = typeof s.summary === 'string' ? s.summary : '분석 완료'
+  const pos = (s.signal_breakdown?.positive_signals ?? []).map((x) => (typeof x.signal === 'string' ? x.signal : '')).filter(Boolean)
+  const neu = (s.signal_breakdown?.neutral_signals ?? []).map((x) => (typeof x.signal === 'string' ? x.signal : '')).filter(Boolean)
+  const neg = (s.signal_breakdown?.risk_signals ?? []).map((x) => (typeof x.signal === 'string' ? x.signal : '')).filter(Boolean)
+
+  const allActions: StructuredRecommendedAction[] = []
+  const addActions = (arr: Array<{ action?: string; priority?: string; expected_impact?: string; risk_addressed?: string }> | undefined) => {
+    if (!Array.isArray(arr)) return
+    arr.forEach((a) => {
+      const title = typeof a.action === 'string' ? a.action : ''
+      if (title) {
+        allActions.push({
+          title,
+          reasoning: typeof a.expected_impact === 'string' ? a.expected_impact : typeof a.risk_addressed === 'string' ? a.risk_addressed : undefined,
+          urgency_level: (a.priority === 'high' || a.priority === 'medium' || a.priority === 'low' ? a.priority : 'medium') as 'low' | 'medium' | 'high',
+        })
+      }
+    })
+  }
+  addActions(s.strategic_actions?.immediate)
+  addActions(s.strategic_actions?.mid_term)
+  addActions(s.strategic_actions?.risk_mitigation)
+
+  const competitorSummary = (s.competitive_landscape ?? [])
+    .map((c) => c.name && c.positioning ? `${c.name}: ${c.positioning}` : c.name)
+    .filter(Boolean)
+    .join('. ')
+  const marketStructureSummary = s.market_structure?.summary ?? ''
+
+  const pass1: Pass1Result = {
+    summary: summaryText,
+    temperature: score,
+    insights: [...pos, ...neg].slice(0, 5),
+  }
+
+  const summary: InitialResearchSummary = {
+    marketNews: pos.slice(0, 5),
+    painPoints: neg.slice(0, 5),
+    competitorTrends: competitorSummary || marketStructureSummary,
+    sentiment: score,
+    publicReactionTrends: [...pos, ...neu, ...neg].join('. ').slice(0, 500),
+    chartData: defaultChartData(),
+    articleSummaries: [],
+    keyConclusions: allActions.slice(0, 5).map((a) => a.title),
+  }
+
+  const structured: StructuredAnalysisFields = {
+    market_temperature_score: score,
+    summary_insights: summaryText,
+    facts: pos.length ? pos : undefined,
+    hypotheses: (s.key_uncertainties ?? []).slice(0, 3),
+    inferences: neg.length ? neg : undefined,
+    positive_signals: pos.length ? pos : undefined,
+    neutral_signals: neu.length ? neu : undefined,
+    negative_risks: neg.length ? neg : undefined,
+    pm_actions: {
+      recommended_actions: allActions,
+      monitoring_points: s.key_uncertainties ?? [],
+      decision_risks: neg,
+    },
+    strategic_actions: s.strategic_actions,
+    competitive_landscape: (s.competitive_landscape ?? []).filter(
+      (c): c is { name: string; positioning?: string; strength?: string; weakness?: string } =>
+        typeof c.name === 'string' && c.name.trim().length > 0
+    ),
+    market_structure: s.market_structure
+      ? { competition_density: (s.market_structure as { competition_density?: string }).competition_density, summary: s.market_structure.summary }
+      : undefined,
+    market_phase: typeof s.market_phase === 'string' ? s.market_phase : undefined,
+  }
+
+  return { pass1, summary, structured }
+}
+
 const FALLBACK_PASS1: Pass1Result = {
   summary: '분석 중 일부 데이터를 처리하지 못했습니다. 다시 시도해 주세요.',
   temperature: 50,
@@ -400,36 +505,44 @@ export async function* runResearch(
     return
   }
 
-  // Step 2: Pass 1 analysis
+  // Step 2 & 3: Unified strategic analysis (single pass)
   let pass1: Pass1Result
+  let structured: StructuredAnalysisFields
+  let fullSummary: InitialResearchSummary
   try {
     const newsTitles = news.map((n) => n.title)
-    const pass1Prompt = buildPass1Prompt(keyword, newsTitles)
-    const pass1Text = await generateText({
+    const strategicPrompt = buildStrategicPrompt(keyword, 'standard', newsTitles)
+    const strategicText = await generateText({
       apiKey: geminiKey,
-      prompt: pass1Prompt,
-      systemInstruction: PASS1_SYSTEM,
-      maxOutputTokens: 600,
+      prompt: strategicPrompt,
+      systemInstruction: STRATEGIC_FULL_SYSTEM,
+      maxOutputTokens: 2500,
       model: GEMINI_MODEL,
     })
     await trackUsage('gemini')
 
-    const parsed = parsePass1Response(typeof pass1Text === 'string' ? pass1Text : '')
-    if (!parsed) {
+    const strategic = parseStrategicResponse(typeof strategicText === 'string' ? strategicText : '')
+    if (!strategic) {
       yield {
         type: 'error',
-        message: '1차 분석 형식이 올바르지 않아요. 다시 시도해 주세요.',
+        message: '분석 결과 형식이 올바르지 않아요. 다시 시도해 주세요.',
         step: 'pass1',
       }
       return
     }
-    pass1 = parsed
+
+    const merged = buildStructuredFromStrategic(strategic)
+    pass1 = merged.pass1
+    fullSummary = merged.summary
+    structured = merged.structured
+
     yield {
       type: 'pass1',
       summary: pass1.summary,
       temperature: pass1.temperature,
       insights: pass1.insights,
     }
+    yield { type: 'pass2', structured }
   } catch (err) {
     yield {
       type: 'error',
@@ -437,36 +550,6 @@ export async function* runResearch(
       step: 'pass1',
     }
     return
-  }
-
-  // Step 3: Pass 2 analysis
-  let pass2: Pass2Result | null = null
-  let structured: StructuredAnalysisFields
-  let fullSummary: InitialResearchSummary
-  try {
-    const newsTitles = news.map((n) => n.title)
-    const pass2Prompt = buildPass2Prompt(keyword, newsTitles, pass1.summary)
-    const pass2Text = await generateText({
-      apiKey: geminiKey,
-      prompt: pass2Prompt,
-      systemInstruction: PASS2_SYSTEM,
-      maxOutputTokens: 1200,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
-
-    pass2 = parsePass2Response(typeof pass2Text === 'string' ? pass2Text : '')
-    const merged = buildStructuredFields(pass1, pass2)
-    fullSummary = merged.summary
-    structured = merged.structured
-
-    yield { type: 'pass2', structured }
-  } catch (err) {
-    // Pass 2 failure is recoverable - use pass1 data
-    const merged = buildStructuredFields(pass1, null)
-    fullSummary = merged.summary
-    structured = merged.structured
-    yield { type: 'pass2', structured }
   }
 
   // Step 4: Creative analysis
@@ -516,18 +599,10 @@ export async function* runResearch(
       reportId = report.id
 
       const keyMetrics = {
+        ...structured,
         chartData: fullSummary.chartData,
         keyConclusions: fullSummary.keyConclusions,
         sentiment: fullSummary.sentiment,
-        market_temperature_score: structured.market_temperature_score,
-        summary_insights: structured.summary_insights,
-        facts: structured.facts,
-        hypotheses: structured.hypotheses,
-        inferences: structured.inferences,
-        positive_signals: structured.positive_signals,
-        neutral_signals: structured.neutral_signals,
-        negative_risks: structured.negative_risks,
-        pm_actions: structured.pm_actions,
       }
 
       logCacheEvent('write', {

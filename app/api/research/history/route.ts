@@ -34,11 +34,15 @@ export async function GET(req: Request) {
     const country = countryRaw.length === 2 ? countryRaw.toUpperCase() : countryRaw
 
     if (!keyword) {
+      const limit = Math.min(500, Math.max(10, parseInt(searchParams.get('limit') ?? '50', 10) || 50))
+      const offset = Math.max(0, parseInt(searchParams.get('offset') ?? '0', 10) || 0)
+
       const { data: rows, error } = await supabase
         .from('research_history')
         .select('id, keyword, country_code, report_id, analysis_status, analysis_target, market_temperature_score, summary_insights, key_metrics, updated_at')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1)
 
       if (error) {
         console.error('[Research History] list:', error)
@@ -75,7 +79,12 @@ export async function GET(req: Request) {
           date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
         }
       })
-      return NextResponse.json({ list })
+      const { count } = await supabase
+        .from('research_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+
+      return NextResponse.json({ list, total: count ?? list.length })
     }
 
     const selectCols = 'report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
@@ -153,7 +162,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** DELETE body: { id: string } — delete research_history row for current user. */
+/** DELETE body: { id?: string, ids?: string[] } — delete research_history row(s) for current user. */
 export async function DELETE(req: Request) {
   try {
     const supabase = await createClient()
@@ -161,16 +170,20 @@ export async function DELETE(req: Request) {
     if (!user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const body = await req.json().catch(() => ({})) as { id?: string }
-    const id = typeof body?.id === 'string' ? body.id.trim() : ''
-    if (!id) {
-      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    const body = await req.json().catch(() => ({})) as { id?: string; ids?: string[] }
+    const ids: string[] = Array.isArray(body?.ids)
+      ? body.ids.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : typeof body?.id === 'string' && body.id.trim()
+        ? [body.id.trim()]
+        : []
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'id or ids required' }, { status: 400 })
     }
     const { error } = await supabase
       .from('research_history')
       .delete()
-      .eq('id', id)
       .eq('user_id', user.id)
+      .in('id', ids)
 
     if (error) {
       console.error('[Research History] DELETE:', error)

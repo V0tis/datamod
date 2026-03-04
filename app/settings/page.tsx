@@ -20,25 +20,28 @@ type SettingsData = {
   email: string
   nickname: string
   hasGeminiKey: boolean
+  hasGroqKey?: boolean
   hasOpenAIKey?: boolean
   hasAnthropicKey?: boolean
   hasServerGemini?: boolean
+  hasServerGroq?: boolean
   hasServerOpenAI?: boolean
   hasServerAnthropic?: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
+  licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
 }
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
 
 const LICENSE_ROWS: Array<{
-  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasOpenAIKey' | 'hasAnthropicKey'>
+  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasGroqKey' | 'hasOpenAIKey' | 'hasAnthropicKey'>
   label: string
-  stateKey: 'geminiApiKey' | 'openaiApiKey' | 'anthropicApiKey'
-  showKey: 'showGeminiKey' | 'showOpenAIKey' | 'showAnthropicKey'
+  stateKey: 'geminiApiKey' | 'groqApiKey' | 'openaiApiKey' | 'anthropicApiKey'
+  showKey: 'showGeminiKey' | 'showGroqKey' | 'showOpenAIKey' | 'showAnthropicKey'
 }> = [
   { id: 'hasGeminiKey', label: 'Gemini — 시장 분석', stateKey: 'geminiApiKey', showKey: 'showGeminiKey' },
-  { id: 'hasAnthropicKey', label: 'Claude — 인사이트', stateKey: 'anthropicApiKey', showKey: 'showAnthropicKey' },
-  { id: 'hasOpenAIKey', label: 'OpenAI — 분석 리포트·Fallback', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
+  { id: 'hasGroqKey', label: 'Groq — 인사이트·탭 분석', stateKey: 'groqApiKey', showKey: 'showGroqKey' },
+  { id: 'hasOpenAIKey', label: 'OpenAI — Fallback', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
+  { id: 'hasAnthropicKey', label: 'Claude — 인사이트 (선택)', stateKey: 'anthropicApiKey', showKey: 'showAnthropicKey' },
 ]
 
 const SETTINGS_TAB_PARAM = 'tab'
@@ -62,9 +65,11 @@ function SettingsPageInner() {
   const [data, setData] = useState<SettingsData | null>(null)
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [groqApiKey, setGroqApiKey] = useState('')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [anthropicApiKey, setAnthropicApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [showGroqKey, setShowGroqKey] = useState(false)
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
   const [showAnthropicKey, setShowAnthropicKey] = useState(false)
 
@@ -95,6 +100,7 @@ function SettingsPageInner() {
           setData(json)
           setNickname(json.nickname ?? '')
           setGeminiApiKey('')
+          setGroqApiKey('')
           setOpenaiApiKey('')
           setAnthropicApiKey('')
         }
@@ -132,6 +138,7 @@ function SettingsPageInner() {
     try {
       const body: Record<string, string> = {}
       if (geminiApiKey !== '') body.gemini_api_key = geminiApiKey
+      if (groqApiKey !== '') body.groq_api_key = groqApiKey
       if (openaiApiKey !== '') body.openai_api_key = openaiApiKey
       if (anthropicApiKey !== '') body.anthropic_api_key = anthropicApiKey
       const res = await fetch('/api/settings', {
@@ -145,6 +152,7 @@ function SettingsPageInner() {
         return
       }
       setGeminiApiKey('')
+      setGroqApiKey('')
       setOpenaiApiKey('')
       setAnthropicApiKey('')
       const nextRes = await fetch('/api/settings')
@@ -159,19 +167,19 @@ function SettingsPageInner() {
   }
 
   const getKeyState = (row: typeof LICENSE_ROWS[0]) => {
-    const value = { geminiApiKey, openaiApiKey, anthropicApiKey }[row.stateKey] as string
+    const value = { geminiApiKey, groqApiKey, openaiApiKey, anthropicApiKey }[row.stateKey] as string
     const hasUser = !!data?.[row.id]
-    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : row.id === 'hasOpenAIKey' ? data?.hasServerOpenAI : data?.hasServerAnthropic
-    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : row.id === 'hasOpenAIKey' ? data?.licenseOrigin?.openai : data?.licenseOrigin?.anthropic
+    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : row.id === 'hasGroqKey' ? data?.hasServerGroq : row.id === 'hasOpenAIKey' ? data?.hasServerOpenAI : data?.hasServerAnthropic
+    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : row.id === 'hasGroqKey' ? data?.licenseOrigin?.groq : row.id === 'hasOpenAIKey' ? data?.licenseOrigin?.openai : data?.licenseOrigin?.anthropic
     const isUserTyped = value.length > 0
     const placeholder =
       hasServer && !hasUser ? MASKED_PLACEHOLDER
       : hasUser ? MASKED_PLACEHOLDER
       : '키를 입력하세요'
     const canReveal = isUserTyped
-    const show = { showGeminiKey, showOpenAIKey, showAnthropicKey }[row.showKey] as boolean
-    const setShow = { showGeminiKey: setShowGeminiKey, showOpenAIKey: setShowOpenAIKey, showAnthropicKey: setShowAnthropicKey }[row.showKey]
-    const setValue = { geminiApiKey: setGeminiApiKey, openaiApiKey: setOpenaiApiKey, anthropicApiKey: setAnthropicApiKey }[row.stateKey]
+    const show = { showGeminiKey, showGroqKey, showOpenAIKey, showAnthropicKey }[row.showKey] as boolean
+    const setShow = { showGeminiKey: setShowGeminiKey, showGroqKey: setShowGroqKey, showOpenAIKey: setShowOpenAIKey, showAnthropicKey: setShowAnthropicKey }[row.showKey]
+    const setValue = { geminiApiKey: setGeminiApiKey, groqApiKey: setGroqApiKey, openaiApiKey: setOpenaiApiKey, anthropicApiKey: setAnthropicApiKey }[row.stateKey]
     return { value, hasUser, hasServer, origin, isUserTyped, placeholder, canReveal, show, setShow, setValue }
   }
 
@@ -185,7 +193,7 @@ function SettingsPageInner() {
   if (!user) {
     return (
       <div className="p-6 md:p-8">
-        <Card className="mx-auto max-w-2xl border border-border bg-white shadow-sm">
+        <Card className="mx-auto max-w-2xl border border-border bg-card shadow-sm">
           <CardContent className="p-8 text-center text-muted-foreground">
             로그인한 후 설정을 변경할 수 있습니다.
           </CardContent>
@@ -225,7 +233,7 @@ function SettingsPageInner() {
         </TabsList>
 
         <TabsContent value="profile" className="m-0">
-          <Card className="border border-border bg-white shadow-sm">
+          <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
               <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있습니다.</CardDescription>
@@ -244,7 +252,7 @@ function SettingsPageInner() {
                     placeholder="닉네임을 입력하세요"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
-                    className="bg-white"
+                    className="bg-background"
                   />
                 </div>
                 <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -263,7 +271,7 @@ function SettingsPageInner() {
         </TabsContent>
 
         <TabsContent value="license" className="m-0">
-          <Card className="border border-border bg-white shadow-sm">
+          <Card className="border border-border bg-card shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg text-foreground">API 키</CardTitle>
               <CardDescription className="text-muted-foreground">
@@ -291,7 +299,7 @@ function SettingsPageInner() {
                             value={s.value}
                             onChange={(e) => s.setValue(e.target.value)}
                             onFocus={() => handleKeyFocus(row)}
-                            className="bg-gray-50 border-gray-200 pr-16 h-9 text-sm placeholder:text-gray-400 focus:bg-white"
+                            className="bg-muted/50 border-border pr-16 h-9 text-sm placeholder:text-muted-foreground focus:bg-background text-foreground"
                             autoComplete="off"
                           />
                           <div className="absolute right-2 flex items-center gap-1.5">
@@ -307,7 +315,7 @@ function SettingsPageInner() {
                               type="button"
                               onClick={() => s.canReveal && s.setShow(!s.show)}
                               title={s.canReveal ? (s.show ? '숨기기' : '보기') : '서버 키는 보안상 표시하지 않습니다'}
-                              className={`p-1 rounded ${s.canReveal ? 'text-gray-500 hover:text-foreground' : 'text-gray-300 cursor-default'}`}
+                              className={`p-1 rounded ${s.canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default'}`}
                               aria-label={s.show ? '숨기기' : '보기'}
                             >
                               {s.show && s.canReveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
