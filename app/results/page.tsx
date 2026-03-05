@@ -8,7 +8,6 @@ import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
@@ -22,25 +21,15 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { GroqAnalysis } from '@/components/research/GroqAnalysis'
-import { GeminiAnalysis } from '@/components/research/GeminiAnalysis'
-import { ConsensusInsight, type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
-import { MarketTemperature } from '@/components/research/market-temperature'
-import { SuggestedPMActions } from '@/components/research/suggested-pm-actions'
 import { AnalysisQualityIndicator } from '@/components/research/analysis-quality-indicator'
-import { InsightSummary } from '@/components/research/InsightSummary'
+import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
-import { KeyFindings } from '@/components/research/KeyFindings'
-import { ResultsReportView } from '@/components/research/ResultsReportView'
+import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
 type AiTabId = 'logic' | 'creative' | 'fact'
-const AI_TABS: { id: AiTabId; label: string; theme: string; icon: React.ElementType }[] = [
-  { id: 'logic', label: '시장 분석', theme: 'data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 border-blue-200', icon: BarChart3 },
-  { id: 'creative', label: '인사이트', theme: 'data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800 border-amber-200', icon: Lightbulb },
-  { id: 'fact', label: '종합 리포트', theme: 'data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800 border-emerald-200', icon: CheckSquare },
-]
 
 const QUOTA_TOAST_ID = 'quota-error'
 const TAB_ERROR_TOAST_ID = 'tab-analysis-error'
@@ -794,7 +783,7 @@ function ResultsContent() {
         {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
           <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading reading-space-y-lg reading-text">
+        <div id="pm-dashboard-top" className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading reading-space-y-lg reading-text">
         {/* Single primary context header. No stacked labels. */}
         <header className="pb-4 border-b border-border/60">
           <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight break-words">
@@ -844,468 +833,90 @@ function ResultsContent() {
               Retry
             </Button>
           </div>
-        ) : loading ? (
-          <div className="space-y-6 py-6">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">
-                {streamingState.status === 'running' || streamingState.status === 'streaming'
-                  ? `분석 중 (${streamingState.currentStep + 1}/${streamingState.totalSteps})`
-                  : '분석 중...'}
-              </p>
-            </div>
-            <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-            <div className="h-32 bg-muted rounded-xl animate-pulse" />
-            <div className="h-24 bg-muted rounded-xl animate-pulse" />
-            <div className="h-24 bg-muted rounded-xl animate-pulse" />
-            <div className="h-40 bg-muted rounded-xl animate-pulse" />
-          </div>
         ) : (
-          <ResultsReportView
+          <PMDecisionDashboard
             keyword={currentKeyword ?? ''}
             result={displayResult}
-            analysisStatus={canonicalStatus}
+            loading={loading}
+            streamingState={streamingState}
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
             onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
             onAbort={abortAnalysis}
             reanalyzing={loading}
-            progress={currentTask?.progress ?? null}
-            analysisMode={analysisMode}
-            streamingState={streamingState}
           />
         )}
 
-        {/* Legacy blocks hidden: ResultsReportView provides summary + actions when completed. */}
-        {false && (
-          <section id="insight-summary" className="scroll-mt-4 rounded-lg border border-border/60 bg-background/50 p-4 sm:p-5 reading-section-gap" aria-label="Insight summary">
-            <h2 className="text-sm font-medium text-foreground mb-3">요약</h2>
-            <div className="reading-space-y">
-              <InsightSummary
-                summary={
-                  consensusData?.strategicSummary?.summary?.trim() ||
-                  (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
-                  ''
-                }
-                sentimentScore={consensusData?.sentiment?.score ?? null}
-                trend={consensusData?.sentiment?.trend ?? 'stable'}
-                confidence={consensusData?.metadata?.confidence ?? null}
-                partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
-                loading={
-                  ((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) &&
-                  !consensusData &&
-                  !(displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0]
-                }
-              />
-              {(() => {
-                const km = displayResult?.key_metrics
-                const keyFindingItems =
-                  (km?.facts?.length ?? 0) > 0 || (km?.inferences?.length ?? 0) > 0
-                    ? [...(km?.facts ?? []), ...(km?.inferences ?? [])].slice(0, 5)
-                    : (km?.keyConclusions?.length ?? displayResult?.keyConclusions?.length ?? 0) > 0
-                      ? (km?.keyConclusions ?? displayResult?.keyConclusions ?? []).slice(0, 5)
-                      : (consensusData?.strategicSummary?.actionItems ?? []).slice(0, 5)
-                if (keyFindingItems.length === 0) return null
-                return <KeyFindings items={keyFindingItems} title="핵심 정리" maxItems={5} />
-              })()}
-            </div>
-          </section>
-        )}
-
-        {/* Suggested PM Actions: hidden when using ResultsReportView. */}
-        {false && displayStatus === 'done' && displayResult && (
-          <SuggestedPMActions
-            marketTempScore={
-              ((): number | null => {
-                const s = consensusData?.sentiment?.score
-                if (typeof s === 'number') return s as number
-                return (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
-                  ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
-                  : null
-              })()
-            }
-            competitionScore={
-              consensusData?.impactAnalysis?.find((i) => i.subject === '경쟁력')?.score ??
-              displayResult?.key_metrics?.chartData?.impact?.find((i) => i.subject === '경쟁력')?.score ??
-              null
-            }
-            signalConfidence={consensusData?.metadata?.confidence ?? null}
-            onSaveAsInsight={(actions) => {
-              setSaveInsightNote(actions.join('\n\n'))
-              setSaveInsightName((currentKeyword ?? '').trim() || 'PM 액션 제안')
-              setSaveInsightOpen(true)
-            }}
-          />
-        )}
-
-        {/* Actions: hidden when using ResultsReportView. */}
-        {false && displayStatus === 'done' && displayResult && (
-          <div className="no-print flex flex-wrap items-center gap-2 sm:gap-3 mb-6 pb-4 border-b border-border">
-            <Button type="button" variant="outline" size="sm" onClick={printReportAsPdf} className="gap-1.5">
-              <FileDown className="w-4 h-4" />
-              PDF로 저장
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={handleSaveInsightOpen} className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10">
-              <Bookmark className="w-4 h-4" />
-              인사이트로 저장
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="gap-2"
-              disabled={loading}
-              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-              aria-label="전체 리포트를 새 데이터로 다시 생성"
-              aria-busy={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  AI가 최신 정보를 분석 중입니다...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4" />
-                  새로운 데이터로 다시 분석하기
-                </>
-              )}
-            </Button>
-            {displayResult?.reportId && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 border-primary text-primary hover:bg-primary/10"
-                disabled={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
-                aria-label="현재 탭만 캐시 무시하고 다시 분석"
-                aria-busy={tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab]}
-                onClick={() => {
-                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabErrorGroq((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabErrorGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  fetchTabAnalysis(activeTab as AiTabId, 'all', { isReanalyze: true })
-                }}
-              >
-                {tabLoadingGroq[activeTab] || tabLoadingGemini[activeTab] ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    탭 분석 재실행 중...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    재분석 (캐시 무시)
-                  </>
+        {/* 실시간 뉴스: PM 대시보드 하단 보조 정보 */}
+        {displayStatus === 'done' && displayResult && currentKeyword && (
+          <section className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5" aria-label="실시간 뉴스">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Newspaper className="h-3.5 w-3.5 text-primary" />
+                실시간 뉴스
+                {rssNewsLoading && (
+                  <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    불러오는 중
+                  </span>
                 )}
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Evidence & raw analysis: collapsible. Shown when completed. */}
-        <section className="reading-section-gap" aria-labelledby="consensus-heading">
-          <h2 id="consensus-heading" className="text-sm font-medium text-foreground mb-3">
-            상세 분석
-          </h2>
-        {canonicalStatus === 'failed' ? (
-          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
-            <ErrorState
-              title="분석을 완료하지 못했습니다"
-              description="서버가 바쁘거나 일시적인 오류일 수 있습니다. 아래 버튼으로 다시 시도해 주세요."
-              recoveryLabel="다시 분석하기"
-              onRecovery={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-              detail={displayError?.includes('형식이 올바르지 않아요') ? 'AI 응답 형식이 올바르지 않아 파싱에 실패했습니다. 재시도하면 해결되는 경우가 많습니다.' : displayError ?? undefined}
-            />
-          </div>
-        ) : canonicalStatus === 'queued' || canonicalStatus === 'analyzing' ? (
-          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
-            <div className="flex items-center gap-3 py-4">
-              <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
-              <p className="text-sm text-muted-foreground">
-                {currentTask?.progress ?? '분석 중'}
-              </p>
-            </div>
-          </div>
-        ) : canonicalStatus === 'completed' && displayResult ? (
-          <ConsensusInsight
-            data={consensusData}
-            loading={((tabLoadingGroq.creative || tabLoadingGemini.creative) || consensusReanalyzing) && !consensusData}
-            bothFailed={bothSettledForConsensus && creativeGroqState === 'error' && creativeGeminiState === 'error'}
-            partialData={bothSettledForConsensus && (creativeGroqState === 'success') !== (creativeGeminiState === 'success')}
-            errorMessage={displayResult?.analysis_results ? null : (tabErrorGroq.creative || tabErrorGemini.creative || null)}
-            onRetry={retryConsensus}
-          />
-        ) : (
-          <div className="no-print w-full rounded-xl border border-border bg-card p-6">
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80">
-                <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                분석을 실행하면 전략 통찰이 여기에 표시됩니다.
-              </p>
-            </div>
-          </div>
-        )}
-        </section>
-
-        {/* Evidence: news, market analysis, reports. Collapsed by default for document flow. */}
-        <section className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5" aria-label="Evidence">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <h3 className="text-sm font-medium text-foreground">뉴스 · 시장 분석 · 종합 리포트</h3>
-            <button
-              type="button"
-              onClick={() => setEvidenceOpen((o) => !o)}
-              className="flex items-center gap-1.5 min-h-[44px] py-2 px-2 -my-1 text-xs font-medium text-muted-foreground hover:text-foreground touch-manipulation rounded"
-              aria-expanded={evidenceOpen}
-              aria-controls="evidence-content"
-            >
-              {evidenceOpen ? '접기' : '펼치기'}
-              {evidenceOpen ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
-            </button>
-          </div>
-          <div id="evidence-content" className={evidenceOpen ? 'block' : 'hidden'} aria-hidden={!evidenceOpen}>
-          {/* 실시간 뉴스: compact so Insight stays above the fold. 기간 선택 기본 30일 */}
-          {currentKeyword && (
-            <div className="mb-6">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <Newspaper className="h-3.5 w-3.5 text-primary" />
-                  실시간 뉴스
-                  {rssNewsLoading && (
-                    <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      불러오는 중
-                    </span>
-                  )}
-                </h3>
-                <div className="flex items-center gap-1" role="group" aria-label="뉴스 기간 선택">
-                  {([7, 14, 30, 90] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setNewsDays(d)}
-                      className={cn(
-                        'min-w-[2.25rem] py-1.5 px-2 text-xs font-medium rounded-md border transition-colors',
-                        newsDays === d
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                      )}
-                    >
-                      {d}일
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {rssNewsLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
-                      <div className="h-3.5 w-full bg-muted rounded mb-2" />
-                      <div className="h-3 w-3/4 bg-muted rounded" />
-                    </div>
-                  ))}
-                </div>
-              ) : rssNewsFetched && rssNews.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다. 잠시 뒤에 다시 보시거나, 다른 키워드로 검색해 보세요.</p>
-              ) : rssNews.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {rssNews.map((item, i) => (
-                    <article key={i} className="rounded-lg border border-border bg-card p-3 hover:border-primary/20 transition-colors text-left">
-                      <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2">{item.title || '제목 없음'}</h4>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mt-1.5">
-                        <span>{item.source || '언론사'}</span>
-                        {item.link && (
-                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
-                            링크 <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          <p className="text-[11px] text-muted-foreground mb-3">시장 분석 · 인사이트 · 종합 리포트</p>
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AiTabId)} className="w-full min-w-0">
-          <TabsList className="grid w-full max-w-3xl grid-cols-3 h-11 sm:h-12 p-0.5 sm:p-1 gap-0.5 sm:gap-1 bg-muted/60 border border-input mb-4 sm:mb-6">
-            {AI_TABS.map(({ id, label, theme, icon: Icon }) => (
-              <TabsTrigger key={id} value={id} className={cn('gap-1 sm:gap-2 text-xs sm:text-sm border border-transparent data-[state=active]:bg-background-elevated data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:rounded-b-none px-2 sm:px-3', theme)}>
-                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                <span className="truncate">{label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {quotaExceeded ? (
-            <div className="mt-6">
-              <ErrorState
-                variant="warning"
-                title="API 사용량이 초과되었습니다"
-                description="지금은 분석을 더 진행할 수 없습니다. 설정에서 API 키를 확인하시거나 잠시 뒤에 다시 시도해 주세요."
-                recoveryLabel="다시 시도"
-                onRecovery={() => {
-                  setQuotaExceeded(false)
-                  setTabErrorGroq({ logic: null, creative: null, fact: null })
-                  setTabErrorGemini({ logic: null, creative: null, fact: null })
-                  setTabCacheGroq((prev) => ({ ...prev, [activeTab]: null }))
-                  setTabCacheGemini((prev) => ({ ...prev, [activeTab]: null }))
-                  fetchTabAnalysis(activeTab as AiTabId, 'all')
-                }}
-                secondaryAction={
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/settings">설정에서 키 확인</Link>
-                  </Button>
-                }
-              />
-            </div>
-          ) : (
-          AI_TABS.map(({ id }) => (
-            <TabsContent key={id} value={id} className="mt-6 focus-visible:outline-none">
-              {(canonicalStatus === 'queued' || canonicalStatus === 'analyzing') ? (
-                <div className="rounded-xl border border-border bg-muted/20 py-4">
-                  <div className="flex items-center gap-3 py-4">
-                    <div className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" aria-hidden />
-                    <p className="text-sm text-muted-foreground">
-                      {currentTask?.progress ?? '분석 중'}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <h3 className="text-sm font-semibold text-foreground mb-3 sm:mb-4 tracking-tight">Groq · Gemini 분석</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 reading-gap-lg">
-                    <GroqAnalysis
-                        tabId={id}
-                      text={(id === 'logic' ? tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative : tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGroq.creative ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.creative) : (tabCacheGroq[id] ?? (displayResult?.analysis_groq as TabAnalysisRecord)?.[id])) && (tabLoadingGroq[id === 'logic' ? 'creative' : id] || loading)}
-                      error={tabErrorGroq[id === 'logic' ? 'creative' : id]}
-                      retryCount={retryCountTabGroq[id === 'logic' ? 'creative' : id] ?? 0}
-                      onRetry={() => {
-                        const tabToFetch = id === 'logic' ? 'creative' : id
-                        if ((retryCountTabGroq[tabToFetch] ?? 0) >= 3) {
-                          setRetryCountTabGroq((prev) => ({ ...prev, [tabToFetch]: 0 }))
-                          setTabErrorGroq((prev) => ({ ...prev, [tabToFetch]: null }))
-                        }
-                        setTabCacheGroq((prev) => ({ ...prev, [tabToFetch]: null }))
-                        fetchTabAnalysis(tabToFetch, 'groq', { isReanalyze: true })
-                      }}
-                    />
-                    <GeminiAnalysis
-                        tabId={id}
-                      text={(id === 'logic' ? tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative : tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id] ?? null) ?? null}
-                      loading={!(id === 'logic' ? (tabCacheGemini.creative ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.creative) : (tabCacheGemini[id] ?? (displayResult?.analysis_gemini as TabAnalysisRecord)?.[id])) && (tabLoadingGemini[id === 'logic' ? 'creative' : id] || loading)}
-                      error={tabErrorGemini[id === 'logic' ? 'creative' : id]}
-                      retryCount={retryCountTabGemini[id === 'logic' ? 'creative' : id] ?? 0}
-                      quotaExceeded={geminiQuotaExceeded}
-                      onRetry={() => {
-                        const tabToFetch = id === 'logic' ? 'creative' : id
-                        if (tabErrorGemini[tabToFetch] === '무료 쿼터 초과') {
-                          setGeminiQuotaExceeded(false)
-                          setTabErrorGemini((prev) => ({ ...prev, [tabToFetch]: null }))
-                        }
-                        if ((retryCountTabGemini[tabToFetch] ?? 0) >= 3) {
-                          setRetryCountTabGemini((prev) => ({ ...prev, [tabToFetch]: 0 }))
-                          setTabErrorGemini((prev) => ({ ...prev, [tabToFetch]: null }))
-                        }
-                        setTabCacheGemini((prev) => ({ ...prev, [tabToFetch]: null }))
-                        fetchTabAnalysis(tabToFetch, 'gemini', { isReanalyze: true })
-                      }}
-                    />
-                  </div>
-                  {id === 'creative' && (
-                    <div className="rounded-xl border border-border bg-card p-4 sm:p-6 mt-4 sm:mt-6">
-                      <p className="text-sm font-medium text-foreground mb-2 sm:mb-3">추가 질문 (선택)</p>
-                      <div className="flex flex-col sm:flex-row gap-2" aria-busy={followUpLoading}>
-                        <Input
-                          type="text"
-                          aria-label="추가 질문"
-                          placeholder={followUpLoading ? '답변 생성 중…' : '질문을 입력하세요'}
-                          value={followUpQuestion}
-                          onChange={(e) => setFollowUpQuestion(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleFollowUp()}
-                          disabled={followUpLoading}
-                          className="flex-1 min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={handleFollowUp}
-                          disabled={followUpLoading || !followUpQuestion.trim()}
-                          aria-busy={followUpLoading}
-                        >
-                          {followUpLoading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                              답변 중...
-                            </>
-                          ) : (
-                            '질문하기'
-                          )}
-                        </Button>
-                      </div>
-                      {followUps.length > 0 && (
-                        <div className="mt-4 space-y-3">
-                          {followUps.map((item, i) => (
-                            <div key={i} className="rounded-lg border border-border bg-muted/30 p-4 space-y-1">
-                              <p className="text-sm text-muted-foreground text-muted-foreground font-medium">Q. {item.question}</p>
-                              <p className="text-foreground whitespace-pre-wrap text-sm">{item.answer}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </TabsContent>
-          )))}
-        </Tabs>
-          </div>
-        </section>
-
-        {/* Next steps: concise list. */}
-        {displayStatus === 'done' && displayResult && (consensusData?.strategicSummary?.actionItems?.length ?? 0) > 0 && (
-          <section className="reading-section-gap pt-4 border-t border-border/60" aria-label="Next steps">
-            <button
-              type="button"
-              onClick={() => setImplicationOpen((o) => !o)}
-              className="lg:sr-only w-full flex items-center justify-between gap-2 min-h-[44px] py-2 text-left mb-2 touch-manipulation text-sm text-muted-foreground"
-              aria-expanded={implicationOpen}
-              aria-controls="implication-content"
-            >
-              다음 단계
-              {implicationOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-            <div className="hidden lg:block mb-2">
-              <h2 className="text-sm font-medium text-foreground">다음 단계</h2>
-            </div>
-            <div id="implication-content" className={cn(implicationOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!implicationOpen}>
-              <ul className="space-y-1 list-none pl-0 text-sm text-foreground">
-                {(consensusData?.strategicSummary?.actionItems ?? []).slice(0, 3).map((item, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="text-primary shrink-0">·</span>
-                    <span className="break-words">{item}</span>
-                  </li>
+              </h3>
+              <div className="flex items-center gap-1" role="group" aria-label="뉴스 기간 선택">
+                {([7, 14, 30, 90] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setNewsDays(d)}
+                    className={cn(
+                      'min-w-[2.25rem] py-1.5 px-2 text-xs font-medium rounded-md border transition-colors',
+                      newsDays === d
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    {d}일
+                  </button>
                 ))}
-              </ul>
-              <p className="text-[11px] text-muted-foreground mt-2">추가 질문은 인사이트 탭에서 이용하세요.</p>
+              </div>
             </div>
+            {rssNewsLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
+                    <div className="h-3.5 w-full bg-muted rounded mb-2" />
+                    <div className="h-3 w-3/4 bg-muted rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : rssNewsFetched && rssNews.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다.</p>
+            ) : rssNews.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {rssNews.map((item, i) => (
+                  <article key={i} className="rounded-lg border border-border bg-card p-3 hover:border-primary/20 transition-colors text-left">
+                    <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2">{item.title || '제목 없음'}</h4>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-1.5">
+                      <span>{item.source || '언론사'}</span>
+                      {item.link && (
+                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                          링크 <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </section>
         )}
 
-        {/* Small screens: jump back to summary after partial reading (interrupted usage). */}
         {displayStatus === 'done' && displayResult && (
           <div className="lg:hidden flex justify-center py-3">
             <a
-              href="#insight-summary"
+              href="#pm-dashboard-top"
               className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
-              요약으로 돌아가기
+              대시보드로 돌아가기
             </a>
           </div>
         )}
