@@ -173,10 +173,10 @@ export function AnalysisTimeline({
         className
       )}
     >
-      <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-2 mb-6">
         <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          AI 분석 타임라인
+          AI Analysis Timeline
         </h2>
       </div>
       <div className="relative">
@@ -248,7 +248,7 @@ export function AnalysisTimeline({
                     {content.aiInsight && (
                       <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          AI 인사이트
+                          Insights
                         </p>
                         <p className="text-sm text-foreground leading-relaxed">
                           {content.aiInsight}
@@ -257,7 +257,7 @@ export function AnalysisTimeline({
                     )}
                     {content.signals && content.signals.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">신호</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Signals</p>
                         <ul className="space-y-1">
                           {content.signals.map((s, j) => (
                             <li

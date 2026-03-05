@@ -6,10 +6,14 @@ import { cn } from '@/lib/utils'
 export interface ProductStrategySectionProps {
   /** Market opportunity summary / strategy summary from AI */
   summary?: string | null
-  /** Key opportunities */
+  /** Key opportunities (also used for target users when structured) */
   opportunities?: string[]
   /** Strategic positioning / key product direction */
   keyConclusions?: string[]
+  /** Target users (e.g. Early adopters) */
+  targetUsers?: string | null
+  /** Core value proposition */
+  valueProposition?: string | null
   loading?: boolean
   className?: string
 }
@@ -18,13 +22,17 @@ export function ProductStrategySection({
   summary,
   opportunities = [],
   keyConclusions = [],
+  targetUsers,
+  valueProposition,
   loading = false,
   className,
 }: ProductStrategySectionProps) {
   const hasSummary = Boolean(summary?.trim())
   const hasOpportunities = opportunities.length > 0
   const hasConclusions = keyConclusions.length > 0
-  const hasContent = hasSummary || hasOpportunities || hasConclusions
+  const hasTargetUsers = Boolean(targetUsers?.trim())
+  const hasValueProp = Boolean(valueProposition?.trim())
+  const hasContent = hasSummary || hasOpportunities || hasConclusions || hasTargetUsers || hasValueProp
 
   if (loading && !hasContent) {
     return (
@@ -61,11 +69,27 @@ export function ProductStrategySection({
         <div className="flex items-center gap-2 mb-6">
           <Lightbulb className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            제품 전략 제안
+            Strategy
           </h2>
         </div>
 
         <div className="space-y-6">
+          {(hasTargetUsers || hasValueProp) && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {hasTargetUsers && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Target users</p>
+                  <p className="text-sm text-foreground">{targetUsers!.trim()}</p>
+                </div>
+              )}
+              {hasValueProp && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Core value proposition</p>
+                  <p className="text-sm text-foreground">{valueProposition!.trim()}</p>
+                </div>
+              )}
+            </div>
+          )}
           {hasSummary && (
             <div className="rounded-lg border border-border/60 bg-muted/10 p-4 sm:p-5">
               <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
@@ -77,7 +101,7 @@ export function ProductStrategySection({
           {hasOpportunities && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                시장 기회
+                Market opportunities
               </h3>
               <ul className="space-y-2">
                 {opportunities.slice(0, 5).map((opp, i) => (
@@ -93,7 +117,7 @@ export function ProductStrategySection({
           {hasConclusions && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                핵심 제품 방향
+                Key product direction
               </h3>
               <ul className="space-y-2">
                 {keyConclusions.slice(0, 5).map((item, i) => (

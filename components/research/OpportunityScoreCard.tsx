@@ -3,13 +3,25 @@
 import { Target, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+/** Maps breakdown keys to display labels (user-facing) */
 const BREAKDOWN_LABELS: Record<string, string> = {
-  market_growth: '시장 성장',
-  competition_pressure: '경쟁 압박',
-  user_demand: '사용자 수요',
-  product_differentiation: '제품 차별화',
-  market_timing: '시장 타이밍',
+  market_growth: 'Market Growth',
+  competition_pressure: 'Competition',
+  user_demand: 'Funding',
+  product_differentiation: 'Product Differentiation',
+  market_timing: 'Trend Momentum',
 }
+
+type BreakdownKey = 'market_growth' | 'competition_pressure' | 'user_demand' | 'product_differentiation' | 'market_timing'
+
+/** Primary breakdown keys for Score Breakdown section (order matters) */
+const SCORE_BREAKDOWN_ORDER: readonly BreakdownKey[] = [
+  'market_growth',
+  'competition_pressure',
+  'user_demand',
+  'product_differentiation',
+  'market_timing',
+]
 
 export interface OpportunityScoreCardProps {
   score: number | null
@@ -69,13 +81,11 @@ export function OpportunityScoreCard({
   if (!hasScore) return null
 
   const breakdownItems = breakdown
-    ? (['market_growth', 'competition_pressure', 'user_demand', 'product_differentiation', 'market_timing'] as const)
-        .filter((k) => breakdown[k] != null)
-        .map((k) => ({
-          key: k,
-          label: BREAKDOWN_LABELS[k] ?? k,
-          value: Math.round(Math.min(100, Math.max(0, breakdown[k] ?? 0))),
-        }))
+    ? (SCORE_BREAKDOWN_ORDER.filter((k) => breakdown[k] != null) as BreakdownKey[]).map((k) => ({
+        key: k,
+        label: BREAKDOWN_LABELS[k] ?? k,
+        value: Math.round(Math.min(100, Math.max(0, breakdown[k] ?? 0))),
+      }))
     : []
 
   return (
@@ -91,30 +101,47 @@ export function OpportunityScoreCard({
         <div className="flex items-center gap-2 mb-6">
           <Target className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            시장 기회 점수
+            Opportunity Score
           </h2>
         </div>
 
-        {/* Main Score */}
-        <div className="flex items-baseline gap-2 mb-8">
-          <span
-            className={cn(
-              'text-4xl sm:text-5xl lg:text-6xl font-bold tabular-nums',
-              scoreColor(normScore ?? 0)
-            )}
+        {/* Main Score + Progress Bar */}
+        <div className="mb-8">
+          <div className="flex items-baseline gap-2 mb-3">
+            <span
+              className={cn(
+                'text-4xl sm:text-5xl lg:text-6xl font-bold tabular-nums',
+                scoreColor(normScore ?? 0)
+              )}
+            >
+              {normScore}
+            </span>
+            <span className="text-xl sm:text-2xl text-muted-foreground font-medium">
+              / 100
+            </span>
+          </div>
+          <div
+            className="h-2 rounded-full bg-muted overflow-hidden"
+            role="progressbar"
+            aria-valuenow={normScore ?? 0}
+            aria-valuemin={0}
+            aria-valuemax={100}
           >
-            {normScore}
-          </span>
-          <span className="text-xl sm:text-2xl text-muted-foreground font-medium">
-            / 100
-          </span>
+            <div
+              className={cn(
+                'h-full rounded-full transition-all duration-500',
+                (normScore ?? 0) >= 70 ? 'bg-emerald-500' : (normScore ?? 0) >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+              )}
+              style={{ width: `${normScore ?? 0}%` }}
+            />
+          </div>
         </div>
 
         {/* Score Breakdown */}
         {breakdownItems.length > 0 && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-              점수 구성
+              Score Breakdown
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {breakdownItems.map(({ key, label, value }) => (
@@ -144,7 +171,7 @@ export function OpportunityScoreCard({
           <div className="rounded-lg border border-border/60 bg-muted/10 p-4 sm:p-5">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
               <ChevronRight className="h-4 w-4 text-primary" />
-              점수 산출 근거
+              Why this score
             </h3>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
               {reasoning.trim()}

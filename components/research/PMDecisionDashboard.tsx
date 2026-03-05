@@ -2,7 +2,7 @@
 
 import { FileDown, RefreshCw, Loader2, Bookmark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { AnalysisTimeline } from './dashboard/AnalysisTimeline'
+import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
 import { ProductStrategySection } from './dashboard/ProductStrategySection'
 import { PMActionPlanSection } from './dashboard/PMActionPlanSection'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -30,6 +30,15 @@ export interface PMDecisionDashboardProps {
   result: ResearchResponse | null
   loading: boolean
   streamingState: StreamingState
+  /** Consensus / strategic summary for Target users & Value proposition */
+  consensusData?: {
+    strategicSummary?: {
+      summary?: string
+      opportunity?: string
+      threat?: string
+      actionItems?: string[]
+    }
+  } | null
   /** 폴링에서 받은 진행 단계 (0-based). 스트리밍 없이 새 탭/새로고침 시 사용 */
   polledProgressStep?: number
   /** 시장 데이터 수집 결과 (타임라인 Step 1용) */
@@ -55,6 +64,7 @@ export function PMDecisionDashboard({
   onSaveInsight,
   onReanalyze,
   reanalyzing = false,
+  consensusData,
 }: PMDecisionDashboardProps) {
   const km = (result?.key_metrics ?? {}) as KeyMetricsWithStrategic
   const strategicActions = km.strategic_actions
@@ -111,10 +121,14 @@ export function PMDecisionDashboard({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* AI Analysis Timeline - show during analysis or when result exists */}
+      {/* AI Product Strategy Engine - visual pipeline */}
       {showTimeline && (
-        <AnalysisTimeline
+        <StrategyEnginePipeline
+          keyword={keyword}
           currentStep={currentStep}
+          allCompleted={
+            streamingState.status === 'completed' || (result != null && !isAnalyzing)
+          }
           streamingStepId={stepId}
           taskData={taskData}
           newsList={newsList}
@@ -127,6 +141,12 @@ export function PMDecisionDashboard({
         summary={productStrategySummary}
         opportunities={productStrategyOpportunities}
         keyConclusions={productStrategyKeyConclusions}
+        targetUsers={
+          (productStrategySummary || productStrategyOpportunities.length > 0)
+            ? 'Early adopters'
+            : undefined
+        }
+        valueProposition={consensusData?.strategicSummary?.opportunity ?? undefined}
         loading={loading && !productStrategySummary && productStrategyOpportunities.length === 0}
       />
 

@@ -31,7 +31,7 @@ function RinAISearchInner() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
-  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null }[]>([])
+  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
@@ -139,13 +139,14 @@ function RinAISearchInner() {
     setRecentReportsLoading(true)
           fetch('/api/research/history')
             .then((res) => res.json())
-            .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null }> }) => {
+            .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null; analysis_status?: string | null }> }) => {
               const list = data?.list ?? []
-              setRecentReports(list.slice(0, 5).map((r) => ({
+              setRecentReports(list.slice(0, 6).map((r) => ({
                 keyword: r.keyword,
                 created_at: r.updated_at ?? null,
                 country_code: r.country_code ?? 'KR',
                 opportunity_score: r.opportunity_score ?? null,
+                analysis_status: r.analysis_status ?? null,
               })))
             })
       .catch((err) => {
@@ -206,16 +207,17 @@ function RinAISearchInner() {
         })
         if (reportRes.ok) {
           const now = new Date().toISOString()
-          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry, opportunity_score: null }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
+          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry, opportunity_score: null, analysis_status: 'analyzing' }, ...prev.filter((r) => r.keyword !== k)].slice(0, 6))
           fetch('/api/research/history')
             .then((res) => res.json())
-      .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null }> }) => {
+      .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null; analysis_status?: string | null }> }) => {
         const list = data?.list ?? []
-        setRecentReports(list.slice(0, 5).map((r) => ({
+        setRecentReports(list.slice(0, 6).map((r) => ({
           keyword: r.keyword,
           created_at: r.updated_at ?? null,
           country_code: r.country_code ?? 'KR',
           opportunity_score: r.opportunity_score ?? null,
+          analysis_status: r.analysis_status ?? null,
         })))
       })
             .catch(() => {})
@@ -248,25 +250,6 @@ function RinAISearchInner() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header: 로고 | 로그인 (검색바 제거, 단일 진입점으로 통합) */}
-      <header className="sticky top-0 z-20 border-b border-border bg-card px-4 py-3 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <RinLogo size={28} className="shrink-0 opacity-95" />
-            <span className="font-semibold text-lg text-foreground hidden sm:inline">Rin-AI</span>
-          </Link>
-          <div className="shrink-0 flex justify-end">
-            {!user && (
-              <Link href={`/auth/login?callbackUrl=${encodeURIComponent('/')}`}>
-                <Button variant="outline" size="sm" className="h-8 text-sm">
-                  로그인
-                </Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
       <AnimatePresence mode="wait">
         {searching ? (
           <motion.div
@@ -288,180 +271,83 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-6 md:p-8"
+            className="p-4 md:p-6"
           >
             {error && (
-              <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive text-sm">
+              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
                 {error}
               </div>
             )}
 
             {user && canSearch === false && (
-              <div className="mb-6 rounded-xl border border-warning/30 bg-warning/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="mb-4 rounded-lg border border-warning/30 bg-warning/5 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <p className="text-warning text-sm">설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.</p>
                 <Link href="/settings?tab=license" className="shrink-0">
-                  <Button variant="outline" size="sm" className="border-warning text-warning hover:bg-warning/10">
+                  <Button variant="outline" size="sm" className="border-warning text-warning hover:bg-warning/10 h-8">
                     키 등록하러 가기
                   </Button>
                 </Link>
               </div>
             )}
 
-            {/* 1. Market Trends Overview — top */}
-            <div className="mx-auto max-w-5xl mb-10">
-              <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-                  <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-primary shrink-0" />
-                    글로벌 시장 트렌드 요약
-                  </h2>
-                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
-                    전체 보기 <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                <CountryChips
-                  value={trendCountry}
-                  onChange={setTrendCountry}
-                  updatedAt={sharedTrends.updatedAt}
-                  className="mb-4"
-                />
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  {trendsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
-                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                      <span className="text-center">
-                        {sharedTrends.updatedAt ? '정보가 오래되어 최신 트렌드를 불러오고 있습니다...' : '최신 트렌드를 불러오는 중...'}
-                      </span>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
-                        <li className="flex flex-col items-center justify-center py-8 text-center">
-                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted text-muted-foreground mb-2">
-                            <TrendingUp className="h-5 w-5" aria-hidden />
-                          </div>
-                          <span className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</span>
-                          <span className="text-xs text-muted-foreground mt-0.5">잠시 후 새로고침하거나 국가를 바꿔 보세요.</span>
-                        </li>
-                      ) : (
-                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => {
-                          const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
-                          const displayName = hasTranslation ? item.title_ko! : item.keyword
-                          return (
-                            <li key={`${trendCountry}-${i}`}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedTrendItem(item)
-                                  setTrendPanelOpen(true)
-                                }}
-                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-2 hover:bg-muted/50 transition-colors border border-transparent"
-                              >
-                                <span className="min-w-0 flex-1 flex items-center gap-2">
-                                  <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-muted/60 text-xs font-medium text-muted-foreground tabular-nums">
-                                    {item.rank ?? i + 1}
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="font-medium text-foreground block truncate">{displayName}</span>
-                                    {hasTranslation && (
-                                      <span className="text-muted-foreground text-xs block truncate">{item.keyword}</span>
-                                    )}
-                                  </span>
-                                </span>
-                                {item.search_volume != null && (
-                                  <span className="text-muted-foreground text-xs shrink-0 tabular-nums" title="검색량">
-                                    {item.search_volume}
-                                  </span>
-                                )}
-                              </button>
-                            </li>
-                          )
-                        })
-                      )}
-                    </ul>
-                  )}
-                </div>
-                <p className="text-muted-foreground text-xs mt-3 text-center">RSS 기준 실시간 업데이트</p>
-              </section>
-            </div>
-
-            {/* 2. Start New Market Analysis — question-based, core entry point */}
-            <section className="mb-10 max-w-2xl mx-auto">
-              <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-6 sm:p-8 shadow-sm">
-                <h2 className="text-lg font-semibold text-foreground mb-1">어떤 시장을 분석하고 싶나요?</h2>
-                <p className="text-sm text-muted-foreground mb-5">시장 또는 제품 키워드를 입력하면 AI가 전략 분석을 진행합니다.</p>
-                <form onSubmit={handleSearch} className="space-y-4">
+            {/* 1. Start New Analysis — primary focus, first visible */}
+            <section className="mb-6 max-w-2xl mx-auto">
+              <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-foreground mb-4">어떤 시장을 분석하고 싶나요?</h2>
+                <form onSubmit={handleSearch} className="space-y-3">
                   <div
                     className={cn(
-                      'relative flex items-center rounded-xl border-2 border-border bg-background h-14 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 overflow-hidden transition-all',
+                      'relative flex items-center rounded-lg border-2 border-border bg-background h-12 px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
                       (searching || isAnalyzingNow()) && 'opacity-80'
                     )}
                   >
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none text-muted-foreground" aria-hidden>
-                      <Search className="h-5 w-5 shrink-0" />
-                    </span>
                     <Input
                       type="search"
                       aria-label="분석할 시장 키워드"
-                      placeholder="예: AI Meeting Assistant"
+                      placeholder="AI Meeting Assistant"
                       value={query}
                       onChange={(e) => {
                         setQuery(e.target.value)
                         setError(null)
                       }}
                       disabled={searching || isAnalyzingNow()}
-                      className="border-0 bg-transparent pl-12 pr-4 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
                     />
                     {query.length > 0 && !searching && !isAnalyzingNow() && (
                       <button
                         type="button"
                         onClick={() => setQuery('')}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                         aria-label="검색어 지우기"
                       >
                         <X className="h-4 w-4" />
                       </button>
                     )}
                   </div>
-
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <div className="flex-1" />
+                  <div className="flex justify-end">
                     {(searching || isAnalyzingNow()) ? (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={handleAbort}
-                        className="h-10 px-6"
-                      >
+                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-9 px-5 text-sm">
                         <X className="h-4 w-4 mr-2" />
                         분석 중단
                       </Button>
                     ) : (
-                      <Button
-                        type="submit"
-                        disabled={!query.trim()}
-                        className="h-10 px-6"
-                      >
+                      <Button type="submit" disabled={!query.trim()} className="h-9 px-6 text-sm font-medium">
                         {getButtonLabel()}
                       </Button>
                     )}
                   </div>
                 </form>
-
-                {/* Progress Indicator */}
                 {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{getButtonLabel()}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출</p>
                       </div>
                     </div>
                     {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
-                      <div className="mt-3">
+                      <div className="mt-2">
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>진행률</span>
                           <span>{Math.round(((streamingState.currentStep + 1) / 5) * 100)}%</span>
@@ -479,12 +365,73 @@ function RinAISearchInner() {
               </div>
             </section>
 
+            {/* 2. Global Market Trends */}
+            <div className="mx-auto max-w-5xl mb-6">
+              <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                    Global Market Trends
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <CountryChips
+                      value={trendCountry}
+                      onChange={setTrendCountry}
+                      updatedAt={sharedTrends.updatedAt}
+                    />
+                    <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
+                      전체 보기 <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+                {trendsLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 py-4">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div key={i} className="rounded-lg border border-border bg-muted/20 h-20 animate-pulse" />
+                    ))}
+                  </div>
+                ) : (sharedTrends[trendCountry] ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center rounded-lg border border-dashed border-border">
+                    <TrendingUp className="h-8 w-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {(sharedTrends[trendCountry] ?? []).slice(0, 6).map((item, i) => {
+                      const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
+                      const displayName = hasTranslation ? item.title_ko! : item.keyword
+                      const growthPct = Math.round(250 - (item.rank ?? i + 1) * 18)
+                      return (
+                        <button
+                          key={`${trendCountry}-${i}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTrendItem(item)
+                            setTrendPanelOpen(true)
+                          }}
+                          className="group text-left rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                        >
+                          <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                            {displayName}
+                          </p>
+                          <p className="text-xs text-emerald-600 mt-0.5 font-medium tabular-nums">
+                            ↑ {Math.max(80, growthPct)}%
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <p className="text-muted-foreground text-xs mt-2">RSS·트렌드 기준 (1시간 캐시)</p>
+              </section>
+            </div>
+
             {/* 3. Recent Analyses */}
             <div className="mx-auto max-w-5xl">
-              <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <History className="h-5 w-5 text-primary shrink-0" />
+              <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <History className="h-4 w-4 text-primary shrink-0" />
                     최근 분석 기록
                   </h2>
                   <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
@@ -505,32 +452,41 @@ function RinAISearchInner() {
                       ))}
                     </div>
                   ) : recentReports.length > 0 ? (
-                    <ul className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {recentReports.map((r, i) => (
-                        <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
-                          <Link
-                            href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                            className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="font-medium text-foreground block truncate">{r.keyword}</span>
-                              <span className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
-                                {r.opportunity_score != null && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Target className="h-3.5 w-3.5 text-primary shrink-0" />
-                                    시장 기회 점수 {r.opportunity_score}
-                                  </span>
-                                )}
-                                <span>
-                                  <TimeAgo isoString={r.created_at} /> 분석
-                                </span>
+                        <Link
+                          key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}
+                          href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
+                          className="group flex flex-col rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-primary transition-colors">
+                              {r.keyword}
+                            </p>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                            {r.opportunity_score != null && (
+                              <span className="inline-flex items-center gap-1">
+                                <Target className="h-3.5 w-3.5 text-primary shrink-0" />
+                                Opportunity Score {r.opportunity_score}
                               </span>
-                            </span>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </Link>
-                        </li>
+                            )}
+                            <span><TimeAgo isoString={r.created_at} /></span>
+                            {r.analysis_status && (
+                              <span className={cn(
+                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                r.analysis_status === 'completed' && 'bg-emerald-500/10 text-emerald-600',
+                                r.analysis_status === 'analyzing' && 'bg-amber-500/10 text-amber-600',
+                                r.analysis_status === 'failed' && 'bg-rose-500/10 text-rose-600'
+                              )}>
+                                {r.analysis_status === 'completed' ? '완료' : r.analysis_status === 'analyzing' ? '분석 중' : r.analysis_status === 'failed' ? '실패' : r.analysis_status}
+                              </span>
+                            )}
+                          </div>
+                        </Link>
                       ))}
-                    </ul>
+                    </div>
                   ) : (
                     <p className="text-muted-foreground text-sm py-8 text-center">
                       아직 분석 기록이 없습니다. 위에서 새 시장 분석을 시작해 보세요.

@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
-import { Home, History, Bookmark, LogOut, Settings, ChevronDown, RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
-import { ThemeSwitcher } from '@/components/theme-switcher'
+import { History, LogOut, Settings, ChevronDown, RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { RinLogo } from '@/components/rin-logo'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -15,9 +14,7 @@ import { useAnalysisTasks } from '@/lib/hooks/use-analysis-tasks'
 import type { AnalysisTask } from '@/lib/analysis-types'
 
 const navItems = [
-  { href: '/', label: 'Home', icon: Home },
   { href: '/history', label: 'History', icon: History },
-  { href: '/insights', label: 'Insights', icon: Bookmark },
 ]
 
 /** PM-friendly labels: render from task.status only; backend is source of truth. */
@@ -113,9 +110,9 @@ export function GlobalHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <Link href="/" className="flex items-center gap-2 shrink-0 hover:opacity-90">
-          <RinLogo size={24} className="shrink-0" />
+          <RinLogo size={22} className="shrink-0" />
           <span className="font-semibold text-foreground hidden sm:inline">Rin</span>
         </Link>
 
@@ -224,7 +221,6 @@ export function GlobalHeader() {
           )}
         </div>
 
-        <ThemeSwitcher className="shrink-0" />
         <Link href="/settings">
           <Button variant="ghost" size="icon" className="shrink-0" aria-label="Settings">
             <Settings className="h-5 w-5" />
@@ -245,7 +241,7 @@ export function GlobalHeader() {
       {/* UX: Background analysis strip only on Results page to prioritize content elsewhere */}
       {hasTasks && isResultsPage && (
         <div
-          className="sticky top-14 z-20 flex items-center gap-2 border-b border-border bg-card/90 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+          className="sticky top-12 z-20 flex items-center gap-2 border-b border-border bg-card/90 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/80"
           role="status"
           aria-live="polite"
           aria-label="Background analysis tasks"

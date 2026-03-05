@@ -7,7 +7,7 @@ export function ErrorToastProvider() {
   return (
     <>
       <Toaster
-        theme="dark"
+        theme="light"
         position="bottom-right"
         closeButton
         richColors

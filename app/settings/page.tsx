@@ -9,10 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
 
@@ -32,16 +32,13 @@ type SettingsData = {
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
 
-const LICENSE_ROWS: Array<{
-  id: keyof Pick<SettingsData, 'hasGeminiKey' | 'hasGroqKey' | 'hasOpenAIKey' | 'hasAnthropicKey'>
-  label: string
-  stateKey: 'geminiApiKey' | 'groqApiKey' | 'openaiApiKey' | 'anthropicApiKey'
-  showKey: 'showGeminiKey' | 'showGroqKey' | 'showOpenAIKey' | 'showAnthropicKey'
-}> = [
-  { id: 'hasGeminiKey', label: 'Gemini — 시장 분석', stateKey: 'geminiApiKey', showKey: 'showGeminiKey' },
-  { id: 'hasGroqKey', label: 'Groq — 인사이트·탭 분석', stateKey: 'groqApiKey', showKey: 'showGroqKey' },
-  { id: 'hasOpenAIKey', label: 'OpenAI — Fallback', stateKey: 'openaiApiKey', showKey: 'showOpenAIKey' },
-  { id: 'hasAnthropicKey', label: 'Claude — 인사이트 (선택)', stateKey: 'anthropicApiKey', showKey: 'showAnthropicKey' },
+const ANALYSIS_DEPTH_KEY = 'rin_analysis_depth'
+type AnalysisDepth = 'fast' | 'standard' | 'deep'
+
+const ANALYSIS_OPTIONS: { value: AnalysisDepth; label: string }[] = [
+  { value: 'fast', label: '빠른 분석' },
+  { value: 'standard', label: '표준 분석' },
+  { value: 'deep', label: '심층 분석' },
 ]
 
 const SETTINGS_TAB_PARAM = 'tab'
@@ -66,12 +63,11 @@ function SettingsPageInner() {
   const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
-  const [openaiApiKey, setOpenaiApiKey] = useState('')
-  const [anthropicApiKey, setAnthropicApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [showGroqKey, setShowGroqKey] = useState(false)
-  const [showOpenAIKey, setShowOpenAIKey] = useState(false)
-  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
+  const [savingGemini, setSavingGemini] = useState(false)
+  const [savingGroq, setSavingGroq] = useState(false)
+  const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
 
   useEffect(() => {
     const supabase = createClient()
@@ -101,13 +97,27 @@ function SettingsPageInner() {
           setNickname(json.nickname ?? '')
           setGeminiApiKey('')
           setGroqApiKey('')
-          setOpenaiApiKey('')
-          setAnthropicApiKey('')
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
       .finally(() => setLoading(false))
   }, [user, router])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem(ANALYSIS_DEPTH_KEY)
+    if (stored === 'fast' || stored === 'standard' || stored === 'deep') {
+      setAnalysisDepth(stored)
+    }
+  }, [])
+
+  const handleAnalysisDepthChange = (value: AnalysisDepth) => {
+    setAnalysisDepth(value)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ANALYSIS_DEPTH_KEY, value)
+      toast.success('분석 깊이가 저장되었습니다.')
+    }
+  }
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -131,20 +141,15 @@ function SettingsPageInner() {
     }
   }
 
-  const handleSaveLicense = async (e: React.FormEvent) => {
+  const handleSaveGemini = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
-    setSaving(true)
+    setSavingGemini(true)
     try {
-      const body: Record<string, string> = {}
-      if (geminiApiKey !== '') body.gemini_api_key = geminiApiKey
-      if (groqApiKey !== '') body.groq_api_key = groqApiKey
-      if (openaiApiKey !== '') body.openai_api_key = openaiApiKey
-      if (anthropicApiKey !== '') body.anthropic_api_key = anthropicApiKey
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ gemini_api_key: geminiApiKey || undefined }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -152,49 +157,67 @@ function SettingsPageInner() {
         return
       }
       setGeminiApiKey('')
-      setGroqApiKey('')
-      setOpenaiApiKey('')
-      setAnthropicApiKey('')
       const nextRes = await fetch('/api/settings')
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
       }
-      toast.success('라이선스 설정이 저장되었습니다.')
+      toast.success('Gemini API 키가 저장되었습니다.')
     } finally {
-      setSaving(false)
+      setSavingGemini(false)
     }
   }
 
-  const getKeyState = (row: typeof LICENSE_ROWS[0]) => {
-    const value = { geminiApiKey, groqApiKey, openaiApiKey, anthropicApiKey }[row.stateKey] as string
-    const hasUser = !!data?.[row.id]
-    const hasServer = row.id === 'hasGeminiKey' ? data?.hasServerGemini : row.id === 'hasGroqKey' ? data?.hasServerGroq : row.id === 'hasOpenAIKey' ? data?.hasServerOpenAI : data?.hasServerAnthropic
-    const origin = row.id === 'hasGeminiKey' ? data?.licenseOrigin?.gemini : row.id === 'hasGroqKey' ? data?.licenseOrigin?.groq : row.id === 'hasOpenAIKey' ? data?.licenseOrigin?.openai : data?.licenseOrigin?.anthropic
-    const isUserTyped = value.length > 0
-    const placeholder =
-      hasServer && !hasUser ? MASKED_PLACEHOLDER
-      : hasUser ? MASKED_PLACEHOLDER
-      : '키를 입력하세요'
-    const canReveal = isUserTyped
-    const show = { showGeminiKey, showGroqKey, showOpenAIKey, showAnthropicKey }[row.showKey] as boolean
-    const setShow = { showGeminiKey: setShowGeminiKey, showGroqKey: setShowGroqKey, showOpenAIKey: setShowOpenAIKey, showAnthropicKey: setShowAnthropicKey }[row.showKey]
-    const setValue = { geminiApiKey: setGeminiApiKey, groqApiKey: setGroqApiKey, openaiApiKey: setOpenaiApiKey, anthropicApiKey: setAnthropicApiKey }[row.stateKey]
-    return { value, hasUser, hasServer, origin, isUserTyped, placeholder, canReveal, show, setShow, setValue }
-  }
-
-  const handleKeyFocus = (row: typeof LICENSE_ROWS[0]) => {
-    const s = getKeyState(row)
-    if (s.hasServer && !s.hasUser && !s.value) {
-      s.setValue('')
+  const handleSaveGroq = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    setSavingGroq(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groq_api_key: groqApiKey || undefined }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
+        return
+      }
+      setGroqApiKey('')
+      const nextRes = await fetch('/api/settings')
+      if (nextRes.ok) {
+        const nextJson = (await nextRes.json()) as SettingsData
+        setData(nextJson)
+      }
+      toast.success('Groq API 키가 저장되었습니다.')
+    } finally {
+      setSavingGroq(false)
     }
   }
+
+  const getKeyState = (provider: 'gemini' | 'groq') => {
+    if (provider === 'gemini') {
+      const hasUser = !!data?.hasGeminiKey
+      const hasServer = !!data?.hasServerGemini
+      const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
+      const canReveal = geminiApiKey.length > 0
+      return { value: geminiApiKey, hasUser, hasServer, placeholder, canReveal, show: showGeminiKey, setShow: setShowGeminiKey, setValue: setGeminiApiKey }
+    }
+    const hasUser = !!data?.hasGroqKey
+    const hasServer = !!data?.hasServerGroq
+    const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
+    const canReveal = groqApiKey.length > 0
+    return { value: groqApiKey, hasUser, hasServer, placeholder, canReveal, show: showGroqKey, setShow: setShowGroqKey, setValue: setGroqApiKey }
+  }
+
+  const geminiConnected = !!(data?.hasGeminiKey || data?.hasServerGemini)
+  const groqConnected = !!(data?.hasGroqKey || data?.hasServerGroq)
 
   if (!user) {
     return (
-      <div className="p-6 md:p-8">
+      <div className="p-4 md:p-6">
         <Card className="mx-auto max-w-2xl border border-border bg-card shadow-sm">
-          <CardContent className="p-8 text-center text-muted-foreground">
+          <CardContent className="p-6 text-center text-muted-foreground">
             로그인한 후 설정을 변경할 수 있습니다.
           </CardContent>
         </Card>
@@ -204,7 +227,7 @@ function SettingsPageInner() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 flex items-center justify-center min-h-[40vh]">
+      <div className="p-4 md:p-6 flex items-center justify-center min-h-[40vh]">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
           <p className="text-sm">설정을 불러오는 중...</p>
@@ -214,14 +237,14 @@ function SettingsPageInner() {
   }
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-foreground mb-1">설정</h1>
-      <p className="text-muted-foreground text-sm mb-6">
+    <div className="p-4 md:p-6 w-full max-w-5xl mx-auto">
+      <h1 className="text-lg font-semibold text-foreground mb-0.5">설정</h1>
+      <p className="text-muted-foreground text-xs mb-4">
         내 정보와 분석용 API 키를 관리하세요.
       </p>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full max-w-md grid grid-cols-2 h-11 rounded-lg bg-muted/50 p-1 mb-6">
+        <TabsList className="w-full max-w-md grid grid-cols-2 h-9 rounded-lg bg-muted/50 p-1 mb-4">
           <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <User className="h-4 w-4" />
             내 정보
@@ -270,75 +293,138 @@ function SettingsPageInner() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="license" className="m-0">
+        <TabsContent value="license" className="m-0 space-y-6">
+          {/* 1. AI Provider Settings */}
           <Card className="border border-border bg-card shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-foreground">API 키</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                별도 입력이 없는 경우 시스템 기본 라이선스가 적용됩니다. 직접 입력한 키만 눈 아이콘으로 확인할 수 있으며, 서버 키는 보안상 노출하지 않습니다.
-              </CardDescription>
+            <CardHeader>
+              <CardTitle className="text-lg">AI Provider 설정</CardTitle>
+              <CardDescription>시장 분석에 사용되는 AI API 키를 설정합니다.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-0">
-              <form onSubmit={handleSaveLicense} className="space-y-4">
-                {LICENSE_ROWS.map((row) => {
-                  const s = getKeyState(row)
-                  const badgeLabel = s.origin === 'USER' ? 'User' : (s.hasServer || s.origin === 'SYSTEM') ? 'System' : null
-                  return (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center py-2 border-b border-border/80 last:border-0 last:pb-0 first:pt-0"
-                    >
-                      <div className="md:col-span-4">
-                        <Label className="text-sm font-medium text-foreground">{row.label}</Label>
-                      </div>
-                      <div className="md:col-span-8 relative">
-                        <div className="relative flex items-center">
-                          <Input
-                            type={s.show && s.canReveal ? 'text' : 'password'}
-                            placeholder={s.placeholder}
-                            value={s.value}
-                            onChange={(e) => s.setValue(e.target.value)}
-                            onFocus={() => handleKeyFocus(row)}
-                            className="bg-muted/50 border-border pr-16 h-9 text-sm placeholder:text-muted-foreground focus:bg-background text-foreground"
-                            autoComplete="off"
-                          />
-                          <div className="absolute right-2 flex items-center gap-1.5">
-                            {badgeLabel && (
-                              <Badge
-                                variant={badgeLabel === 'User' ? 'default' : 'secondary'}
-                                className="text-[10px] px-1.5 py-0 font-normal bg-muted text-muted-foreground border-0 data-[variant=default]:bg-primary/10 data-[variant=default]:text-primary"
-                              >
-                                {badgeLabel}
-                              </Badge>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => s.canReveal && s.setShow(!s.show)}
-                              title={s.canReveal ? (s.show ? '숨기기' : '보기') : '서버 키는 보안상 표시하지 않습니다'}
-                              className={`p-1 rounded ${s.canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default'}`}
-                              aria-label={s.show ? '숨기기' : '보기'}
-                            >
-                              {s.show && s.canReveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                <div className="pt-4">
-                  <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        저장 중...
-                      </>
-                    ) : (
-                      '저장'
-                    )}
-                  </Button>
+            <CardContent className="space-y-8">
+              {/* Gemini API Key */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-base font-medium">Gemini API Key</Label>
+                  <p className="text-sm text-muted-foreground mt-1">시장 신호 분석 및 리서치에 사용됩니다.</p>
                 </div>
-              </form>
+                <form onSubmit={handleSaveGemini} className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Input
+                      type={getKeyState('gemini').show && getKeyState('gemini').canReveal ? 'text' : 'password'}
+                      placeholder={getKeyState('gemini').placeholder}
+                      value={getKeyState('gemini').value}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      className="pr-10 bg-muted/50 focus:bg-background"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => getKeyState('gemini').canReveal && setShowGeminiKey(!showGeminiKey)}
+                      title={getKeyState('gemini').canReveal ? (showGeminiKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                      className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('gemini').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                      aria-label={showGeminiKey ? '숨기기' : '보기'}
+                    >
+                      {showGeminiKey && getKeyState('gemini').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button type="submit" disabled={savingGemini} className="shrink-0">
+                    {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                  </Button>
+                </form>
+              </div>
+
+              {/* Groq API Key */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-base font-medium">Groq API Key</Label>
+                  <p className="text-sm text-muted-foreground mt-1">인사이트·탭별 분석에 사용됩니다.</p>
+                </div>
+                <form onSubmit={handleSaveGroq} className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Input
+                      type={getKeyState('groq').show && getKeyState('groq').canReveal ? 'text' : 'password'}
+                      placeholder={getKeyState('groq').placeholder}
+                      value={getKeyState('groq').value}
+                      onChange={(e) => setGroqApiKey(e.target.value)}
+                      className="pr-10 bg-muted/50 focus:bg-background"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => getKeyState('groq').canReveal && setShowGroqKey(!showGroqKey)}
+                      title={getKeyState('groq').canReveal ? (showGroqKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                      className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('groq').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                      aria-label={showGroqKey ? '숨기기' : '보기'}
+                    >
+                      {showGroqKey && getKeyState('groq').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button type="submit" disabled={savingGroq} className="shrink-0">
+                    {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 2. Analysis Configuration */}
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">분석 설정</CardTitle>
+              <CardDescription>분석 깊이를 선택하세요. 심층 분석일수록 더 상세한 결과를 제공합니다.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                {ANALYSIS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleAnalysisDepthChange(opt.value)}
+                    className={cn(
+                      'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                      analysisDepth === opt.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. System Status */}
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">시스템 상태</CardTitle>
+              <CardDescription>API 연결 상태를 확인합니다.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
+                  {geminiConnected ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="font-medium">Gemini API</p>
+                    <p className="text-sm text-muted-foreground">{geminiConnected ? 'Connected' : 'Not connected'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
+                  {groqConnected ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="font-medium">Groq API</p>
+                    <p className="text-sm text-muted-foreground">{groqConnected ? 'Connected' : 'Not connected'}</p>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

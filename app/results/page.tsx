@@ -839,7 +839,7 @@ function ResultsContent() {
         {/* AI Product Strategy Report header */}
         <header className="pb-6 border-b border-border/60">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            시장
+            Market Analysis
           </p>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground tracking-tight break-words">
             {currentKeyword}
@@ -935,6 +935,7 @@ function ResultsContent() {
             polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : undefined}
             newsList={newsList}
             taskData={taskData}
+            consensusData={consensusData}
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
             onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}

@@ -777,14 +777,14 @@ export const useResearchStore = create<ResearchStore>()(
                   const ev = event as { task?: string; status?: string; data?: unknown }
                   const task = ev.task
                   const status = ev.status
-                  if (task && status === 'completed') {
-                    if (task in stepMap) {
-                      const stepIdx = stepMap[task]
-                      setStepProgress(stepIdx, task)
+                  if (task && task in stepMap) {
+                    const stepIdx = stepMap[task]
+                    setStepProgress(stepIdx, task)
+                    if (status === 'completed') {
                       lastSuccessfulStep = stepIdx
-                    }
-                    if (ev.data != null) {
-                      get().setTaskData(task, ev.data)
+                      if (ev.data != null) {
+                        get().setTaskData(task, ev.data)
+                      }
                     }
                   }
                 }

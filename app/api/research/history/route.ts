@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
       const { data: rows, error } = await supabase
         .from('research_history')
-        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, market_temperature_score, summary_insights, key_metrics, updated_at')
+        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, updated_at')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .range(offset, offset + limit - 1)
@@ -63,13 +63,18 @@ export async function GET(req: Request) {
           ? (topAction as { title: string }).title
           : null
         const opportunityScore = typeof km?.opportunity_score === 'number' ? km.opportunity_score : null
+        const analysisStatus = ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status)
+        const confidenceScore = typeof (r as { confidence_score?: number }).confidence_score === 'number'
+          ? (r as { confidence_score: number }).confidence_score
+          : null
         return {
           id: r.id,
           keyword: r.keyword ?? '',
           country_code: r.country_code ?? 'KR',
           report_id: r.report_id ?? null,
-          analysis_status: ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status),
+          analysis_status: analysisStatus,
           analysis_target: (r as { analysis_target?: string }).analysis_target ?? null,
+          confidence_score: confidenceScore,
           market_temperature_score: typeof (r as { market_temperature_score?: number }).market_temperature_score === 'number'
             ? (r as { market_temperature_score: number }).market_temperature_score
             : null,

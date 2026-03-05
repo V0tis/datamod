@@ -59,7 +59,7 @@ export function PMActionPlanSection({
         <div className="flex items-center gap-2 mb-6">
           <CheckSquare className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            실행 전략
+            Action Plan
           </h2>
         </div>
 
