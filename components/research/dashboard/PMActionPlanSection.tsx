@@ -31,7 +31,7 @@ export function PMActionPlanSection({
           'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
           className
         )}
-        aria-label="PM Action Plan"
+        aria-label="실행 전략"
       >
         <div className="p-6 sm:p-8">
           <div className="h-4 w-32 rounded bg-muted/60 animate-pulse mb-6" />
@@ -59,7 +59,7 @@ export function PMActionPlanSection({
         <div className="flex items-center gap-2 mb-6">
           <CheckSquare className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            PM Action Plan
+            실행 전략
           </h2>
         </div>
 

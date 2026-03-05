@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, ChevronRight, Loader2, X } from 'lucide-react'
+import { Search, TrendingUp, History, ChevronRight, Loader2, X, Target } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
@@ -31,7 +31,7 @@ function RinAISearchInner() {
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [loadingMessage] = useState(() => getRandomRinMessage())
-  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string }[]>([])
+  const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
@@ -83,7 +83,13 @@ function RinAISearchInner() {
 
   const setTrendCountry = (code: CountryChipCode) => {
     setTrendCountryState(code)
-    router.replace(`/?country=${code}`)
+    try {
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `/?country=${code}`)
+      }
+    } catch {
+      router.replace(`/?country=${code}`)
+    }
   }
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
   const jobs = useResearchStore((s) => s.jobs)
@@ -131,12 +137,17 @@ function RinAISearchInner() {
       return
     }
     setRecentReportsLoading(true)
-    fetch('/api/research/history')
-      .then((res) => res.json())
-      .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
-        const list = data?.list ?? []
-        setRecentReports(list.slice(0, 3).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
-      })
+          fetch('/api/research/history')
+            .then((res) => res.json())
+            .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null }> }) => {
+              const list = data?.list ?? []
+              setRecentReports(list.slice(0, 5).map((r) => ({
+                keyword: r.keyword,
+                created_at: r.updated_at ?? null,
+                country_code: r.country_code ?? 'KR',
+                opportunity_score: r.opportunity_score ?? null,
+              })))
+            })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했습니다.' })
         setRecentReports([])
@@ -195,13 +206,18 @@ function RinAISearchInner() {
         })
         if (reportRes.ok) {
           const now = new Date().toISOString()
-          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry }, ...prev.filter((r) => r.keyword !== k)].slice(0, 3))
+          setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry, opportunity_score: null }, ...prev.filter((r) => r.keyword !== k)].slice(0, 5))
           fetch('/api/research/history')
             .then((res) => res.json())
-            .then((data: { list?: { keyword: string; updated_at?: string | null; country_code?: string }[] }) => {
-              const list = data?.list ?? []
-              setRecentReports(list.slice(0, 3).map((r) => ({ keyword: r.keyword, created_at: r.updated_at ?? null, country_code: r.country_code ?? 'KR' })))
-            })
+      .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null }> }) => {
+        const list = data?.list ?? []
+        setRecentReports(list.slice(0, 5).map((r) => ({
+          keyword: r.keyword,
+          created_at: r.updated_at ?? null,
+          country_code: r.country_code ?? 'KR',
+          opportunity_score: r.opportunity_score ?? null,
+        })))
+      })
             .catch(() => {})
         } else {
           const err = await reportRes.json().catch(() => ({}))
@@ -227,7 +243,7 @@ function RinAISearchInner() {
       }
       return '분석 중...'
     }
-    return '시장·제품 분석'
+    return '시장 분석 시작'
   }
 
   return (
@@ -291,17 +307,89 @@ function RinAISearchInner() {
               </div>
             )}
 
-            {/* Primary Analysis Input */}
-            <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
-              <div className="max-w-2xl mx-auto space-y-5">
-                <div className="text-center">
-                  <h1 className="text-2xl font-bold text-foreground mb-2">Analyze a Market or Product</h1>
-                  <p className="text-muted-foreground text-sm">
-                    시장이나 제품을 입력하고, PM 전략 분석을 시작하세요.
-                  </p>
+            {/* 1. Market Trends Overview — top */}
+            <div className="mx-auto max-w-5xl mb-10">
+              <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+                  <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary shrink-0" />
+                    글로벌 시장 트렌드 요약
+                  </h2>
+                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
+                    전체 보기 <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </div>
+                <CountryChips
+                  value={trendCountry}
+                  onChange={setTrendCountry}
+                  updatedAt={sharedTrends.updatedAt}
+                  className="mb-4"
+                />
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  {trendsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      <span className="text-center">
+                        {sharedTrends.updatedAt ? '정보가 오래되어 최신 트렌드를 불러오고 있습니다...' : '최신 트렌드를 불러오는 중...'}
+                      </span>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
+                        <li className="flex flex-col items-center justify-center py-8 text-center">
+                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted text-muted-foreground mb-2">
+                            <TrendingUp className="h-5 w-5" aria-hidden />
+                          </div>
+                          <span className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</span>
+                          <span className="text-xs text-muted-foreground mt-0.5">잠시 후 새로고침하거나 국가를 바꿔 보세요.</span>
+                        </li>
+                      ) : (
+                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => {
+                          const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
+                          const displayName = hasTranslation ? item.title_ko! : item.keyword
+                          return (
+                            <li key={`${trendCountry}-${i}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTrendItem(item)
+                                  setTrendPanelOpen(true)
+                                }}
+                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-2 hover:bg-muted/50 transition-colors border border-transparent"
+                              >
+                                <span className="min-w-0 flex-1 flex items-center gap-2">
+                                  <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-muted/60 text-xs font-medium text-muted-foreground tabular-nums">
+                                    {item.rank ?? i + 1}
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="font-medium text-foreground block truncate">{displayName}</span>
+                                    {hasTranslation && (
+                                      <span className="text-muted-foreground text-xs block truncate">{item.keyword}</span>
+                                    )}
+                                  </span>
+                                </span>
+                                {item.search_volume != null && (
+                                  <span className="text-muted-foreground text-xs shrink-0 tabular-nums" title="검색량">
+                                    {item.search_volume}
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          )
+                        })
+                      )}
+                    </ul>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-xs mt-3 text-center">RSS 기준 실시간 업데이트</p>
+              </section>
+            </div>
 
-                {/* Large Search Input */}
+            {/* 2. Start New Market Analysis — question-based, core entry point */}
+            <section className="mb-10 max-w-2xl mx-auto">
+              <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-6 sm:p-8 shadow-sm">
+                <h2 className="text-lg font-semibold text-foreground mb-1">어떤 시장을 분석하고 싶나요?</h2>
+                <p className="text-sm text-muted-foreground mb-5">시장 또는 제품 키워드를 입력하면 AI가 전략 분석을 진행합니다.</p>
                 <form onSubmit={handleSearch} className="space-y-4">
                   <div
                     className={cn(
@@ -314,8 +402,8 @@ function RinAISearchInner() {
                     </span>
                     <Input
                       type="search"
-                      aria-label="검색 키워드"
-                      placeholder="분석할 키워드를 입력하세요..."
+                      aria-label="분석할 시장 키워드"
+                      placeholder="예: AI Meeting Assistant"
                       value={query}
                       onChange={(e) => {
                         setQuery(e.target.value)
@@ -362,13 +450,11 @@ function RinAISearchInner() {
 
                 {/* Progress Indicator */}
                 {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
                     <div className="flex items-center gap-3">
                       <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">
-                          {getButtonLabel()}
-                        </p>
+                        <p className="text-sm font-medium text-foreground">{getButtonLabel()}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출
                         </p>
@@ -391,29 +477,28 @@ function RinAISearchInner() {
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* Decision flow: Primary Analysis | Recent Analyses (3) | Market Trends Snapshot */}
-            <div className="mx-auto max-w-6xl space-y-6">
-              {/* Recent Analyses (latest 3) */}
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-colors duration-200 hover:bg-background-elevated">
+            {/* 3. Recent Analyses */}
+            <div className="mx-auto max-w-5xl">
+              <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-foreground flex items-center gap-2">
-                    <History className="h-5 w-5 text-primary" />
-                    Recent Analyses
+                  <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+                    <History className="h-5 w-5 text-primary shrink-0" />
+                    최근 분석 기록
                   </h2>
-                  <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
-                    전체 <ChevronRight className="h-4 w-4" />
+                  <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
+                    전체 보기 <ChevronRight className="h-4 w-4" />
                   </Link>
                 </div>
                 {user ? (
                   recentReportsLoading ? (
                     <div className="space-y-2" aria-busy="true" aria-label="최근 분석 불러오는 중">
-                      {[1, 2, 3].map((i) => (
+                      {[1, 2, 3, 4].map((i) => (
                         <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
                           <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <span className="h-4 w-28 bg-muted rounded animate-pulse" />
-                            <span className="h-3 w-8 bg-muted rounded animate-pulse shrink-0" />
+                            <span className="h-4 w-32 bg-muted rounded animate-pulse" />
+                            <span className="h-3 w-16 bg-muted rounded animate-pulse shrink-0" />
                           </div>
                           <span className="h-3 w-12 bg-muted rounded animate-pulse shrink-0" />
                         </div>
@@ -425,120 +510,38 @@ function RinAISearchInner() {
                         <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
                           <Link
                             href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                            className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted-hover transition-colors"
+                            className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
                           >
-                            <span className="min-w-0 flex items-center gap-2">
-                              <span className="font-medium text-foreground truncate">{r.keyword}</span>
-                              <span className="shrink-0 text-xs text-muted-foreground" title="트렌드 채택 국가">
-                                {COUNTRY_LABELS[r.country_code] ?? r.country_code}
+                            <span className="min-w-0 flex-1">
+                              <span className="font-medium text-foreground block truncate">{r.keyword}</span>
+                              <span className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
+                                {r.opportunity_score != null && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <Target className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    시장 기회 점수 {r.opportunity_score}
+                                  </span>
+                                )}
+                                <span>
+                                  <TimeAgo isoString={r.created_at} /> 분석
+                                </span>
                               </span>
                             </span>
-                            <span className="flex items-center gap-1 shrink-0">
-                              <TimeAgo isoString={r.created_at} className="text-muted-foreground text-xs" />
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            </span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                           </Link>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-muted-foreground text-sm py-6 text-center">
-                      아직 분석 기록이 없어요. 위에서 분석을 시작하세요.
+                    <p className="text-muted-foreground text-sm py-8 text-center">
+                      아직 분석 기록이 없습니다. 위에서 새 시장 분석을 시작해 보세요.
                     </p>
                   )
                 ) : (
-                  <p className="text-muted-foreground text-sm py-6 text-center">
-                    로그인하면 최근 분석이 표시됩니다.
+                  <p className="text-muted-foreground text-sm py-8 text-center">
+                    로그인하면 최근 분석 기록이 표시됩니다.
                   </p>
                 )}
-              </div>
-
-              {/* Market Trends Snapshot */}
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-colors duration-200 hover:bg-background-elevated">
-                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                  <h2 className="font-semibold text-foreground flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    Market Trends Snapshot
-                  </h2>
-                  <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5">
-                    전체 <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                <CountryChips
-                  value={trendCountry}
-                  onChange={setTrendCountry}
-                  updatedAt={sharedTrends.updatedAt}
-                  className="mb-4"
-                />
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  {trendsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
-                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                      <span className="text-center">
-                        {sharedTrends.updatedAt ? '정보가 오래되어 최신 트렌드를 불러오고 있습니다...' : '최신 트렌드를 불러오는 중...'}
-                      </span>
-                    </div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {(sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).length === 0 ? (
-                        <li className="flex flex-col items-center justify-center py-8 text-center">
-                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted text-muted-foreground mb-2">
-                            <TrendingUp className="h-5 w-5" aria-hidden />
-                          </div>
-                          <span className="text-sm text-muted-foreground">트렌드 데이터가 없어요</span>
-                          <span className="text-xs text-muted-foreground mt-0.5">잠시 후 새로고침하거나 국가를 바꿔 보세요.</span>
-                        </li>
-                      ) : (
-                        (sharedTrends[trendCountry] ?? []).slice(0, MAIN_TRENDS_TOP_N).map((item, i) => {
-                          const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
-                          return (
-                            <li key={`${trendCountry}-${i}`}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedTrendItem(item)
-                                  setTrendPanelOpen(true)
-                                }}
-                                className="w-full flex items-center justify-between gap-2 text-sm text-left rounded-md px-2 py-1.5 hover:bg-muted-hover transition-colors border border-transparent"
-                              >
-                                <span className="min-w-0 flex-1 flex items-center gap-2">
-                                  <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-muted-hover text-xs font-medium text-muted-foreground tabular-nums">
-                                    {item.rank ?? i + 1}
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    {hasTranslation ? (
-                                      <>
-                                        <span className="font-medium text-foreground block truncate">
-                                          {item.title_ko}
-                                        </span>
-                                        <span className="text-muted-foreground text-xs block truncate">
-                                          {item.keyword}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className="font-medium text-foreground truncate">
-                                        {item.keyword}
-                                      </span>
-                                    )}
-                                  </span>
-                                </span>
-                                {item.search_volume != null && (
-                                  <span className="text-muted-foreground text-xs shrink-0 tabular-nums">
-                                    {item.search_volume}
-                                  </span>
-                                )}
-                              </button>
-                            </li>
-                          )
-                        })
-                      )}
-                    </ul>
-                  )}
-                </div>
-                <p className="text-muted-foreground text-xs mt-2 text-center text-warning/90">
-                  RSS 데이터는 실시간 업데이트 주기를 따릅니다.
-                </p>
-              </div>
+              </section>
             </div>
 
             <TrendDetailPanel

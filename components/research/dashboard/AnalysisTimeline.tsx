@@ -8,7 +8,7 @@ const STEPS = [
   { id: 'signal_layer', label: '시장 신호 수집' },
   { id: 'trend_analysis', label: '시장 성장 분석' },
   { id: 'competition_analysis', label: '경쟁 환경 매핑' },
-  { id: 'strategy_generation', label: '시장 리스크 평가' },
+  { id: 'strategy_generation', label: '리스크 평가' },
   { id: 'execution_layer', label: '제품 전략 도출' },
 ] as const
 
@@ -176,7 +176,7 @@ export function AnalysisTimeline({
       <div className="flex items-center gap-2 mb-6">
         <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          AI Analysis Timeline
+          AI 분석 타임라인
         </h2>
       </div>
       <div className="relative">
@@ -248,7 +248,7 @@ export function AnalysisTimeline({
                     {content.aiInsight && (
                       <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          AI Insight
+                          AI 인사이트
                         </p>
                         <p className="text-sm text-foreground leading-relaxed">
                           {content.aiInsight}
@@ -257,7 +257,7 @@ export function AnalysisTimeline({
                     )}
                     {content.signals && content.signals.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Signals</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">신호</p>
                         <ul className="space-y-1">
                           {content.signals.map((s, j) => (
                             <li

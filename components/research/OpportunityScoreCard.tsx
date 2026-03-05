@@ -4,11 +4,11 @@ import { Target, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const BREAKDOWN_LABELS: Record<string, string> = {
-  market_growth: 'Market Growth',
-  competition_pressure: 'Competition Pressure',
-  user_demand: 'User Demand',
-  product_differentiation: 'Product Differentiation',
-  market_timing: 'Market Timing',
+  market_growth: '시장 성장',
+  competition_pressure: '경쟁 압박',
+  user_demand: '사용자 수요',
+  product_differentiation: '제품 차별화',
+  market_timing: '시장 타이밍',
 }
 
 export interface OpportunityScoreCardProps {
@@ -48,7 +48,7 @@ export function OpportunityScoreCard({
           'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
           className
         )}
-        aria-label="Opportunity Score"
+        aria-label="시장 기회 점수"
       >
         <div className="p-6 sm:p-8">
           <div className="flex items-center gap-2 mb-6">
@@ -91,7 +91,7 @@ export function OpportunityScoreCard({
         <div className="flex items-center gap-2 mb-6">
           <Target className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Opportunity Score
+            시장 기회 점수
           </h2>
         </div>
 
@@ -114,7 +114,7 @@ export function OpportunityScoreCard({
         {breakdownItems.length > 0 && (
           <div className="mb-6">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-              Score Breakdown
+              점수 구성
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {breakdownItems.map(({ key, label, value }) => (
@@ -144,7 +144,7 @@ export function OpportunityScoreCard({
           <div className="rounded-lg border border-border/60 bg-muted/10 p-4 sm:p-5">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
               <ChevronRight className="h-4 w-4 text-primary" />
-              Why This Score
+              점수 산출 근거
             </h3>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
               {reasoning.trim()}

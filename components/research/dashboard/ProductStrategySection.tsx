@@ -33,7 +33,7 @@ export function ProductStrategySection({
           'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
           className
         )}
-        aria-label="Product Strategy"
+        aria-label="제품 전략 제안"
       >
         <div className="p-6 sm:p-8">
           <div className="h-4 w-36 rounded bg-muted/60 animate-pulse mb-6" />
@@ -61,7 +61,7 @@ export function ProductStrategySection({
         <div className="flex items-center gap-2 mb-6">
           <Lightbulb className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Product Strategy
+            제품 전략 제안
           </h2>
         </div>
 
@@ -77,7 +77,7 @@ export function ProductStrategySection({
           {hasOpportunities && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Market Opportunities
+                시장 기회
               </h3>
               <ul className="space-y-2">
                 {opportunities.slice(0, 5).map((opp, i) => (
@@ -93,7 +93,7 @@ export function ProductStrategySection({
           {hasConclusions && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Key Product Direction
+                핵심 제품 방향
               </h3>
               <ul className="space-y-2">
                 {keyConclusions.slice(0, 5).map((item, i) => (

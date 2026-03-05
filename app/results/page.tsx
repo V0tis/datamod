@@ -26,6 +26,7 @@ import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
+import { AIConfidenceCard } from '@/components/research/AIConfidenceCard'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
@@ -838,7 +839,7 @@ function ResultsContent() {
         {/* AI Product Strategy Report header */}
         <header className="pb-6 border-b border-border/60">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Market Analysis
+            시장
           </p>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground tracking-tight break-words">
             {currentKeyword}
@@ -871,6 +872,24 @@ function ResultsContent() {
             breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
             reasoning={displayResult?.key_metrics?.opportunity_score_reasoning ?? undefined}
             loading={loading && displayResult?.key_metrics?.opportunity_score == null}
+            className="mb-6"
+          />
+        )}
+
+        {/* AI Confidence — trust layer, below Opportunity Score */}
+        {displayResult && (
+          <AIConfidenceCard
+            score={(() => {
+              const km = displayResult?.key_metrics
+              const ar = displayResult?.analysis_results as { confidence?: number } | undefined
+              if (typeof km?.confidence_score === 'number') return Math.round(Math.min(100, Math.max(0, km.confidence_score)))
+              const c = ar?.confidence
+              if (typeof c === 'number') return c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, Math.max(0, c)))
+              const mc = consensusData?.metadata?.confidence
+              if (mc != null && typeof mc === 'number') return mc <= 1 ? Math.round(mc * 100) : Math.round(Math.min(100, Math.max(0, mc)))
+              return loading ? null : 75
+            })()}
+            loading={loading && displayResult?.key_metrics?.confidence_score == null && (displayResult?.analysis_results as { confidence?: number } | undefined)?.confidence == null}
             className="mb-6"
           />
         )}
