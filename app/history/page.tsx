@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Search, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, Loader2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const TARGET_LABELS: Record<string, string> = {
   product: '제품',
@@ -73,6 +74,9 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('all')
+  const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
   const [scoreFilter, setScoreFilter] = useState<ScoreFilterOption>('all')
   const [marketTypeFilter, setMarketTypeFilter] = useState<MarketTypeFilterOption>('all')
 
@@ -172,6 +176,51 @@ export default function HistoryPage() {
     router.push(href)
   }
 
+  const deleteRecord = useCallback(async (id: string) => {
+    setDeletingId(id)
+    try {
+      const res = await fetch('/api/research/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.status === 204) {
+        setRecords((prev) => prev.filter((r) => r.id !== id))
+        toast.success('삭제되었습니다.')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data?.error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    } finally {
+      setDeletingId(null)
+    }
+  }, [])
+
+  const handleClearAll = useCallback(async () => {
+    setClearingAll(true)
+    try {
+      const res = await fetch('/api/research/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteAll: true }),
+      })
+      if (res.status === 204) {
+        setRecords([])
+        setClearAllOpen(false)
+        toast.success('모든 분석 로그가 삭제되었습니다.')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data?.error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    } finally {
+      setClearingAll(false)
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto min-h-screen bg-background">
@@ -229,10 +278,61 @@ export default function HistoryPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto min-h-screen bg-background">
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold text-foreground tracking-tight">리서치 아카이브</h1>
-        <p className="text-muted-foreground text-xs mt-0.5">PM을 위한 분석 기록 보관소</p>
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground tracking-tight">리서치 아카이브</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">PM을 위한 분석 기록 보관소</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 text-destructive border-destructive/50 hover:bg-destructive/10"
+          onClick={() => setClearAllOpen(true)}
+        >
+          분석 로그 전체 삭제
+        </Button>
       </header>
+
+      {clearAllOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-all-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !clearingAll && setClearAllOpen(false)}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-5">
+            <h2 id="clear-all-title" className="font-semibold text-foreground mb-2">
+              모든 분석 로그를 삭제하시겠습니까?
+            </h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              삭제된 로그는 복구할 수 없습니다.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={clearingAll}
+                onClick={() => setClearAllOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={clearingAll}
+                onClick={handleClearAll}
+              >
+                {clearingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4 mb-6">
         {/* Search */}
@@ -356,8 +456,8 @@ export default function HistoryPage() {
                   Created {formatCreatedDate(record.updated_at)}
                 </p>
 
-                <div className="mt-4 pt-4 border-t border-border/60" onClick={(e) => e.stopPropagation()}>
-                  <Link href={resultsHref}>
+                <div className="mt-4 pt-4 border-t border-border/60 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Link href={resultsHref} className="flex-1 min-w-0">
                     <Button
                       size="sm"
                       variant="outline"
@@ -371,12 +471,29 @@ export default function HistoryPage() {
                         </>
                       ) : (
                         <>
-                          View Report
+                          View
                           <ChevronRight className="h-4 w-4 group-hover/btn:translate-x-0.5 transition-transform" />
                         </>
                       )}
                     </Button>
                   </Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-destructive border-destructive/50 hover:bg-destructive/10"
+                    disabled={deletingId === record.id}
+                    onClick={() => deleteRecord(record.id)}
+                    aria-label="삭제"
+                  >
+                    {deletingId === record.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </>
+                    )}
+                  </Button>
                 </div>
               </article>
             )

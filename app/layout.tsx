@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
 import { ErrorToastProvider } from "@/components/error-toast-provider";
+import { ApiKeyValidationProvider } from "@/components/api-key-validation-provider";
 
 export const metadata: Metadata = {
   title: "Rin-AI",
@@ -23,6 +24,7 @@ export default function RootLayout({
           <AuthProvider>
             <AppShell>{children}</AppShell>
             <ErrorToastProvider />
+            <ApiKeyValidationProvider />
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -169,7 +169,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** DELETE body: { id?: string, ids?: string[] } — delete research_history row(s) for current user. */
+/** DELETE body: { id?: string, ids?: string[], deleteAll?: boolean } — delete research_history row(s) for current user. */
 export async function DELETE(req: Request) {
   try {
     const supabase = await createClient()
@@ -177,20 +177,25 @@ export async function DELETE(req: Request) {
     if (!user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const body = await req.json().catch(() => ({})) as { id?: string; ids?: string[] }
-    const ids: string[] = Array.isArray(body?.ids)
-      ? body.ids.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-      : typeof body?.id === 'string' && body.id.trim()
-        ? [body.id.trim()]
-        : []
-    if (ids.length === 0) {
-      return NextResponse.json({ error: 'id or ids required' }, { status: 400 })
+    const body = await req.json().catch(() => ({})) as { id?: string; ids?: string[]; deleteAll?: boolean }
+    const deleteAll = body?.deleteAll === true
+    const ids: string[] = deleteAll
+      ? []
+      : Array.isArray(body?.ids)
+        ? body.ids.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        : typeof body?.id === 'string' && body.id.trim()
+          ? [body.id.trim()]
+          : []
+
+    if (!deleteAll && ids.length === 0) {
+      return NextResponse.json({ error: 'id, ids, or deleteAll required' }, { status: 400 })
     }
-    const { error } = await supabase
+
+    const query = supabase
       .from('research_history')
       .delete()
       .eq('user_id', user.id)
-      .in('id', ids)
+    const { error } = deleteAll ? await query : await query.in('id', ids)
 
     if (error) {
       console.error('[Research History] DELETE:', error)
