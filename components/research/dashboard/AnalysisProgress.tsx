@@ -4,11 +4,11 @@ import { Check, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PROGRESS_STEPS = [
-  { id: 'signals', label: 'Collecting market signals' },
-  { id: 'trends', label: 'Detecting trends' },
-  { id: 'risks', label: 'Evaluating risks' },
-  { id: 'strategy', label: 'Generating strategy' },
-  { id: 'action', label: 'Creating action plan' },
+  { id: 'signals', label: '시장 데이터 수집 중' },
+  { id: 'trends', label: '시장 트렌드 분석 중' },
+  { id: 'risks', label: '리스크 요인 분석 중' },
+  { id: 'strategy', label: '전략 도출 중' },
+  { id: 'action', label: '실행 액션 생성 중' },
 ] as const
 
 export interface AnalysisProgressProps {
@@ -50,7 +50,7 @@ export function AnalysisProgress({
       <div className="flex items-center gap-3 mb-6">
         <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
         <h2 className="text-base font-semibold text-foreground">
-          Analyzing Market...
+          시장 분석 진행 중
         </h2>
       </div>
       <ul className="space-y-3">
@@ -84,7 +84,7 @@ export function AnalysisProgress({
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 )}
                 {status === 'pending' && (
-                  <span className="text-xs font-medium">{i + 1}</span>
+                  <span className="text-xs font-medium" aria-hidden>○</span>
                 )}
               </span>
               <span

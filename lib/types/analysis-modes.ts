@@ -24,12 +24,22 @@ export type AnalysisModeConfig = {
   outputs: string[]
 }
 
+/** Product Strategy Engine - 5 layers */
+export const ENGINE_STAGE_IDS = [
+  'signal_layer',
+  'trend_analysis',
+  'competition_analysis',
+  'strategy_generation',
+  'execution_layer',
+] as const
+
 export const ANALYSIS_MODE_STEPS: Record<AnalysisMode, AnalysisModeStep[]> = {
   standard: [
-    { id: 'news', label: 'News Collection', description: '뉴스 수집' },
-    { id: 'pass1', label: 'Initial Analysis', description: '1차 분석' },
-    { id: 'pass2', label: 'Deep Analysis', description: '심층 분석' },
-    { id: 'creative', label: 'Insight Generation', description: '인사이트 생성' },
+    { id: 'signal_layer', label: '시장 신호 수집', description: '검색 트렌드, 뉴스, 스타트업 런칭, 펀딩 신호 수집' },
+    { id: 'trend_analysis', label: '시장 성장 신호 분석', description: '성장 패턴·신흥 트렌드 식별' },
+    { id: 'competition_analysis', label: '경쟁 환경 매핑', description: '경쟁사 식별·경쟁 지형도 작성' },
+    { id: 'strategy_generation', label: '시장 리스크 평가', description: '포화, 강자, 하락 신호 평가' },
+    { id: 'execution_layer', label: '제품 전략 도출', description: '시장 신호·분석 기반 제품 전략 생성' },
   ],
   quick: [
     { id: 'news', label: 'News Collection', description: '뉴스 수집' },

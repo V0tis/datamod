@@ -25,6 +25,7 @@ import { AnalysisQualityIndicator } from '@/components/research/analysis-quality
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
@@ -154,9 +155,9 @@ function ResultsContent() {
     keyword: storeKeyword,
     status,
     analysisStatus,
-    analysisMode,
     streamingState,
     newsList,
+    taskData,
     result,
     error,
     startStreamingResearch,
@@ -246,21 +247,70 @@ function ResultsContent() {
   const [historyLoadDone, setHistoryLoadDone] = useState(false)
   const [hasCachedResult, setHasCachedResult] = useState<boolean | null>(null)
 
+  /** 폴링: 백그라운드 분석 진행 상태 추적 (2초마다). 새 탭/새로고침 시 스트리밍 상태 없이 진행 확인 */
+  const [polledStatus, setPolledStatus] = useState<'pending' | 'running' | 'completed' | 'failed' | null>(null)
+  const [polledProgressStep, setPolledProgressStep] = useState(0)
+  const [polledError, setPolledError] = useState<string | null>(null)
+
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) {
       setHistoryLoadDone(true)
       setHasCachedResult(null)
+      setPolledStatus(null)
+      setPolledError(null)
       return
     }
     setHistoryLoadDone(false)
     setHasCachedResult(null)
+    setPolledStatus(null)
+    setPolledError(null)
     const countryCode = countryFromUrl
     loadFromHistory(k, countryCode).then((status) => {
       setHistoryLoadDone(true)
       setHasCachedResult(status === 'cached')
     })
   }, [keyword, storeKeyword, countryFromUrl, loadFromHistory])
+
+  // Poll analysis status when we have keyword but no result (detects background analysis on refresh/new tab)
+  useEffect(() => {
+    const k = (keyword ?? storeKeyword)?.trim()
+    const countryCode = countryFromUrl
+    if (!k || !historyLoadDone || displayResult?.reportId) return
+    if (polledStatus === 'completed' || polledStatus === 'failed') return
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/analysis/status?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryCode)}`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) return
+        const status = data.status as 'pending' | 'running' | 'completed' | 'failed'
+        const step = typeof data.progressStep === 'number' ? data.progressStep : 0
+        setPolledStatus(status)
+        setPolledProgressStep(step)
+        if (status === 'completed') {
+          await loadFromHistory(k, countryCode)
+        }
+        if (status === 'failed') {
+          setPolledError(data.error ?? '분석이 실패했습니다.')
+        }
+      } catch {
+        // ignore network errors, will retry
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 2000)
+    return () => clearInterval(interval)
+  }, [
+    keyword,
+    storeKeyword,
+    countryFromUrl,
+    historyLoadDone,
+    displayResult?.reportId,
+    polledStatus,
+    loadFromHistory,
+  ])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -309,9 +359,10 @@ function ResultsContent() {
       })
   }, [keyword, storeKeyword, newsDays])
 
-  const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
+  const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword
+  const showPolledError = polledStatus === 'failed'
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
     countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
@@ -783,20 +834,23 @@ function ResultsContent() {
         {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
           <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div id="pm-dashboard-top" className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 hover:bg-muted rin-reading reading-space-y-lg reading-text">
-        {/* Single primary context header. No stacked labels. */}
-        <header className="pb-4 border-b border-border/60">
-          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight break-words">
-            &quot;{currentKeyword}&quot;
+        <div id="pm-dashboard-top" className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
+        {/* AI Product Strategy Report header */}
+        <header className="pb-6 border-b border-border/60">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            Market Analysis
+          </p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground tracking-tight break-words">
+            {currentKeyword}
             {headerTitleKo && (
               <span className="ml-2 text-base font-normal text-muted-foreground" title="한국어 번역">
                 · {headerTitleKo}
               </span>
             )}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1.5">
-            {canonicalStatus === 'queued' || canonicalStatus === 'analyzing'
-              ? (currentTask?.progress ?? '분석 중')
+          <p className="text-muted-foreground text-sm mt-2">
+            {canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
+              ? (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다')
               : canonicalStatus === 'completed' && displayResult?.updated_at
                 ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
                 : canonicalStatus === 'failed'
@@ -804,6 +858,22 @@ function ResultsContent() {
                   : null}
           </p>
         </header>
+
+        {/* Opportunity Score - prominent at top (show when we have score, or loading during analysis) */}
+        {(displayResult?.key_metrics?.opportunity_score != null ||
+          (loading && displayResult)) && (
+          <OpportunityScoreCard
+            score={
+              typeof displayResult?.key_metrics?.opportunity_score === 'number'
+                ? displayResult.key_metrics.opportunity_score
+                : null
+            }
+            breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
+            reasoning={displayResult?.key_metrics?.opportunity_score_reasoning ?? undefined}
+            loading={loading && displayResult?.key_metrics?.opportunity_score == null}
+            className="mb-6"
+          />
+        )}
 
         {/* No cache + not analyzing: show Run Analysis CTA. Analysis only runs on explicit user click. */}
         {needsRunAction ? (
@@ -820,15 +890,19 @@ function ResultsContent() {
               Run Analysis
             </Button>
           </div>
-        ) : canonicalStatus === 'failed' ? (
+        ) : (canonicalStatus === 'failed' || showPolledError) ? (
           <div className="py-12 flex flex-col items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
             <h2 className="text-lg font-semibold text-foreground mb-2">Analysis Failed</h2>
             <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-              {displayError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
+              {displayError ?? polledError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
             </p>
             <Button
               variant="secondary"
-              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              onClick={() => {
+                setPolledStatus(null)
+                setPolledError(null)
+                startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+              }}
             >
               Retry
             </Button>
@@ -839,6 +913,9 @@ function ResultsContent() {
             result={displayResult}
             loading={loading}
             streamingState={streamingState}
+            polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : undefined}
+            newsList={newsList}
+            taskData={taskData}
             onPrint={printReportAsPdf}
             onSaveInsight={handleSaveInsightOpen}
             onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}

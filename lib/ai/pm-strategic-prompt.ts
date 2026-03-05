@@ -76,3 +76,150 @@ Mode: ${mode}
 
 Analyze the market. Return ONLY the JSON object. No markdown, no commentary.`
 }
+
+/** Task 2: Detect trend patterns from news */
+export const TASK_TRENDS_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: { "market_score": number 0-100, "summary": "2-3 sentences", "positive_signals": ["signal1","signal2"], "neutral_signals": ["signal1"] }
+All content in Korean.`
+
+export function buildTaskTrendsPrompt(keyword: string, newsTitles: string[]): string {
+  const block = newsTitles.length
+    ? `News headlines:\n${newsTitles.slice(0, 15).map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
+    : ''
+  return `${block}Keyword: ${keyword}
+Analyze trend patterns and growth signals from the news. Return ONLY the JSON object.`
+}
+
+/** Task 3: Analyze competition from trends */
+export const TASK_COMPETITION_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: { "competitive_landscape": [{ "name": "", "positioning": "" }], "market_structure": { "summary": "" } }
+All content in Korean.`
+
+export function buildTaskCompetitionPrompt(keyword: string, trendSummary: string): string {
+  return `Keyword: ${keyword}
+Trend summary: ${trendSummary}
+
+Identify competitors and competitive landscape. Return ONLY the JSON object.`
+}
+
+/** Task 4: Evaluate risks */
+export const TASK_RISKS_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: { "risk_signals": ["risk1","risk2"], "key_uncertainties": ["uncertainty1"] }
+All content in Korean.`
+
+export function buildTaskRisksPrompt(
+  keyword: string,
+  trendSummary: string,
+  competitionSummary: string
+): string {
+  return `Keyword: ${keyword}
+Trends: ${trendSummary}
+Competition: ${competitionSummary}
+
+Identify market risks and key uncertainties. Return ONLY the JSON object.`
+}
+
+/** Strategy Layer: opportunities, risks, strategy summary */
+export const STRATEGY_LAYER_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: {
+  "opportunities": ["opportunity1", "opportunity2"],
+  "risks": ["risk1", "risk2"],
+  "strategy_summary": "2-3 sentence PM-level strategy summary"
+}
+All content in Korean.`
+
+export function buildStrategyLayerPrompt(
+  keyword: string,
+  trendSummary: string,
+  competitionSummary: string
+): string {
+  return `Keyword: ${keyword}
+Trends: ${trendSummary}
+Competition: ${competitionSummary}
+
+Identify product opportunities, market risks, and a brief strategy summary. Return ONLY the JSON object.`
+}
+
+/** Execution Layer: product actions, feature ideas, GTM steps */
+export const EXECUTION_LAYER_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: {
+  "product_actions": [{ "action": "", "priority": "high|medium|low", "reasoning": "" }],
+  "feature_ideas": ["idea1", "idea2", "idea3"],
+  "go_to_market_steps": ["step1", "step2"]
+}
+All content in Korean. Be concrete and actionable.`
+
+export function buildExecutionLayerPrompt(
+  keyword: string,
+  strategySummary: string,
+  opportunitiesSummary: string,
+  risksSummary: string
+): string {
+  return `Keyword: ${keyword}
+Strategy: ${strategySummary}
+Opportunities: ${opportunitiesSummary}
+Risks: ${risksSummary}
+
+Generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
+}
+
+/** Opportunity Score - PM market attractiveness (0-100) with breakdown and reasoning */
+export const OPPORTUNITY_SCORE_SYSTEM = `You are a product strategy analyst. Given market analysis, calculate an Opportunity Score (0-100) representing how attractive the market/product opportunity is for a PM.
+
+OUTPUT: Return ONLY valid JSON. No extra text. All content in Korean.
+Format: {
+  "opportunity_score": number (0-100),
+  "market_growth": number (0-100),
+  "competition_pressure": number (0-100, lower = less pressure = better opportunity),
+  "user_demand": number (0-100),
+  "product_differentiation": number (0-100),
+  "market_timing": number (0-100),
+  "score_reasoning": "2-4 sentences explaining why this score. Reference: market signals, trend patterns, competition level. Be transparent."
+}`
+
+export function buildOpportunityScorePrompt(
+  keyword: string,
+  trendSummary: string,
+  competitionSummary: string,
+  opportunitiesSummary: string,
+  risksSummary: string
+): string {
+  return `Keyword: ${keyword}
+Trends: ${trendSummary}
+Competition: ${competitionSummary}
+Opportunities: ${opportunitiesSummary}
+Risks: ${risksSummary}
+
+Calculate the Opportunity Score and breakdown. Return ONLY the JSON object.`
+}
+
+/** Task 5: Generate strategy (legacy - strategic_actions) */
+export const TASK_STRATEGY_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: { "strategic_actions": { "immediate": [{ "action": "", "priority": "high|medium|low", "expected_impact": "" }], "mid_term": [], "risk_mitigation": [] } }
+All content in Korean.`
+
+export function buildTaskStrategyPrompt(
+  keyword: string,
+  trendSummary: string,
+  competitionSummary: string,
+  risksSummary: string
+): string {
+  return `Keyword: ${keyword}
+Trends: ${trendSummary}
+Competition: ${competitionSummary}
+Risks: ${risksSummary}
+
+Generate PM-focused strategic actions. Return ONLY the JSON object.`
+}

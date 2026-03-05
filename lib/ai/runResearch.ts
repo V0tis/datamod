@@ -8,8 +8,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { generateText, runTabAnalysis } from './unified-ai-service'
 import {
-  STRATEGIC_FULL_SYSTEM,
-  buildStrategicPrompt,
+  OPPORTUNITY_SCORE_SYSTEM,
+  buildOpportunityScorePrompt,
+  TASK_TRENDS_SYSTEM,
+  buildTaskTrendsPrompt,
+  TASK_COMPETITION_SYSTEM,
+  buildTaskCompetitionPrompt,
+  STRATEGY_LAYER_SYSTEM,
+  buildStrategyLayerPrompt,
+  EXECUTION_LAYER_SYSTEM,
+  buildExecutionLayerPrompt,
 } from './pm-strategic-prompt'
 import { extractJsonFromText } from '@/lib/extract-json'
 import { trackUsage } from '@/lib/usage'
@@ -46,7 +54,24 @@ export type Pass2Result = {
   signals?: { pos?: string[]; neu?: string[]; neg?: string[] }
 }
 
+/** Product Strategy Engine stage IDs - layered analysis */
+export type AnalysisTaskId =
+  | 'signal_layer'
+  | 'trend_analysis'
+  | 'competition_analysis'
+  | 'strategy_generation'
+  | 'execution_layer'
+
+export type TaskCompletedPayload = {
+  signal_layer?: { signals: string[]; news_activity?: Array<{ title: string; url?: string; publisher?: string }> }
+  trend_analysis?: { trend_summary: string; market_temperature_score: number; growth_signals?: string[] }
+  competition_analysis?: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
+  strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string }
+  execution_layer?: { product_actions: Array<{ action: string; priority?: string; reasoning?: string }>; feature_ideas?: string[]; go_to_market_steps?: string[] }
+}
+
 export type ResearchStreamEvent =
+  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed'; data?: TaskCompletedPayload[AnalysisTaskId] }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
@@ -491,65 +516,347 @@ export async function* runResearch(
     return
   }
 
-  // Step 1: Fetch news
+  const updateProgress = async (step: number, status: 'analyzing' | 'completed' | 'failed') => {
+    await supabase
+      .from('research_history')
+      .upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          analysis_status: status,
+          progress_step: status === 'completed' ? null : step,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+  }
+
+  await updateProgress(0, 'analyzing')
+
+  // Layer 1: Signal Layer - collect market signals
+  yield { type: 'task', task: 'signal_layer', status: 'running' }
   let news: NewsItem[]
   try {
     news = await fetchNewsTitles(keyword)
+    const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
+    const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
+    await updateProgress(1, 'analyzing')
+    yield {
+      type: 'task',
+      task: 'signal_layer',
+      status: 'completed',
+      data: {
+        signals: signalSources,
+        news_activity: news.map((n) => ({ title: n.title, url: n.url, publisher: n.publisher })),
+      },
+    }
     yield { type: 'news', items: news }
   } catch (err) {
+    await updateProgress(0, 'failed')
+    yield { type: 'error', message: '시장 신호 수집에 실패했습니다.', step: 'signal_layer' }
+    return
+  }
+
+  const newsTitles = news.map((n) => n.title)
+
+  // Layer 2: Analysis Layer - Trend detection
+  yield { type: 'task', task: 'trend_analysis', status: 'running' }
+  let trendData: { summary: string; market_score: number; positive_signals: string[]; neutral_signals: string[] }
+  try {
+    const trendText = await generateText({
+      apiKey: geminiKey,
+      prompt: buildTaskTrendsPrompt(keyword, newsTitles),
+      systemInstruction: TASK_TRENDS_SYSTEM,
+      maxOutputTokens: 800,
+      model: GEMINI_MODEL,
+    })
+    await trackUsage('gemini')
+    const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
+      typeof trendText === 'string' ? trendText : ''
+    )
+    if (!parsed || (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string')) {
+      throw new Error('Invalid trend response')
+    }
+    trendData = {
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
+      market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
+      positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
+      neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
+    }
+    await updateProgress(2, 'analyzing')
+    yield {
+      type: 'task',
+      task: 'trend_analysis',
+      status: 'completed',
+      data: {
+        trend_summary: trendData.summary,
+        market_temperature_score: trendData.market_score,
+        growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
+      },
+    }
+    yield {
+      type: 'pass1',
+      summary: trendData.summary,
+      temperature: trendData.market_score,
+      insights: trendData.positive_signals,
+    }
+  } catch (err) {
+    await updateProgress(2, 'failed')
+    yield { type: 'error', message: '트렌드 분석 중 오류가 발생했습니다.', step: 'trend_analysis' }
+    return
+  }
+
+  // Layer 3: Analysis Layer - Competition mapping
+  yield { type: 'task', task: 'competition_analysis', status: 'running' }
+  let competitionData: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
+  try {
+    const compText = await generateText({
+      apiKey: geminiKey,
+      prompt: buildTaskCompetitionPrompt(keyword, trendData.summary),
+      systemInstruction: TASK_COMPETITION_SYSTEM,
+      maxOutputTokens: 600,
+      model: GEMINI_MODEL,
+    })
+    await trackUsage('gemini')
+    const parsed = parseJson<{
+      competitive_landscape?: Array<{ name?: string; positioning?: string }>
+      market_structure?: { summary?: string }
+    }>(typeof compText === 'string' ? compText : '')
+    const landscape = Array.isArray(parsed?.competitive_landscape)
+      ? parsed.competitive_landscape
+          .filter((c): c is { name: string; positioning?: string } => typeof c?.name === 'string')
+          .slice(0, 10)
+      : []
+    competitionData = {
+      competitive_landscape: landscape,
+      market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
+    }
+    await updateProgress(3, 'analyzing')
+    yield {
+      type: 'task',
+      task: 'competition_analysis',
+      status: 'completed',
+      data: competitionData,
+    }
+  } catch (err) {
+    await updateProgress(3, 'failed')
     yield {
       type: 'error',
-      message: '뉴스 수집에 실패했습니다.',
-      step: 'news',
+      message: '경쟁 환경 분석 중 오류가 발생했습니다.',
+      step: 'competition_analysis',
     }
     return
   }
 
-  // Step 2 & 3: Unified strategic analysis (single pass)
-  let pass1: Pass1Result
-  let structured: StructuredAnalysisFields
-  let fullSummary: InitialResearchSummary
+  const competitionSummary = competitionData.competitive_landscape
+    .map((c) => (c.positioning ? `${c.name}: ${c.positioning}` : c.name))
+    .join('. ') || competitionData.market_structure || ''
+
+  // Layer 4: Strategy Layer - opportunities, risks, strategy summary
+  yield { type: 'task', task: 'strategy_generation', status: 'running' }
+  let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
   try {
-    const newsTitles = news.map((n) => n.title)
-    const strategicPrompt = buildStrategicPrompt(keyword, 'standard', newsTitles)
-    const strategicText = await generateText({
+    const stratText = await generateText({
       apiKey: geminiKey,
-      prompt: strategicPrompt,
-      systemInstruction: STRATEGIC_FULL_SYSTEM,
-      maxOutputTokens: 2500,
+      prompt: buildStrategyLayerPrompt(keyword, trendData.summary, competitionSummary),
+      systemInstruction: STRATEGY_LAYER_SYSTEM,
+      maxOutputTokens: 600,
       model: GEMINI_MODEL,
     })
     await trackUsage('gemini')
-
-    const strategic = parseStrategicResponse(typeof strategicText === 'string' ? strategicText : '')
-    if (!strategic) {
-      yield {
-        type: 'error',
-        message: '분석 결과 형식이 올바르지 않아요. 다시 시도해 주세요.',
-        step: 'pass1',
-      }
-      return
+    const parsed = parseJson<{ opportunities?: string[]; risks?: string[]; strategy_summary?: string }>(
+      typeof stratText === 'string' ? stratText : ''
+    )
+    strategyData = {
+      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : trendData.positive_signals,
+      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : [],
+      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
     }
-
-    const merged = buildStructuredFromStrategic(strategic)
-    pass1 = merged.pass1
-    fullSummary = merged.summary
-    structured = merged.structured
-
+    await updateProgress(4, 'analyzing')
     yield {
-      type: 'pass1',
-      summary: pass1.summary,
-      temperature: pass1.temperature,
-      insights: pass1.insights,
+      type: 'task',
+      task: 'strategy_generation',
+      status: 'completed',
+      data: strategyData,
     }
-    yield { type: 'pass2', structured }
   } catch (err) {
-    yield {
-      type: 'error',
-      message: 'AI 분석 중 오류가 발생했습니다.',
-      step: 'pass1',
-    }
+    await updateProgress(4, 'failed')
+    yield { type: 'error', message: '전략 생성 중 오류가 발생했습니다.', step: 'strategy_generation' }
     return
+  }
+
+  const strategyContext = [strategyData.strategy_summary, strategyData.opportunities.join('. '), strategyData.risks.join('. ')].filter(Boolean).join('\n')
+
+  // Layer 5: Execution Layer - product actions, feature ideas, GTM steps
+  yield { type: 'task', task: 'execution_layer', status: 'running' }
+  let executionData: {
+    product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
+    feature_ideas: string[]
+    go_to_market_steps: string[]
+  }
+  try {
+    const execText = await generateText({
+      apiKey: geminiKey,
+      prompt: buildExecutionLayerPrompt(
+        keyword,
+        strategyData.strategy_summary,
+        strategyData.opportunities.join('. '),
+        strategyData.risks.join('. ')
+      ),
+      systemInstruction: EXECUTION_LAYER_SYSTEM,
+      maxOutputTokens: 800,
+      model: GEMINI_MODEL,
+    })
+    await trackUsage('gemini')
+    const parsed = parseJson<{
+      product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
+      feature_ideas?: string[]
+      go_to_market_steps?: string[]
+    }>(typeof execText === 'string' ? execText : '')
+    const actions = Array.isArray(parsed?.product_actions)
+      ? parsed.product_actions
+          .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
+          .map((a) => ({ action: (a as { action: string }).action, priority: a.priority, reasoning: a.reasoning }))
+      : []
+    executionData = {
+      product_actions: actions,
+      feature_ideas: Array.isArray(parsed?.feature_ideas) ? parsed.feature_ideas.filter((s): s is string => typeof s === 'string') : [],
+      go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
+    }
+    await updateProgress(5, 'analyzing')
+    yield {
+      type: 'task',
+      task: 'execution_layer',
+      status: 'completed',
+      data: executionData,
+    }
+  } catch (err) {
+    executionData = {
+      product_actions: [],
+      feature_ideas: [],
+      go_to_market_steps: [],
+    }
+  }
+
+  const pos = trendData.positive_signals
+  const neu = trendData.neutral_signals
+  const neg = strategyData.risks
+  const allActions: StructuredRecommendedAction[] = executionData.product_actions.map((a) => ({
+    title: a.action,
+    reasoning: a.reasoning,
+    urgency_level: (a.priority === 'high' || a.priority === 'medium' ? a.priority : 'medium') as 'low' | 'medium' | 'high',
+  }))
+
+  const keyConclusions = [
+    ...allActions.slice(0, 3).map((a) => a.title),
+    ...executionData.feature_ideas.slice(0, 2),
+    ...executionData.go_to_market_steps.slice(0, 2),
+  ].filter(Boolean)
+
+  const fullSummary: InitialResearchSummary = {
+    marketNews: pos.slice(0, 5),
+    painPoints: neg.slice(0, 5),
+    competitorTrends: competitionSummary,
+    sentiment: trendData.market_score,
+    publicReactionTrends: [...pos, ...neu, ...neg].join('. ').slice(0, 500),
+    chartData: defaultChartData(),
+    articleSummaries: [],
+    keyConclusions: keyConclusions.slice(0, 5),
+  }
+
+  const structured: StructuredAnalysisFields = {
+    market_temperature_score: trendData.market_score,
+    summary_insights: strategyData.strategy_summary,
+    facts: pos.length ? pos : undefined,
+    hypotheses: strategyData.risks.slice(0, 3),
+    inferences: neg.length ? neg : undefined,
+    positive_signals: pos.length ? pos : undefined,
+    neutral_signals: neu.length ? neu : undefined,
+    negative_risks: neg.length ? neg : undefined,
+    pm_actions: {
+      recommended_actions: allActions,
+      monitoring_points: strategyData.risks,
+      decision_risks: neg,
+    },
+    strategic_actions: {
+      immediate: executionData.product_actions.filter((a) => a.priority === 'high').map((a) => ({ action: a.action, priority: 'high' as const, expected_impact: a.reasoning })),
+      mid_term: executionData.product_actions.filter((a) => a.priority === 'medium').map((a) => ({ action: a.action, priority: 'medium' as const, expected_impact: a.reasoning })),
+      risk_mitigation: [],
+    },
+    competitive_landscape: competitionData.competitive_landscape.map((c) => ({
+      name: c.name,
+      positioning: c.positioning,
+      strength: undefined,
+      weakness: undefined,
+    })),
+    market_structure: competitionData.market_structure
+      ? { competition_density: undefined, summary: competitionData.market_structure }
+      : undefined,
+  }
+
+  yield { type: 'pass2', structured }
+
+  // Opportunity Score - PM market attractiveness
+  let opportunityScoreData: {
+    opportunity_score: number
+    market_growth: number
+    competition_pressure: number
+    user_demand: number
+    product_differentiation: number
+    market_timing: number
+    score_reasoning: string
+  } | null = null
+  try {
+    const scoreText = await generateText({
+      apiKey: geminiKey,
+      prompt: buildOpportunityScorePrompt(
+        keyword,
+        trendData.summary,
+        competitionSummary,
+        strategyData.opportunities.join('. '),
+        strategyData.risks.join('. ')
+      ),
+      systemInstruction: OPPORTUNITY_SCORE_SYSTEM,
+      maxOutputTokens: 500,
+      model: GEMINI_MODEL,
+    })
+    await trackUsage('gemini')
+    const parsed = parseJson<{
+      opportunity_score?: number
+      market_growth?: number
+      competition_pressure?: number
+      user_demand?: number
+      product_differentiation?: number
+      market_timing?: number
+      score_reasoning?: string
+    }>(typeof scoreText === 'string' ? scoreText : '')
+    if (parsed && typeof parsed.opportunity_score === 'number') {
+      const clamp = (n: number) => Math.min(100, Math.max(0, n))
+      opportunityScoreData = {
+        opportunity_score: clamp(parsed.opportunity_score),
+        market_growth: clamp(typeof parsed.market_growth === 'number' ? parsed.market_growth : 50),
+        competition_pressure: clamp(typeof parsed.competition_pressure === 'number' ? parsed.competition_pressure : 50),
+        user_demand: clamp(typeof parsed.user_demand === 'number' ? parsed.user_demand : 50),
+        product_differentiation: clamp(typeof parsed.product_differentiation === 'number' ? parsed.product_differentiation : 50),
+        market_timing: clamp(typeof parsed.market_timing === 'number' ? parsed.market_timing : 50),
+        score_reasoning: typeof parsed.score_reasoning === 'string' ? parsed.score_reasoning : '',
+      }
+    }
+  } catch {
+    /* recoverable */
+  }
+
+  if (opportunityScoreData) {
+    structured.opportunity_score = opportunityScoreData.opportunity_score
+    structured.opportunity_score_breakdown = {
+      market_growth: opportunityScoreData.market_growth,
+      competition_pressure: opportunityScoreData.competition_pressure,
+      user_demand: opportunityScoreData.user_demand,
+      product_differentiation: opportunityScoreData.product_differentiation,
+      market_timing: opportunityScoreData.market_timing,
+    }
+    structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
   }
 
   // Step 4: Creative analysis
@@ -573,6 +880,7 @@ export async function* runResearch(
 
       creativeGroq = creative.groqText
       creativeGemini = creative.geminiText
+      await updateProgress(5, 'analyzing')
       yield { type: 'creative', groqText: creativeGroq, geminiText: creativeGemini }
     }
   } catch (err) {
@@ -620,6 +928,7 @@ export async function* runResearch(
         report_id: reportId,
         key_metrics: keyMetrics,
         analysis_status: 'completed',
+        progress_step: null,
         updated_at: new Date().toISOString(),
       }
       if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
@@ -662,6 +971,7 @@ export async function* runResearch(
       await supabase.from('reports').update({ content: fullSummary }).eq('id', reportId)
     }
   } catch (err) {
+    await updateProgress(5, 'failed')
     yield {
       type: 'error',
       message: '리포트 저장 중 오류가 발생했습니다.',

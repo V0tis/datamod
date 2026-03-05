@@ -51,6 +51,16 @@ export type StructuredAnalysisFields = {
   competitive_landscape?: Array<{ name?: string; positioning?: string; strength?: string; weakness?: string }>
   market_structure?: { competition_density?: string; summary?: string }
   market_phase?: string
+  /** Opportunity Score (0-100) - PM market attractiveness */
+  opportunity_score?: number
+  opportunity_score_breakdown?: {
+    market_growth?: number
+    competition_pressure?: number
+    user_demand?: number
+    product_differentiation?: number
+    market_timing?: number
+  }
+  opportunity_score_reasoning?: string
   strategic_actions?: {
     immediate?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>

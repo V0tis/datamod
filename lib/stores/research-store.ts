@@ -81,6 +81,15 @@ export interface ResearchResponse {
     market_temperature_score?: number
     confidence_score?: number
     analysis_target?: string
+    opportunity_score?: number
+    opportunity_score_breakdown?: {
+      market_growth?: number
+      competition_pressure?: number
+      user_demand?: number
+      product_differentiation?: number
+      market_timing?: number
+    }
+    opportunity_score_reasoning?: string
     summary_insights?: string
     pm_actions?: {
       recommended_actions?: Array<{ title: string; reasoning?: string; urgency_level?: 'low' | 'medium' | 'high'; related_risk?: string }>
@@ -221,6 +230,8 @@ interface ResearchState {
   activeJobId: string | null
   /** Last successful report for recovery on error */
   lastSuccessfulReport: ResearchResponse | null
+  /** Per-task partial data from analysis console (task ID -> data) */
+  taskData: Partial<Record<string, unknown>>
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -348,6 +359,8 @@ interface ResearchStore extends ResearchState {
   setStreamingState: (state: StreamingState) => void
   /** Update step progress (internal use) */
   setStepProgress: (currentStep: number, stepId: string) => void
+  /** Set task data (internal use) */
+  setTaskData: (taskId: string, data: unknown) => void
   /** Check if analysis is currently running */
   isAnalyzingNow: () => boolean
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
@@ -391,6 +404,7 @@ const initialState: ResearchState = {
   jobOrder: [],
   activeJobId: null,
   lastSuccessfulReport: null,
+  taskData: {},
 }
 
 export const useResearchStore = create<ResearchStore>()(
@@ -428,6 +442,12 @@ export const useResearchStore = create<ResearchStore>()(
           currentStep,
           streamingState: createStreamingState(mode, currentStep, stepId),
         })
+      },
+
+      setTaskData: (taskId: string, data: unknown) => {
+        set((s) => ({
+          taskData: { ...s.taskData, [taskId]: data },
+        }))
       },
 
       isAnalyzingNow: () => {
@@ -625,7 +645,7 @@ export const useResearchStore = create<ResearchStore>()(
           status: 'loading',
           analysisStatus: 'analyzing',
           analysisMode: mode,
-          streamingState: createRunningState(mode, 0, steps[0]?.id ?? 'news'),
+          streamingState: createRunningState(mode, 0, steps[0]?.id ?? 'signal_layer'),
           currentStep: 0,
           totalSteps: getStepCount(mode),
           newsList: [],
@@ -636,6 +656,7 @@ export const useResearchStore = create<ResearchStore>()(
           insightsSection: null,
           error: null,
           insights: null,
+          taskData: {},
         })
 
         try {
@@ -692,12 +713,17 @@ export const useResearchStore = create<ResearchStore>()(
           const applyUpdate = get().applyStreamingUpdate
           const setStepProgress = get().setStepProgress
 
-          // Map event types to step indices
+          // Product Strategy Engine - 5 layers
           const stepMap: Record<string, number> = {
+            signal_layer: 0,
             news: 0,
+            trend_analysis: 1,
             pass1: 1,
-            pass2: 2,
-            creative: 3,
+            competition_analysis: 2,
+            strategy_generation: 3,
+            execution_layer: 4,
+            pass2: 4,
+            creative: 4,
           }
 
           while (!streamEnded) {
@@ -746,8 +772,25 @@ export const useResearchStore = create<ResearchStore>()(
                 }
                 const type = event.type
 
-                // Update step progress
-                if (type in stepMap) {
+                // Handle task events (AI Analysis Console)
+                if (type === 'task') {
+                  const ev = event as { task?: string; status?: string; data?: unknown }
+                  const task = ev.task
+                  const status = ev.status
+                  if (task && status === 'completed') {
+                    if (task in stepMap) {
+                      const stepIdx = stepMap[task]
+                      setStepProgress(stepIdx, task)
+                      lastSuccessfulStep = stepIdx
+                    }
+                    if (ev.data != null) {
+                      get().setTaskData(task, ev.data)
+                    }
+                  }
+                }
+
+                // Update step progress for non-task events
+                if (type !== 'task' && type in stepMap) {
                   const stepIdx = stepMap[type]
                   setStepProgress(stepIdx, type)
                   lastSuccessfulStep = stepIdx

@@ -1,16 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { FileDown, RefreshCw, Loader2, Bookmark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { MarketSnapshot } from './dashboard/MarketSnapshot'
-import { MarketDrivers } from './dashboard/MarketDrivers'
-import { MarketSignals } from './dashboard/MarketSignals'
-import { RisksPanel } from './dashboard/RisksPanel'
-import { OpportunitiesPanel } from './dashboard/OpportunitiesPanel'
-import { ActionPlanTimeline } from './dashboard/ActionPlanTimeline'
-import { AnalysisProgress, STREAM_STEP_MAP } from './dashboard/AnalysisProgress'
-import { cn } from '@/lib/utils'
+import { AnalysisTimeline } from './dashboard/AnalysisTimeline'
+import { ProductStrategySection } from './dashboard/ProductStrategySection'
+import { PMActionPlanSection } from './dashboard/PMActionPlanSection'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import type { StreamingState } from '@/lib/types/analysis-modes'
 
@@ -36,6 +30,12 @@ export interface PMDecisionDashboardProps {
   result: ResearchResponse | null
   loading: boolean
   streamingState: StreamingState
+  /** 폴링에서 받은 진행 단계 (0-based). 스트리밍 없이 새 탭/새로고침 시 사용 */
+  polledProgressStep?: number
+  /** 시장 데이터 수집 결과 (타임라인 Step 1용) */
+  newsList?: Array<{ title?: string; url?: string; publisher?: string }>
+  /** Per-task partial data from backend (AI Analysis Console) */
+  taskData?: Partial<Record<string, unknown>>
   onPrint?: () => void
   onSaveInsight?: () => void
   onReanalyze?: () => void
@@ -43,47 +43,20 @@ export interface PMDecisionDashboardProps {
   reanalyzing?: boolean
 }
 
-function deriveTrend(score: number | null): 'rising' | 'stable' | 'declining' {
-  if (score == null) return 'stable'
-  if (score > 55) return 'rising'
-  if (score < 45) return 'declining'
-  return 'stable'
-}
-
 export function PMDecisionDashboard({
   keyword,
   result,
   loading,
   streamingState,
+  polledProgressStep,
+  newsList = [],
+  taskData = {},
   onPrint,
   onSaveInsight,
   onReanalyze,
   reanalyzing = false,
 }: PMDecisionDashboardProps) {
-  const [revealedSections, setRevealedSections] = useState<Set<string>>(new Set())
-
   const km = (result?.key_metrics ?? {}) as KeyMetricsWithStrategic
-  const score =
-    km.market_temperature_score ??
-    km.sentiment ??
-    result?.sentiment ??
-    null
-  const trend = deriveTrend(typeof score === 'number' ? score : null)
-  const signalCount =
-    (km.positive_signals?.length ?? 0) +
-    (km.neutral_signals?.length ?? 0) +
-    (km.negative_risks?.length ?? 0)
-  const confidence =
-    typeof km.confidence_score === 'number'
-      ? Math.round(km.confidence_score * 100)
-      : result?.analysis_results?.confidence ?? null
-
-  const drivers: string[] = (km.positive_signals ?? result?.marketNews ?? [])
-    .slice(0, 3)
-    .filter(Boolean)
-
-  const risks: string[] = km.negative_risks ?? result?.painPoints ?? []
-
   const strategicActions = km.strategic_actions
   const actionPhases = (() => {
     const phases: Array<{ week: string; items: string[] }> = []
@@ -110,194 +83,58 @@ export function PMDecisionDashboard({
     return phases
   })()
 
-  const opportunities = (() => {
-    const out: Array<{ title: string; description?: string; reason?: string }> = []
-    const imm = strategicActions?.immediate ?? []
-    const mid = strategicActions?.mid_term ?? []
-    for (const a of [...imm, ...mid].slice(0, 3)) {
-      if (typeof a?.action === 'string' && a.action.trim())
-        out.push({
-          title: a.action.trim(),
-          description: a.expected_impact,
-        })
-    }
-    if (out.length === 0) {
-      const rec = km.pm_actions?.recommended_actions ?? []
-      for (const a of rec.slice(0, 3)) {
-        if (typeof a?.title === 'string' && a.title.trim())
-          out.push({
-            title: a.title,
-            description: a.reasoning,
-          })
-      }
-    }
-    return out
-  })()
-
-  const signals = (() => {
-    const items: Array<{
-      label: string
-      value?: string
-      trend: 'rising' | 'stable' | 'declining'
-      status?: 'positive' | 'neutral' | 'negative'
-    }> = []
-    const pos = km.positive_signals ?? []
-    const neu = km.neutral_signals ?? []
-    const neg = km.negative_risks ?? []
-    pos.slice(0, 2).forEach((s) =>
-      items.push({ label: s, trend: 'rising', status: 'positive' })
-    )
-    neu.slice(0, 2).forEach((s) =>
-      items.push({ label: s, trend: 'stable', status: 'neutral' })
-    )
-    neg.slice(0, 2).forEach((s) =>
-      items.push({ label: s, trend: 'declining', status: 'negative' })
-    )
-    if (items.length === 0) {
-      if (result?.marketNews?.length)
-        items.push({ label: '시장 뉴스', trend: 'rising', status: 'positive' })
-      if (result?.painPoints?.length)
-        items.push({ label: '페인포인트', trend: 'declining', status: 'negative' })
-      if (result?.competitorTrends)
-        items.push({ label: '경쟁사 동향', trend: 'stable', status: 'neutral' })
-    }
-    return items
-  })()
+  const productStrategySummary = km.summary_insights ?? result?.keyConclusions?.[0] ?? ''
+  const productStrategyOpportunities =
+    km.positive_signals ?? result?.marketNews ?? []
+  const productStrategyKeyConclusions =
+    result?.keyConclusions ?? (result?.key_metrics?.keyConclusions as string[] | undefined) ?? []
 
   const currentStep =
-    streamingState.status === 'running' || streamingState.status === 'streaming'
-      ? streamingState.currentStep
-      : streamingState.status === 'completed'
-        ? 4
-        : -1
+    polledProgressStep != null && loading
+      ? polledProgressStep
+      : streamingState.status === 'running' || streamingState.status === 'streaming'
+        ? streamingState.currentStep
+        : streamingState.status === 'completed'
+          ? 4
+          : -1
   const stepId =
     streamingState.status === 'running' || streamingState.status === 'streaming'
       ? streamingState.stepId
       : undefined
-
-  useEffect(() => {
-    if (loading) {
-      const mapped =
-        stepId && STREAM_STEP_MAP[stepId] != null
-          ? STREAM_STEP_MAP[stepId]
-          : currentStep
-      const sections = new Set<string>()
-      if (mapped >= 0) sections.add('snapshot')
-      if (mapped >= 1) sections.add('drivers')
-      if (mapped >= 2) {
-        sections.add('signals')
-        sections.add('risks')
-        sections.add('opportunities')
-        sections.add('actionPlan')
-      }
-      setRevealedSections(sections)
-    } else {
-      setRevealedSections(
-        new Set([
-          'snapshot',
-          'drivers',
-          'signals',
-          'risks',
-          'opportunities',
-          'actionPlan',
-        ])
-      )
-    }
-  }, [loading, currentStep, stepId])
 
   const isAnalyzing =
     loading ||
     streamingState.status === 'running' ||
     streamingState.status === 'streaming'
 
-  const showSection = (id: string) =>
-    revealedSections.has(id) || !isAnalyzing
+  const showTimeline = (result != null || isAnalyzing) && Boolean(keyword?.trim())
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {isAnalyzing && (
-        <AnalysisProgress currentStep={currentStep} streamingStepId={stepId} />
+      {/* AI Analysis Timeline - show during analysis or when result exists */}
+      {showTimeline && (
+        <AnalysisTimeline
+          currentStep={currentStep}
+          streamingStepId={stepId}
+          taskData={taskData}
+          newsList={newsList}
+          result={result}
+        />
       )}
 
-      {/* Top: MarketSnapshot */}
-      <div
-        className={cn(
-          'transition-all duration-500',
-          showSection('snapshot')
-            ? 'opacity-100 translate-y-0'
-            : 'opacity-0 translate-y-4 pointer-events-none h-0 overflow-hidden'
-        )}
-      >
-        <MarketSnapshot
-          score={typeof score === 'number' ? score : null}
-          trend={trend}
-          signalCount={signalCount}
-          confidence={confidence}
-          loading={loading && !result?.reportId}
-        />
-      </div>
+      {/* Product Strategy */}
+      <ProductStrategySection
+        summary={productStrategySummary}
+        opportunities={productStrategyOpportunities}
+        keyConclusions={productStrategyKeyConclusions}
+        loading={loading && !productStrategySummary && productStrategyOpportunities.length === 0}
+      />
 
-      {/* Two-column layout */}
-      <div
-        className={cn(
-          'transition-all duration-500',
-          showSection('drivers') ||
-            showSection('signals') ||
-            showSection('risks') ||
-            showSection('opportunities')
-            ? 'opacity-100 translate-y-0'
-            : 'opacity-0 translate-y-4 pointer-events-none h-0 overflow-hidden'
-        )}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left column */}
-          <div className="space-y-6">
-            {showSection('drivers') && (
-              <MarketDrivers
-                drivers={drivers}
-                loading={loading && drivers.length === 0}
-              />
-            )}
-            {showSection('risks') && (
-              <RisksPanel
-                risks={risks}
-                loading={loading && risks.length === 0}
-              />
-            )}
-          </div>
-
-          {/* Right column */}
-          <div className="space-y-6">
-            {showSection('signals') && (
-              <MarketSignals
-                signals={signals}
-                loading={loading && signals.length === 0}
-              />
-            )}
-            {showSection('opportunities') && (
-              <OpportunitiesPanel
-                opportunities={opportunities}
-                loading={loading && opportunities.length === 0}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Full width: ActionPlanTimeline */}
-      <div
-        className={cn(
-          'transition-all duration-500',
-          showSection('actionPlan')
-            ? 'opacity-100 translate-y-0'
-            : 'opacity-0 translate-y-4 pointer-events-none h-0 overflow-hidden'
-        )}
-      >
-        <ActionPlanTimeline
-          phases={actionPhases}
-          loading={loading && actionPhases.length === 0}
-        />
-      </div>
+      {/* PM Action Plan */}
+      <PMActionPlanSection
+        phases={actionPhases}
+        loading={loading && actionPhases.length === 0}
+      />
 
       <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">
         {onPrint && (

@@ -12,7 +12,6 @@ import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkelet
 import { TimeAgo } from '@/components/time-ago'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
-import { type AnalysisMode, ANALYSIS_MODE_CONFIG } from '@/lib/types/analysis-modes'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { ComparisonView } from '@/components/research/comparison-view'
 
@@ -32,7 +31,6 @@ interface ResearchRecord {
   report_id: string | null
   analysis_status?: 'queued' | 'analyzing' | 'completed' | 'failed'
   analysis_target?: string | null
-  analysis_mode?: AnalysisMode
   market_temperature_score?: number | null
   summary_insights?: string | null
   top_risk?: string | null
@@ -76,7 +74,6 @@ export default function HistoryPage() {
   const [filter, setFilter] = useState('')
 
   const [showFilters, setShowFilters] = useState(false)
-  const [modeFilter, setModeFilter] = useState<AnalysisMode | 'all'>('all')
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('all')
   const [tempFilter, setTempFilter] = useState<TempFilterOption>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all')
@@ -113,10 +110,6 @@ export default function HistoryPage() {
       )
     }
 
-    if (modeFilter !== 'all') {
-      result = result.filter((r) => r.analysis_mode === modeFilter)
-    }
-
     if (dateFilter !== 'all') {
       const now = new Date()
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -151,7 +144,7 @@ export default function HistoryPage() {
     }
 
     return result
-  }, [records, filter, modeFilter, dateFilter, tempFilter, statusFilter])
+  }, [records, filter, dateFilter, tempFilter, statusFilter])
 
   const selectedRecords = useMemo(() =>
     records.filter((r) => selectedIds.has(r.id)),
@@ -164,10 +157,9 @@ export default function HistoryPage() {
     return filteredRecords.slice(start, start + PAGE_SIZE)
   }, [filteredRecords, page])
 
-  const hasActiveFilters = modeFilter !== 'all' || dateFilter !== 'all' || tempFilter !== 'all' || statusFilter !== 'all'
+  const hasActiveFilters = dateFilter !== 'all' || tempFilter !== 'all' || statusFilter !== 'all'
 
   const clearFilters = useCallback(() => {
-    setModeFilter('all')
     setDateFilter('all')
     setTempFilter('all')
     setStatusFilter('all')
@@ -361,7 +353,7 @@ export default function HistoryPage() {
               필터
               {hasActiveFilters && (
                 <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                  {[modeFilter !== 'all', dateFilter !== 'all', tempFilter !== 'all', statusFilter !== 'all'].filter(Boolean).length}
+                  {[dateFilter !== 'all', tempFilter !== 'all', statusFilter !== 'all'].filter(Boolean).length}
                 </span>
               )}
             </Button>
@@ -394,24 +386,7 @@ export default function HistoryPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">분석 모드</label>
-                  <div className="relative">
-                    <select
-                      value={modeFilter}
-                      onChange={(e) => setModeFilter(e.target.value as AnalysisMode | 'all')}
-                      className="w-full h-9 rounded-md border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="all">전체 모드</option>
-                      {Object.values(ANALYSIS_MODE_CONFIG).map((config) => (
-                        <option key={config.id} value={config.id}>{config.labelKo}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground">기간</label>
                   <div className="relative">
@@ -523,11 +498,6 @@ export default function HistoryPage() {
                           <span className="text-[11px] text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 shrink-0">
                             {COUNTRY_LABELS[record.country_code] ?? record.country_code}
                           </span>
-                          {record.analysis_mode && (
-                            <span className="text-[11px] text-primary bg-primary/10 rounded px-1.5 py-0.5 shrink-0">
-                              {ANALYSIS_MODE_CONFIG[record.analysis_mode]?.labelKo ?? record.analysis_mode}
-                            </span>
-                          )}
                           {record.analysis_target && (
                             <span className="text-[11px] text-muted-foreground shrink-0">
                               {TARGET_LABELS[record.analysis_target] ?? record.analysis_target}
@@ -573,7 +543,7 @@ export default function HistoryPage() {
                           variant="outline"
                           className="h-8 gap-1 text-xs"
                           onClick={() => {
-                            startStreamingResearch(record.keyword, { country_code: record.country_code, mode: record.analysis_mode ?? 'standard' })
+                            startStreamingResearch(record.keyword, { country_code: record.country_code })
                             router.push(`/results?keyword=${encodeURIComponent(record.keyword)}&country=${encodeURIComponent(record.country_code)}`)
                           }}
                           aria-label="다시 분석"

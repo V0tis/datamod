@@ -20,8 +20,6 @@ import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { TrendDetailPanel } from '@/components/trend-detail-panel'
-import { CompactModeSelector, AnalysisPreview } from '@/components/research/analysis-mode-selector'
-import { type AnalysisMode, ANALYSIS_MODE_CONFIG } from '@/lib/types/analysis-modes'
 
 const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
@@ -91,8 +89,6 @@ function RinAISearchInner() {
   const jobs = useResearchStore((s) => s.jobs)
   const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
   const abortAnalysis = useResearchStore((s) => s.abortAnalysis)
-  const analysisMode = useResearchStore((s) => s.analysisMode)
-  const setAnalysisMode = useResearchStore((s) => s.setAnalysisMode)
   const streamingState = useResearchStore((s) => s.streamingState)
   const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
   const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running') || isAnalyzingNow()
@@ -189,7 +185,7 @@ function RinAISearchInner() {
     }
     setError(null)
     setSearching(true)
-    startStreamingResearch(k, { country_code: trendCountry, mode: analysisMode })
+    startStreamingResearch(k, { country_code: trendCountry })
     if (user) {
       try {
         const reportRes = await fetch('/api/reports', {
@@ -227,12 +223,11 @@ function RinAISearchInner() {
     if (searching || isAnalyzingNow()) {
       const state = streamingState
       if (state.status === 'running' || state.status === 'streaming') {
-        const modeConfig = ANALYSIS_MODE_CONFIG[analysisMode]
-        return `분석 중... (${state.currentStep + 1}/${state.totalSteps})`
+        return `분석 중... (${state.currentStep + 1}/5)`
       }
       return '분석 중...'
     }
-    return `${ANALYSIS_MODE_CONFIG[analysisMode].labelKo} 시작`
+    return '시장·제품 분석'
   }
 
   return (
@@ -341,15 +336,8 @@ function RinAISearchInner() {
                     )}
                   </div>
 
-                  {/* Mode Selector */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <CompactModeSelector
-                      value={analysisMode}
-                      onChange={setAnalysisMode}
-                      disabled={searching || isAnalyzingNow()}
-                      className="flex-1 sm:flex-none"
-                    />
-                    <div className="flex-1 hidden sm:block" />
+                    <div className="flex-1" />
                     {(searching || isAnalyzingNow()) ? (
                       <Button
                         type="button"
@@ -372,11 +360,6 @@ function RinAISearchInner() {
                   </div>
                 </form>
 
-                {/* Analysis Preview */}
-                {query.trim() && !searching && !isAnalyzingNow() && (
-                  <AnalysisPreview mode={analysisMode} className="pt-2" />
-                )}
-
                 {/* Progress Indicator */}
                 {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -387,7 +370,7 @@ function RinAISearchInner() {
                           {getButtonLabel()}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {ANALYSIS_MODE_CONFIG[analysisMode].descriptionKo}
+                          시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출
                         </p>
                       </div>
                     </div>
@@ -395,12 +378,12 @@ function RinAISearchInner() {
                       <div className="mt-3">
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>진행률</span>
-                          <span>{Math.round(((streamingState.currentStep + 1) / streamingState.totalSteps) * 100)}%</span>
+                          <span>{Math.round(((streamingState.currentStep + 1) / 5) * 100)}%</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all duration-500"
-                            style={{ width: `${((streamingState.currentStep + 1) / streamingState.totalSteps) * 100}%` }}
+                            style={{ width: `${((streamingState.currentStep + 1) / 5) * 100}%` }}
                           />
                         </div>
                       </div>
@@ -563,7 +546,7 @@ function RinAISearchInner() {
               onOpenChange={setTrendPanelOpen}
               selectedItem={selectedTrendItem}
               onAnalyze={(keyword) => {
-                startStreamingResearch(keyword, { country_code: trendCountry, mode: analysisMode })
+                startStreamingResearch(keyword, { country_code: trendCountry })
                 router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
               }}
             />
