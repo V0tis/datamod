@@ -29,7 +29,6 @@ import { AnalysisHistorySidebar } from '@/components/research/AnalysisHistorySid
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { AIConfidenceCard } from '@/components/research/AIConfidenceCard'
-import { AIAnalysisTimeline } from '@/components/research/AIAnalysisTimeline'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
@@ -909,35 +908,6 @@ function ResultsContent() {
                   : null}
           </p>
         </header>
-
-        {/* AI Analysis Timeline - between header and result; shows during analysis, collapses when done */}
-        {hasKeyword && ((canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running' || displayResult) && (
-          <AIAnalysisTimeline
-            currentStep={
-              (polledStatus as string) === 'running'
-                ? Math.min(4, Math.max(0, polledProgressStep))
-                : streamingState.status === 'running' || streamingState.status === 'streaming'
-                  ? streamingState.currentStep
-                  : streamingState.status === 'completed'
-                    ? 4
-                    : -1
-            }
-            streamingStepId={
-              streamingState.status === 'running' || streamingState.status === 'streaming'
-                ? streamingState.stepId
-                : undefined
-            }
-            allCompleted={
-              streamingState.status === 'completed' ||
-              (displayResult != null && !loading && (canonicalStatus as string) !== 'analyzing' && (polledStatus as string) !== 'running')
-            }
-            analysisTasks={analysisTasks}
-            defaultCollapsed={
-              !(loading || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running')
-            }
-            className="mb-4"
-          />
-        )}
 
         {/* Opportunity Score - prominent at top (show when we have score, or loading during analysis) */}
         {(displayResult?.key_metrics?.opportunity_score != null ||

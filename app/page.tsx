@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
-import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
@@ -343,34 +342,6 @@ function RinAISearchInner() {
                     )}
                   </div>
                 </form>
-                <SuggestedAnalyses
-                  onSelect={(k) => {
-                    if (isAnalyzingNow()) {
-                      toast.warning('이미 분석이 진행 중입니다.')
-                      return
-                    }
-                    setError(null)
-                    setSearching(true)
-                    startStreamingResearch(k, { country_code: trendCountry })
-                    if (user) {
-                      fetch('/api/reports', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ keyword: k }),
-                      })
-                        .then((reportRes) => {
-                          if (reportRes.ok) {
-                            const now = new Date().toISOString()
-                            setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry, opportunity_score: null, analysis_status: 'analyzing' }, ...prev.filter((r) => r.keyword !== k)].slice(0, 6))
-                          }
-                        })
-                        .catch(() => {})
-                    }
-                    router.push(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(trendCountry)}`)
-                  }}
-                  disabled={searching || isAnalyzingNow()}
-                  className="mt-4"
-                />
                 {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 mt-3">
                     <div className="flex items-center gap-2">

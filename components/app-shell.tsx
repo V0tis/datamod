@@ -12,7 +12,13 @@ const isAuthOnlyPath = (path: string) =>
   path === '/login' ||
   path.startsWith('/login/') ||
   path === '/auth/signup' ||
-  path.startsWith('/auth/signup/')
+  path.startsWith('/auth/signup/') ||
+  path === '/auth/verify' ||
+  path.startsWith('/auth/verify/') ||
+  path === '/auth/login' ||
+  path.startsWith('/auth/login/') ||
+  path === '/auth/callback' ||
+  path.startsWith('/auth/callback/')
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

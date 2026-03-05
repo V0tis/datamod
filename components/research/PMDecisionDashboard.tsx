@@ -93,10 +93,11 @@ export function PMDecisionDashboard({
   const effectiveAnalysisTasks = analysisTasks ?? analysisTasksProp
 
   const showTimeline = (result != null || isAnalyzing) && Boolean(keyword?.trim())
+  const analysisComplete = result != null && !isAnalyzing
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {/* AI Product Strategy Engine - visual pipeline */}
+      {/* AI Analysis Timeline - primary focus, shows pending/running/completed */}
       {showTimeline && (
         <StrategyEnginePipeline
           keyword={keyword}
@@ -113,18 +114,20 @@ export function PMDecisionDashboard({
         />
       )}
 
-      {/* 5 collapsible analysis sections */}
-      <AnalysisResultSections
-        result={result}
-        taskData={taskData}
-        analysisTasks={effectiveAnalysisTasks ?? undefined}
-        consensusData={consensusData ?? undefined}
-        loading={loading}
-        keyword={keyword}
-        onSaveToWorkspace={onSaveInsight}
-      />
+      {/* Strategy, Strategic Actions, Action Plan - only when analysis finishes */}
+      {analysisComplete && (
+        <>
+          <AnalysisResultSections
+            result={result}
+            taskData={taskData}
+            analysisTasks={effectiveAnalysisTasks ?? undefined}
+            consensusData={consensusData ?? undefined}
+            loading={false}
+            keyword={keyword}
+            onSaveToWorkspace={onSaveInsight}
+          />
 
-      <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">
+          <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">
         {onPrint && (
           <Button variant="outline" size="sm" onClick={onPrint} className="gap-1.5">
             <FileDown className="h-4 w-4" />
@@ -158,7 +161,9 @@ export function PMDecisionDashboard({
             )}
           </Button>
         )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
