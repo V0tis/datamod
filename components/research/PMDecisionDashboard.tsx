@@ -1,29 +1,14 @@
 'use client'
 
+import { useCallback } from 'react'
 import { FileDown, RefreshCw, Loader2, Bookmark } from 'lucide-react'
+import { useAnalysisTasksPoll } from '@/lib/hooks/use-analysis-tasks-poll'
+import { useResearchStore } from '@/lib/stores/research-store'
 import { Button } from '@/components/ui/button'
 import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
-import { ProductStrategySection } from './dashboard/ProductStrategySection'
-import { PMActionPlanSection } from './dashboard/PMActionPlanSection'
+import { AnalysisResultSections } from './AnalysisResultSections'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import type { StreamingState } from '@/lib/types/analysis-modes'
-
-type StrategicActionItem = {
-  action?: string
-  priority?: string
-  expected_impact?: string
-  risk_addressed?: string
-}
-
-type StrategicActions = {
-  immediate?: StrategicActionItem[]
-  mid_term?: StrategicActionItem[]
-  risk_mitigation?: StrategicActionItem[]
-}
-
-type KeyMetricsWithStrategic = ResearchResponse['key_metrics'] & {
-  strategic_actions?: StrategicActions
-}
 
 export interface PMDecisionDashboardProps {
   keyword: string
@@ -45,6 +30,13 @@ export interface PMDecisionDashboardProps {
   newsList?: Array<{ title?: string; url?: string; publisher?: string }>
   /** Per-task partial data from backend (AI Analysis Console) */
   taskData?: Partial<Record<string, unknown>>
+  /** Polled task status from backend (optional, falls back to taskData) */
+  analysisTasks?: Array<{
+    step_name: string
+    status: 'pending' | 'running' | 'completed' | 'failed'
+    output_data: unknown
+    error_message: string | null
+  }> | null
   onPrint?: () => void
   onSaveInsight?: () => void
   onReanalyze?: () => void
@@ -60,45 +52,13 @@ export function PMDecisionDashboard({
   polledProgressStep,
   newsList = [],
   taskData = {},
+  analysisTasks: analysisTasksProp,
   onPrint,
   onSaveInsight,
   onReanalyze,
   reanalyzing = false,
   consensusData,
 }: PMDecisionDashboardProps) {
-  const km = (result?.key_metrics ?? {}) as KeyMetricsWithStrategic
-  const strategicActions = km.strategic_actions
-  const actionPhases = (() => {
-    const phases: Array<{ week: string; items: string[] }> = []
-    const imm = strategicActions?.immediate ?? []
-    const mid = strategicActions?.mid_term ?? []
-    const risk = strategicActions?.risk_mitigation ?? []
-    const addItems = (arr: StrategicActionItem[]) =>
-      arr
-        .map((a) => (typeof a?.action === 'string' ? a.action.trim() : ''))
-        .filter(Boolean)
-    if (imm.length) phases.push({ week: 'Week 1', items: addItems(imm) })
-    if (mid.length) phases.push({ week: 'Week 2', items: addItems(mid) })
-    if (risk.length) phases.push({ week: 'Week 3', items: addItems(risk) })
-    if (phases.length === 0) {
-      const rec = km.pm_actions?.recommended_actions ?? []
-      if (rec.length)
-        phases.push({
-          week: 'Recommended',
-          items: rec
-            .map((a) => (typeof a?.title === 'string' ? a.title : ''))
-            .filter(Boolean),
-        })
-    }
-    return phases
-  })()
-
-  const productStrategySummary = km.summary_insights ?? result?.keyConclusions?.[0] ?? ''
-  const productStrategyOpportunities =
-    km.positive_signals ?? result?.marketNews ?? []
-  const productStrategyKeyConclusions =
-    result?.keyConclusions ?? (result?.key_metrics?.keyConclusions as string[] | undefined) ?? []
-
   const currentStep =
     polledProgressStep != null && loading
       ? polledProgressStep
@@ -117,10 +77,25 @@ export function PMDecisionDashboard({
     streamingState.status === 'running' ||
     streamingState.status === 'streaming'
 
+  const analysisId = useResearchStore((s) => s.analysisId)
+  const analysisTasks = useResearchStore((s) => s.analysisTasks)
+  const setAnalysisTasks = useResearchStore((s) => s.setAnalysisTasks)
+
+  const onTasks = useCallback(
+    (data: { tasks: typeof analysisTasks }) => {
+      setAnalysisTasks(data.tasks)
+    },
+    [setAnalysisTasks]
+  )
+
+  useAnalysisTasksPoll(analysisId, isAnalyzing, onTasks)
+
+  const effectiveAnalysisTasks = analysisTasks ?? analysisTasksProp
+
   const showTimeline = (result != null || isAnalyzing) && Boolean(keyword?.trim())
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-5 animate-in fade-in duration-300">
       {/* AI Product Strategy Engine - visual pipeline */}
       {showTimeline && (
         <StrategyEnginePipeline
@@ -131,29 +106,22 @@ export function PMDecisionDashboard({
           }
           streamingStepId={stepId}
           taskData={taskData}
+          analysisTasks={effectiveAnalysisTasks}
           newsList={newsList}
           result={result}
+          onRetryStep={onReanalyze}
         />
       )}
 
-      {/* Product Strategy */}
-      <ProductStrategySection
-        summary={productStrategySummary}
-        opportunities={productStrategyOpportunities}
-        keyConclusions={productStrategyKeyConclusions}
-        targetUsers={
-          (productStrategySummary || productStrategyOpportunities.length > 0)
-            ? 'Early adopters'
-            : undefined
-        }
-        valueProposition={consensusData?.strategicSummary?.opportunity ?? undefined}
-        loading={loading && !productStrategySummary && productStrategyOpportunities.length === 0}
-      />
-
-      {/* PM Action Plan */}
-      <PMActionPlanSection
-        phases={actionPhases}
-        loading={loading && actionPhases.length === 0}
+      {/* 5 collapsible analysis sections */}
+      <AnalysisResultSections
+        result={result}
+        taskData={taskData}
+        analysisTasks={effectiveAnalysisTasks ?? undefined}
+        consensusData={consensusData ?? undefined}
+        loading={loading}
+        keyword={keyword}
+        onSaveToWorkspace={onSaveInsight}
       />
 
       <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">

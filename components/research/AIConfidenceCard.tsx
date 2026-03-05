@@ -12,11 +12,14 @@ export interface DataSourceWithSignal {
 }
 
 const DEFAULT_DATA_SOURCES: DataSourceWithSignal[] = [
-  { name: 'Google Trends', label: 'Google Trends signal', strength: 'High' },
-  { name: 'Reddit', label: 'Reddit discussion', strength: 'Medium' },
-  { name: 'Product Hunt', label: 'Product Hunt launches', strength: 'High' },
-  { name: 'Startup funding reports', label: 'Startup funding reports', strength: 'High' },
+  { name: 'Google Trends' },
+  { name: 'Reddit discussions' },
+  { name: 'Product Hunt launches' },
+  { name: 'Startup funding reports' },
 ]
+
+const CONFIDENCE_EXPLANATION =
+  'The confidence score represents how strong and consistent the detected market signals are.'
 
 const SOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'Google Trends': TrendingUp,
@@ -37,18 +40,14 @@ function getSourceIcon(name: string) {
   return BarChart3
 }
 
-function signalStrengthColor(strength: SignalStrength): string {
-  if (strength === 'High') return 'text-emerald-600 dark:text-emerald-500'
-  if (strength === 'Medium') return 'text-amber-600 dark:text-amber-500'
-  return 'text-muted-foreground'
-}
-
 export interface AIConfidenceCardProps {
   /** Confidence score 0–100 */
   score?: number | null
   /** Data sources with optional signal strength */
   dataSources?: DataSourceWithSignal[] | string[]
   loading?: boolean
+  /** Activity message shown during loading (e.g. "Analyzing Market Signals...") */
+  loadingMessage?: string | null
   className?: string
 }
 
@@ -77,6 +76,7 @@ export function AIConfidenceCard({
   score,
   dataSources,
   loading = false,
+  loadingMessage,
   className,
 }: AIConfidenceCardProps) {
   const hasScore = score != null && Number.isFinite(score)
@@ -92,13 +92,18 @@ export function AIConfidenceCard({
         )}
         aria-label="AI Confidence"
       >
-        <div className="p-6 sm:p-8">
+        <div className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="h-5 w-5 rounded bg-muted animate-pulse" />
             <div className="h-4 w-28 rounded bg-muted/60 animate-pulse" />
           </div>
+          {loadingMessage && (
+            <p className="text-sm font-medium text-foreground mb-3 animate-pulse">
+              {loadingMessage}
+            </p>
+          )}
           <div className="h-10 w-16 rounded-lg bg-muted/40 animate-pulse mb-3" />
-          <div className="h-2.5 w-full rounded-full bg-muted/40 animate-pulse mb-6" />
+          <div className="h-2.5 w-full rounded-full bg-muted/40 animate-pulse mb-4" />
           <div className="h-4 w-24 rounded bg-muted/30 animate-pulse mb-3" />
           <div className="space-y-2">
             {[1, 2, 3, 4].map((i) => (
@@ -136,9 +141,9 @@ export function AIConfidenceCard({
         </div>
 
         {/* Confidence score */}
-        <div className="mb-6">
+        <div className="mb-4">
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">
+            <span className="text-2xl sm:text-3xl font-bold tabular-nums text-foreground">
               {normScore}%
             </span>
           </div>
@@ -153,16 +158,15 @@ export function AIConfidenceCard({
           </div>
         </div>
 
-        {/* Data Sources with icons and signal strength */}
-        <div>
+        {/* Data Sources */}
+        <div className="mb-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
             Data Sources
           </h3>
           <ul className="space-y-2">
             {sources.map((source, i) => {
               const Icon = getSourceIcon(source.name)
-              const strength = source.strength ?? 'Medium'
-              const displayLabel = source.label ?? `${source.name} signal`
+              const displayLabel = source.label ?? source.name
               return (
                 <li
                   key={i}
@@ -171,23 +175,20 @@ export function AIConfidenceCard({
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background border border-border/60">
                     <Icon className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground truncate">
-                      {displayLabel}
-                    </p>
-                    <p
-                      className={cn(
-                        'text-sm font-semibold',
-                        signalStrengthColor(strength)
-                      )}
-                    >
-                      {strength}
-                    </p>
-                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    {displayLabel}
+                  </span>
                 </li>
               )
             })}
           </ul>
+        </div>
+
+        {/* Brief explanation */}
+        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {CONFIDENCE_EXPLANATION}
+          </p>
         </div>
       </div>
     </section>

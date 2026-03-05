@@ -34,7 +34,7 @@ export function MarketSnapshot({
     return (
       <section
         className={cn(
-          'rounded-xl border border-border bg-card p-6 shadow-sm',
+          'rounded-lg border border-border bg-card p-4 shadow-sm',
           className
         )}
         aria-label="Market snapshot"
@@ -58,7 +58,7 @@ export function MarketSnapshot({
   return (
     <section
       className={cn(
-        'rounded-xl border border-border bg-card p-6 shadow-sm',
+        'rounded-lg border border-border bg-card p-4 shadow-sm',
         className
       )}
       aria-label="Market snapshot"

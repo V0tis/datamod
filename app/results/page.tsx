@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
@@ -25,8 +25,13 @@ import { AnalysisQualityIndicator } from '@/components/research/analysis-quality
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { AnalysisHistorySidebar } from '@/components/research/AnalysisHistorySidebar'
+import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { AIConfidenceCard } from '@/components/research/AIConfidenceCard'
+import { AIAnalysisTimeline } from '@/components/research/AIAnalysisTimeline'
+import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
+import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
@@ -73,7 +78,7 @@ function NewsDetailModal({
             <X className="w-5 h-5" />
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 sm:space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* AI 요약: 통합 분석 결과에서만 표시 (summarize-article 호출 없음) */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-2">전략적 통찰</h4>
@@ -148,6 +153,7 @@ function NewsDetailModal({
  * useCurrentTask syncs selection and provides task-level progress for the analyzing state.
  */
 function ResultsContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
@@ -157,6 +163,7 @@ function ResultsContent() {
     status,
     analysisStatus,
     streamingState,
+    analysisTasks,
     newsList,
     taskData,
     result,
@@ -828,14 +835,55 @@ function ResultsContent() {
     }
   }, [saveInsightName, saveInsightNote, saveInsightSaving, buildInsightSnapshot])
 
+  const dataSourceSignals = ((): DataSourceSignal[] => {
+    const kw = (currentKeyword ?? '').trim()
+    const allTrends = [...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]
+    const hasTrendMatch = kw && allTrends.some((t) => (t.keyword ?? '').trim().toLowerCase() === kw.toLowerCase())
+    const fundingScore = displayResult?.key_metrics?.opportunity_score_breakdown?.funding_signals
+    const fundingNum = typeof fundingScore === 'number' ? fundingScore : null
+
+    return [
+      {
+        id: 'google-trends',
+        source: 'Google Trends',
+        summary: hasTrendMatch
+          ? 'Search interest and volume data for this topic from trending queries.'
+          : allTrends.length > 0
+            ? 'Global trend context available; this keyword may not be in the current trend list.'
+            : 'Trend data not available for this keyword.',
+        confidence: hasTrendMatch ? 'high' : allTrends.length > 0 ? 'medium' : 'low',
+      },
+      {
+        id: 'reddit',
+        source: 'Reddit discussions',
+        summary: 'Community discussions and sentiment from Reddit. Not yet integrated into this analysis.',
+        confidence: 'low',
+      },
+      {
+        id: 'product-hunt',
+        source: 'Product Hunt launches',
+        summary: 'Product launches and upvotes from Product Hunt. Not yet integrated into this analysis.',
+        confidence: 'low',
+      },
+      {
+        id: 'vc-funding',
+        source: 'VC funding data',
+        summary: fundingNum != null
+          ? `Funding signal score (${fundingNum}) reflected in the opportunity score breakdown.`
+          : 'No dedicated VC funding signal in this analysis.',
+        confidence: fundingNum != null ? (fundingNum >= 70 ? 'high' : fundingNum >= 40 ? 'medium' : 'low') : 'low',
+      },
+    ]
+  })()
+
   const showTabs = hasKeyword
   if (showTabs) {
     return (
-      <div className="px-4 py-5 sm:px-6 sm:py-6 md:p-8 min-h-screen bg-background rin-doc">
+      <div className="px-4 py-4 sm:px-5 sm:py-5 md:p-6 min-h-screen bg-background rin-doc">
         {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
           <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div id="pm-dashboard-top" className="rounded-xl border border-border bg-card shadow-sm p-4 sm:p-6 md:p-8 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
+        <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-4 sm:p-5 md:p-6 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
         {/* AI Product Strategy Report header */}
         <header className="pb-6 border-b border-border/60">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
@@ -850,8 +898,10 @@ function ResultsContent() {
             )}
           </h1>
           <p className="text-muted-foreground text-sm mt-2">
-            {canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
-              ? (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다')
+            {(canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
+              ? (streamingState.status === 'running' || streamingState.status === 'streaming'
+                  ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                  : (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다'))
               : canonicalStatus === 'completed' && displayResult?.updated_at
                 ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
                 : canonicalStatus === 'failed'
@@ -859,6 +909,35 @@ function ResultsContent() {
                   : null}
           </p>
         </header>
+
+        {/* AI Analysis Timeline - between header and result; shows during analysis, collapses when done */}
+        {hasKeyword && ((canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running' || displayResult) && (
+          <AIAnalysisTimeline
+            currentStep={
+              (polledStatus as string) === 'running'
+                ? Math.min(4, Math.max(0, polledProgressStep))
+                : streamingState.status === 'running' || streamingState.status === 'streaming'
+                  ? streamingState.currentStep
+                  : streamingState.status === 'completed'
+                    ? 4
+                    : -1
+            }
+            streamingStepId={
+              streamingState.status === 'running' || streamingState.status === 'streaming'
+                ? streamingState.stepId
+                : undefined
+            }
+            allCompleted={
+              streamingState.status === 'completed' ||
+              (displayResult != null && !loading && (canonicalStatus as string) !== 'analyzing' && (polledStatus as string) !== 'running')
+            }
+            analysisTasks={analysisTasks}
+            defaultCollapsed={
+              !(loading || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running')
+            }
+            className="mb-4"
+          />
+        )}
 
         {/* Opportunity Score - prominent at top (show when we have score, or loading during analysis) */}
         {(displayResult?.key_metrics?.opportunity_score != null ||
@@ -872,7 +951,12 @@ function ResultsContent() {
             breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
             reasoning={displayResult?.key_metrics?.opportunity_score_reasoning ?? undefined}
             loading={loading && displayResult?.key_metrics?.opportunity_score == null}
-            className="mb-6"
+            loadingMessage={
+              loading && (streamingState.status === 'running' || streamingState.status === 'streaming')
+                ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                : undefined
+            }
+            className="mb-4"
           />
         )}
 
@@ -890,27 +974,39 @@ function ResultsContent() {
               return loading ? null : 75
             })()}
             loading={loading && displayResult?.key_metrics?.confidence_score == null && (displayResult?.analysis_results as { confidence?: number } | undefined)?.confidence == null}
-            className="mb-6"
+            loadingMessage={
+              loading && (streamingState.status === 'running' || streamingState.status === 'streaming')
+                ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                : undefined
+            }
+            className="mb-4"
           />
         )}
 
         {/* No cache + not analyzing: show Run Analysis CTA. Analysis only runs on explicit user click. */}
         {needsRunAction ? (
-          <div className="py-12 flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
+          <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4">
             <p className="text-muted-foreground text-sm mb-4">
               &quot;{currentKeyword}&quot;에 대한 분석이 없습니다. 실행하려면 아래 버튼을 클릭하세요.
             </p>
             <Button
               size="lg"
               onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-              className="gap-2"
+              className="gap-2 mb-6"
             >
               <RefreshCw className="h-4 w-4" />
               Run Analysis
             </Button>
+            <SuggestedAnalyses
+              onSelect={(k) => {
+                router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
+                startStreamingResearch(k, { country_code: countryFromUrl })
+              }}
+              disabled={loading}
+            />
           </div>
         ) : (canonicalStatus === 'failed' || showPolledError) ? (
-          <div className="py-12 flex flex-col items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+          <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5">
             <h2 className="text-lg font-semibold text-foreground mb-2">Analysis Failed</h2>
             <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
               {displayError ?? polledError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
@@ -1093,6 +1189,20 @@ function ResultsContent() {
               </button>
             </div>
             <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
+            {/* Analysis history: recent analyses, click to reopen */}
+            <AnalysisHistorySidebar
+              currentKeyword={currentKeyword}
+              currentCountry={countryFromUrl}
+              refetchTrigger={displayResult?.updated_at}
+              className="mb-4"
+            />
+            {/* Data Sources: signals with source, summary, confidence */}
+            <div className="mb-4">
+              <DataSourcesSection
+                signals={dataSourceSignals}
+                loading={loading && !displayResult}
+              />
+            </div>
             {/* Analysis quality: trustworthiness score (fact coverage, signal consistency, hypothesis discipline, uncertainty disclosure). */}
             {displayStatus === 'done' && displayResult && (() => {
               const qualityInput = {
@@ -1241,8 +1351,8 @@ function ResultsContent() {
 
   if (!hasKeyword) {
     return (
-      <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] bg-background">
-        <div className="rounded-2xl border border-border bg-card shadow-sm p-8 max-w-md w-full">
+      <div className="p-5 md:p-6 flex flex-col items-center justify-center min-h-[50vh] bg-background">
+        <div className="rounded-xl border border-border bg-card shadow-sm p-6 max-w-md w-full">
           <EmptyState
             title="키워드를 검색하세요"
             description="검색하면 인사이트 요약을 먼저 볼 수 있습니다. 상세 리포트는 필요할 때 펼쳐보시면 됩니다."
@@ -1252,6 +1362,14 @@ function ResultsContent() {
               </Link>
             }
           />
+          <div className="mt-6 pt-6 border-t border-border">
+            <SuggestedAnalyses
+              onSelect={(k) => {
+                router.replace(`/results?keyword=${encodeURIComponent(k)}&country=KR`)
+                startStreamingResearch(k, { country_code: 'KR' })
+              }}
+            />
+          </div>
         </div>
       </div>
     )
@@ -1264,8 +1382,8 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[50vh] bg-background">
-          <div className="rounded-2xl border border-border bg-card shadow-sm p-8 w-full max-w-md">
+        <div className="p-5 md:p-6 flex flex-col items-center justify-center min-h-[50vh] bg-background">
+          <div className="rounded-xl border border-border bg-card shadow-sm p-6 w-full max-w-md">
             <LoadingState
               message="페이지를 불러오는 중입니다"
               detail="잠시만 기다려 주세요."

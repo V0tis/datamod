@@ -50,6 +50,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // 이메일 미인증 사용자: 인증 요청 페이지로 리다이렉트
+  if (!user.email_confirmed_at) {
+    const verifyUrl = new URL('/auth/verify', request.url)
+    verifyUrl.searchParams.set('reason', 'email_verification_required')
+    return NextResponse.redirect(verifyUrl)
+  }
+
   return response
 }
 

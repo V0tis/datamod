@@ -198,17 +198,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-size: 14px;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground text-[14px];
   }
   h1 {
-    @apply text-2xl font-bold tracking-tight text-foreground;
+    @apply text-lg sm:text-xl font-bold tracking-tight text-foreground;
   }
   h2 {
-    @apply text-xl font-semibold text-foreground;
+    @apply text-base sm:text-lg font-semibold text-foreground;
   }
   h3 {
-    @apply text-lg font-semibold text-foreground;
+    @apply text-[15px] sm:text-base font-semibold text-foreground;
   }
 }
 
@@ -265,16 +268,19 @@
   margin-top: 1.5rem;
 }
 
-/* PM-focused layout: single density for clarity and long reading sessions */
+/* Compact professional layout: Linear/Vercel/Notion density */
 body {
-  --reading-gap: 0.875rem;
-  --reading-gap-lg: 1.25rem;
-  --reading-space-y: 1.25rem;
-  --reading-space-y-lg: 1.75rem;
-  --reading-text: 1.0625rem;
-  --reading-text-lg: 1.125rem;
-  --reading-leading: 1.75;
-  --reading-section-gap: 1.5rem;
+  --reading-gap: 0.625rem;
+  --reading-gap-lg: 0.875rem;
+  --reading-space-y: 0.875rem;
+  --reading-space-y-lg: 1.125rem;
+  --reading-text: 0.875rem;
+  --reading-text-lg: 0.9375rem;
+  --reading-leading: 1.6;
+  --reading-section-gap: 1rem;
+  --section-spacing: 2.5rem;
+  --card-padding: 1rem;
+  --container-padding: 1rem;
 }
 .reading-gap { gap: var(--reading-gap); }
 .reading-gap-lg { gap: var(--reading-gap-lg); }

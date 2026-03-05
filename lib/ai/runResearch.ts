@@ -70,8 +70,17 @@ export type TaskCompletedPayload = {
   execution_layer?: { product_actions: Array<{ action: string; priority?: string; reasoning?: string }>; feature_ideas?: string[]; go_to_market_steps?: string[] }
 }
 
+const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
+  'signal_layer',
+  'trend_analysis',
+  'competition_analysis',
+  'strategy_generation',
+  'execution_layer',
+]
+
 export type ResearchStreamEvent =
-  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed'; data?: TaskCompletedPayload[AnalysisTaskId] }
+  | { type: 'analysis_started'; analysisId: string }
+  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
@@ -502,6 +511,31 @@ export async function* runResearch(
     .eq('country_code', cacheKey.countryCode)
     .maybeSingle()
 
+  const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
+
+  const upsertAnalysisTask = async (
+    step: AnalysisTaskId,
+    status: 'pending' | 'running' | 'completed' | 'failed',
+    opts?: { outputData?: unknown; errorMessage?: string }
+  ) => {
+    const now = new Date().toISOString()
+    await supabase
+      .from('analysis_tasks')
+      .upsert(
+        {
+          analysis_id: analysisId,
+          step_name: step,
+          status,
+          started_at: status === 'running' || status === 'completed' || status === 'failed' ? now : null,
+          completed_at: status === 'completed' || status === 'failed' ? now : null,
+          output_data: opts?.outputData ?? null,
+          error_message: opts?.errorMessage ?? null,
+          updated_at: now,
+        },
+        { onConflict: 'analysis_id,step_name' }
+      )
+  }
+
   if (cacheRow?.report_id && isCacheValid(cacheRow.updated_at)) {
     logCacheEvent('hit', {
       scope: 'run_research',
@@ -533,34 +567,42 @@ export async function* runResearch(
   }
 
   await updateProgress(0, 'analyzing')
+  yield { type: 'analysis_started', analysisId }
 
   // Layer 1: Signal Layer - collect market signals
+  await upsertAnalysisTask('signal_layer', 'running')
   yield { type: 'task', task: 'signal_layer', status: 'running' }
   let news: NewsItem[]
   try {
     news = await fetchNewsTitles(keyword)
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
+    const signalData = {
+      signals: signalSources,
+      news_activity: news.map((n) => ({ title: n.title, url: n.url, publisher: n.publisher })),
+    }
+    await upsertAnalysisTask('signal_layer', 'completed', { outputData: signalData })
     await updateProgress(1, 'analyzing')
     yield {
       type: 'task',
       task: 'signal_layer',
       status: 'completed',
-      data: {
-        signals: signalSources,
-        news_activity: news.map((n) => ({ title: n.title, url: n.url, publisher: n.publisher })),
-      },
+      data: signalData,
     }
     yield { type: 'news', items: news }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '시장 신호 수집에 실패했습니다.'
+    await upsertAnalysisTask('signal_layer', 'failed', { errorMessage: msg })
     await updateProgress(0, 'failed')
-    yield { type: 'error', message: '시장 신호 수집에 실패했습니다.', step: 'signal_layer' }
+    yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg }
+    yield { type: 'error', message: msg, step: 'signal_layer' }
     return
   }
 
   const newsTitles = news.map((n) => n.title)
 
   // Layer 2: Analysis Layer - Trend detection
+  await upsertAnalysisTask('trend_analysis', 'running')
   yield { type: 'task', task: 'trend_analysis', status: 'running' }
   let trendData: { summary: string; market_score: number; positive_signals: string[]; neutral_signals: string[] }
   try {
@@ -584,16 +626,18 @@ export async function* runResearch(
       positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
       neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
     }
+    const trendPayload = {
+      trend_summary: trendData.summary,
+      market_temperature_score: trendData.market_score,
+      growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
+    }
+    await upsertAnalysisTask('trend_analysis', 'completed', { outputData: trendPayload })
     await updateProgress(2, 'analyzing')
     yield {
       type: 'task',
       task: 'trend_analysis',
       status: 'completed',
-      data: {
-        trend_summary: trendData.summary,
-        market_temperature_score: trendData.market_score,
-        growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
-      },
+      data: trendPayload,
     }
     yield {
       type: 'pass1',
@@ -602,12 +646,16 @@ export async function* runResearch(
       insights: trendData.positive_signals,
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '트렌드 분석 중 오류가 발생했습니다.'
+    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg })
     await updateProgress(2, 'failed')
-    yield { type: 'error', message: '트렌드 분석 중 오류가 발생했습니다.', step: 'trend_analysis' }
+    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg }
+    yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
   }
 
   // Layer 3: Analysis Layer - Competition mapping
+  await upsertAnalysisTask('competition_analysis', 'running')
   yield { type: 'task', task: 'competition_analysis', status: 'running' }
   let competitionData: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
   try {
@@ -632,6 +680,7 @@ export async function* runResearch(
       competitive_landscape: landscape,
       market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
     }
+    await upsertAnalysisTask('competition_analysis', 'completed', { outputData: competitionData })
     await updateProgress(3, 'analyzing')
     yield {
       type: 'task',
@@ -640,12 +689,11 @@ export async function* runResearch(
       data: competitionData,
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '경쟁 환경 분석 중 오류가 발생했습니다.'
+    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg })
     await updateProgress(3, 'failed')
-    yield {
-      type: 'error',
-      message: '경쟁 환경 분석 중 오류가 발생했습니다.',
-      step: 'competition_analysis',
-    }
+    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg }
+    yield { type: 'error', message: msg, step: 'competition_analysis' }
     return
   }
 
@@ -654,6 +702,7 @@ export async function* runResearch(
     .join('. ') || competitionData.market_structure || ''
 
   // Layer 4: Strategy Layer - opportunities, risks, strategy summary
+  await upsertAnalysisTask('strategy_generation', 'running')
   yield { type: 'task', task: 'strategy_generation', status: 'running' }
   let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
   try {
@@ -673,6 +722,7 @@ export async function* runResearch(
       risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : [],
       strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
     }
+    await upsertAnalysisTask('strategy_generation', 'completed', { outputData: strategyData })
     await updateProgress(4, 'analyzing')
     yield {
       type: 'task',
@@ -681,14 +731,18 @@ export async function* runResearch(
       data: strategyData,
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '전략 생성 중 오류가 발생했습니다.'
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg })
     await updateProgress(4, 'failed')
-    yield { type: 'error', message: '전략 생성 중 오류가 발생했습니다.', step: 'strategy_generation' }
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg }
+    yield { type: 'error', message: msg, step: 'strategy_generation' }
     return
   }
 
   const strategyContext = [strategyData.strategy_summary, strategyData.opportunities.join('. '), strategyData.risks.join('. ')].filter(Boolean).join('\n')
 
   // Layer 5: Execution Layer - product actions, feature ideas, GTM steps
+  await upsertAnalysisTask('execution_layer', 'running')
   yield { type: 'task', task: 'execution_layer', status: 'running' }
   let executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -724,6 +778,7 @@ export async function* runResearch(
       feature_ideas: Array.isArray(parsed?.feature_ideas) ? parsed.feature_ideas.filter((s): s is string => typeof s === 'string') : [],
       go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
     }
+    await upsertAnalysisTask('execution_layer', 'completed', { outputData: executionData })
     await updateProgress(5, 'analyzing')
     yield {
       type: 'task',
@@ -732,6 +787,8 @@ export async function* runResearch(
       data: executionData,
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '전략 실행 생성 중 오류가 발생했습니다.'
+    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg })
     executionData = {
       product_actions: [],
       feature_ideas: [],
@@ -798,14 +855,17 @@ export async function* runResearch(
   yield { type: 'pass2', structured }
 
   // Opportunity Score - PM market attractiveness
+  type ScoreBreakdown = {
+    market_growth?: number
+    competition_density?: number
+    trend_momentum?: number
+    funding_signals?: number
+    risk_factors?: number
+  }
   let opportunityScoreData: {
     opportunity_score: number
-    market_growth: number
-    competition_pressure: number
-    user_demand: number
-    product_differentiation: number
-    market_timing: number
     score_reasoning: string
+    breakdown: ScoreBreakdown
   } | null = null
   try {
     const scoreText = await generateText({
@@ -825,22 +885,24 @@ export async function* runResearch(
     const parsed = parseJson<{
       opportunity_score?: number
       market_growth?: number
-      competition_pressure?: number
-      user_demand?: number
-      product_differentiation?: number
-      market_timing?: number
+      competition_density?: number
+      trend_momentum?: number
+      funding_signals?: number
+      risk_factors?: number
       score_reasoning?: string
     }>(typeof scoreText === 'string' ? scoreText : '')
     if (parsed && typeof parsed.opportunity_score === 'number') {
-      const clamp = (n: number) => Math.min(100, Math.max(0, n))
+      const clampScore = (n: number) => Math.min(100, Math.max(0, n))
+      const breakdown: ScoreBreakdown = {}
+      if (typeof parsed.market_growth === 'number') breakdown.market_growth = parsed.market_growth
+      if (typeof parsed.competition_density === 'number') breakdown.competition_density = parsed.competition_density
+      if (typeof parsed.trend_momentum === 'number') breakdown.trend_momentum = parsed.trend_momentum
+      if (typeof parsed.funding_signals === 'number') breakdown.funding_signals = parsed.funding_signals
+      if (typeof parsed.risk_factors === 'number') breakdown.risk_factors = parsed.risk_factors
       opportunityScoreData = {
-        opportunity_score: clamp(parsed.opportunity_score),
-        market_growth: clamp(typeof parsed.market_growth === 'number' ? parsed.market_growth : 50),
-        competition_pressure: clamp(typeof parsed.competition_pressure === 'number' ? parsed.competition_pressure : 50),
-        user_demand: clamp(typeof parsed.user_demand === 'number' ? parsed.user_demand : 50),
-        product_differentiation: clamp(typeof parsed.product_differentiation === 'number' ? parsed.product_differentiation : 50),
-        market_timing: clamp(typeof parsed.market_timing === 'number' ? parsed.market_timing : 50),
+        opportunity_score: clampScore(parsed.opportunity_score),
         score_reasoning: typeof parsed.score_reasoning === 'string' ? parsed.score_reasoning : '',
+        breakdown,
       }
     }
   } catch {
@@ -849,13 +911,7 @@ export async function* runResearch(
 
   if (opportunityScoreData) {
     structured.opportunity_score = opportunityScoreData.opportunity_score
-    structured.opportunity_score_breakdown = {
-      market_growth: opportunityScoreData.market_growth,
-      competition_pressure: opportunityScoreData.competition_pressure,
-      user_demand: opportunityScoreData.user_demand,
-      product_differentiation: opportunityScoreData.product_differentiation,
-      market_timing: opportunityScoreData.market_timing,
-    }
+    structured.opportunity_score_breakdown = opportunityScoreData.breakdown
     structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
   }
 

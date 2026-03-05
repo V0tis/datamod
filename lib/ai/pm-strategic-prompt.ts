@@ -173,19 +173,22 @@ Risks: ${risksSummary}
 Generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
 }
 
-/** Opportunity Score - PM market attractiveness (0-100) with breakdown and reasoning */
+/** Opportunity Score - PM market attractiveness (0-100) with signed breakdown and reasoning */
 export const OPPORTUNITY_SCORE_SYSTEM = `You are a product strategy analyst. Given market analysis, calculate an Opportunity Score (0-100) representing how attractive the market/product opportunity is for a PM.
 
-OUTPUT: Return ONLY valid JSON. No extra text. All content in Korean.
+OUTPUT: Return ONLY valid JSON. No extra text.
 Format: {
   "opportunity_score": number (0-100),
-  "market_growth": number (0-100),
-  "competition_pressure": number (0-100, lower = less pressure = better opportunity),
-  "user_demand": number (0-100),
-  "product_differentiation": number (0-100),
-  "market_timing": number (0-100),
-  "score_reasoning": "2-4 sentences explaining why this score. Reference: market signals, trend patterns, competition level. Be transparent."
-}`
+  "market_growth": number (contribution, e.g. +30 = positive factor),
+  "competition_density": number (contribution, typically negative, e.g. -10),
+  "trend_momentum": number (contribution, e.g. +20),
+  "funding_signals": number (contribution, e.g. +15),
+  "risk_factors": number (contribution, typically negative, e.g. -5),
+  "score_reasoning": "1-2 sentence AI explanation in Korean. Example: '검색 성장과 스타트업 활동이 활발하나, 대형 SaaS 기업 경쟁으로 기회 점수가 낮아집니다.'"
+}
+
+Contributions can be positive or negative. They conceptually explain what adds or subtracts from the base opportunity.
+score_reasoning: Explain the score in plain language. Reference search growth, competition, trends, funding, risks.`
 
 export function buildOpportunityScorePrompt(
   keyword: string,

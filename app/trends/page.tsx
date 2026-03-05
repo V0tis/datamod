@@ -13,7 +13,6 @@ import { showErrorToast } from '@/lib/error-toast'
 import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
-import { TrendDetailPanel } from '@/components/trend-detail-panel'
 import { cn } from '@/lib/utils'
 
 function showTrendsErrorToast(err: unknown): void {
@@ -82,7 +81,7 @@ function TrendsSkeleton() {
 function TrendsPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const startResearch = useResearchStore((s) => s.startResearch)
+  const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
   const [country, setCountryState] = useState<CountryChipCode>(() => {
     if (typeof window === 'undefined') return 'KR'
     const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
@@ -92,8 +91,6 @@ function TrendsPageInner() {
   })
   const [chipChanging, setChipChanging] = useState(false)
   const [updating, setUpdating] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<TrendItem | null>(null)
 
   useEffect(() => {
     const c = searchParams.get('country')
@@ -183,22 +180,17 @@ function TrendsPageInner() {
       .finally(() => setUpdating(false))
   }
 
-  const handleRowClick = (item: TrendItem) => {
-    setSelectedItem(item)
-    setDrawerOpen(true)
-  }
-
-  const handleAnalyzeFromPanel = (keyword: string) => {
-    startResearch(keyword, { country_code: country })
-    setSelectedItem(null)
+  const handleTrendClick = (item: TrendItem) => {
+    const keyword = item.title_ko ?? item.keyword
+    startStreamingResearch(keyword, { country_code: country })
     router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`)
   }
 
   const items = trends[country] ?? []
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto bg-background min-h-screen">
-      <header className="mb-6">
+    <div className="p-4 md:p-6 w-full max-w-7xl mx-auto bg-background min-h-screen">
+      <header className="mb-5">
         <h1 className="text-2xl font-bold text-foreground text-foreground flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />
           국가별 트렌드
@@ -239,7 +231,7 @@ function TrendsPageInner() {
         </div>
         <CardHeader>
           <CardTitle className="text-lg text-foreground">{COUNTRY_LABELS[country] ?? country} 인기 검색어</CardTitle>
-          <CardDescription className="text-muted-foreground">키워드 클릭 → 상세 패널에서 &quot;이 키워드로 분석하기&quot;로 바로 리서치</CardDescription>
+          <CardDescription className="text-muted-foreground">키워드를 클릭하면 바로 분석 페이지로 이동합니다</CardDescription>
           <p className="text-warning/90 text-xs mt-1">RSS 데이터는 실시간 업데이트 주기를 따릅니다.</p>
         </CardHeader>
         <CardContent className="relative">
@@ -272,13 +264,11 @@ function TrendsPageInner() {
               </div>
               <ul className="space-y-2">
                 {items.map((item, i) => {
-                  const newsPreview = (item.news_items ?? []).slice(0, 2)
-                  const previewHeadlines = newsPreview.map((n) => n.title)
                   return (
                     <li key={`${item.keyword}-${i}`} className="rounded-xl border border-border bg-muted/30 bg-card overflow-hidden hover:bg-primary/5 hover:bg-muted-hover hover:border-primary/30 transition-all transition-colors duration-300">
                       <button
                         type="button"
-                        onClick={() => handleRowClick(item)}
+                        onClick={() => handleTrendClick(item)}
                         className="w-full text-left grid grid-cols-12 gap-3 items-center px-4 py-3"
                       >
                         <span className="col-span-1 flex items-center">
@@ -315,12 +305,6 @@ function TrendsPageInner() {
         </CardContent>
       </Card>
 
-      <TrendDetailPanel
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        selectedItem={selectedItem}
-        onAnalyze={handleAnalyzeFromPanel}
-      />
     </div>
   )
 }

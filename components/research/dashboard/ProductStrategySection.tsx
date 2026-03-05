@@ -43,8 +43,8 @@ export function ProductStrategySection({
         )}
         aria-label="제품 전략 제안"
       >
-        <div className="p-6 sm:p-8">
-          <div className="h-4 w-36 rounded bg-muted/60 animate-pulse mb-6" />
+        <div className="p-4 sm:p-5">
+          <div className="h-4 w-32 rounded bg-muted/60 animate-pulse mb-4" />
           <div className="space-y-3">
             <div className="h-20 rounded-lg bg-muted/40 animate-pulse" />
             <div className="h-4 w-full rounded bg-muted/30 animate-pulse" />
@@ -65,15 +65,15 @@ export function ProductStrategySection({
       )}
       aria-label="Product Strategy"
     >
-      <div className="p-6 sm:p-8">
-        <div className="flex items-center gap-2 mb-6">
+      <div className="p-4 sm:p-5">
+        <div className="flex items-center gap-2 mb-4">
           <Lightbulb className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
             Strategy
           </h2>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {(hasTargetUsers || hasValueProp) && (
             <div className="grid gap-3 sm:grid-cols-2">
               {hasTargetUsers && (

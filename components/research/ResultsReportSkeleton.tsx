@@ -11,7 +11,7 @@ export function ResultsReportSkeleton({ showLongMessageAfterMs = 5000 }: { showL
   }, [showLongMessageAfterMs])
 
   return (
-    <div className="space-y-8" aria-busy="true" aria-label="분석 중">
+    <div className="space-y-5" aria-busy="true" aria-label="분석 중">
       {showContextMessage && (
         <p className="text-sm text-muted-foreground animate-in fade-in duration-300" role="status">
           시장 동향·경쟁사를 분석해 PM 관점 요약을 만들고 있어요

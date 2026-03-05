@@ -1,6 +1,7 @@
 'use client'
 
-import { Check, Loader2, Circle, ChevronDown, Sparkles } from 'lucide-react'
+import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle } from 'lucide-react'
+import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { cn } from '@/lib/utils'
 
 /** AI Analysis Timeline - 5 PM strategy steps with real reasoning output */
@@ -42,7 +43,15 @@ export interface StrategyEnginePipelineProps {
   allCompleted?: boolean
   streamingStepId?: string
   taskData?: Partial<Record<string, unknown>>
+  /** Polled task status from backend (real state) */
+  analysisTasks?: Array<{
+    step_name: string
+    status: 'pending' | 'running' | 'completed' | 'failed'
+    output_data: unknown
+    error_message: string | null
+  }> | null
   newsList?: Array<{ title?: string; url?: string; publisher?: string }>
+  onRetryStep?: () => void
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -61,13 +70,16 @@ export interface StrategyEnginePipelineProps {
 function getStageInsight(
   stageIndex: number,
   taskData: Partial<Record<string, unknown>>,
+  analysisTask: { output_data?: unknown } | null,
   result: StrategyEnginePipelineProps['result'],
   newsList: Array<{ title?: string; url?: string; publisher?: string }>
 ): PipelineStageInsight | null {
-  const km = result?.key_metrics ?? {}
   const stage = PIPELINE_STAGES[stageIndex]
   const taskId = stage?.taskId
-  const td = taskId ? taskData[taskId] : null
+  const td = (analysisTask?.output_data && typeof analysisTask.output_data === 'object'
+    ? analysisTask.output_data
+    : taskId ? taskData[taskId] : null) as Record<string, unknown> | null
+  const km = result?.key_metrics ?? {}
 
   if (td && typeof td === 'object') {
     const obj = td as Record<string, unknown>
@@ -231,10 +243,18 @@ export function StrategyEnginePipeline({
   allCompleted = false,
   streamingStepId,
   taskData = {},
+  analysisTasks = null,
   newsList = [],
+  onRetryStep,
   result,
   className,
 }: StrategyEnginePipelineProps) {
+  type TaskItem = NonNullable<typeof analysisTasks> extends (infer U)[] ? U : never
+  const taskMap = (analysisTasks ?? []).reduce(
+    (acc, t) => { acc[t.step_name] = t; return acc },
+    {} as Record<string, TaskItem>
+  )
+
   const effectiveIndex = allCompleted
     ? 5
     : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
@@ -243,7 +263,11 @@ export function StrategyEnginePipeline({
         ? currentStep
         : 0
 
-  const getStatus = (i: number): 'pending' | 'running' | 'completed' => {
+  type StageStatus = 'pending' | 'running' | 'completed' | 'failed'
+  const getStatus = (i: number): StageStatus => {
+    const stage = PIPELINE_STAGES[i]
+    const task = stage ? taskMap[stage.id] : null
+    if (task) return task.status
     if (i < effectiveIndex) return 'completed'
     if (i === effectiveIndex && !allCompleted) return 'running'
     return 'pending'
@@ -252,13 +276,13 @@ export function StrategyEnginePipeline({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
+        'rounded-lg border border-border bg-card shadow-sm overflow-hidden',
         'bg-gradient-to-b from-primary/5 to-transparent',
         className
       )}
     >
-      <div className="p-5 sm:p-6">
-        <div className="flex items-center gap-2 mb-6">
+      <div className="p-4 sm:p-5">
+        <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div>
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -273,12 +297,14 @@ export function StrategyEnginePipeline({
         <div className="relative">
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
+            const analysisTask = taskMap[stage.id] ?? null
             const insight =
               (status === 'completed' || status === 'running')
-                ? getStageInsight(i, taskData, result, newsList)
+                ? getStageInsight(i, taskData, analysisTask, result, newsList)
                 : null
             const hasInsight = insight && (insight.summary || (insight.signals?.length ?? 0) > 0)
             const showInsightPanel = hasInsight && (status === 'completed' || status === 'running')
+            const task = taskMap[stage.id]
 
             return (
               <div key={stage.id} className="relative">
@@ -292,6 +318,8 @@ export function StrategyEnginePipeline({
                       'border-primary bg-primary/10 shadow-md ring-2 ring-primary/20',
                     status === 'pending' &&
                       'border-border/60 bg-muted/20 opacity-60',
+                    status === 'failed' &&
+                      'border-destructive/50 bg-destructive/5',
                   )}
                 >
                   <div
@@ -302,6 +330,7 @@ export function StrategyEnginePipeline({
                         'border-primary bg-primary/20 text-primary',
                       status === 'pending' &&
                         'border-muted-foreground/30 bg-muted/50 text-muted-foreground',
+                      status === 'failed' && 'border-destructive bg-destructive/20 text-destructive',
                     )}
                   >
                     {status === 'completed' && (
@@ -313,6 +342,9 @@ export function StrategyEnginePipeline({
                     {status === 'pending' && (
                       <Circle className="h-4 w-4" strokeWidth={2} />
                     )}
+                    {status === 'failed' && (
+                      <AlertCircle className="h-5 w-5" strokeWidth={2} />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3
@@ -321,19 +353,34 @@ export function StrategyEnginePipeline({
                         status === 'completed' && 'text-foreground',
                         status === 'running' && 'text-foreground',
                         status === 'pending' && 'text-muted-foreground',
+                        status === 'failed' && 'text-destructive',
                       )}
                     >
                       Step {i + 1} · {stage.label}
                     </h3>
                     {status === 'running' && !hasInsight && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        분석 중...
+                        {getAnalysisActivityMessage(stage.id, i, { short: true })}
+                      </p>
+                    )}
+                    {status === 'failed' && (
+                      <p className="text-xs text-destructive mt-1">
+                        {task?.error_message ?? '오류 발생'}
                       </p>
                     )}
                     {hasInsight && (status === 'completed' || status === 'running') && insight?.summary && (
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                         {insight.summary}
                       </p>
+                    )}
+                    {status === 'failed' && onRetryStep && (
+                      <button
+                        type="button"
+                        onClick={onRetryStep}
+                        className="mt-2 text-xs font-medium text-primary hover:underline"
+                      >
+                        다시 시도
+                      </button>
                     )}
                   </div>
                 </div>
@@ -374,7 +421,7 @@ export function StrategyEnginePipeline({
                   <div
                     className={cn(
                       'flex justify-center py-1',
-                      status === 'completed' ? 'text-primary/60' : 'text-border',
+                      status === 'completed' ? 'text-primary/60' : status === 'failed' ? 'text-destructive/40' : 'text-border',
                     )}
                   >
                     <ChevronDown className="h-5 w-5" />

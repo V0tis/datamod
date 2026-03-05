@@ -21,6 +21,12 @@ export async function POST(req: Request) {
     if (!user?.id) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
+    if (!user.email_confirmed_at) {
+      return NextResponse.json(
+        { error: '이메일 인증을 완료한 후 분석을 이용할 수 있습니다.' },
+        { status: 403 }
+      )
+    }
 
     const body = (await req.json().catch(() => ({}))) as {
       keyword?: string

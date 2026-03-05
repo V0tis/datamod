@@ -14,13 +14,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { parseJsonResponse } from '@/lib/fetch-json'
-import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
+import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
-import { TrendDetailPanel } from '@/components/trend-detail-panel'
-
+import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
@@ -54,9 +54,6 @@ function RinAISearchInner() {
       ? (saved as CountryChipCode)
       : 'KR'
   })
-  const [trendPanelOpen, setTrendPanelOpen] = useState(false)
-  const [selectedTrendItem, setSelectedTrendItem] = useState<TrendItem | null>(null)
-
   useEffect(() => {
     const c = searchParams.get('country')
     if (c && (COUNTRY_CHIP_CODES as readonly string[]).includes(c)) {
@@ -257,12 +254,21 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col items-center justify-center min-h-[60vh] p-8"
+            className="flex flex-col items-center justify-center min-h-[60vh] p-6"
           >
-            <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <RinAnimation variant="loading" size={200} className="mx-auto block" />
-              <p className="text-center font-medium text-foreground mt-4">{loadingMessage}</p>
-              <p className="text-center text-muted-foreground text-sm mt-1">잠시만 기다려 주세요.</p>
+              <p className="text-center font-medium text-foreground mt-4">
+                {streamingState.status === 'running' || streamingState.status === 'streaming'
+                  ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                  : loadingMessage}
+              </p>
+              <p className="text-center text-muted-foreground text-sm mt-1">
+                {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                typeof streamingState.currentStep === 'number'
+                  ? `Step ${streamingState.currentStep + 1} of 5`
+                  : '잠시만 기다려 주세요.'}
+              </p>
             </div>
           </motion.div>
         ) : (
@@ -271,7 +277,7 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-4 md:p-6"
+            className="p-4 md:p-5"
           >
             {error && (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
@@ -291,7 +297,7 @@ function RinAISearchInner() {
             )}
 
             {/* 1. Start New Analysis — primary focus, first visible */}
-            <section className="mb-6 max-w-2xl mx-auto">
+            <section className="mb-5 max-w-2xl mx-auto">
               <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
                 <h2 className="text-lg font-semibold text-foreground mb-4">어떤 시장을 분석하고 싶나요?</h2>
                 <form onSubmit={handleSearch} className="space-y-3">
@@ -337,13 +343,50 @@ function RinAISearchInner() {
                     )}
                   </div>
                 </form>
+                <SuggestedAnalyses
+                  onSelect={(k) => {
+                    if (isAnalyzingNow()) {
+                      toast.warning('이미 분석이 진행 중입니다.')
+                      return
+                    }
+                    setError(null)
+                    setSearching(true)
+                    startStreamingResearch(k, { country_code: trendCountry })
+                    if (user) {
+                      fetch('/api/reports', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ keyword: k }),
+                      })
+                        .then((reportRes) => {
+                          if (reportRes.ok) {
+                            const now = new Date().toISOString()
+                            setRecentReports((prev) => [{ keyword: k, created_at: now, country_code: trendCountry, opportunity_score: null, analysis_status: 'analyzing' }, ...prev.filter((r) => r.keyword !== k)].slice(0, 6))
+                          }
+                        })
+                        .catch(() => {})
+                    }
+                    router.push(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(trendCountry)}`)
+                  }}
+                  disabled={searching || isAnalyzingNow()}
+                  className="mt-4"
+                />
                 {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 mt-3">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{getButtonLabel()}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출</p>
+                        <p className="text-sm font-medium text-foreground">
+                          {(streamingState.status === 'running' || streamingState.status === 'streaming')
+                            ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                            : getButtonLabel()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                          typeof streamingState.currentStep === 'number'
+                            ? `Step ${streamingState.currentStep + 1} of 5`
+                            : '시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출'}
+                        </p>
                       </div>
                     </div>
                     {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
@@ -366,7 +409,7 @@ function RinAISearchInner() {
             </section>
 
             {/* 2. Global Market Trends */}
-            <div className="mx-auto max-w-5xl mb-6">
+            <div className="mx-auto max-w-5xl mb-5">
               <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -406,8 +449,9 @@ function RinAISearchInner() {
                           key={`${trendCountry}-${i}`}
                           type="button"
                           onClick={() => {
-                            setSelectedTrendItem(item)
-                            setTrendPanelOpen(true)
+                            const keyword = item.title_ko ?? item.keyword
+                            startStreamingResearch(keyword, { country_code: trendCountry })
+                            router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
                           }}
                           className="group text-left rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
                         >
@@ -500,15 +544,6 @@ function RinAISearchInner() {
               </section>
             </div>
 
-            <TrendDetailPanel
-              open={trendPanelOpen}
-              onOpenChange={setTrendPanelOpen}
-              selectedItem={selectedTrendItem}
-              onAnalyze={(keyword) => {
-                startStreamingResearch(keyword, { country_code: trendCountry })
-                router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
-              }}
-            />
           </motion.div>
         )}
       </AnimatePresence>

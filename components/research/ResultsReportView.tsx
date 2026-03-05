@@ -144,14 +144,14 @@ export function ResultsReportView({
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-5 animate-in fade-in duration-300">
       {/* Progress Banner */}
       {isAnalyzing && (
         <ProgressBanner
           mode={analysisMode}
           streamingState={streamingState}
           onAbort={onAbort}
-          className="mb-6"
+          className="mb-4"
         />
       )}
 

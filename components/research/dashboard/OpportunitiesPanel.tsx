@@ -28,7 +28,7 @@ export function OpportunitiesPanel({
   if (loading && !hasContent) {
     return (
       <section
-        className={cn('rounded-xl border border-border bg-card p-6', className)}
+        className={cn('rounded-lg border border-border bg-card p-4', className)}
         aria-label="Strategic opportunities"
       >
         <div className="h-4 w-40 rounded bg-muted/60 animate-pulse mb-4" />
@@ -45,7 +45,7 @@ export function OpportunitiesPanel({
 
   return (
     <section
-      className={cn('rounded-xl border border-border bg-card p-6', className)}
+      className={cn('rounded-lg border border-border bg-card p-4', className)}
       aria-label="Strategic opportunities"
     >
       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-4">

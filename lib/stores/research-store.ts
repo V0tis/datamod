@@ -84,6 +84,10 @@ export interface ResearchResponse {
     opportunity_score?: number
     opportunity_score_breakdown?: {
       market_growth?: number
+      competition_density?: number
+      trend_momentum?: number
+      funding_signals?: number
+      risk_factors?: number
       competition_pressure?: number
       user_demand?: number
       product_differentiation?: number
@@ -232,6 +236,15 @@ interface ResearchState {
   lastSuccessfulReport: ResearchResponse | null
   /** Per-task partial data from analysis console (task ID -> data) */
   taskData: Partial<Record<string, unknown>>
+  /** Current analysis run ID for polling (userId|keyword|country) */
+  analysisId: string | null
+  /** Polled task status from backend (source of truth for timeline) */
+  analysisTasks: Array<{
+    step_name: string
+    status: 'pending' | 'running' | 'completed' | 'failed'
+    output_data: unknown
+    error_message: string | null
+  }> | null
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -361,6 +374,10 @@ interface ResearchStore extends ResearchState {
   setStepProgress: (currentStep: number, stepId: string) => void
   /** Set task data (internal use) */
   setTaskData: (taskId: string, data: unknown) => void
+  /** Set analysis ID for polling */
+  setAnalysisId: (id: string | null) => void
+  /** Set polled analysis tasks */
+  setAnalysisTasks: (tasks: ResearchState['analysisTasks']) => void
   /** Check if analysis is currently running */
   isAnalyzingNow: () => boolean
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
@@ -405,6 +422,8 @@ const initialState: ResearchState = {
   activeJobId: null,
   lastSuccessfulReport: null,
   taskData: {},
+  analysisId: null,
+  analysisTasks: null,
 }
 
 export const useResearchStore = create<ResearchStore>()(
@@ -448,6 +467,14 @@ export const useResearchStore = create<ResearchStore>()(
         set((s) => ({
           taskData: { ...s.taskData, [taskId]: data },
         }))
+      },
+
+      setAnalysisId: (id: string | null) => {
+        set({ analysisId: id })
+      },
+
+      setAnalysisTasks: (tasks: ResearchState['analysisTasks']) => {
+        set({ analysisTasks: tasks })
       },
 
       isAnalyzingNow: () => {
@@ -657,6 +684,8 @@ export const useResearchStore = create<ResearchStore>()(
           error: null,
           insights: null,
           taskData: {},
+          analysisId: null,
+          analysisTasks: null,
         })
 
         try {
@@ -712,6 +741,7 @@ export const useResearchStore = create<ResearchStore>()(
           let lastSuccessfulStep = 0
           const applyUpdate = get().applyStreamingUpdate
           const setStepProgress = get().setStepProgress
+          const setAnalysisId = get().setAnalysisId
 
           // Product Strategy Engine - 5 layers
           const stepMap: Record<string, number> = {
@@ -771,6 +801,11 @@ export const useResearchStore = create<ResearchStore>()(
                   message?: string
                 }
                 const type = event.type
+
+                if (type === 'analysis_started') {
+                  const ev = event as { analysisId?: string }
+                  if (ev.analysisId) setAnalysisId(ev.analysisId)
+                }
 
                 // Handle task events (AI Analysis Console)
                 if (type === 'task') {

@@ -21,7 +21,7 @@ export function WhyMarketMoving({
   if (loading && !hasContent) {
     return (
       <section
-        className={cn('rounded-xl border border-border bg-card p-6', className)}
+        className={cn('rounded-lg border border-border bg-card p-4', className)}
         aria-label="Why the market is moving"
       >
         <div className="h-4 w-48 rounded bg-muted/60 animate-pulse mb-4" />
@@ -41,7 +41,7 @@ export function WhyMarketMoving({
 
   return (
     <section
-      className={cn('rounded-xl border border-border bg-card p-6', className)}
+      className={cn('rounded-lg border border-border bg-card p-4', className)}
       aria-label="Why the market is moving"
     >
       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-4">

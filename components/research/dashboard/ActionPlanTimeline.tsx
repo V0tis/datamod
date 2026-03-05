@@ -24,11 +24,11 @@ export function ActionPlanTimeline({
   if (loading && !hasContent) {
     return (
       <section
-        className={cn('rounded-xl border border-border bg-card p-6', className)}
+        className={cn('rounded-lg border border-border bg-card p-4', className)}
         aria-label="Action plan"
       >
-        <div className="h-4 w-40 rounded bg-muted/60 animate-pulse mb-6" />
-        <div className="space-y-6">
+        <div className="h-4 w-40 rounded bg-muted/60 animate-pulse mb-4" />
+        <div className="space-y-4">
           {[1, 2, 3].map((i) => (
             <div key={i}>
               <div className="h-4 w-20 rounded bg-muted/60 animate-pulse mb-3" />
@@ -48,10 +48,10 @@ export function ActionPlanTimeline({
 
   return (
     <section
-      className={cn('rounded-xl border border-border bg-card p-6', className)}
+      className={cn('rounded-lg border border-border bg-card p-4', className)}
       aria-label="Action plan for PM"
     >
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-6">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-4">
         <CheckSquare className="h-4 w-4" />
         Action Plan for PM
       </h2>

@@ -55,6 +55,11 @@ export type StructuredAnalysisFields = {
   opportunity_score?: number
   opportunity_score_breakdown?: {
     market_growth?: number
+    competition_density?: number
+    trend_momentum?: number
+    funding_signals?: number
+    risk_factors?: number
+    /** Legacy 0-100 format */
     competition_pressure?: number
     user_demand?: number
     product_differentiation?: number

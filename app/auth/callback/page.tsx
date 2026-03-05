@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { showErrorToast } from '@/lib/error-toast'
+import { RinLogo } from '@/components/rin-logo'
+import { CheckCircle2 } from 'lucide-react'
 
 function parseHashParams(hash: string): Record<string, string> {
   const params: Record<string, string> = {}
@@ -46,7 +48,6 @@ export default function AuthCallbackPage() {
       .then(async () => {
         await fetch('/api/auth/sync-profile', { method: 'POST' })
         setStatus('success')
-        window.location.href = '/'
       })
       .catch((err) => {
         setStatus('error')
@@ -88,12 +89,33 @@ export default function AuthCallbackPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background px-4">
-      <LoadingState
-        message="대시보드로 이동 중이에요"
-        detail="잠시만 기다려 주세요."
-        size="lg"
-      />
+    <main className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold text-foreground">
+              이메일 인증이 완료되었습니다.
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              rin-ai 서비스를 이용하실 수 있어요.
+            </p>
+          </div>
+        </div>
+        <Button
+          asChild
+          className="w-full h-12 rounded-lg gap-2 text-base font-medium"
+        >
+          <Link href="/">
+            <RinLogo size={20} />
+            rin-ai 시작하기
+          </Link>
+        </Button>
+      </div>
     </main>
   )
 }

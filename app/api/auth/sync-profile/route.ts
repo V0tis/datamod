@@ -14,6 +14,8 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const verified = Boolean(user?.email_confirmed_at)
+
   const nickname =
     typeof user.user_metadata?.nickname === 'string'
       ? user.user_metadata.nickname.trim() || null
@@ -49,5 +51,5 @@ export async function POST() {
       { onConflict: 'id' }
     )
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, verified })
 }

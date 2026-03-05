@@ -33,8 +33,8 @@ export function PMActionPlanSection({
         )}
         aria-label="실행 전략"
       >
-        <div className="p-6 sm:p-8">
-          <div className="h-4 w-32 rounded bg-muted/60 animate-pulse mb-6" />
+        <div className="p-4 sm:p-5">
+          <div className="h-4 w-32 rounded bg-muted/60 animate-pulse mb-4" />
           <ul className="space-y-3 pl-5">
             {[1, 2, 3, 4].map((i) => (
               <li key={i} className="h-4 rounded bg-muted/40 animate-pulse" />
@@ -55,8 +55,8 @@ export function PMActionPlanSection({
       )}
       aria-label="PM Action Plan"
     >
-      <div className="p-6 sm:p-8">
-        <div className="flex items-center gap-2 mb-6">
+      <div className="p-4 sm:p-5">
+        <div className="flex items-center gap-2 mb-4">
           <CheckSquare className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
             Action Plan
