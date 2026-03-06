@@ -43,6 +43,8 @@ export async function POST(req: Request) {
       )
     }
 
+    console.log('[Research Run API] POST 요청', { keyword, countryCode, userId: user.id })
+
     const adminClient = createAdminClient()
     const [geminiResult, groqKey] = await Promise.all([
       getGeminiKeyForRequest(adminClient, user.id),
@@ -101,6 +103,11 @@ export async function POST(req: Request) {
 
           for await (const event of generator) {
             if (isClosed) break
+            if (event.type === 'task') {
+              console.log('[Research Run API] 이벤트', { type: event.type, task: event.task, status: event.status, error: event.error })
+            } else if (event.type === 'error' || event.type === 'done' || event.type === 'cached') {
+              console.log('[Research Run API] 이벤트', { type: event.type, message: 'message' in event ? event.message : undefined })
+            }
             send(event)
 
             if (event.type === 'error' || event.type === 'done' || event.type === 'cached') {
@@ -110,6 +117,7 @@ export async function POST(req: Request) {
         } catch (err) {
           const message =
             err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.'
+          console.log('[Research Run API] 제너레이터 예외', { keyword, error: message, err })
           send({ type: 'error', message })
         }
 
@@ -125,7 +133,7 @@ export async function POST(req: Request) {
       },
     })
   } catch (e) {
-    console.error('[Research Run API] POST:', e)
+    console.log('[Research Run API] POST 예외:', e)
     return NextResponse.json(
       { error: '분석을 시작하지 못했어요. 다시 시도해 주세요.' },
       { status: 500 }

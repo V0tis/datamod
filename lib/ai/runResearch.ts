@@ -19,7 +19,7 @@ import {
   EXECUTION_LAYER_SYSTEM,
   buildExecutionLayerPrompt,
 } from './pm-strategic-prompt'
-import { extractJsonFromText } from '@/lib/extract-json'
+import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 import type {
@@ -153,7 +153,16 @@ function parseJson<T>(text: string): T | null {
   const raw = extractJsonFromText(text)
   try {
     return JSON.parse(raw) as T
-  } catch {
+  } catch (err) {
+    const parseError = err instanceof Error ? err : new Error(String(err))
+    const repaired = tryRepairTruncatedJson(raw, parseError)
+    if (repaired) {
+      try {
+        return JSON.parse(repaired) as T
+      } catch {
+        /* fallback to null */
+      }
+    }
     return null
   }
 }
@@ -512,6 +521,9 @@ export async function* runResearch(
     .maybeSingle()
 
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
+  const log = (step: string, detail: string, extra?: Record<string, unknown>) => {
+    console.log('[AI Timeline]', { step, detail, analysisId: analysisId.slice(0, 40) + '...', keyword, ...extra })
+  }
 
   const upsertAnalysisTask = async (
     step: AnalysisTaskId,
@@ -567,9 +579,11 @@ export async function* runResearch(
   }
 
   await updateProgress(0, 'analyzing')
+  log('start', 'analysis_started')
   yield { type: 'analysis_started', analysisId }
 
   // Layer 1: Signal Layer - collect market signals
+  log('signal_layer', 'running')
   await upsertAnalysisTask('signal_layer', 'running')
   yield { type: 'task', task: 'signal_layer', status: 'running' }
   let news: NewsItem[]
@@ -582,6 +596,7 @@ export async function* runResearch(
       news_activity: news.map((n) => ({ title: n.title, url: n.url, publisher: n.publisher })),
     }
     await upsertAnalysisTask('signal_layer', 'completed', { outputData: signalData })
+    log('signal_layer', 'completed', { newsCount: news.length })
     await updateProgress(1, 'analyzing')
     yield {
       type: 'task',
@@ -592,6 +607,7 @@ export async function* runResearch(
     yield { type: 'news', items: news }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '시장 신호 수집에 실패했습니다.'
+    log('signal_layer', 'failed', { error: msg, err })
     await upsertAnalysisTask('signal_layer', 'failed', { errorMessage: msg })
     await updateProgress(0, 'failed')
     yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg }
@@ -602,6 +618,7 @@ export async function* runResearch(
   const newsTitles = news.map((n) => n.title)
 
   // Layer 2: Analysis Layer - Trend detection
+  log('trend_analysis', 'running')
   await upsertAnalysisTask('trend_analysis', 'running')
   yield { type: 'task', task: 'trend_analysis', status: 'running' }
   let trendData: { summary: string; market_score: number; positive_signals: string[]; neutral_signals: string[] }
@@ -617,6 +634,7 @@ export async function* runResearch(
     const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
       typeof trendText === 'string' ? trendText : ''
     )
+    
     if (!parsed || (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string')) {
       throw new Error('Invalid trend response')
     }
@@ -632,6 +650,7 @@ export async function* runResearch(
       growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
     }
     await upsertAnalysisTask('trend_analysis', 'completed', { outputData: trendPayload })
+    log('trend_analysis', 'completed')
     await updateProgress(2, 'analyzing')
     yield {
       type: 'task',
@@ -647,6 +666,7 @@ export async function* runResearch(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '트렌드 분석 중 오류가 발생했습니다.'
+    log('trend_analysis', 'failed', { error: msg, err })
     await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg })
     await updateProgress(2, 'failed')
     yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg }
@@ -655,10 +675,12 @@ export async function* runResearch(
   }
 
   // Layer 3: Analysis Layer - Competition mapping
+  log('competition_analysis', 'running (Gemini API 호출 예정)')
   await upsertAnalysisTask('competition_analysis', 'running')
   yield { type: 'task', task: 'competition_analysis', status: 'running' }
   let competitionData: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
   try {
+    log('competition_analysis', 'generateText 호출 중', { promptLen: buildTaskCompetitionPrompt(keyword, trendData.summary).length })
     const compText = await generateText({
       apiKey: geminiKey,
       prompt: buildTaskCompetitionPrompt(keyword, trendData.summary),
@@ -681,6 +703,7 @@ export async function* runResearch(
       market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
     }
     await upsertAnalysisTask('competition_analysis', 'completed', { outputData: competitionData })
+    log('competition_analysis', 'completed', { competitorsCount: competitionData.competitive_landscape.length })
     await updateProgress(3, 'analyzing')
     yield {
       type: 'task',
@@ -690,6 +713,7 @@ export async function* runResearch(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '경쟁 환경 분석 중 오류가 발생했습니다.'
+    log('competition_analysis', 'failed', { error: msg, err, errName: err instanceof Error ? err.name : typeof err })
     await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg })
     await updateProgress(3, 'failed')
     yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg }
@@ -702,6 +726,7 @@ export async function* runResearch(
     .join('. ') || competitionData.market_structure || ''
 
   // Layer 4: Strategy Layer - opportunities, risks, strategy summary
+  log('strategy_generation', 'running')
   await upsertAnalysisTask('strategy_generation', 'running')
   yield { type: 'task', task: 'strategy_generation', status: 'running' }
   let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
@@ -723,6 +748,7 @@ export async function* runResearch(
       strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
     }
     await upsertAnalysisTask('strategy_generation', 'completed', { outputData: strategyData })
+    log('strategy_generation', 'completed')
     await updateProgress(4, 'analyzing')
     yield {
       type: 'task',
@@ -732,6 +758,7 @@ export async function* runResearch(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '전략 생성 중 오류가 발생했습니다.'
+    log('strategy_generation', 'failed', { error: msg, err })
     await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg })
     await updateProgress(4, 'failed')
     yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg }
@@ -742,6 +769,7 @@ export async function* runResearch(
   const strategyContext = [strategyData.strategy_summary, strategyData.opportunities.join('. '), strategyData.risks.join('. ')].filter(Boolean).join('\n')
 
   // Layer 5: Execution Layer - product actions, feature ideas, GTM steps
+  log('execution_layer', 'running')
   await upsertAnalysisTask('execution_layer', 'running')
   yield { type: 'task', task: 'execution_layer', status: 'running' }
   let executionData: {
@@ -779,6 +807,7 @@ export async function* runResearch(
       go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
     }
     await upsertAnalysisTask('execution_layer', 'completed', { outputData: executionData })
+    log('execution_layer', 'completed', { actionsCount: executionData.product_actions.length })
     await updateProgress(5, 'analyzing')
     yield {
       type: 'task',
@@ -788,6 +817,7 @@ export async function* runResearch(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '전략 실행 생성 중 오류가 발생했습니다.'
+    log('execution_layer', 'failed', { error: msg, err })
     await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg })
     executionData = {
       product_actions: [],
