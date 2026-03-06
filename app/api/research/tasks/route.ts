@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     const admin = createAdminClient()
     const { data: rows, error } = await admin
       .from('analysis_tasks')
-      .select('step_name, status, output_data, error_message, started_at, completed_at')
+      .select('step_name, status, output_data, error_message, started_at, completed_at, provider, fallback_used, primary_provider_error')
       .eq('analysis_id', analysisId)
       .in('step_name', STEP_ORDER)
       .order('created_at', { ascending: true })
@@ -68,13 +68,16 @@ export async function GET(req: Request) {
           error_message: r.error_message,
           started_at: r.started_at,
           completed_at: r.completed_at,
+          provider: (r as { provider?: string | null }).provider ?? null,
+          fallback_used: (r as { fallback_used?: boolean }).fallback_used ?? false,
+          primary_provider_error: (r as { primary_provider_error?: string | null }).primary_provider_error ?? null,
         },
       ])
     )
 
     const tasks = STEP_ORDER.map((step) => {
       const row = byStep.get(step)
-      return row ?? { step_name: step, status: 'pending' as const, output_data: null, error_message: null, started_at: null, completed_at: null }
+      return row ?? { step_name: step, status: 'pending' as const, output_data: null, error_message: null, started_at: null, completed_at: null, provider: null, fallback_used: false, primary_provider_error: null }
     })
 
     const allCompleted = tasks.every((t) => t.status === 'completed')

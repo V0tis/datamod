@@ -106,6 +106,17 @@ Trend summary: ${trendSummary}
 Identify competitors and competitive landscape. Return ONLY the JSON object.`
 }
 
+/** Competition prompt using news headlines (for parallel execution with trend) */
+export function buildTaskCompetitionPromptFromNews(keyword: string, newsTitles: string[]): string {
+  const block =
+    newsTitles.length > 0
+      ? `News headlines:\n${newsTitles.slice(0, 15).map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
+      : ''
+  return `${block}Keyword: ${keyword}
+
+Identify competitors and competitive landscape from the news. Return ONLY the JSON object.`
+}
+
 /** Task 4: Evaluate risks */
 export const TASK_RISKS_SYSTEM = `${STRATEGIC_SYSTEM}
 
@@ -171,6 +182,32 @@ Opportunities: ${opportunitiesSummary}
 Risks: ${risksSummary}
 
 Generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
+}
+
+/** Unified Strategy + Execution: single pipeline for strategy and execution */
+export const STRATEGY_EXECUTION_SYSTEM = `${STRATEGIC_SYSTEM}
+
+OUTPUT: Return ONLY valid JSON. No extra text.
+Format: {
+  "opportunities": ["opportunity1", "opportunity2"],
+  "risks": ["risk1", "risk2"],
+  "strategy_summary": "2-3 sentence PM-level strategy summary",
+  "product_actions": [{ "action": "", "priority": "high|medium|low", "reasoning": "" }],
+  "feature_ideas": ["idea1", "idea2", "idea3"],
+  "go_to_market_steps": ["step1", "step2"]
+}
+All content in Korean. Identify opportunities/risks/strategy first, then derive concrete product actions, feature ideas, and GTM steps. Be specific and actionable.`
+
+export function buildStrategyExecutionPrompt(
+  keyword: string,
+  trendSummary: string,
+  competitionSummary: string
+): string {
+  return `Keyword: ${keyword}
+Trends: ${trendSummary}
+Competition: ${competitionSummary}
+
+In one response: identify product opportunities, market risks, and a 2-3 sentence strategy summary; then generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
 }
 
 /** Opportunity Score - PM market attractiveness (0-100) with signed breakdown and reasoning */

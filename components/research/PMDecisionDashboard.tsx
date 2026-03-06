@@ -80,6 +80,10 @@ export function PMDecisionDashboard({
     streamingState.status === 'running' || streamingState.status === 'streaming'
       ? streamingState.stepId
       : undefined
+  const retryMessage =
+    streamingState.status === 'running' || streamingState.status === 'streaming'
+      ? ('retryMessage' in streamingState ? streamingState.retryMessage : undefined)
+      : undefined
 
   const isAnalyzing =
     loading ||
@@ -103,6 +107,7 @@ export function PMDecisionDashboard({
 
   const showTimeline = (result != null || isAnalyzing || hasError) && Boolean(keyword?.trim())
   const analysisComplete = result != null && !isAnalyzing
+  const showResultSections = (result != null || isAnalyzing || (effectiveAnalysisTasks?.length ?? 0) > 0) && Boolean(keyword?.trim())
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
@@ -115,6 +120,7 @@ export function PMDecisionDashboard({
             streamingState.status === 'completed' || (result != null && !isAnalyzing && !hasError)
           }
           streamingStepId={stepId}
+          retryMessage={retryMessage}
           taskData={taskData}
           analysisTasks={effectiveAnalysisTasks}
           newsList={newsList}
@@ -126,15 +132,15 @@ export function PMDecisionDashboard({
         />
       )}
 
-      {/* Strategy, Strategic Actions, Action Plan - only when analysis finishes */}
-      {analysisComplete && (
+      {/* Strategy, Strategic Actions, Action Plan - show progressively during streaming */}
+      {showResultSections && (
         <>
           <AnalysisResultSections
             result={result}
             taskData={taskData}
             analysisTasks={effectiveAnalysisTasks ?? undefined}
             consensusData={consensusData ?? undefined}
-            loading={false}
+            loading={isAnalyzing}
             keyword={keyword}
             onSaveToWorkspace={onSaveInsight}
           />

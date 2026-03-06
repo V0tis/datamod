@@ -25,11 +25,13 @@ import { AnalysisQualityIndicator } from '@/components/research/analysis-quality
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { AnalysisHistorySidebar } from '@/components/research/AnalysisHistorySidebar'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { AIConfidenceCard } from '@/components/research/AIConfidenceCard'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
+import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
@@ -368,8 +370,9 @@ function ResultsContent() {
 
   const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
-  const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword
   const showPolledError = polledStatus === 'failed'
+  const hasFailure = canonicalStatus === 'failed' || showPolledError
+  const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
     countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
@@ -996,31 +999,21 @@ function ResultsContent() {
               onAbort={abortAnalysis}
               reanalyzing={loading}
               hasError={canonicalStatus === 'failed' || showPolledError}
-              errorStepIndex={polledProgressStep}
+              errorStepIndex={
+                streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
+                  ? streamingState.lastSuccessfulStep + 1
+                  : polledProgressStep
+              }
               globalErrorMessage={displayError ?? polledError ?? undefined}
             />
-            {(canonicalStatus === 'failed' || showPolledError) && (
-              <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 py-6 px-4">
-                <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-                  {displayError ?? polledError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
-                </p>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setPolledStatus(null)
-                    setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
-                  }}
-                >
-                  Retry
-                </Button>
-              </div>
+            {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
+              <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} className="mt-5" />
             )}
           </>
         )}
 
-        {/* 실시간 뉴스: PM 대시보드 하단 보조 정보 */}
-        {displayStatus === 'done' && displayResult && currentKeyword && (
+        {/* 실시간 뉴스: 외부 RSS 데이터, AI 분석과 독립적으로 페이지 로드 시 즉시 fetch */}
+        {currentKeyword && (
           <section className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5" aria-label="실시간 뉴스">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -1175,8 +1168,55 @@ function ResultsContent() {
               refetchTrigger={displayResult?.updated_at}
               className="mb-4"
             />
+            {/* Market Summary: 핵심 인사이트 우선 표시, 인지 부담 감소 */}
+            {displayResult && (
+              <section className="mb-4 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                <h3 className="px-4 py-3 text-sm font-semibold text-foreground border-b border-border/60 bg-muted/30">
+                  Market Summary
+                </h3>
+                <div className="grid grid-cols-1 gap-2 p-4">
+                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Market Size</p>
+                    <p className="text-sm font-semibold text-foreground tabular-nums">
+                      {typeof displayResult?.key_metrics?.opportunity_score === 'number'
+                        ? `${displayResult.key_metrics.opportunity_score}/100`
+                        : '—'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">시장 매력도 점수</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Growth Rate</p>
+                    <p className="text-sm font-semibold text-foreground tabular-nums">
+                      {typeof displayResult?.key_metrics?.opportunity_score_breakdown?.market_growth === 'number'
+                        ? `${displayResult.key_metrics.opportunity_score_breakdown.market_growth}/100`
+                        : typeof displayResult?.key_metrics?.opportunity_score_breakdown?.trend_momentum === 'number'
+                          ? `${displayResult.key_metrics.opportunity_score_breakdown.trend_momentum}/100`
+                          : '—'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Key Players</p>
+                    <p className="text-sm font-medium text-foreground line-clamp-3">
+                      {(() => {
+                        const raw = displayResult?.competitorTrends ?? (displayResult as { competitive_landscape?: Array<{ name?: string }> })?.competitive_landscape
+                          ?.map((c) => c.name)
+                          .filter(Boolean)
+                          .join(', ')
+                        const text = (raw ?? '').trim()
+                        return text ? (text.length > 100 ? text.slice(0, 100) + '…' : text) : '—'
+                      })()}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">경쟁사·트렌드 요약</p>
+                  </div>
+                </div>
+              </section>
+            )}
+            {/* Advanced Details: 부가 정보 접이식으로 인지 부담 감소 */}
+            <CollapsibleSection title="Advanced Details" defaultExpanded={false} className="mb-4">
+            <div className="space-y-4">
             {/* Data Sources: signals with source, summary, confidence */}
-            <div className="mb-4">
+            <div>
               <DataSourcesSection
                 signals={dataSourceSignals}
                 loading={loading && !displayResult}
@@ -1321,6 +1361,8 @@ function ResultsContent() {
                 </ul>
               )}
             </div>
+            </div>
+            </CollapsibleSection>
             </div>
           </div>
         </div>

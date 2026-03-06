@@ -244,6 +244,9 @@ interface ResearchState {
     status: 'pending' | 'running' | 'completed' | 'failed'
     output_data: unknown
     error_message: string | null
+    provider?: string | null
+    fallback_used?: boolean
+    primary_provider_error?: string | null
   }> | null
 }
 
@@ -371,13 +374,19 @@ interface ResearchStore extends ResearchState {
   /** Update streaming state (internal use) */
   setStreamingState: (state: StreamingState) => void
   /** Update step progress (internal use) */
-  setStepProgress: (currentStep: number, stepId: string) => void
+  setStepProgress: (currentStep: number, stepId: string, retryMessage?: string) => void
   /** Set task data (internal use) */
   setTaskData: (taskId: string, data: unknown) => void
   /** Set analysis ID for polling */
   setAnalysisId: (id: string | null) => void
   /** Set polled analysis tasks */
   setAnalysisTasks: (tasks: ResearchState['analysisTasks']) => void
+  /** Merge a streaming task into analysisTasks for immediate timeline update */
+  mergeStreamingTaskIntoAnalysisTasks: (
+    stepName: string,
+    status: 'completed' | 'failed' | 'running',
+    opts?: { outputData?: unknown; errorMessage?: string | null; provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
+  ) => void
   /** Check if analysis is currently running */
   isAnalyzingNow: () => boolean
   startResearch: (keyword: string, options?: { fromRetry?: boolean; country_code?: string }) => void
@@ -455,11 +464,11 @@ export const useResearchStore = create<ResearchStore>()(
         set({ streamingState: state })
       },
 
-      setStepProgress: (currentStep: number, stepId: string) => {
+      setStepProgress: (currentStep: number, stepId: string, retryMessage?: string) => {
         const mode = get().analysisMode
         set({
           currentStep,
-          streamingState: createStreamingState(mode, currentStep, stepId),
+          streamingState: createStreamingState(mode, currentStep, stepId, retryMessage),
         })
       },
 
@@ -475,6 +484,54 @@ export const useResearchStore = create<ResearchStore>()(
 
       setAnalysisTasks: (tasks: ResearchState['analysisTasks']) => {
         set({ analysisTasks: tasks })
+      },
+
+      /** Merge a streaming task into analysisTasks so timeline shows it immediately. */
+      mergeStreamingTaskIntoAnalysisTasks: (
+        stepName: string,
+        status: 'completed' | 'failed' | 'running',
+        opts?: { outputData?: unknown; errorMessage?: string | null; provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
+      ) => {
+        const STEP_ORDER = [
+          'signal_layer',
+          'trend_analysis',
+          'competition_analysis',
+          'strategy_generation',
+          'execution_layer',
+        ] as const
+        set((s) => {
+          const prev = s.analysisTasks ?? []
+          const byStep = new Map(prev.map((t) => [t.step_name, t]))
+          const entry = {
+            step_name: stepName,
+            status,
+            output_data: opts?.outputData ?? null,
+            error_message: opts?.errorMessage ?? null,
+            started_at: null,
+            completed_at: null,
+            provider: opts?.provider ?? null,
+            fallback_used: opts?.fallback_used ?? false,
+            primary_provider_error: opts?.primary_provider_error ?? null,
+          }
+          byStep.set(stepName, { ...byStep.get(stepName), ...entry } as (typeof prev)[0])
+          const merged = STEP_ORDER.map((name) => {
+            const t = byStep.get(name)
+            return (
+              t ?? {
+                step_name: name,
+                status: 'pending' as const,
+                output_data: null,
+                error_message: null,
+                started_at: null,
+                completed_at: null,
+                provider: null,
+                fallback_used: false,
+                primary_provider_error: null,
+              }
+            )
+          })
+          return { analysisTasks: merged }
+        })
       },
 
       isAnalyzingNow: () => {
@@ -809,17 +866,37 @@ export const useResearchStore = create<ResearchStore>()(
 
                 // Handle task events (AI Analysis Console)
                 if (type === 'task') {
-                  const ev = event as { task?: string; status?: string; data?: unknown }
+                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string }
                   const task = ev.task
                   const status = ev.status
                   if (task && task in stepMap) {
                     const stepIdx = stepMap[task]
-                    setStepProgress(stepIdx, task)
+                    setStepProgress(stepIdx, task, ev.retryMessage)
                     if (status === 'completed') {
                       lastSuccessfulStep = stepIdx
                       if (ev.data != null) {
                         get().setTaskData(task, ev.data)
                       }
+                      if (ev.fallback_used) {
+                        get().mergeStreamingTaskIntoAnalysisTasks(task, 'completed', {
+                          outputData: ev.data ?? null,
+                          provider: ev.provider ?? null,
+                          fallback_used: true,
+                          primary_provider_error: ev.primaryProviderError ?? null,
+                        })
+                      }
+                    } else if (status === 'running' && ev.fallback_used) {
+                      get().mergeStreamingTaskIntoAnalysisTasks(task, 'running', {
+                        provider: ev.provider ?? null,
+                        fallback_used: true,
+                        primary_provider_error: ev.primaryProviderError ?? null,
+                      })
+                    } else if (status === 'failed') {
+                      get().mergeStreamingTaskIntoAnalysisTasks(task, 'failed', {
+                        errorMessage: ev.error ?? null,
+                        provider: ev.provider ?? null,
+                        fallback_used: ev.fallback_used ?? false,
+                      })
                     }
                   }
                 }

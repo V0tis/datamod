@@ -94,12 +94,17 @@ function RinAISearchInner() {
     }
   }
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
+  /** When true, we're navigating from trend click - keep main UI static, show overlay only */
+  const [navigatingFromTrend, setNavigatingFromTrend] = useState(false)
   const jobs = useResearchStore((s) => s.jobs)
   const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
   const abortAnalysis = useResearchStore((s) => s.abortAnalysis)
   const streamingState = useResearchStore((s) => s.streamingState)
+  const currentAnalysisKeyword = useResearchStore((s) => s.keyword)
   const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
   const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running') || isAnalyzingNow()
+  /** Use analysis UI only when searching from form; trend click should not change main page */
+  const showAnalysisUI = (searching || isAnalyzingNow()) && !navigatingFromTrend
 
   useEffect(() => {
     const supabase = createClient()
@@ -240,7 +245,7 @@ function RinAISearchInner() {
   }
 
   const getButtonLabel = () => {
-    if (searching || isAnalyzingNow()) {
+    if (showAnalysisUI) {
       const state = streamingState
       if (state.status === 'running' || state.status === 'streaming') {
         return `분석 중... (${state.currentStep + 1}/5)`
@@ -251,9 +256,17 @@ function RinAISearchInner() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      {navigatingFromTrend && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" aria-label="이동 중">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">분석 페이지로 이동 중...</p>
+          </div>
+        </div>
+      )}
       <AnimatePresence mode="wait">
-        {searching ? (
+        {searching && !navigatingFromTrend ? (
           <motion.div
             key="loading"
             initial={{ opacity: 0 }}
@@ -302,14 +315,14 @@ function RinAISearchInner() {
             )}
 
             {/* 1. Start New Analysis — primary focus, first visible */}
-            <section className="mb-5 max-w-2xl mx-auto">
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-foreground mb-4">어떤 시장을 분석하고 싶나요?</h2>
-                <form onSubmit={handleSearch} className="space-y-3">
+            <section className="mb-8 max-w-3xl mx-auto">
+              <div className="rounded-xl border border-border bg-card p-6 md:p-8 shadow-sm">
+                <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-6">어떤 시장을 분석하고 싶나요?</h2>
+                <form onSubmit={handleSearch} className="space-y-5">
                   <div
                     className={cn(
-                      'relative flex items-center rounded-lg border-2 border-border bg-background h-12 px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
-                      (searching || isAnalyzingNow()) && 'opacity-80'
+                      'relative flex items-center rounded-lg border-2 border-border bg-background h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
+                      showAnalysisUI && 'opacity-80'
                     )}
                   >
                     <Input
@@ -321,34 +334,34 @@ function RinAISearchInner() {
                         setQuery(e.target.value)
                         setError(null)
                       }}
-                      disabled={searching || isAnalyzingNow()}
-                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                      disabled={showAnalysisUI}
+                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
                     />
-                    {query.length > 0 && !searching && !isAnalyzingNow() && (
+                    {query.length > 0 && !showAnalysisUI && (
                       <button
                         type="button"
                         onClick={() => setQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                         aria-label="검색어 지우기"
                       >
                         <X className="h-4 w-4" />
                       </button>
                     )}
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-1">
                     {(searching || isAnalyzingNow()) ? (
-                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-9 px-5 text-sm">
+                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-10 px-6 text-sm">
                         <X className="h-4 w-4 mr-2" />
                         분석 중단
                       </Button>
                     ) : (
-                      <Button type="submit" disabled={!query.trim()} className="h-9 px-6 text-sm font-medium">
+                      <Button type="submit" disabled={!query.trim()} size="lg" className="h-11 px-8 text-base font-semibold">
                         {getButtonLabel()}
                       </Button>
                     )}
                   </div>
                 </form>
-                {(searching || isAnalyzingNow()) && streamingState.status !== 'idle' && (
+                {showAnalysisUI && streamingState.status !== 'idle' && (
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 mt-3">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
@@ -385,14 +398,17 @@ function RinAISearchInner() {
               </div>
             </section>
 
-            {/* 2. Global Market Trends */}
+            {/* 2. Real-time Search Trends */}
             <div className="mx-auto max-w-5xl mb-5">
               <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-                    Global Market Trends
-                  </h2>
+                <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                      Real-time Search Trends
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Real-time trending search keywords from Google RSS.</p>
+                  </div>
                   <div className="flex items-center gap-3">
                     <CountryChips
                       value={trendCountry}
@@ -419,7 +435,12 @@ function RinAISearchInner() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {(sharedTrends[trendCountry] ?? []).slice(0, 6).map((item, i) => {
                       const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
-                      const displayName = hasTranslation ? item.title_ko! : item.keyword
+                      const showBoth = trendCountry !== 'KR' && hasTranslation
+                      const displayName = showBoth
+                        ? `${item.keyword} · ${item.title_ko}`
+                        : hasTranslation
+                          ? item.title_ko!
+                          : item.keyword
                       const growthPct = Math.round(250 - (item.rank ?? i + 1) * 18)
                       return (
                         <button
@@ -427,8 +448,9 @@ function RinAISearchInner() {
                           type="button"
                           onClick={() => {
                             const keyword = item.title_ko ?? item.keyword
-                            startStreamingResearch(keyword, { country_code: trendCountry })
+                            setNavigatingFromTrend(true)
                             router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
+                            startStreamingResearch(keyword, { country_code: trendCountry })
                           }}
                           className="group text-left rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
                         >
@@ -486,24 +508,51 @@ function RinAISearchInner() {
                             </p>
                             <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                          <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                            {r.opportunity_score != null && (
-                              <span className="inline-flex items-center gap-1">
-                                <Target className="h-3.5 w-3.5 text-primary shrink-0" />
-                                Opportunity Score {r.opportunity_score}
-                              </span>
-                            )}
-                            <span><TimeAgo isoString={r.created_at} /></span>
-                            {r.analysis_status && (
-                              <span className={cn(
-                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                                r.analysis_status === 'completed' && 'bg-emerald-500/10 text-emerald-600',
-                                r.analysis_status === 'analyzing' && 'bg-amber-500/10 text-amber-600',
-                                r.analysis_status === 'failed' && 'bg-rose-500/10 text-rose-600'
-                              )}>
-                                {r.analysis_status === 'completed' ? '완료' : r.analysis_status === 'analyzing' ? '분석 중' : r.analysis_status === 'failed' ? '실패' : r.analysis_status}
-                              </span>
-                            )}
+                          <div className="mt-2 flex flex-col gap-2">
+                            <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                              {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Target className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  Opportunity Score {r.opportunity_score}
+                                </span>
+                              )}
+                              <span><TimeAgo isoString={r.created_at} /></span>
+                              {r.analysis_status && r.analysis_status !== 'analyzing' && (
+                                <span className={cn(
+                                  'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                  r.analysis_status === 'completed' && 'bg-emerald-500/10 text-emerald-600',
+                                  r.analysis_status === 'failed' && 'bg-rose-500/10 text-rose-600'
+                                )}>
+                                  {r.analysis_status === 'completed' ? '완료' : r.analysis_status === 'failed' ? '실패' : r.analysis_status}
+                                </span>
+                              )}
+                            </div>
+                            {r.analysis_status === 'analyzing' && (() => {
+                              const isCurrentAnalysis = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
+                              const hasStepInfo = isCurrentAnalysis && (streamingState.status === 'running' || streamingState.status === 'streaming')
+                              const stepNum = hasStepInfo ? (streamingState.currentStep ?? 0) + 1 : 1
+                              const totalSteps = 5
+                              const activityMessage = hasStepInfo
+                                ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                                : '분석을 시작했습니다...'
+                              return (
+                                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 space-y-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />
+                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-500">Running...</span>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Step {stepNum} / {totalSteps}: {activityMessage}
+                                  </p>
+                                  <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-amber-500/60 rounded-full transition-all duration-500"
+                                      style={{ width: `${(stepNum / totalSteps) * 100}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })()}
                           </div>
                         </Link>
                       ))}

@@ -2,15 +2,16 @@
 
 import {
   BarChart3,
-  Radio,
-  Hash,
   Users,
   Lightbulb,
+  Target,
+  TrendingUp,
 } from 'lucide-react'
-import { CollapsibleSection } from '@/components/ui/collapsible-section'
-import { MarketTemperature } from '@/components/research/market-temperature'
+import { ProductStrategySection } from '@/components/research/ProductStrategySection'
+import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard'
 import { QuickActions } from '@/components/research/QuickActions'
 import { StrategicActionsSection, type StrategicActionItem } from '@/components/research/StrategicActionsSection'
+import { textToBullets } from '@/lib/text-to-bullets'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
@@ -39,12 +40,10 @@ export interface AnalysisResultSectionsProps {
   analysisTasks?: AnalysisTask[] | null
   consensusData?: {
     sentiment?: { score?: number; trend?: 'rising' | 'falling' | 'stable'; ratio?: unknown }
-    strategicSummary?: { summary?: string; opportunity?: string }
+    strategicSummary?: { summary?: string; opportunity?: string; actionItems?: string[] }
   } | null
   loading?: boolean
-  /** Keyword for markdown export title */
   keyword?: string
-  /** Save to workspace (same as Save insight) */
   onSaveToWorkspace?: () => void
 }
 
@@ -58,89 +57,69 @@ export function AnalysisResultSections({
   onSaveToWorkspace,
 }: AnalysisResultSectionsProps) {
   const km = result?.key_metrics ?? {}
-  const signalOutput = getTaskOutput('signal_layer', taskData, analysisTasks)
   const trendOutput = getTaskOutput('trend_analysis', taskData, analysisTasks)
   const competitionOutput = getTaskOutput('competition_analysis', taskData, analysisTasks)
   const strategyOutput = getTaskOutput('strategy_generation', taskData, analysisTasks)
 
-  // Market Overview
-  const summaryInsights = km.summary_insights ?? result?.keyConclusions?.[0] ?? ''
-  const trendSummary = (typeof trendOutput?.trend_summary === 'string'
-    ? trendOutput.trend_summary
-    : typeof trendOutput?.summary === 'string'
-      ? trendOutput.summary
-      : '') as string
-  const marketTempScoreNorm =
-    typeof consensusData?.sentiment?.score === 'number'
-      ? consensusData.sentiment.score
-      : typeof km.market_temperature_score === 'number'
-        ? (km.market_temperature_score - 50) * 2
-        : typeof trendOutput?.market_temperature_score === 'number'
-          ? (Number(trendOutput.market_temperature_score) - 50) * 2
-          : null
-  const competitorTrends = result?.competitorTrends ?? ''
-
-  // Key Signals
-  const positiveSignals = km.positive_signals ?? []
-  const neutralSignals = km.neutral_signals ?? []
-  const negativeRisks = km.negative_risks ?? result?.painPoints ?? []
+  // Market Opportunity
+  const opportunityScore = typeof km.opportunity_score === 'number' ? km.opportunity_score : null
+  const breakdown = km.opportunity_score_breakdown ?? {}
+  const marketGrowth = typeof breakdown.market_growth === 'number' ? breakdown.market_growth : null
+  const trendMomentum = typeof breakdown.trend_momentum === 'number' ? breakdown.trend_momentum : null
   const growthSignals = Array.isArray(trendOutput?.growth_signals)
-    ? (trendOutput.growth_signals as string[]).filter((s) => typeof s === 'string')
+    ? (trendOutput.growth_signals as string[]).filter((s) => typeof s === 'string').slice(0, 5)
     : []
-  const signalLayerSignals = Array.isArray(signalOutput?.signals)
-    ? (signalOutput.signals as string[]).filter((s) => typeof s === 'string')
-    : []
-  const allSignals = [
-    ...positiveSignals,
-    ...neutralSignals,
-    ...negativeRisks,
+  const keyTrends = [
     ...growthSignals,
-    ...signalLayerSignals,
-  ].filter(Boolean)
+    ...(km.positive_signals ?? []).slice(0, 3),
+  ].filter(Boolean).slice(0, 5)
 
-  // Emerging Keywords (from signals, growth_signals, news headlines)
-  const newsActivity = Array.isArray(signalOutput?.news_activity)
-    ? (signalOutput.news_activity as Array<{ title?: string }>)
-    : []
-  const headlines = newsActivity
-    .map((n) => (n.title ?? '').trim().slice(0, 80))
-    .filter(Boolean)
-  const emergingKeywords = [
-    ...new Set([
-      ...(Array.isArray(signalLayerSignals) ? signalLayerSignals : []),
-      ...growthSignals,
-      ...headlines.slice(0, 3).flatMap((h) => h.split(/\s+/).slice(0, 3)),
-    ]),
-  ]
-    .filter((s) => typeof s === 'string' && s.length > 2)
-    .slice(0, 12)
+  // Key Insights (Top 3)
+  const valueProposition = (consensusData?.strategicSummary?.opportunity ?? '').trim()
+  const opportunities = Array.isArray(strategyOutput?.opportunities)
+    ? (strategyOutput.opportunities as string[]).filter((s) => typeof s === 'string')
+    : km.positive_signals ?? result?.marketNews ?? []
+  const keyConclusions = result?.keyConclusions ?? (km.keyConclusions as string[] | undefined) ?? []
+  const summaryInsights = (km.summary_insights ?? '').trim()
+  const strategySummary = typeof strategyOutput?.strategy_summary === 'string'
+    ? strategyOutput.strategy_summary
+    : ''
+
+  const topInsights = [
+    valueProposition,
+    opportunities[0],
+    keyConclusions[0],
+    summaryInsights,
+    strategySummary,
+  ].filter((s) => s && s.length > 0).slice(0, 3)
 
   // Competitive Landscape
   const competitiveLandscape = Array.isArray(competitionOutput?.competitive_landscape)
     ? (competitionOutput.competitive_landscape as Array<{ name?: string; positioning?: string }>)
     : []
-  const marketStructure =
-    typeof competitionOutput?.market_structure === 'string'
-      ? competitionOutput.market_structure
-      : ''
+  const competitorTrendsBullets = textToBullets(result?.competitorTrends ?? '', 4)
+  const marketStructureBullets = textToBullets(
+    typeof competitionOutput?.market_structure === 'string' ? competitionOutput.market_structure : '',
+    3
+  )
 
-  // Strategic Insight
-  const opportunities = Array.isArray(strategyOutput?.opportunities)
-    ? (strategyOutput.opportunities as string[]).filter((s) => typeof s === 'string')
-    : km.positive_signals ?? result?.marketNews ?? []
-  const risks = Array.isArray(strategyOutput?.risks)
-    ? (strategyOutput.risks as string[]).filter((s) => typeof s === 'string')
-    : []
-  const strategySummary =
-    typeof strategyOutput?.strategy_summary === 'string'
-      ? strategyOutput.strategy_summary
-      : summaryInsights
-  const keyConclusions = result?.keyConclusions ?? (km.keyConclusions as string[] | undefined) ?? []
+  // Strategy Recommendation
+  const strategyBullets = textToBullets(
+    (strategySummary || summaryInsights || consensusData?.strategicSummary?.summary) ?? '',
+    4
+  )
+  const opportunityReason = valueProposition || strategyBullets[0] || ''
+
+  // Execution Ideas
   const pmActions = km.pm_actions?.recommended_actions ?? []
-  const actionItems = pmActions.map((a) => a?.title ?? (a as { action?: string })?.action ?? '').filter(Boolean)
-  const valueProposition = consensusData?.strategicSummary?.opportunity ?? undefined
+  const actionItems = pmActions
+    .map((a) => (a?.title ?? (a as { action?: string })?.action ?? ''))
+    .filter(Boolean)
+  const actionItemsFromConsensus = consensusData?.strategicSummary?.actionItems ?? []
+  const allActionItems = [...actionItems, ...actionItemsFromConsensus].filter(Boolean).slice(0, 8)
+  const mvpIdeas = opportunities.slice(0, 3)
 
-  // Build Strategic Actions: title (action), description (context), opportunity (product direction)
+  // Strategic Actions for existing component
   const strategicActions: StrategicActionItem[] = pmActions
     .map((a, i) => {
       const title = a?.title ?? (a as { action?: string })?.action ?? ''
@@ -150,9 +129,7 @@ export function AnalysisResultSections({
       const relatedRisk = typeof (a as { related_risk?: string })?.related_risk === 'string'
         ? (a as { related_risk: string }).related_risk.trim()
         : ''
-      const desc = relatedRisk
-        ? `Addresses: ${relatedRisk}. ${reasoning}`.trim()
-        : reasoning || summaryInsights?.slice(0, 200) || trendSummary?.slice(0, 200) || 'Market analysis supports this direction.'
+      const desc = relatedRisk ? `Addresses: ${relatedRisk}. ${reasoning}`.trim() : reasoning || 'Market analysis supports this direction.'
       const opp = opportunities[i] || reasoning || `Focus on ${title || 'this area'} as a product initiative.`
       return {
         id: `action-${i}-${(title || '').slice(0, 30).replace(/\s+/g, '-')}`,
@@ -163,36 +140,8 @@ export function AnalysisResultSections({
     })
     .filter((a) => a.title && (a.description || a.opportunity))
 
-  const hasMarketOverview =
-    Boolean(summaryInsights?.trim()) ||
-    Boolean(trendSummary?.trim()) ||
-    Boolean(competitorTrends?.trim()) ||
-    marketTempScoreNorm != null
-  const hasKeySignals = allSignals.length > 0
-  const hasEmergingKeywords = emergingKeywords.length > 0
-  const hasCompetitive =
-    competitiveLandscape.length > 0 ||
-    Boolean(marketStructure?.trim()) ||
-    Boolean(competitorTrends?.trim())
-  const hasStrategic =
-    Boolean(strategySummary?.trim()) ||
-    opportunities.length > 0 ||
-    keyConclusions.length > 0 ||
-    actionItems.length > 0 ||
-    Boolean(valueProposition?.trim())
-
-  // Key Insight: most impactful one-liner for the card
-  const keyInsightRaw =
-    (valueProposition?.trim()) ||
-    (opportunities[0]?.trim()) ||
-    (keyConclusions[0]?.trim()) ||
-    (strategySummary?.trim()) ||
-    (summaryInsights?.trim()) ||
-    (growthSignals[0]?.trim()) ||
-    ''
-  const keyInsight = keyInsightRaw.length > 120
-    ? keyInsightRaw.slice(0, 117).trim() + '...'
-    : keyInsightRaw
+  const keyInsightRaw = topInsights[0] || ''
+  const keyInsight = keyInsightRaw.length > 120 ? keyInsightRaw.slice(0, 117).trim() + '...' : keyInsightRaw
 
   const getMarkdownContent = () => {
     const lines: string[] = []
@@ -204,93 +153,44 @@ export function AnalysisResultSections({
       lines.push(keyInsightRaw)
       lines.push('')
     }
-    if (summaryInsights || trendSummary || competitorTrends) {
-      lines.push('## Market Overview')
-      lines.push('')
-      if (summaryInsights) lines.push(summaryInsights)
-      if (trendSummary && trendSummary !== summaryInsights) lines.push(trendSummary)
-      if (competitorTrends) lines.push('', '### 경쟁사 동향', '', competitorTrends)
-      lines.push('')
-    }
-    if (allSignals.length > 0) {
-      lines.push('## Key Signals')
-      lines.push('')
-      if (positiveSignals.length > 0) {
-        lines.push('### 긍정 신호')
-        positiveSignals.forEach((s) => lines.push(`- ${s}`))
-        lines.push('')
-      }
-      if (neutralSignals.length > 0) {
-        lines.push('### 중립')
-        neutralSignals.forEach((s) => lines.push(`- ${s}`))
-        lines.push('')
-      }
-      if (negativeRisks.length > 0) {
-        lines.push('### 부정 · 리스크')
-        negativeRisks.forEach((s) => lines.push(`- ${s}`))
-        lines.push('')
-      }
-    }
-    if (emergingKeywords.length > 0) {
-      lines.push('## Emerging Keywords')
-      lines.push('')
-      lines.push(emergingKeywords.join(' · '))
-      lines.push('')
-    }
-    if (marketStructure || competitiveLandscape.length > 0 || competitorTrends) {
-      lines.push('## Competitive Landscape')
-      lines.push('')
-      if (marketStructure) lines.push(marketStructure)
-      if (competitiveLandscape.length > 0) {
-        lines.push('', '### 경쟁사')
-        competitiveLandscape.forEach((c) =>
-          lines.push(`- **${c.name}**${c.positioning ? ` · ${c.positioning}` : ''}`)
-        )
-      }
-      lines.push('')
-    }
-    if (strategicActions.length > 0) {
-      lines.push('## Strategic Actions')
-      lines.push('')
-      strategicActions.forEach((a, i) => {
-        lines.push(`### ${i + 1}. ${a.title}`)
-        lines.push('')
-        lines.push('**Description:**', a.description, '')
-        lines.push('**Opportunity:**', a.opportunity, '')
-      })
-      lines.push('')
-    }
-    if (strategySummary || opportunities.length > 0 || keyConclusions.length > 0 || actionItems.length > 0) {
-      lines.push('## Strategic Insight')
-      lines.push('')
-      if (valueProposition) lines.push(`**Core value proposition:** ${valueProposition}`, '')
-      if (strategySummary) lines.push(strategySummary, '')
-      if (opportunities.length > 0) {
-        lines.push('### Market opportunities')
-        opportunities.forEach((o) => lines.push(`- ${o}`))
-        lines.push('')
-      }
-      if (keyConclusions.length > 0) {
-        lines.push('### Key product direction')
-        keyConclusions.forEach((k) => lines.push(`- ${k}`))
-        lines.push('')
-      }
-      if (risks.length > 0) {
-        lines.push('### 리스크')
-        risks.forEach((r) => lines.push(`- ${r}`))
-        lines.push('')
-      }
-      if (actionItems.length > 0) {
-        lines.push('### Action Plan')
-        actionItems.forEach((a) => lines.push(`- ${a}`))
-      }
-    }
+    lines.push('## Market Opportunity')
+    if (opportunityScore != null) lines.push(`- Market size / opportunity: ${opportunityScore}/100`)
+    if (marketGrowth != null) lines.push(`- Growth: ${marketGrowth}/100`)
+    keyTrends.forEach((t) => lines.push(`- ${t}`))
+    lines.push('')
+    lines.push('## Key Insights')
+    topInsights.forEach((i) => lines.push(`- ${i}`))
+    lines.push('')
+    lines.push('## Competitive Landscape')
+    competitiveLandscape.forEach((c) => lines.push(`- **${c.name}**${c.positioning ? ` · ${c.positioning}` : ''}`))
+    if (competitorTrendsBullets.length > 0) competitorTrendsBullets.forEach((b) => lines.push(`- ${b}`))
+    lines.push('')
+    lines.push('## Strategy Recommendation')
+    strategyBullets.forEach((b) => lines.push(`- ${b}`))
+    if (opportunityReason) lines.push('', `**Why this opportunity:** ${opportunityReason}`)
+    lines.push('')
+    lines.push('## Execution Ideas')
+    allActionItems.forEach((a) => lines.push(`- ${a}`))
+    mvpIdeas.forEach((m) => lines.push(`- MVP: ${m}`))
     return lines.join('\n')
   }
 
+  const hasAnyContent =
+    opportunityScore != null ||
+    keyTrends.length > 0 ||
+    topInsights.length > 0 ||
+    competitiveLandscape.length > 0 ||
+    competitorTrendsBullets.length > 0 ||
+    marketStructureBullets.length > 0 ||
+    strategyBullets.length > 0 ||
+    allActionItems.length > 0 ||
+    strategicActions.length > 0
+
+  if (!hasAnyContent && !loading) return null
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Key Insight card - top highlight */}
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Hero: Key Insight + Quick Actions */}
       {(keyInsight || loading) && (
         <div
           className={cn(
@@ -310,326 +210,225 @@ export function AnalysisResultSections({
               {keyInsight}
             </p>
           )}
+          {(keyInsight || loading) && (
+            <QuickActions
+              keyInsight={keyInsight}
+              getMarkdownContent={getMarkdownContent}
+              onSaveToWorkspace={onSaveToWorkspace}
+              disabled={loading}
+              className="pt-4"
+            />
+          )}
         </div>
       )}
 
-      {/* Quick actions */}
-      {(keyInsight || loading) && (
-        <QuickActions
-          keyInsight={keyInsight}
-          getMarkdownContent={getMarkdownContent}
-          onSaveToWorkspace={onSaveToWorkspace}
-          disabled={loading}
-          className="pt-1"
-        />
-      )}
-
-      {/* Strategic Actions - actionable product strategy from AI insights */}
-      <StrategicActionsSection
-        actions={strategicActions}
-        loading={loading && strategicActions.length === 0}
-        onSaveAction={onSaveToWorkspace}
-      />
-
-      {/* 1. Market Overview */}
-      <CollapsibleSection
-        title="Market Overview"
-        icon={<BarChart3 className="h-5 w-5" />}
-        defaultExpanded={true}
-        hasContent={hasMarketOverview || loading}
-      >
-        {loading && !hasMarketOverview ? (
-          <div className="space-y-3">
-            <div className="h-4 w-3/4 rounded bg-muted/60 animate-pulse" />
-            <div className="h-20 rounded-lg bg-muted/40 animate-pulse" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {marketTempScoreNorm != null && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  시장 온도
-                </p>
-                <MarketTemperature
-                  score={marketTempScoreNorm}
-                  trend={consensusData?.sentiment?.trend ?? 'stable'}
-                  factors={km.chartData?.sentiment}
-                  positiveSignals={positiveSignals.slice(0, 3)}
-                  neutralSignals={neutralSignals.slice(0, 2)}
-                  negativeRisks={negativeRisks.slice(0, 3)}
-                />
-              </div>
-            )}
-            {(summaryInsights || trendSummary) && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  시장 요약
-                </p>
-                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                  {summaryInsights || trendSummary}
-                </p>
-              </div>
-            )}
-            {competitorTrends && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  경쟁사 동향
-                </p>
-                <p className="text-sm text-foreground leading-relaxed">{competitorTrends}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </CollapsibleSection>
-
-      {/* 2. Key Signals */}
-      <CollapsibleSection
-        title="Key Signals"
-        icon={<Radio className="h-5 w-5" />}
-        defaultExpanded={true}
-        hasContent={hasKeySignals || loading}
-      >
-        {loading && !hasKeySignals ? (
-          <ul className="space-y-2 pl-4">
-            {[1, 2, 3, 4].map((i) => (
-              <li key={i} className="h-4 rounded bg-muted/40 animate-pulse" />
+      {/* 1. Market Opportunity */}
+      <ProductStrategySection title="Market Opportunity" icon={<BarChart3 className="h-5 w-5" />}>
+        {loading && !opportunityScore && keyTrends.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-20 rounded-lg bg-muted/40 animate-pulse" />
             ))}
-          </ul>
+          </div>
         ) : (
           <div className="space-y-4">
-            {positiveSignals.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {opportunityScore != null && (
+                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Market Size</p>
+                  <p className="text-xl font-semibold text-foreground tabular-nums">{opportunityScore}/100</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">시장 매력도</p>
+                </div>
+              )}
+              {(marketGrowth != null || trendMomentum != null) && (
+                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Growth Potential</p>
+                  <p className="text-xl font-semibold text-foreground tabular-nums">
+                    {(marketGrowth ?? trendMomentum ?? '—')}/100
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
+                </div>
+              )}
+            </div>
+            {keyTrends.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">
-                  긍정 신호
-                </p>
-                <ul className="space-y-1 list-none pl-0">
-                  {positiveSignals.slice(0, 5).map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-primary mt-1">•</span>
-                      <span>{s}</span>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Key Trends</p>
+                <ul className="space-y-1.5 list-none pl-0">
+                  {keyTrends.map((t, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-foreground">
+                      <span className="text-primary shrink-0">•</span>
+                      <span>{t}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {neutralSignals.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  중립
-                </p>
-                <ul className="space-y-1 list-none pl-0">
-                  {neutralSignals.slice(0, 3).map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-muted-foreground mt-1">•</span>
-                      <span>{s}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {negativeRisks.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-destructive/80 uppercase tracking-wider mb-2">
-                  부정 · 리스크
-                </p>
-                <ul className="space-y-1 list-none pl-0">
-                  {negativeRisks.slice(0, 5).map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-destructive mt-1">•</span>
-                      <span>{s}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {growthSignals.length > 0 && positiveSignals.length === 0 && neutralSignals.length === 0 && negativeRisks.length === 0 && (
-              <ul className="space-y-1 list-none pl-0">
-                {growthSignals.slice(0, 6).map((s, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                    <span className="text-primary mt-1">•</span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
+            {!opportunityScore && keyTrends.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">시장 기회 데이터를 분석 중입니다.</p>
             )}
           </div>
         )}
-      </CollapsibleSection>
+      </ProductStrategySection>
 
-      {/* 3. Emerging Keywords */}
-      <CollapsibleSection
-        title="Emerging Keywords"
-        icon={<Hash className="h-5 w-5" />}
-        defaultExpanded={false}
-        hasContent={hasEmergingKeywords || loading}
-      >
-        {loading && !hasEmergingKeywords ? (
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <span
+      {/* 2. Key Insights */}
+      <ProductStrategySection title="Key Insights" icon={<Lightbulb className="h-5 w-5" />}>
+        {loading && topInsights.length === 0 ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 rounded-lg bg-muted/40 animate-pulse" />
+            ))}
+          </div>
+        ) : topInsights.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3">
+            {topInsights.map((insight, i) => (
+              <KeyInsightBulletCard
                 key={i}
-                className="h-7 w-20 rounded-full bg-muted/60 animate-pulse"
+                title={insight.length > 140 ? insight.slice(0, 137).trim() + '...' : insight}
+                index={i + 1}
               />
             ))}
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {emergingKeywords.map((kw, i) => (
-              <span
-                key={i}
-                className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground"
-              >
-                {kw}
-              </span>
-            ))}
-          </div>
+          <p className="text-sm text-muted-foreground">핵심 인사이트가 아직 없습니다.</p>
         )}
-      </CollapsibleSection>
+      </ProductStrategySection>
 
-      {/* 4. Competitive Landscape */}
-      <CollapsibleSection
-        title="Competitive Landscape"
-        icon={<Users className="h-5 w-5" />}
-        defaultExpanded={false}
-        hasContent={hasCompetitive || loading}
-      >
-        {loading && !hasCompetitive ? (
+      {/* 3. Competitive Landscape */}
+      <ProductStrategySection title="Competitive Landscape" icon={<Users className="h-5 w-5" />}>
+        {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
           <div className="space-y-3">
-            <div className="h-4 w-full rounded bg-muted/60 animate-pulse" />
-            <div className="h-16 rounded bg-muted/40 animate-pulse" />
+            <div className="h-16 rounded-lg bg-muted/40 animate-pulse" />
+            <div className="h-12 rounded-lg bg-muted/30 animate-pulse" />
           </div>
         ) : (
           <div className="space-y-4">
-            {marketStructure && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  시장 구조
-                </p>
-                <p className="text-sm text-foreground leading-relaxed">{marketStructure}</p>
-              </div>
-            )}
             {competitiveLandscape.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  경쟁사
-                </p>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Major Competitors</p>
                 <div className="flex flex-wrap gap-2">
-                  {competitiveLandscape.slice(0, 10).map((c, i) => (
+                  {competitiveLandscape.slice(0, 8).map((c, i) => (
                     <div
                       key={i}
-                      className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm"
+                      className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm"
                     >
                       <span className="font-medium text-foreground">{c.name}</span>
                       {c.positioning && (
-                        <span className="text-muted-foreground ml-1">· {c.positioning}</span>
+                        <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {competitorTrends && !marketStructure && competitiveLandscape.length === 0 && (
-              <p className="text-sm text-foreground leading-relaxed">{competitorTrends}</p>
+            {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Market Positioning</p>
+                <ul className="space-y-1.5 list-none pl-0">
+                  {(competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets).map((b, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-foreground">
+                      <span className="text-muted-foreground shrink-0">•</span>
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 && marketStructureBullets.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">경쟁 구도 데이터가 없습니다.</p>
             )}
           </div>
         )}
-      </CollapsibleSection>
+      </ProductStrategySection>
 
-      {/* 5. Strategic Insight */}
-      <CollapsibleSection
-        title="Strategic Insight"
-        icon={<Lightbulb className="h-5 w-5" />}
-        defaultExpanded={true}
-        hasContent={hasStrategic || loading}
-      >
-        {loading && !hasStrategic ? (
+      {/* 4. Strategy Recommendation */}
+      <ProductStrategySection title="Strategy Recommendation" icon={<Target className="h-5 w-5" />}>
+        {loading && strategyBullets.length === 0 && !opportunityReason ? (
           <div className="space-y-3">
-            <div className="h-20 rounded-lg bg-muted/40 animate-pulse" />
-            <div className="h-4 w-full rounded bg-muted/30 animate-pulse" />
+            <div className="h-12 rounded-lg bg-muted/40 animate-pulse" />
+            <div className="h-8 rounded-lg bg-muted/30 animate-pulse" />
           </div>
         ) : (
           <div className="space-y-4">
-            {valueProposition && (
+            {strategyBullets.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Core value proposition
-                </p>
-                <p className="text-sm text-foreground">{valueProposition}</p>
-              </div>
-            )}
-            {strategySummary && (
-              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                  {strategySummary}
-                </p>
-              </div>
-            )}
-            {opportunities.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Market opportunities
-                </p>
-                <ul className="space-y-2">
-                  {opportunities.slice(0, 5).map((opp, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>{opp}</span>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Product Strategy</p>
+                <ul className="space-y-1.5 list-none pl-0">
+                  {strategyBullets.map((b, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-foreground">
+                      <span className="text-primary shrink-0">•</span>
+                      <span>{b}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {keyConclusions.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Key product direction
+            {opportunityReason && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">Why This Opportunity Exists</p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {opportunityReason.length > 200 ? opportunityReason.slice(0, 197).trim() + '...' : opportunityReason}
                 </p>
-                <ul className="space-y-2">
-                  {keyConclusions.slice(0, 5).map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
             )}
-            {risks.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-destructive/80 uppercase tracking-wider mb-2">
-                  리스크
-                </p>
-                <ul className="space-y-1">
-                  {risks.slice(0, 4).map((r, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <span className="text-destructive mt-0.5">•</span>
-                      <span>{r}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {actionItems.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Action Plan
-                </p>
-                <ul className="space-y-2">
-                  {actionItems.slice(0, 8).map((action, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-foreground">
-                      <span
-                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
-                        aria-hidden
-                      />
-                      <span>{action}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {strategyBullets.length === 0 && !opportunityReason && !loading && (
+              <p className="text-sm text-muted-foreground">전략 제안이 아직 없습니다.</p>
             )}
           </div>
         )}
-      </CollapsibleSection>
+      </ProductStrategySection>
+
+      {/* 5. Execution Ideas */}
+      <ProductStrategySection title="Execution Ideas" icon={<TrendingUp className="h-5 w-5" />}>
+        {loading && allActionItems.length === 0 && strategicActions.length === 0 ? (
+          <div className="space-y-3">
+            <div className="h-24 rounded-lg bg-muted/40 animate-pulse" />
+            <div className="h-16 rounded-lg bg-muted/30 animate-pulse" />
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {strategicActions.length > 0 ? (
+              <StrategicActionsSection
+                actions={strategicActions}
+                loading={false}
+                onSaveAction={onSaveToWorkspace}
+              />
+            ) : (
+              <>
+                {allActionItems.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Actionable Product Ideas</p>
+                    <ul className="space-y-2 list-none pl-0">
+                      {allActionItems.map((a, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-foreground rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
+                          <span className="text-primary shrink-0 mt-0.5">•</span>
+                          <span>{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {mvpIdeas.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">MVP Suggestions</p>
+                    <ul className="space-y-1.5 list-none pl-0">
+                      {mvpIdeas.map((m, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-foreground">
+                          <span className="text-primary shrink-0">•</span>
+                          <span>{m}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+            {allActionItems.length === 0 && strategicActions.length === 0 && mvpIdeas.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">실행 아이디어가 아직 없습니다.</p>
+            )}
+          </div>
+        )}
+      </ProductStrategySection>
+
     </div>
   )
 }

@@ -1,7 +1,10 @@
 'use client'
 
-import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle } from 'lucide-react'
+import { useRef, useEffect } from 'react'
+import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle, RefreshCw, AlertTriangle } from 'lucide-react'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { getProviderDisplayName } from '@/lib/ai/provider-display'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 /** AI Analysis Timeline - 5 PM strategy steps with real reasoning output */
@@ -42,6 +45,8 @@ export interface StrategyEnginePipelineProps {
   /** When true, all stages show as completed */
   allCompleted?: boolean
   streamingStepId?: string
+  /** Shown when retrying after 429 (e.g. "재시도 중...") */
+  retryMessage?: string
   taskData?: Partial<Record<string, unknown>>
   /** Polled task status from backend (real state) */
   analysisTasks?: Array<{
@@ -49,6 +54,9 @@ export interface StrategyEnginePipelineProps {
     status: 'pending' | 'running' | 'completed' | 'failed'
     output_data: unknown
     error_message: string | null
+    provider?: string | null
+    fallback_used?: boolean
+    primary_provider_error?: string | null
   }> | null
   newsList?: Array<{ title?: string; url?: string; publisher?: string }>
   onRetryStep?: () => void
@@ -248,6 +256,7 @@ export function StrategyEnginePipeline({
   currentStep,
   allCompleted = false,
   streamingStepId,
+  retryMessage,
   taskData = {},
   analysisTasks = null,
   newsList = [],
@@ -264,6 +273,8 @@ export function StrategyEnginePipeline({
     {} as Record<string, TaskItem>
   )
 
+  const stepRefs = useRef<(HTMLDivElement | null)[]>([])
+
   const effectiveIndex = allCompleted
     ? 5
     : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
@@ -272,8 +283,14 @@ export function StrategyEnginePipeline({
         ? currentStep
         : 0
 
+  const runningStepIndex = PIPELINE_STAGES.findIndex((_, i) => getStatus(i) === 'running')
+  useEffect(() => {
+    const el = runningStepIndex >= 0 ? stepRefs.current[runningStepIndex] : null
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [runningStepIndex])
+
   type StageStatus = 'pending' | 'running' | 'completed' | 'failed'
-  const getStatus = (i: number): StageStatus => {
+  function getStatus(i: number): StageStatus {
     const stage = PIPELINE_STAGES[i]
     const task = stage ? taskMap[stage.id] : null
     // Global error: failed step + completed before + pending after
@@ -322,7 +339,11 @@ export function StrategyEnginePipeline({
             const task = taskMap[stage.id]
 
             return (
-              <div key={stage.id} className="relative">
+              <div
+                key={stage.id}
+                ref={(el) => { stepRefs.current[i] = el }}
+                className="relative"
+              >
                 {/* Node */}
                 <div
                   className={cn(
@@ -373,29 +394,66 @@ export function StrategyEnginePipeline({
                     >
                       Step {i + 1} · {stage.label}
                     </h3>
-                    {status === 'running' && !hasInsight && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {getAnalysisActivityMessage(stage.id, i, { short: true })}
+                    {status !== 'pending' && (
+                      <p className="text-[11px] font-medium text-muted-foreground mt-0.5 uppercase tracking-wider">
+                        Model: {task
+                          ? (() => {
+                              const t = task as { provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
+                              if (t.fallback_used && t.primary_provider_error) {
+                                return `Gemini → Failed (${t.primary_provider_error}) · Groq → ${status === 'completed' ? 'Success' : 'Running'}`
+                              }
+                              return getProviderDisplayName(t.provider ?? null, t.fallback_used) || '—'
+                            })()
+                          : '—'}
+                        {' · '}
+                        Status: {status === 'completed' ? 'Completed' : status === 'running' ? 'Running' : status === 'failed' ? 'Failed' : 'Pending'}
                       </p>
+                    )}
+                    {status === 'running' && (
+                      <div className="mt-1 space-y-1">
+                        {(task as { fallback_used?: boolean; primary_provider_error?: string | null } | null)?.fallback_used &&
+                        (task as { primary_provider_error?: string | null })?.primary_provider_error ? (
+                          <>
+                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                              <span className="text-xs font-medium">
+                                Gemini {((task as { primary_provider_error?: string }).primary_provider_error)?.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                              Retrying with Groq...
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {retryMessage && i === effectiveIndex
+                              ? retryMessage
+                              : getAnalysisActivityMessage(stage.id, i, { short: true })}
+                          </p>
+                        )}
+                      </div>
                     )}
                     {status === 'failed' && (
-                      <p className="text-xs text-destructive mt-1">
-                        {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
-                      </p>
+                      <div className="mt-1 space-y-2">
+                        <p className="text-xs text-destructive font-medium">
+                          Error: {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
+                        </p>
+                        {(task?.error_message ?? globalErrorMessage) && /quota|429|rate limit|한도|초과|혼잡/i.test((task?.error_message ?? globalErrorMessage) ?? '') && (
+                          <p className="text-xs text-muted-foreground">재시도가 필요할 수 있습니다.</p>
+                        )}
+                        {onRetryStep && (
+                          <Button variant="outline" size="sm" onClick={onRetryStep} className="gap-1.5 h-8 text-xs">
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Retry Step
+                          </Button>
+                        )}
+                      </div>
                     )}
-                    {hasInsight && (status === 'completed' || status === 'running') && insight?.summary && (
+                    {status !== 'failed' && hasInsight && (status === 'completed' || status === 'running') && insight?.summary && (
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                         {insight.summary}
                       </p>
-                    )}
-                    {status === 'failed' && onRetryStep && (
-                      <button
-                        type="button"
-                        onClick={onRetryStep}
-                        className="mt-2 text-xs font-medium text-primary hover:underline"
-                      >
-                        다시 시도
-                      </button>
                     )}
                   </div>
                 </div>

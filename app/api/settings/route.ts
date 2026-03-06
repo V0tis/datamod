@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey, getSystemGeminiKey } from '@/lib/license'
 
+export const dynamic = 'force-dynamic'
+
 /** GET: 현재 사용자 설정 조회 (키 원문은 절대 노출하지 않음) + 검색 가능 여부 + 키 출처 */
 export async function GET() {
   const supabase = await createClient()
@@ -21,6 +23,13 @@ export async function GET() {
   if (error) {
     console.error('[Settings GET]', error)
     return NextResponse.json({ error: '설정을 불러오지 못했습니다.' }, { status: 500 })
+  }
+
+  // 디버깅: DB 조회 결과 확인 (연동 미표시 시 터미널에서 확인)
+  const hasGeminiInDb = !!(row?.gemini_api_key && String(row.gemini_api_key).trim().length > 0)
+  const hasGroqInDb = !!(row && (row as { groq_api_key?: string }).groq_api_key && String((row as { groq_api_key?: string }).groq_api_key).trim().length > 0)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Settings GET] user_id:', user.id, '| row:', !!row, '| hasGeminiInDb:', hasGeminiInDb, '| hasGroqInDb:', hasGroqInDb)
   }
 
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
@@ -43,7 +52,7 @@ export async function GET() {
 
   const systemGroq = !!(process.env.GROQ_API_KEY ?? '').trim()
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
     hasGeminiKey,
@@ -62,6 +71,8 @@ export async function GET() {
       anthropic: anthropicOrigin ?? (systemAnthropic ? 'SYSTEM' : null),
     },
   })
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+  return res
 }
 
 /** POST: 설정 저장 (upsert) */

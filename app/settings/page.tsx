@@ -65,6 +65,8 @@ function SettingsPageInner() {
   const [groqApiKey, setGroqApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [showGroqKey, setShowGroqKey] = useState(false)
+  const [editingGemini, setEditingGemini] = useState(false)
+  const [editingGroq, setEditingGroq] = useState(false)
   const [savingGemini, setSavingGemini] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
@@ -83,7 +85,8 @@ function SettingsPageInner() {
       setLoading(false)
       return
     }
-    fetch('/api/settings')
+    setLoading(true)
+    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       .then((res) => {
         if (res.status === 401) {
           router.replace('/auth/login')
@@ -102,6 +105,17 @@ function SettingsPageInner() {
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
       .finally(() => setLoading(false))
   }, [user, router])
+
+  // 라이선스 탭 진입 시 설정 재조회 (input에 연동 상태가 확실히 반영되도록)
+  useEffect(() => {
+    if (!user || activeTab !== TAB_LICENSE) return
+    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: SettingsData | null) => {
+        if (json) setData(json)
+      })
+      .catch(() => {})
+  }, [user, activeTab])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -157,7 +171,7 @@ function SettingsPageInner() {
         return
       }
       setGeminiApiKey('')
-      const nextRes = await fetch('/api/settings')
+      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
@@ -184,7 +198,7 @@ function SettingsPageInner() {
         return
       }
       setGroqApiKey('')
-      const nextRes = await fetch('/api/settings')
+      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
@@ -201,13 +215,17 @@ function SettingsPageInner() {
       const hasServer = !!data?.hasServerGemini
       const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
       const canReveal = geminiApiKey.length > 0
-      return { value: geminiApiKey, hasUser, hasServer, placeholder, canReveal, show: showGeminiKey, setShow: setShowGeminiKey, setValue: setGeminiApiKey }
+      const showMask = hasUser && !geminiApiKey && !editingGemini
+      const displayValue = geminiApiKey || (showMask ? MASKED_PLACEHOLDER : '')
+      return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showGeminiKey, setShow: setShowGeminiKey, setValue: setGeminiApiKey, setEditing: setEditingGemini }
     }
     const hasUser = !!data?.hasGroqKey
     const hasServer = !!data?.hasServerGroq
     const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
     const canReveal = groqApiKey.length > 0
-    return { value: groqApiKey, hasUser, hasServer, placeholder, canReveal, show: showGroqKey, setShow: setShowGroqKey, setValue: setGroqApiKey }
+    const showMask = hasUser && !groqApiKey && !editingGroq
+    const displayValue = groqApiKey || (showMask ? MASKED_PLACEHOLDER : '')
+    return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showGroqKey, setShow: setShowGroqKey, setValue: setGroqApiKey, setEditing: setEditingGroq }
   }
 
   const geminiConnected = !!(data?.hasGeminiKey || data?.hasServerGemini)
@@ -314,6 +332,8 @@ function SettingsPageInner() {
                       placeholder={getKeyState('gemini').placeholder}
                       value={getKeyState('gemini').value}
                       onChange={(e) => setGeminiApiKey(e.target.value)}
+                      onFocus={() => getKeyState('gemini').hasUser && !geminiApiKey && getKeyState('gemini').setEditing(true)}
+                      onBlur={() => getKeyState('gemini').setEditing(false)}
                       className="pr-10 bg-muted/50 focus:bg-background"
                       autoComplete="off"
                     />
@@ -346,6 +366,8 @@ function SettingsPageInner() {
                       placeholder={getKeyState('groq').placeholder}
                       value={getKeyState('groq').value}
                       onChange={(e) => setGroqApiKey(e.target.value)}
+                      onFocus={() => getKeyState('groq').hasUser && !groqApiKey && getKeyState('groq').setEditing(true)}
+                      onBlur={() => getKeyState('groq').setEditing(false)}
                       className="pr-10 bg-muted/50 focus:bg-background"
                       autoComplete="off"
                     />

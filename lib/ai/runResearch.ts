@@ -6,20 +6,38 @@
 import Parser from 'rss-parser'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
-import { generateText, runTabAnalysis } from './unified-ai-service'
+import { generateText, runTabAnalysis, completeChat } from './unified-ai-service'
 import {
-  OPPORTUNITY_SCORE_SYSTEM,
-  buildOpportunityScorePrompt,
   TASK_TRENDS_SYSTEM,
   buildTaskTrendsPrompt,
   TASK_COMPETITION_SYSTEM,
-  buildTaskCompetitionPrompt,
-  STRATEGY_LAYER_SYSTEM,
-  buildStrategyLayerPrompt,
-  EXECUTION_LAYER_SYSTEM,
-  buildExecutionLayerPrompt,
+  buildTaskCompetitionPromptFromNews,
+  STRATEGY_EXECUTION_SYSTEM,
+  buildStrategyExecutionPrompt,
 } from './pm-strategic-prompt'
 import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
+import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep } from './retry-with-backoff'
+import { computeOpportunityScore } from './opportunity-score-formula'
+
+const AI_RETRY_DELAY_MS = 2000
+const AI_MAX_RETRIES = 3
+
+function logAiError(provider: string, step: string, reason: string, retryAttempt: number, err: unknown) {
+  console.log('[AI Error]', {
+    provider,
+    step,
+    reason,
+    retry_attempt: retryAttempt,
+    max_retries: AI_MAX_RETRIES,
+    message: err instanceof Error ? err.message : String(err),
+  })
+}
+
+function toUserFriendlyError(err: unknown, fallback: string): string {
+  if (is429OrQuotaError(err)) return RATE_LIMIT_USER_MESSAGE
+  return err instanceof Error ? err.message : fallback
+}
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 import type {
@@ -78,9 +96,11 @@ const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
   'execution_layer',
 ]
 
+export type AnalysisStepProvider = 'gemini' | 'groq'
+
 export type ResearchStreamEvent =
   | { type: 'analysis_started'; analysisId: string }
-  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string }
+  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
@@ -165,6 +185,140 @@ function parseJson<T>(text: string): T | null {
     }
     return null
   }
+}
+
+type TrendTaskResult = {
+  trendData: { summary: string; market_score: number; positive_signals: string[]; neutral_signals: string[] }
+  trendPayload: { trend_summary: string; market_temperature_score: number; growth_signals: string[] }
+  usedFallback: boolean
+  primaryProviderError?: string
+}
+
+type CompetitionTaskResult = {
+  competitionData: {
+    competitive_landscape: Array<{ name: string; positioning?: string }>
+    market_structure?: string
+  }
+  usedFallback: boolean
+  primaryProviderError?: string
+}
+
+/** Run trend analysis (no yield; for parallel execution). */
+async function runTrendTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  newsTitles: string[]
+): Promise<TrendTaskResult> {
+  const prompt = buildTaskTrendsPrompt(keyword, newsTitles)
+  let text!: string
+  let usedFallback = false
+  let primaryProviderError: string | undefined
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    try {
+      text = await generateText({
+        apiKey: geminiKey,
+        prompt,
+        systemInstruction: TASK_TRENDS_SYSTEM,
+        maxOutputTokens: 800,
+        model: GEMINI_MODEL,
+      })
+      break
+    } catch (err) {
+      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+        await sleep(AI_RETRY_DELAY_MS)
+      } else if (isFallbackTriggerError(err) && groqKey) {
+        primaryProviderError = getFallbackErrorReason(err)
+        const groqRes = await completeChat({
+          apiKey: groqKey,
+          messages: [{ role: 'system', content: TASK_TRENDS_SYSTEM }, { role: 'user', content: prompt }],
+          maxTokens: 800,
+        })
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+        text = groqRes.text
+        usedFallback = true
+        break
+      } else {
+        throw err
+      }
+    }
+  }
+  if (!usedFallback) await trackUsage('gemini')
+  const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
+    typeof text === 'string' ? text : ''
+  )
+  if (!parsed || (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string')) {
+    throw new Error('Invalid trend response')
+  }
+  const trendData = {
+    summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
+    market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
+    positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
+    neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
+  }
+  const trendPayload = {
+    trend_summary: trendData.summary,
+    market_temperature_score: trendData.market_score,
+    growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
+  }
+  return { trendData, trendPayload, usedFallback, primaryProviderError }
+}
+
+/** Run competition analysis from news (no yield; for parallel execution with trend). */
+async function runCompetitionTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  newsTitles: string[]
+): Promise<CompetitionTaskResult> {
+  const prompt = buildTaskCompetitionPromptFromNews(keyword, newsTitles)
+  let text!: string
+  let usedFallback = false
+  let primaryProviderError: string | undefined
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    try {
+      text = await generateText({
+        apiKey: geminiKey,
+        prompt,
+        systemInstruction: TASK_COMPETITION_SYSTEM,
+        maxOutputTokens: 600,
+        model: GEMINI_MODEL,
+      })
+      break
+    } catch (err) {
+      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+        await sleep(AI_RETRY_DELAY_MS)
+      } else if (isFallbackTriggerError(err) && groqKey) {
+        primaryProviderError = getFallbackErrorReason(err)
+        const groqRes = await completeChat({
+          apiKey: groqKey,
+          messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }],
+          maxTokens: 600,
+        })
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+        text = groqRes.text
+        usedFallback = true
+        break
+      } else {
+        throw err
+      }
+    }
+  }
+  if (!usedFallback) await trackUsage('gemini')
+  const parsed = parseJson<{
+    competitive_landscape?: Array<{ name?: string; positioning?: string }>
+    market_structure?: { summary?: string }
+  }>(typeof text === 'string' ? text : '')
+  const landscape = Array.isArray(parsed?.competitive_landscape)
+    ? parsed.competitive_landscape
+        .filter((c): c is { name: string; positioning?: string } => typeof c?.name === 'string')
+        .slice(0, 10)
+    : []
+  const competitionData = {
+    competitive_landscape: landscape,
+    market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
+  }
+  return { competitionData, usedFallback, primaryProviderError }
 }
 
 function validatePass1(data: unknown): ValidationResult<Pass1Result> {
@@ -528,24 +682,31 @@ export async function* runResearch(
   const upsertAnalysisTask = async (
     step: AnalysisTaskId,
     status: 'pending' | 'running' | 'completed' | 'failed',
-    opts?: { outputData?: unknown; errorMessage?: string }
+    opts?: {
+      outputData?: unknown
+      errorMessage?: string
+      provider?: AnalysisStepProvider | null
+      fallback_used?: boolean
+      primary_provider_error?: string | null
+    }
   ) => {
     const now = new Date().toISOString()
-    await supabase
-      .from('analysis_tasks')
-      .upsert(
-        {
-          analysis_id: analysisId,
-          step_name: step,
-          status,
-          started_at: status === 'running' || status === 'completed' || status === 'failed' ? now : null,
-          completed_at: status === 'completed' || status === 'failed' ? now : null,
-          output_data: opts?.outputData ?? null,
-          error_message: opts?.errorMessage ?? null,
-          updated_at: now,
-        },
-        { onConflict: 'analysis_id,step_name' }
-      )
+    const row: Record<string, unknown> = {
+      analysis_id: analysisId,
+      step_name: step,
+      status,
+      started_at: status === 'running' || status === 'completed' || status === 'failed' ? now : null,
+      completed_at: status === 'completed' || status === 'failed' ? now : null,
+      output_data: opts?.outputData ?? null,
+      error_message: opts?.errorMessage ?? null,
+      provider: opts?.provider ?? null,
+      fallback_used: opts?.fallback_used ?? false,
+      updated_at: now,
+    }
+    if (opts?.primary_provider_error != null) {
+      row.primary_provider_error = opts.primary_provider_error
+    }
+    await supabase.from('analysis_tasks').upsert(row, { onConflict: 'analysis_id,step_name' })
   }
 
   if (cacheRow?.report_id && isCacheValid(cacheRow.updated_at)) {
@@ -582,10 +743,10 @@ export async function* runResearch(
   log('start', 'analysis_started')
   yield { type: 'analysis_started', analysisId }
 
-  // Layer 1: Signal Layer - collect market signals
+  // Layer 1: Signal Layer - collect market signals (no AI)
   log('signal_layer', 'running')
-  await upsertAnalysisTask('signal_layer', 'running')
-  yield { type: 'task', task: 'signal_layer', status: 'running' }
+  await upsertAnalysisTask('signal_layer', 'running', { provider: null, fallback_used: false })
+  yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   let news: NewsItem[]
   try {
     news = await fetchNewsTitles(keyword)
@@ -595,7 +756,7 @@ export async function* runResearch(
       signals: signalSources,
       news_activity: news.map((n) => ({ title: n.title, url: n.url, publisher: n.publisher })),
     }
-    await upsertAnalysisTask('signal_layer', 'completed', { outputData: signalData })
+    await upsertAnalysisTask('signal_layer', 'completed', { outputData: signalData, provider: null, fallback_used: false })
     log('signal_layer', 'completed', { newsCount: news.length })
     await updateProgress(1, 'analyzing')
     yield {
@@ -603,199 +764,175 @@ export async function* runResearch(
       task: 'signal_layer',
       status: 'completed',
       data: signalData,
+      provider: null,
+      fallback_used: false,
     }
     yield { type: 'news', items: news }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '시장 신호 수집에 실패했습니다.'
+    const msg = toUserFriendlyError(err, '시장 신호 수집에 실패했습니다.')
     log('signal_layer', 'failed', { error: msg, err })
-    await upsertAnalysisTask('signal_layer', 'failed', { errorMessage: msg })
+    await upsertAnalysisTask('signal_layer', 'failed', { errorMessage: msg, provider: null, fallback_used: false })
     await updateProgress(0, 'failed')
-    yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg }
+    yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg, provider: null, fallback_used: false }
     yield { type: 'error', message: msg, step: 'signal_layer' }
     return
   }
 
   const newsTitles = news.map((n) => n.title)
 
-  // Layer 2: Analysis Layer - Trend detection
-  log('trend_analysis', 'running')
-  await upsertAnalysisTask('trend_analysis', 'running')
-  yield { type: 'task', task: 'trend_analysis', status: 'running' }
-  let trendData: { summary: string; market_score: number; positive_signals: string[]; neutral_signals: string[] }
-  try {
-    const trendText = await generateText({
-      apiKey: geminiKey,
-      prompt: buildTaskTrendsPrompt(keyword, newsTitles),
-      systemInstruction: TASK_TRENDS_SYSTEM,
-      maxOutputTokens: 800,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
-    const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
-      typeof trendText === 'string' ? trendText : ''
-    )
-    
-    if (!parsed || (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string')) {
-      throw new Error('Invalid trend response')
-    }
-    trendData = {
-      summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
-      market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
-      positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
-      neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
-    }
-    const trendPayload = {
-      trend_summary: trendData.summary,
-      market_temperature_score: trendData.market_score,
-      growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
-    }
-    await upsertAnalysisTask('trend_analysis', 'completed', { outputData: trendPayload })
-    log('trend_analysis', 'completed')
-    await updateProgress(2, 'analyzing')
-    yield {
-      type: 'task',
-      task: 'trend_analysis',
-      status: 'completed',
-      data: trendPayload,
-    }
-    yield {
-      type: 'pass1',
-      summary: trendData.summary,
-      temperature: trendData.market_score,
-      insights: trendData.positive_signals,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '트렌드 분석 중 오류가 발생했습니다.'
-    log('trend_analysis', 'failed', { error: msg, err })
-    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg })
+  // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + news)
+  log('trend_analysis', 'running (parallel)')
+  log('competition_analysis', 'running (parallel)')
+  await upsertAnalysisTask('trend_analysis', 'running', { provider: 'gemini', fallback_used: false })
+  await upsertAnalysisTask('competition_analysis', 'running', { provider: 'gemini', fallback_used: false })
+  yield { type: 'task', task: 'trend_analysis', status: 'running', provider: 'gemini', fallback_used: false }
+  yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
+
+  const [trendSettled, compSettled] = await Promise.allSettled([
+    runTrendTask(geminiKey, groqKey, keyword, newsTitles),
+    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles),
+  ])
+
+  if (trendSettled.status === 'rejected') {
+    const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
+    log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
+    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await updateProgress(2, 'failed')
-    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg }
+    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
   }
-
-  // Layer 3: Analysis Layer - Competition mapping
-  log('competition_analysis', 'running (Gemini API 호출 예정)')
-  await upsertAnalysisTask('competition_analysis', 'running')
-  yield { type: 'task', task: 'competition_analysis', status: 'running' }
-  let competitionData: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
-  try {
-    log('competition_analysis', 'generateText 호출 중', { promptLen: buildTaskCompetitionPrompt(keyword, trendData.summary).length })
-    const compText = await generateText({
-      apiKey: geminiKey,
-      prompt: buildTaskCompetitionPrompt(keyword, trendData.summary),
-      systemInstruction: TASK_COMPETITION_SYSTEM,
-      maxOutputTokens: 600,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
-    const parsed = parseJson<{
-      competitive_landscape?: Array<{ name?: string; positioning?: string }>
-      market_structure?: { summary?: string }
-    }>(typeof compText === 'string' ? compText : '')
-    const landscape = Array.isArray(parsed?.competitive_landscape)
-      ? parsed.competitive_landscape
-          .filter((c): c is { name: string; positioning?: string } => typeof c?.name === 'string')
-          .slice(0, 10)
-      : []
-    competitionData = {
-      competitive_landscape: landscape,
-      market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
-    }
-    await upsertAnalysisTask('competition_analysis', 'completed', { outputData: competitionData })
-    log('competition_analysis', 'completed', { competitorsCount: competitionData.competitive_landscape.length })
-    await updateProgress(3, 'analyzing')
-    yield {
-      type: 'task',
-      task: 'competition_analysis',
-      status: 'completed',
-      data: competitionData,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '경쟁 환경 분석 중 오류가 발생했습니다.'
-    log('competition_analysis', 'failed', { error: msg, err, errName: err instanceof Error ? err.name : typeof err })
-    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg })
+  if (compSettled.status === 'rejected') {
+    const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
+    log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
+    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await updateProgress(3, 'failed')
-    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg }
+    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'competition_analysis' }
     return
+  }
+
+  const trendResult = trendSettled.value
+  const compResult = compSettled.value
+  const trendData = trendResult.trendData
+  const competitionData = compResult.competitionData
+
+  await upsertAnalysisTask('trend_analysis', 'completed', {
+    outputData: trendResult.trendPayload,
+    provider: trendResult.usedFallback ? 'groq' : 'gemini',
+    fallback_used: trendResult.usedFallback,
+    primary_provider_error: trendResult.usedFallback ? trendResult.primaryProviderError ?? null : null,
+  })
+  await upsertAnalysisTask('competition_analysis', 'completed', {
+    outputData: competitionData,
+    provider: compResult.usedFallback ? 'groq' : 'gemini',
+    fallback_used: compResult.usedFallback,
+    primary_provider_error: compResult.usedFallback ? compResult.primaryProviderError ?? null : null,
+  })
+  log('trend_analysis', 'completed', { usedFallback: trendResult.usedFallback })
+  log('competition_analysis', 'completed', { competitorsCount: competitionData.competitive_landscape.length, usedFallback: compResult.usedFallback })
+  await updateProgress(3, 'analyzing')
+
+  yield {
+    type: 'task',
+    task: 'trend_analysis',
+    status: 'completed',
+    data: trendResult.trendPayload,
+    provider: trendResult.usedFallback ? 'groq' : 'gemini',
+    fallback_used: trendResult.usedFallback,
+    primaryProviderError: trendResult.usedFallback ? trendResult.primaryProviderError : undefined,
+  }
+  yield {
+    type: 'task',
+    task: 'competition_analysis',
+    status: 'completed',
+    data: competitionData,
+    provider: compResult.usedFallback ? 'groq' : 'gemini',
+    fallback_used: compResult.usedFallback,
+    primaryProviderError: compResult.usedFallback ? compResult.primaryProviderError : undefined,
+  }
+  yield {
+    type: 'pass1',
+    summary: trendData.summary,
+    temperature: trendData.market_score,
+    insights: trendData.positive_signals,
   }
 
   const competitionSummary = competitionData.competitive_landscape
     .map((c) => (c.positioning ? `${c.name}: ${c.positioning}` : c.name))
     .join('. ') || competitionData.market_structure || ''
 
-  // Layer 4: Strategy Layer - opportunities, risks, strategy summary
-  log('strategy_generation', 'running')
-  await upsertAnalysisTask('strategy_generation', 'running')
-  yield { type: 'task', task: 'strategy_generation', status: 'running' }
+  // Layer 4+5: Unified Strategy + Execution (single AI call)
+  log('strategy_execution', 'running')
+  await upsertAnalysisTask('strategy_generation', 'running', { provider: 'gemini', fallback_used: false })
+  await upsertAnalysisTask('execution_layer', 'running', { provider: 'gemini', fallback_used: false })
+  yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'gemini', fallback_used: false }
+  yield { type: 'task', task: 'execution_layer', status: 'running', provider: 'gemini', fallback_used: false }
   let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
-  try {
-    const stratText = await generateText({
-      apiKey: geminiKey,
-      prompt: buildStrategyLayerPrompt(keyword, trendData.summary, competitionSummary),
-      systemInstruction: STRATEGY_LAYER_SYSTEM,
-      maxOutputTokens: 600,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
-    const parsed = parseJson<{ opportunities?: string[]; risks?: string[]; strategy_summary?: string }>(
-      typeof stratText === 'string' ? stratText : ''
-    )
-    strategyData = {
-      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : trendData.positive_signals,
-      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : [],
-      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
-    }
-    await upsertAnalysisTask('strategy_generation', 'completed', { outputData: strategyData })
-    log('strategy_generation', 'completed')
-    await updateProgress(4, 'analyzing')
-    yield {
-      type: 'task',
-      task: 'strategy_generation',
-      status: 'completed',
-      data: strategyData,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '전략 생성 중 오류가 발생했습니다.'
-    log('strategy_generation', 'failed', { error: msg, err })
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg })
-    await updateProgress(4, 'failed')
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg }
-    yield { type: 'error', message: msg, step: 'strategy_generation' }
-    return
-  }
-
-  const strategyContext = [strategyData.strategy_summary, strategyData.opportunities.join('. '), strategyData.risks.join('. ')].filter(Boolean).join('\n')
-
-  // Layer 5: Execution Layer - product actions, feature ideas, GTM steps
-  log('execution_layer', 'running')
-  await upsertAnalysisTask('execution_layer', 'running')
-  yield { type: 'task', task: 'execution_layer', status: 'running' }
   let executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
     feature_ideas: string[]
     go_to_market_steps: string[]
   }
+  const unifiedPrompt = buildStrategyExecutionPrompt(keyword, trendData.summary, competitionSummary)
   try {
-    const execText = await generateText({
-      apiKey: geminiKey,
-      prompt: buildExecutionLayerPrompt(
-        keyword,
-        strategyData.strategy_summary,
-        strategyData.opportunities.join('. '),
-        strategyData.risks.join('. ')
-      ),
-      systemInstruction: EXECUTION_LAYER_SYSTEM,
-      maxOutputTokens: 800,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
+    let unifiedText!: string
+    let usedFallback = false
+    let primaryProviderError: string | undefined
+    for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+      try {
+        unifiedText = await generateText({
+          apiKey: geminiKey,
+          prompt: unifiedPrompt,
+          systemInstruction: STRATEGY_EXECUTION_SYSTEM,
+          maxOutputTokens: 1200,
+          model: GEMINI_MODEL,
+        })
+        break
+      } catch (err) {
+        const reason = is429OrQuotaError(err) ? 'quota_exceeded' : 'api_error'
+        logAiError('gemini', 'strategy_execution', reason, attempt, err)
+        if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+          yield { type: 'task', task: 'strategy_generation', status: 'running', retryMessage: '재시도 중...', retryAttempt: attempt + 1 }
+          await sleep(AI_RETRY_DELAY_MS)
+        } else if (isFallbackTriggerError(err) && groqKey) {
+          primaryProviderError = getFallbackErrorReason(err)
+          console.log('[AI Timeline] Gemini failed (strategy_execution). Switching to Groq.', { reason: primaryProviderError })
+          yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'groq', fallback_used: true, primaryProviderError }
+          await upsertAnalysisTask('strategy_generation', 'running', { provider: 'groq', fallback_used: true, primary_provider_error: primaryProviderError })
+          const groqRes = await completeChat({
+            apiKey: groqKey,
+            messages: [
+              { role: 'system', content: STRATEGY_EXECUTION_SYSTEM },
+              { role: 'user', content: unifiedPrompt },
+            ],
+            maxTokens: 1200,
+          })
+          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+          unifiedText = groqRes.text
+          usedFallback = true
+          break
+        } else {
+          throw err
+        }
+      }
+    }
+    if (!usedFallback) await trackUsage('gemini')
+
     const parsed = parseJson<{
+      opportunities?: string[]
+      risks?: string[]
+      strategy_summary?: string
       product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
       feature_ideas?: string[]
       go_to_market_steps?: string[]
-    }>(typeof execText === 'string' ? execText : '')
+    }>(typeof unifiedText === 'string' ? unifiedText : '')
+
+    strategyData = {
+      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : trendData.positive_signals,
+      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : [],
+      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
+    }
     const actions = Array.isArray(parsed?.product_actions)
       ? parsed.product_actions
           .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
@@ -806,24 +943,50 @@ export async function* runResearch(
       feature_ideas: Array.isArray(parsed?.feature_ideas) ? parsed.feature_ideas.filter((s): s is string => typeof s === 'string') : [],
       go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
     }
-    await upsertAnalysisTask('execution_layer', 'completed', { outputData: executionData })
-    log('execution_layer', 'completed', { actionsCount: executionData.product_actions.length })
+
+    await upsertAnalysisTask('strategy_generation', 'completed', {
+      outputData: strategyData,
+      provider: usedFallback ? 'groq' : 'gemini',
+      fallback_used: usedFallback,
+      primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
+    })
+    await upsertAnalysisTask('execution_layer', 'completed', {
+      outputData: executionData,
+      provider: usedFallback ? 'groq' : 'gemini',
+      fallback_used: usedFallback,
+      primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
+    })
+    log('strategy_execution', 'completed', { usedFallback })
     await updateProgress(5, 'analyzing')
+
+    yield {
+      type: 'task',
+      task: 'strategy_generation',
+      status: 'completed',
+      data: strategyData,
+      provider: usedFallback ? 'groq' : 'gemini',
+      fallback_used: usedFallback,
+      primaryProviderError: usedFallback ? primaryProviderError : undefined,
+    }
     yield {
       type: 'task',
       task: 'execution_layer',
       status: 'completed',
       data: executionData,
+      provider: usedFallback ? 'groq' : 'gemini',
+      fallback_used: usedFallback,
+      primaryProviderError: usedFallback ? primaryProviderError : undefined,
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '전략 실행 생성 중 오류가 발생했습니다.'
-    log('execution_layer', 'failed', { error: msg, err })
-    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg })
-    executionData = {
-      product_actions: [],
-      feature_ideas: [],
-      go_to_market_steps: [],
-    }
+    const msg = toUserFriendlyError(err, '전략 및 실행 계획 생성 중 오류가 발생했습니다.')
+    log('strategy_execution', 'failed', { error: msg, err })
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    await updateProgress(4, 'failed')
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'execution_layer', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'error', message: msg, step: 'strategy_execution' }
+    return
   }
 
   const pos = trendData.positive_signals
@@ -884,66 +1047,19 @@ export async function* runResearch(
 
   yield { type: 'pass2', structured }
 
-  // Opportunity Score - PM market attractiveness
-  type ScoreBreakdown = {
-    market_growth?: number
-    competition_density?: number
-    trend_momentum?: number
-    funding_signals?: number
-    risk_factors?: number
-  }
-  let opportunityScoreData: {
-    opportunity_score: number
-    score_reasoning: string
-    breakdown: ScoreBreakdown
-  } | null = null
-  try {
-    const scoreText = await generateText({
-      apiKey: geminiKey,
-      prompt: buildOpportunityScorePrompt(
-        keyword,
-        trendData.summary,
-        competitionSummary,
-        strategyData.opportunities.join('. '),
-        strategyData.risks.join('. ')
-      ),
-      systemInstruction: OPPORTUNITY_SCORE_SYSTEM,
-      maxOutputTokens: 500,
-      model: GEMINI_MODEL,
-    })
-    await trackUsage('gemini')
-    const parsed = parseJson<{
-      opportunity_score?: number
-      market_growth?: number
-      competition_density?: number
-      trend_momentum?: number
-      funding_signals?: number
-      risk_factors?: number
-      score_reasoning?: string
-    }>(typeof scoreText === 'string' ? scoreText : '')
-    if (parsed && typeof parsed.opportunity_score === 'number') {
-      const clampScore = (n: number) => Math.min(100, Math.max(0, n))
-      const breakdown: ScoreBreakdown = {}
-      if (typeof parsed.market_growth === 'number') breakdown.market_growth = parsed.market_growth
-      if (typeof parsed.competition_density === 'number') breakdown.competition_density = parsed.competition_density
-      if (typeof parsed.trend_momentum === 'number') breakdown.trend_momentum = parsed.trend_momentum
-      if (typeof parsed.funding_signals === 'number') breakdown.funding_signals = parsed.funding_signals
-      if (typeof parsed.risk_factors === 'number') breakdown.risk_factors = parsed.risk_factors
-      opportunityScoreData = {
-        opportunity_score: clampScore(parsed.opportunity_score),
-        score_reasoning: typeof parsed.score_reasoning === 'string' ? parsed.score_reasoning : '',
-        breakdown,
-      }
-    }
-  } catch {
-    /* recoverable */
-  }
-
-  if (opportunityScoreData) {
-    structured.opportunity_score = opportunityScoreData.opportunity_score
-    structured.opportunity_score_breakdown = opportunityScoreData.breakdown
-    structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
-  }
+  // Opportunity Score - deterministic formula (no LLM call)
+  const opportunityScoreData = computeOpportunityScore({
+    market_score: trendData.market_score,
+    positive_signals_count: trendData.positive_signals.length,
+    neutral_signals_count: trendData.neutral_signals.length,
+    competitor_count: competitionData.competitive_landscape.length,
+    opportunities_count: strategyData.opportunities.length,
+    risks_count: strategyData.risks.length,
+    product_actions_count: executionData.product_actions.length,
+  })
+  structured.opportunity_score = opportunityScoreData.opportunity_score
+  structured.opportunity_score_breakdown = opportunityScoreData.breakdown
+  structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
 
   // Step 4: Creative analysis
   let creativeGroq: string | null = null
