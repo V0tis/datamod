@@ -42,6 +42,12 @@ export interface PMDecisionDashboardProps {
   onReanalyze?: () => void
   onAbort?: () => void
   reanalyzing?: boolean
+  /** When analysis failed globally; timeline stays visible with error step */
+  hasError?: boolean
+  /** Step index (0-4) where error occurred */
+  errorStepIndex?: number
+  /** Global error message to show in failed step */
+  globalErrorMessage?: string
 }
 
 export function PMDecisionDashboard({
@@ -58,6 +64,9 @@ export function PMDecisionDashboard({
   onReanalyze,
   reanalyzing = false,
   consensusData,
+  hasError = false,
+  errorStepIndex = 0,
+  globalErrorMessage,
 }: PMDecisionDashboardProps) {
   const currentStep =
     polledProgressStep != null && loading
@@ -92,7 +101,7 @@ export function PMDecisionDashboard({
 
   const effectiveAnalysisTasks = analysisTasks ?? analysisTasksProp
 
-  const showTimeline = (result != null || isAnalyzing) && Boolean(keyword?.trim())
+  const showTimeline = (result != null || isAnalyzing || hasError) && Boolean(keyword?.trim())
   const analysisComplete = result != null && !isAnalyzing
 
   return (
@@ -103,7 +112,7 @@ export function PMDecisionDashboard({
           keyword={keyword}
           currentStep={currentStep}
           allCompleted={
-            streamingState.status === 'completed' || (result != null && !isAnalyzing)
+            streamingState.status === 'completed' || (result != null && !isAnalyzing && !hasError)
           }
           streamingStepId={stepId}
           taskData={taskData}
@@ -111,6 +120,9 @@ export function PMDecisionDashboard({
           newsList={newsList}
           result={result}
           onRetryStep={onReanalyze}
+          hasError={hasError}
+          errorStepIndex={errorStepIndex}
+          globalErrorMessage={globalErrorMessage}
         />
       )}
 

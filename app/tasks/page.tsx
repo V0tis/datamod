@@ -1,11 +1,14 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAnalysisTasks } from '@/lib/hooks/use-analysis-tasks'
 import type { AnalysisTask } from '@/lib/analysis-types'
-import { RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react'
+import { RefreshCcw, Ban, Loader2, CheckCircle2, AlertCircle, ChevronRight, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const TASK_STATUS_LABEL: Record<AnalysisTask['status'], string> = {
   queued: '대기중',
@@ -32,27 +35,178 @@ function isTaskActive(t: AnalysisTask) {
   return t.status === 'queued' || t.status === 'analyzing'
 }
 
+function formatStarted(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
 export default function TasksPage() {
   const router = useRouter()
-  const { tasks, runningCount, setActiveJob, retryTask, cancelTask } = useAnalysisTasks()
+  const { tasks, runningCount, setActiveJob, retryTask, cancelTask, refresh } = useAnalysisTasks()
+  const [deleteTarget, setDeleteTarget] = useState<AnalysisTask | null>(null)
+  const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
 
   const goToTaskResults = (task: AnalysisTask) => {
     void setActiveJob(task.id)
     router.push(`/results?keyword=${encodeURIComponent(task.keyword)}&country=${encodeURIComponent(task.countryCode || 'KR')}`)
   }
 
+  const handleDeleteTask = useCallback(async (task: AnalysisTask) => {
+    setDeletingId(task.id)
+    try {
+      const res = await fetch(`/api/research/jobs/${task.id}`, { method: 'DELETE' })
+      if (res.status === 204) {
+        await refresh()
+        setDeleteTarget(null)
+        toast.success('삭제되었습니다.')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data?.error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    } finally {
+      setDeletingId(null)
+    }
+  }, [refresh])
+
+  const handleDeleteAll = useCallback(async () => {
+    setClearingAll(true)
+    try {
+      const res = await fetch('/api/research/jobs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteAll: true }),
+      })
+      if (res.status === 204) {
+        await refresh()
+        setClearAllOpen(false)
+        toast.success('모든 분석 기록이 삭제되었습니다.')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data?.error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    } finally {
+      setClearingAll(false)
+    }
+  }, [refresh])
+
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto min-h-screen bg-background">
-      <header className="mb-6">
-        <h1 className="text-lg font-semibold text-foreground tracking-tight">Analysis Tasks</h1>
-        <p className="text-muted-foreground text-xs mt-0.5">
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground tracking-tight">Analysis Tasks</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
           {runningCount > 0
             ? `${runningCount} task(s) in progress`
             : tasks.length === 0
               ? 'No analyses yet. Start one from Dashboard.'
               : `${tasks.length} task(s)`}
-        </p>
+          </p>
+        </div>
+        {tasks.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-destructive border-destructive/50 hover:bg-destructive/10"
+            onClick={() => setClearAllOpen(true)}
+          >
+            Delete All Tasks
+          </Button>
+        )}
       </header>
+
+      {/* Single delete confirmation modal */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-task-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !deletingId && setDeleteTarget(null)}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-5">
+            <h2 id="delete-task-title" className="font-semibold text-foreground mb-2">
+              분석 기록 삭제
+            </h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              이 분석 기록을 삭제하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!deletingId}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={!!deletingId}
+                onClick={() => handleDeleteTask(deleteTarget)}
+              >
+                {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete all confirmation modal */}
+      {clearAllOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-all-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !clearingAll && setClearAllOpen(false)}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-5">
+            <h2 id="delete-all-title" className="font-semibold text-foreground mb-2">
+              모든 분석 기록 삭제
+            </h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              모든 분석 기록을 삭제하시겠습니까? 삭제된 기록은 복구할 수 없습니다.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!clearingAll}
+                onClick={() => setClearAllOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={!!clearingAll}
+                onClick={handleDeleteAll}
+              >
+                {clearingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tasks.length === 0 ? (
         <div className="rounded-xl border border-border/60 bg-card/50 py-12 px-6 text-center">
@@ -100,6 +254,11 @@ export default function TasksPage() {
                       <span className="text-xs text-muted-foreground truncate">{task.progress}</span>
                     )}
                   </div>
+                  {task.createdAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Started: {formatStarted(task.createdAt)}
+                    </p>
+                  )}
                   {task.error && (
                     <p className="mt-2 text-xs text-destructive line-clamp-2">{task.error}</p>
                   )}
@@ -133,6 +292,22 @@ export default function TasksPage() {
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Link>
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDeleteTarget(task)
+                    }}
+                    disabled={!!deletingId}
+                    aria-label="삭제"
+                  >
+                    {deletingId === task.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
             </li>

@@ -18,13 +18,9 @@ export function TimeAgo({ isoString, className }: { isoString: string | null | u
   }
 
   if (!mounted) {
-    const fallback = new Date(isoString).toLocaleDateString('ko-KR', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    return <span className={className}>{fallback}</span>
+    const d = new Date(isoString)
+    const fallback = `${d.getUTCFullYear()}. ${String(d.getUTCMonth() + 1).padStart(2, '0')}. ${String(d.getUTCDate()).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+    return <span className={className} suppressHydrationWarning>{fallback}</span>
   }
 
   return <span className={className}>{formatTimeAgo(isoString)}</span>

@@ -7,8 +7,6 @@ import type { User } from '@supabase/supabase-js'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
-  Play,
-  History,
   ListTodo,
   Settings,
   LogOut,
@@ -20,8 +18,6 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/', label: 'Start Analysis', icon: Play },
-  { href: '/history', label: 'Analysis History', icon: History },
   { href: '/tasks', label: 'Analysis Tasks', icon: ListTodo },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Search, TrendingUp, History, ChevronRight, Loader2, X, Target } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
-import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
+import { RinAnimation, getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
@@ -29,7 +29,10 @@ function RinAISearchInner() {
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
-  const [loadingMessage] = useState(() => getRandomRinMessage())
+  const [loadingMessage, setLoadingMessage] = useState<string>(() => RIN_LOADING_MESSAGES[0])
+  useEffect(() => {
+    setLoadingMessage(getRandomRinMessage())
+  }, [])
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
   const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
@@ -46,17 +49,20 @@ function RinAISearchInner() {
   const [trendStatus, setTrendStatus] = useState<TrendsResponse['trendStatus']>(undefined)
   const [trendsLoading, setTrendsLoading] = useState(false)
   const searchParams = useSearchParams()
-  const [trendCountry, setTrendCountryState] = useState<CountryChipCode>(() => {
-    if (typeof window === 'undefined') return 'KR'
-    const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
-    return saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)
-      ? (saved as CountryChipCode)
-      : 'KR'
-  })
+  const [trendCountry, setTrendCountryState] = useState<CountryChipCode>('KR')
   useEffect(() => {
     const c = searchParams.get('country')
     if (c && (COUNTRY_CHIP_CODES as readonly string[]).includes(c)) {
       setTrendCountryState(c as CountryChipCode)
+    } else {
+      try {
+        const saved = window.localStorage.getItem(TRENDS_COUNTRY_STORAGE_KEY)
+        if (saved && (COUNTRY_CHIP_CODES as readonly string[]).includes(saved)) {
+          setTrendCountryState(saved as CountryChipCode)
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }, [searchParams])
 

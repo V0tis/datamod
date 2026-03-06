@@ -51,3 +51,37 @@ export async function PATCH(
     return NextResponse.json({ error: '작업 취소에 실패했습니다.' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+    }
+
+    const { id } = await params
+    if (!id) {
+      return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('analysis_jobs')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('[Jobs API] delete:', error)
+      return NextResponse.json({ error: '삭제에 실패했습니다.' }, { status: 500 })
+    }
+
+    return new Response(null, { status: 204 })
+  } catch (e) {
+    console.error('[Jobs API] DELETE:', e)
+    return NextResponse.json({ error: '삭제에 실패했습니다.' }, { status: 500 })
+  }
+}

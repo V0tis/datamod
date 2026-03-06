@@ -52,6 +52,12 @@ export interface StrategyEnginePipelineProps {
   }> | null
   newsList?: Array<{ title?: string; url?: string; publisher?: string }>
   onRetryStep?: () => void
+  /** Global analysis failure - timeline stays visible, this step shows error */
+  hasError?: boolean
+  /** Step index (0–4) where global error occurred */
+  errorStepIndex?: number
+  /** Error message to show in failed step when task.error_message is empty */
+  globalErrorMessage?: string
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -246,6 +252,9 @@ export function StrategyEnginePipeline({
   analysisTasks = null,
   newsList = [],
   onRetryStep,
+  hasError = false,
+  errorStepIndex = 0,
+  globalErrorMessage,
   result,
   className,
 }: StrategyEnginePipelineProps) {
@@ -267,6 +276,12 @@ export function StrategyEnginePipeline({
   const getStatus = (i: number): StageStatus => {
     const stage = PIPELINE_STAGES[i]
     const task = stage ? taskMap[stage.id] : null
+    // Global error: failed step + completed before + pending after
+    if (hasError) {
+      if (i === errorStepIndex) return 'failed'
+      if (i < errorStepIndex) return 'completed'
+      return 'pending'
+    }
     if (task) return task.status
     if (i < effectiveIndex) return 'completed'
     if (i === effectiveIndex && !allCompleted) return 'running'
@@ -365,7 +380,7 @@ export function StrategyEnginePipeline({
                     )}
                     {status === 'failed' && (
                       <p className="text-xs text-destructive mt-1">
-                        {task?.error_message ?? '오류 발생'}
+                        {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
                       </p>
                     )}
                     {hasInsight && (status === 'completed' || status === 'running') && insight?.summary && (

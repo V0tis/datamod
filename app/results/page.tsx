@@ -975,39 +975,48 @@ function ResultsContent() {
               disabled={loading}
             />
           </div>
-        ) : (canonicalStatus === 'failed' || showPolledError) ? (
-          <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5">
-            <h2 className="text-lg font-semibold text-foreground mb-2">Analysis Failed</h2>
-            <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
-              {displayError ?? polledError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
-            </p>
-            <Button
-              variant="secondary"
-              onClick={() => {
+        ) : (
+          <>
+            <PMDecisionDashboard
+              keyword={currentKeyword ?? ''}
+              result={displayResult}
+              loading={loading}
+              streamingState={streamingState}
+              polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : (canonicalStatus === 'failed' || showPolledError ? Math.min(4, Math.max(0, polledProgressStep)) : undefined)}
+              newsList={newsList}
+              taskData={taskData}
+              consensusData={consensusData}
+              onPrint={printReportAsPdf}
+              onSaveInsight={handleSaveInsightOpen}
+              onReanalyze={() => {
                 setPolledStatus(null)
                 setPolledError(null)
                 startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
               }}
-            >
-              Retry
-            </Button>
-          </div>
-        ) : (
-          <PMDecisionDashboard
-            keyword={currentKeyword ?? ''}
-            result={displayResult}
-            loading={loading}
-            streamingState={streamingState}
-            polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : undefined}
-            newsList={newsList}
-            taskData={taskData}
-            consensusData={consensusData}
-            onPrint={printReportAsPdf}
-            onSaveInsight={handleSaveInsightOpen}
-            onReanalyze={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
-            onAbort={abortAnalysis}
-            reanalyzing={loading}
-          />
+              onAbort={abortAnalysis}
+              reanalyzing={loading}
+              hasError={canonicalStatus === 'failed' || showPolledError}
+              errorStepIndex={polledProgressStep}
+              globalErrorMessage={displayError ?? polledError ?? undefined}
+            />
+            {(canonicalStatus === 'failed' || showPolledError) && (
+              <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 py-6 px-4">
+                <p className="text-muted-foreground text-sm mb-4 text-center max-w-md">
+                  {displayError ?? polledError ?? '서버가 바쁘거나 일시적인 오류일 수 있습니다.'}
+                </p>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setPolledStatus(null)
+                    setPolledError(null)
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                  }}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {/* 실시간 뉴스: PM 대시보드 하단 보조 정보 */}

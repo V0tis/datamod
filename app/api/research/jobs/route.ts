@@ -106,3 +106,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '작업 생성에 실패했습니다.' }, { status: 500 })
   }
 }
+
+/** DELETE: body { deleteAll?: boolean } — delete all analysis_jobs for current user */
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+    }
+
+    const body = await req.json().catch(() => ({})) as { deleteAll?: boolean }
+    if (body?.deleteAll !== true) {
+      return NextResponse.json({ error: 'deleteAll: true required' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('analysis_jobs')
+      .delete()
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('[Jobs API] delete all:', error)
+      return NextResponse.json({ error: '삭제에 실패했습니다.' }, { status: 500 })
+    }
+
+    return new Response(null, { status: 204 })
+  } catch (e) {
+    console.error('[Jobs API] DELETE:', e)
+    return NextResponse.json({ error: '삭제에 실패했습니다.' }, { status: 500 })
+  }
+}
