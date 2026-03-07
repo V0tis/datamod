@@ -16,7 +16,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -52,9 +52,11 @@ export async function GET() {
 
   const systemGroq = !!(process.env.GROQ_API_KEY ?? '').trim()
 
+  const aiPrimaryModel = (row as { ai_primary_model?: string } | null)?.ai_primary_model
   const res = NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
+    aiPrimaryModel: aiPrimaryModel === 'groq' ? 'groq' : 'gemini',
     hasGeminiKey,
     hasOpenAIKey,
     hasAnthropicKey,
@@ -85,7 +87,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string }
+  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string }
   try {
     body = await req.json()
   } catch {
@@ -102,10 +104,12 @@ export async function POST(req: Request) {
     typeof body.anthropic_api_key === 'string' ? body.anthropic_api_key.trim() || null : undefined
   const groq_api_key =
     typeof body.groq_api_key === 'string' ? body.groq_api_key.trim() || null : undefined
+  const ai_primary_model =
+    body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini' ? body.ai_primary_model : undefined
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -120,6 +124,8 @@ export async function POST(req: Request) {
       anthropic_api_key !== undefined ? anthropic_api_key : (existing as { anthropic_api_key?: string } | null)?.anthropic_api_key ?? null,
     groq_api_key:
       groq_api_key !== undefined ? groq_api_key : (existing as { groq_api_key?: string } | null)?.groq_api_key ?? null,
+    ai_primary_model:
+      ai_primary_model !== undefined ? ai_primary_model : (existing as { ai_primary_model?: string } | null)?.ai_primary_model ?? null,
     updated_at: new Date().toISOString(),
   }
 

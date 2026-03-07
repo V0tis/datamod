@@ -30,7 +30,7 @@ export function isFallbackTriggerError(err: unknown): boolean {
   )
 }
 
-/** Human-readable reason for fallback (e.g. for timeline UI). */
+/** Human-readable reason for fallback (e.g. for timeline UI). English for internal use. */
 export function getFallbackErrorReason(err: unknown): string {
   const msg = String((err as { message?: string })?.message ?? err)
   const status = (err as { status?: number })?.status
@@ -38,6 +38,16 @@ export function getFallbackErrorReason(err: unknown): string {
   if (/timeout|timed out/i.test(msg)) return 'timeout'
   if (/network|econn/i.test(msg)) return 'network error'
   return 'rate limit'
+}
+
+/** Korean label for fallback error (UI 표시용). */
+export function getFallbackErrorReasonKo(err: unknown): string {
+  const msg = String((err as { message?: string })?.message ?? err)
+  const status = (err as { status?: number })?.status
+  if (status === 429 || /429|quota|rate limit|쿼터|한도|초과/i.test(msg)) return '쿼터 초과'
+  if (/timeout|timed out|타임아웃/i.test(msg)) return '타임아웃'
+  if (/network|econn|네트워크/i.test(msg)) return '네트워크 오류'
+  return '속도 제한'
 }
 
 export function sleep(ms: number): Promise<void> {

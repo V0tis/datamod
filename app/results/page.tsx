@@ -240,6 +240,25 @@ function ResultsContent() {
 
   // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
   useEffect(() => {
+    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { aiPrimaryModel?: 'gemini' | 'groq' } | null) => {
+        if (data?.aiPrimaryModel === 'groq') setAiPrimaryModel('groq')
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleAiPrimaryChange = async (value: 'gemini' | 'groq') => {
+    setAiPrimaryModel(value)
+    try {
+      const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ai_primary_model: value }) })
+      if (!res.ok) throw new Error('저장 실패')
+    } catch {
+      setAiPrimaryModel((v) => (v === value ? (value === 'groq' ? 'gemini' : 'groq') : v))
+    }
+  }
+
+  useEffect(() => {
     const mq = typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)') : null
     if (!mq) return
     const setOpen = () => {
@@ -256,6 +275,8 @@ function ResultsContent() {
   const [historyLoadDone, setHistoryLoadDone] = useState(false)
   const [hasCachedResult, setHasCachedResult] = useState<boolean | null>(null)
 
+  /** AI 우선 분석 (Gemini / Groq) - 설정 페이지와 동기화 */
+  const [aiPrimaryModel, setAiPrimaryModel] = useState<'gemini' | 'groq'>('gemini')
   /** 폴링: 백그라운드 분석 진행 상태 추적 (2초마다). 새 탭/새로고침 시 스트리밍 상태 없이 진행 확인 */
   const [polledStatus, setPolledStatus] = useState<'pending' | 'running' | 'completed' | 'failed' | null>(null)
   const [polledProgressStep, setPolledProgressStep] = useState(0)
@@ -888,9 +909,30 @@ function ResultsContent() {
         <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-4 sm:p-5 md:p-6 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
         {/* AI Product Strategy Report header */}
         <header className="pb-6 border-b border-border/60">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Market Analysis
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              시장 분석
+            </p>
+            <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
+              <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
+              <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/50">
+                {(['gemini', 'groq'] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => handleAiPrimaryChange(v)}
+                    disabled={loading}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded transition-colors',
+                      aiPrimaryModel === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    )}
+                  >
+                    {v === 'gemini' ? 'Gemini' : 'Groq'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground tracking-tight break-words">
             {currentKeyword}
             {headerTitleKo && (

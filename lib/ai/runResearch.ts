@@ -109,12 +109,16 @@ export type ResearchStreamEvent =
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
 
+export type AIPrimaryModel = 'gemini' | 'groq'
+
 export type RunResearchParams = {
   keyword: string
   countryCode: string
   userId: string
   geminiKey: string
   groqKey?: string | null
+  /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
+  primaryProvider?: AIPrimaryModel
 }
 
 type RssItem = {
@@ -208,42 +212,55 @@ async function runTrendTask(
   geminiKey: string,
   groqKey: string | null | undefined,
   keyword: string,
-  newsTitles: string[]
+  newsTitles: string[],
+  primaryProvider: AIPrimaryModel
 ): Promise<TrendTaskResult> {
   const prompt = buildTaskTrendsPrompt(keyword, newsTitles)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_TRENDS_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_TRENDS_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
+  const primaryIsGemini = primaryProvider === 'gemini'
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
     try {
-      text = await generateText({
-        apiKey: geminiKey,
-        prompt,
-        systemInstruction: TASK_TRENDS_SYSTEM,
-        maxOutputTokens: 800,
-        model: GEMINI_MODEL,
-      })
+      if (primaryIsGemini) {
+        text = (await tryGemini()) ?? ''
+      } else if (groqKey) {
+        const groqRes = await tryGroq()
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+        text = groqRes.text
+      } else throw new Error('Groq key not available')
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
         await sleep(AI_RETRY_DELAY_MS)
-      } else if (isFallbackTriggerError(err) && groqKey) {
+      } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
-        const groqRes = await completeChat({
-          apiKey: groqKey,
-          messages: [{ role: 'system', content: TASK_TRENDS_SYSTEM }, { role: 'user', content: prompt }],
-          maxTokens: 800,
-        })
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-        text = groqRes.text
-        usedFallback = true
-        break
+        try {
+          if (primaryIsGemini && groqKey) {
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            text = groqRes.text
+          } else if (!primaryIsGemini && geminiKey) {
+            const gemRes = await tryGemini()
+            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+          } else throw err
+          usedFallback = true
+          break
+        } catch {
+          throw err
+        }
       } else {
         throw err
       }
     }
   }
-  if (!usedFallback) await trackUsage('gemini')
+  // Track usage when Gemini was used (primary or fallback)
+  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
+  if (usedGemini) await trackUsage('gemini')
   const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
     typeof text === 'string' ? text : ''
   )
@@ -269,42 +286,54 @@ async function runCompetitionTask(
   geminiKey: string,
   groqKey: string | null | undefined,
   keyword: string,
-  newsTitles: string[]
+  newsTitles: string[],
+  primaryProvider: AIPrimaryModel
 ): Promise<CompetitionTaskResult> {
   const prompt = buildTaskCompetitionPromptFromNews(keyword, newsTitles)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 600, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 600 })
+  const primaryIsGemini = primaryProvider === 'gemini'
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
     try {
-      text = await generateText({
-        apiKey: geminiKey,
-        prompt,
-        systemInstruction: TASK_COMPETITION_SYSTEM,
-        maxOutputTokens: 600,
-        model: GEMINI_MODEL,
-      })
+      if (primaryIsGemini) {
+        text = (await tryGemini()) ?? ''
+      } else if (groqKey) {
+        const groqRes = await tryGroq()
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+        text = groqRes.text
+      } else throw new Error('Groq key not available')
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
         await sleep(AI_RETRY_DELAY_MS)
-      } else if (isFallbackTriggerError(err) && groqKey) {
+      } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
-        const groqRes = await completeChat({
-          apiKey: groqKey,
-          messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }],
-          maxTokens: 600,
-        })
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-        text = groqRes.text
-        usedFallback = true
-        break
+        try {
+          if (primaryIsGemini && groqKey) {
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            text = groqRes.text
+          } else if (!primaryIsGemini && geminiKey) {
+            const gemRes = await tryGemini()
+            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+          } else throw err
+          usedFallback = true
+          break
+        } catch {
+          throw err
+        }
       } else {
         throw err
       }
     }
   }
-  if (!usedFallback) await trackUsage('gemini')
+  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
+  if (usedGemini) await trackUsage('gemini')
   const parsed = parseJson<{
     competitive_landscape?: Array<{ name?: string; positioning?: string }>
     market_structure?: { summary?: string }
@@ -661,7 +690,8 @@ function toRecord(value: unknown): Record<string, string> {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, primaryProvider: primaryProviderParam } = params
+  const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
@@ -789,8 +819,8 @@ export async function* runResearch(
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
 
   const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, newsTitles),
-    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles),
+    runTrendTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider),
+    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider),
   ])
 
   if (trendSettled.status === 'rejected') {
@@ -817,15 +847,17 @@ export async function* runResearch(
   const trendData = trendResult.trendData
   const competitionData = compResult.competitionData
 
+  const trendProvider = primaryProvider === 'gemini' ? (trendResult.usedFallback ? 'groq' : 'gemini') : (trendResult.usedFallback ? 'gemini' : 'groq')
+  const compProvider = primaryProvider === 'gemini' ? (compResult.usedFallback ? 'groq' : 'gemini') : (compResult.usedFallback ? 'gemini' : 'groq')
   await upsertAnalysisTask('trend_analysis', 'completed', {
     outputData: trendResult.trendPayload,
-    provider: trendResult.usedFallback ? 'groq' : 'gemini',
+    provider: trendProvider,
     fallback_used: trendResult.usedFallback,
     primary_provider_error: trendResult.usedFallback ? trendResult.primaryProviderError ?? null : null,
   })
   await upsertAnalysisTask('competition_analysis', 'completed', {
     outputData: competitionData,
-    provider: compResult.usedFallback ? 'groq' : 'gemini',
+    provider: compProvider,
     fallback_used: compResult.usedFallback,
     primary_provider_error: compResult.usedFallback ? compResult.primaryProviderError ?? null : null,
   })
@@ -838,7 +870,7 @@ export async function* runResearch(
     task: 'trend_analysis',
     status: 'completed',
     data: trendResult.trendPayload,
-    provider: trendResult.usedFallback ? 'groq' : 'gemini',
+    provider: trendProvider,
     fallback_used: trendResult.usedFallback,
     primaryProviderError: trendResult.usedFallback ? trendResult.primaryProviderError : undefined,
   }
@@ -847,7 +879,7 @@ export async function* runResearch(
     task: 'competition_analysis',
     status: 'completed',
     data: competitionData,
-    provider: compResult.usedFallback ? 'groq' : 'gemini',
+    provider: compProvider,
     fallback_used: compResult.usedFallback,
     primaryProviderError: compResult.usedFallback ? compResult.primaryProviderError : undefined,
   }
@@ -863,11 +895,12 @@ export async function* runResearch(
     .join('. ') || competitionData.market_structure || ''
 
   // Layer 4+5: Unified Strategy + Execution (single AI call)
+  const stratPrimaryIsGemini = primaryProvider === 'gemini'
   log('strategy_execution', 'running')
-  await upsertAnalysisTask('strategy_generation', 'running', { provider: 'gemini', fallback_used: false })
-  await upsertAnalysisTask('execution_layer', 'running', { provider: 'gemini', fallback_used: false })
-  yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'gemini', fallback_used: false }
-  yield { type: 'task', task: 'execution_layer', status: 'running', provider: 'gemini', fallback_used: false }
+  await upsertAnalysisTask('strategy_generation', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
+  await upsertAnalysisTask('execution_layer', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
+  yield { type: 'task', task: 'strategy_generation', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
+  yield { type: 'task', task: 'execution_layer', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
   let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
   let executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -875,49 +908,56 @@ export async function* runResearch(
     go_to_market_steps: string[]
   }
   const unifiedPrompt = buildStrategyExecutionPrompt(keyword, trendData.summary, competitionSummary)
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt: unifiedPrompt, systemInstruction: STRATEGY_EXECUTION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EXECUTION_SYSTEM }, { role: 'user', content: unifiedPrompt }], maxTokens: 1200 })
   try {
     let unifiedText!: string
     let usedFallback = false
     let primaryProviderError: string | undefined
     for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
       try {
-        unifiedText = await generateText({
-          apiKey: geminiKey,
-          prompt: unifiedPrompt,
-          systemInstruction: STRATEGY_EXECUTION_SYSTEM,
-          maxOutputTokens: 1200,
-          model: GEMINI_MODEL,
-        })
+        if (stratPrimaryIsGemini) {
+          unifiedText = (await tryGemini()) ?? ''
+        } else if (groqKey) {
+          const groqRes = await tryGroq()
+          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+          unifiedText = groqRes.text
+        } else throw new Error('Groq key not available')
         break
       } catch (err) {
+        const primaryName = stratPrimaryIsGemini ? 'gemini' : 'groq'
         const reason = is429OrQuotaError(err) ? 'quota_exceeded' : 'api_error'
-        logAiError('gemini', 'strategy_execution', reason, attempt, err)
+        logAiError(primaryName, 'strategy_execution', reason, attempt, err)
         if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
           yield { type: 'task', task: 'strategy_generation', status: 'running', retryMessage: '재시도 중...', retryAttempt: attempt + 1 }
           await sleep(AI_RETRY_DELAY_MS)
-        } else if (isFallbackTriggerError(err) && groqKey) {
+        } else if (isFallbackTriggerError(err)) {
           primaryProviderError = getFallbackErrorReason(err)
-          console.log('[AI Timeline] Gemini failed (strategy_execution). Switching to Groq.', { reason: primaryProviderError })
-          yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'groq', fallback_used: true, primaryProviderError }
-          await upsertAnalysisTask('strategy_generation', 'running', { provider: 'groq', fallback_used: true, primary_provider_error: primaryProviderError })
-          const groqRes = await completeChat({
-            apiKey: groqKey,
-            messages: [
-              { role: 'system', content: STRATEGY_EXECUTION_SYSTEM },
-              { role: 'user', content: unifiedPrompt },
-            ],
-            maxTokens: 1200,
-          })
-          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-          unifiedText = groqRes.text
-          usedFallback = true
-          break
+          if (stratPrimaryIsGemini && groqKey) {
+            yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'groq', fallback_used: true, primaryProviderError }
+            await upsertAnalysisTask('strategy_generation', 'running', { provider: 'groq', fallback_used: true, primary_provider_error: primaryProviderError })
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            unifiedText = groqRes.text
+            usedFallback = true
+            break
+          } else if (!stratPrimaryIsGemini && geminiKey) {
+            yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'gemini', fallback_used: true, primaryProviderError }
+            await upsertAnalysisTask('strategy_generation', 'running', { provider: 'gemini', fallback_used: true, primary_provider_error: primaryProviderError })
+            const gemRes = await tryGemini()
+            unifiedText = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+            usedFallback = true
+            break
+          } else throw err
         } else {
           throw err
         }
       }
     }
-    if (!usedFallback) await trackUsage('gemini')
+    const usedGemini = stratPrimaryIsGemini ? !usedFallback : usedFallback
+    if (usedGemini) await trackUsage('gemini')
 
     const parsed = parseJson<{
       opportunities?: string[]
@@ -944,15 +984,16 @@ export async function* runResearch(
       go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
     }
 
+    const stratProvider = stratPrimaryIsGemini ? (usedFallback ? 'groq' : 'gemini') : (usedFallback ? 'gemini' : 'groq')
     await upsertAnalysisTask('strategy_generation', 'completed', {
       outputData: strategyData,
-      provider: usedFallback ? 'groq' : 'gemini',
+      provider: stratProvider,
       fallback_used: usedFallback,
       primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
     })
     await upsertAnalysisTask('execution_layer', 'completed', {
       outputData: executionData,
-      provider: usedFallback ? 'groq' : 'gemini',
+      provider: stratProvider,
       fallback_used: usedFallback,
       primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
     })
@@ -964,7 +1005,7 @@ export async function* runResearch(
       task: 'strategy_generation',
       status: 'completed',
       data: strategyData,
-      provider: usedFallback ? 'groq' : 'gemini',
+      provider: stratProvider,
       fallback_used: usedFallback,
       primaryProviderError: usedFallback ? primaryProviderError : undefined,
     }
@@ -973,7 +1014,7 @@ export async function* runResearch(
       task: 'execution_layer',
       status: 'completed',
       data: executionData,
-      provider: usedFallback ? 'groq' : 'gemini',
+      provider: stratProvider,
       fallback_used: usedFallback,
       primaryProviderError: usedFallback ? primaryProviderError : undefined,
     }

@@ -19,6 +19,7 @@ type LicenseOrigin = 'USER' | 'SYSTEM'
 type SettingsData = {
   email: string
   nickname: string
+  aiPrimaryModel?: 'gemini' | 'groq'
   hasGeminiKey: boolean
   hasGroqKey?: boolean
   hasOpenAIKey?: boolean
@@ -39,6 +40,11 @@ const ANALYSIS_OPTIONS: { value: AnalysisDepth; label: string }[] = [
   { value: 'fast', label: '빠른 분석' },
   { value: 'standard', label: '표준 분석' },
   { value: 'deep', label: '심층 분석' },
+]
+
+const AI_PRIMARY_OPTIONS: { value: 'gemini' | 'groq'; label: string }[] = [
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'groq', label: 'Groq' },
 ]
 
 const SETTINGS_TAB_PARAM = 'tab'
@@ -70,6 +76,7 @@ function SettingsPageInner() {
   const [savingGemini, setSavingGemini] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
+  const [aiPrimaryModel, setAiPrimaryModel] = useState<'gemini' | 'groq'>('gemini')
 
   useEffect(() => {
     const supabase = createClient()
@@ -98,6 +105,7 @@ function SettingsPageInner() {
         if (json) {
           setData(json)
           setNickname(json.nickname ?? '')
+          setAiPrimaryModel(json.aiPrimaryModel === 'groq' ? 'groq' : 'gemini')
           setGeminiApiKey('')
           setGroqApiKey('')
         }
@@ -130,6 +138,22 @@ function SettingsPageInner() {
     if (typeof window !== 'undefined') {
       localStorage.setItem(ANALYSIS_DEPTH_KEY, value)
       toast.success('분석 깊이가 저장되었습니다.')
+    }
+  }
+
+  const handleAiPrimaryChange = async (value: 'gemini' | 'groq') => {
+    setAiPrimaryModel(value)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai_primary_model: value }),
+      })
+      if (!res.ok) throw new Error('저장 실패')
+      setData((prev) => (prev ? { ...prev, aiPrimaryModel: value } : null))
+      toast.success('AI 우선 분석이 저장되었습니다.')
+    } catch {
+      toast.error('저장에 실패했습니다.')
     }
   }
 
@@ -395,23 +419,47 @@ function SettingsPageInner() {
               <CardTitle className="text-lg">분석 설정</CardTitle>
               <CardDescription>분석 깊이를 선택하세요. 심층 분석일수록 더 상세한 결과를 제공합니다.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
-                {ANALYSIS_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => handleAnalysisDepthChange(opt.value)}
-                    className={cn(
-                      'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                      analysisDepth === opt.value
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
+                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                  {ANALYSIS_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleAnalysisDepthChange(opt.value)}
+                      className={cn(
+                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        analysisDepth === opt.value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">AI 우선 분석</Label>
+                <p className="text-xs text-muted-foreground mb-2">먼저 사용할 AI 모델을 선택하세요. 실패 시 다른 모델로 자동 폴백됩니다.</p>
+                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                  {AI_PRIMARY_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleAiPrimaryChange(opt.value)}
+                      className={cn(
+                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        aiPrimaryModel === opt.value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -432,7 +480,7 @@ function SettingsPageInner() {
                   )}
                   <div>
                     <p className="font-medium">Gemini API</p>
-                    <p className="text-sm text-muted-foreground">{geminiConnected ? 'Connected' : 'Not connected'}</p>
+                    <p className="text-sm text-muted-foreground">{geminiConnected ? '연결됨' : '연결되지 않음'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
@@ -443,7 +491,7 @@ function SettingsPageInner() {
                   )}
                   <div>
                     <p className="font-medium">Groq API</p>
-                    <p className="text-sm text-muted-foreground">{groqConnected ? 'Connected' : 'Not connected'}</p>
+                    <p className="text-sm text-muted-foreground">{groqConnected ? '연결됨' : '연결되지 않음'}</p>
                   </div>
                 </div>
               </div>

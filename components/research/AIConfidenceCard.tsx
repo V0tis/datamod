@@ -12,14 +12,14 @@ export interface DataSourceWithSignal {
 }
 
 const DEFAULT_DATA_SOURCES: DataSourceWithSignal[] = [
-  { name: 'Google Trends' },
-  { name: 'Reddit discussions' },
-  { name: 'Product Hunt launches' },
-  { name: 'Startup funding reports' },
+  { name: '구글 트렌드' },
+  { name: 'Reddit 커뮤니티 분석' },
+  { name: 'Product Hunt 출시 데이터' },
+  { name: '스타트업 투자 데이터' },
 ]
 
 const CONFIDENCE_EXPLANATION =
-  'The confidence score represents how strong and consistent the detected market signals are.'
+  '신뢰도 점수는 감지된 시장 신호가 얼마나 강하고 일관적인지를 나타냅니다.'
 
 const SOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'Google Trends': TrendingUp,
@@ -90,7 +90,7 @@ export function AIConfidenceCard({
           'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
           className
         )}
-        aria-label="AI Confidence"
+        aria-label="AI 신뢰도"
       >
         <div className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -136,7 +136,7 @@ export function AIConfidenceCard({
         <div className="flex items-center gap-2 mb-4">
           <Shield className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            AI Confidence
+            AI 신뢰도
           </h2>
         </div>
 
@@ -161,7 +161,7 @@ export function AIConfidenceCard({
         {/* Data Sources */}
         <div className="mb-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Data Sources
+            데이터 출처
           </h3>
           <ul className="space-y-2">
             {sources.map((source, i) => {

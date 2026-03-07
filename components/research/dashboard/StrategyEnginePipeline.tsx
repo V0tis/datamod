@@ -9,11 +9,11 @@ import { cn } from '@/lib/utils'
 
 /** AI Analysis Timeline - 5 PM strategy steps with real reasoning output */
 const PIPELINE_STAGES = [
-  { id: 'signal_layer', label: '시장 신호 수집', taskId: 'signal_layer' as const, sectionLabel: 'Signals detected' },
-  { id: 'trend_analysis', label: '시장 성장 분석', taskId: 'trend_analysis' as const, sectionLabel: 'AI Insight' },
-  { id: 'competition_analysis', label: '경쟁 환경 분석', taskId: 'competition_analysis' as const, sectionLabel: 'Detected competitors' },
-  { id: 'strategy_generation', label: '리스크 평가', taskId: 'strategy_generation' as const, sectionLabel: 'Risk signals' },
-  { id: 'execution_layer', label: '제품 전략 도출', taskId: 'execution_layer' as const, sectionLabel: 'Suggested Strategy' },
+  { id: 'signal_layer', label: '시장 신호 수집', taskId: 'signal_layer' as const, sectionLabel: '수집된 시그널' },
+  { id: 'trend_analysis', label: '시장 성장 분석', taskId: 'trend_analysis' as const, sectionLabel: 'AI 인사이트' },
+  { id: 'competition_analysis', label: '경쟁 환경 분석', taskId: 'competition_analysis' as const, sectionLabel: '감지된 경쟁사' },
+  { id: 'strategy_generation', label: '리스크 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 신호' },
+  { id: 'execution_layer', label: '제품 전략 도출', taskId: 'execution_layer' as const, sectionLabel: '제안 전략' },
 ] as const
 
 const STREAM_TO_INDEX: Record<string, number> = {
@@ -213,7 +213,7 @@ function getStageInsight(
         const headlines = newsList.slice(0, 5).map((n) => (n.title ?? '').trim().slice(0, 80)).filter(Boolean)
         const publishers = [...new Set(newsList.map((n) => n.publisher).filter(Boolean))].slice(0, 5) as string[]
         return {
-          sectionLabel: 'Signals detected',
+          sectionLabel: '수집된 시그널',
           summary: `${newsList.length}건 시장 데이터 수집`,
           signals: headlines.length > 0 ? headlines : (publishers.length ? publishers : ['Google News', 'RSS 피드']),
         }
@@ -221,13 +221,13 @@ function getStageInsight(
       return null
     case 1:
       return {
-        sectionLabel: 'AI Insight',
+        sectionLabel: 'AI 인사이트',
         summary: km.summary_insights ?? result?.marketNews?.[0],
         signals: (km.positive_signals ?? result?.marketNews ?? []).slice(0, 4),
       }
     case 2:
       return {
-        sectionLabel: 'Detected competitors',
+        sectionLabel: '감지된 경쟁사',
         summary: result?.competitorTrends,
         signals: (km.neutral_signals ?? []).slice(0, 4),
       }
@@ -235,14 +235,14 @@ function getStageInsight(
       const pos = km.positive_signals ?? []
       const neg = km.negative_risks ?? result?.painPoints ?? []
       return {
-        sectionLabel: 'Risk signals',
+        sectionLabel: '리스크 신호',
         summary: pos.length || neg.length ? `${pos.length}개 기회, ${neg.length}개 리스크` : undefined,
         signals: [...neg.slice(0, 4), ...pos.slice(0, 2)].filter(Boolean),
       }
     case 4:
       const actions = km.pm_actions?.recommended_actions ?? []
       return {
-        sectionLabel: 'Suggested Strategy',
+        sectionLabel: '제안 전략',
         summary: actions.length ? `${actions.length}개 전략 액션 도출` : undefined,
         signals: actions.slice(0, 4).map((a) => a?.title ?? '').filter(Boolean),
       }
@@ -318,10 +318,10 @@ export function StrategyEnginePipeline({
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div>
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              AI Analysis Timeline
+              AI 분석 타임라인
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              AI strategist thinking step by step · &quot;{keyword}&quot;
+              AI가 단계별로 분석 중 · &quot;{keyword}&quot;
             </p>
           </div>
         </div>
@@ -392,21 +392,24 @@ export function StrategyEnginePipeline({
                         status === 'failed' && 'text-destructive',
                       )}
                     >
-                      Step {i + 1} · {stage.label}
+                      단계 {i + 1} · {stage.label}
                     </h3>
                     {status !== 'pending' && (
-                      <p className="text-[11px] font-medium text-muted-foreground mt-0.5 uppercase tracking-wider">
-                        Model: {task
+                      <p className="text-[11px] font-medium text-muted-foreground mt-0.5 uppercase tracking-wider whitespace-pre-line">
+                        모델 상태: {task
                           ? (() => {
                               const t = task as { provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
                               if (t.fallback_used && t.primary_provider_error) {
-                                return `Gemini → Failed (${t.primary_provider_error}) · Groq → ${status === 'completed' ? 'Success' : 'Running'}`
+                                const errKo = t.primary_provider_error === 'quota exceeded' ? '쿼터 초과' : t.primary_provider_error === 'timeout' ? '타임아웃' : t.primary_provider_error === 'network error' ? '네트워크 오류' : t.primary_provider_error.replace(/_/g, ' ')
+                                const primary = t.provider === 'groq' ? 'Gemini' : 'Groq'
+                                const fallback = t.provider === 'groq' ? 'Groq' : 'Gemini'
+                                return `${primary} → 실패 (${errKo})\n${fallback} → ${status === 'completed' ? '성공' : '실행 중'}`
                               }
                               return getProviderDisplayName(t.provider ?? null, t.fallback_used) || '—'
                             })()
                           : '—'}
                         {' · '}
-                        Status: {status === 'completed' ? 'Completed' : status === 'running' ? 'Running' : status === 'failed' ? 'Failed' : 'Pending'}
+                        분석 상태: {status === 'completed' ? '완료' : status === 'running' ? '실행 중' : status === 'failed' ? '실패' : '대기'}
                       </p>
                     )}
                     {status === 'running' && (
@@ -417,12 +420,15 @@ export function StrategyEnginePipeline({
                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
                               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                               <span className="text-xs font-medium">
-                                Gemini {((task as { primary_provider_error?: string }).primary_provider_error)?.replace(/_/g, ' ')}
+                                {((task as { provider?: string }).provider) === 'groq' ? 'Gemini' : 'Groq'} {(() => {
+                                  const err = (task as { primary_provider_error?: string }).primary_provider_error
+                                  return err === 'quota exceeded' ? '쿼터 초과' : err === 'timeout' ? '타임아웃' : err === 'network error' ? '네트워크 오류' : err?.replace(/_/g, ' ') ?? ''
+                                })()}
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                               <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                              Retrying with Groq...
+                              {((task as { provider?: string }).provider) === 'groq' ? 'Groq' : 'Gemini'}로 재시도 중...
                             </p>
                           </>
                         ) : (
@@ -445,7 +451,7 @@ export function StrategyEnginePipeline({
                         {onRetryStep && (
                           <Button variant="outline" size="sm" onClick={onRetryStep} className="gap-1.5 h-8 text-xs">
                             <RefreshCw className="h-3.5 w-3.5" />
-                            Retry Step
+                            단계 재시도
                           </Button>
                         )}
                       </div>

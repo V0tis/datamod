@@ -87,6 +87,23 @@ export async function getResearchKeysForInitialAnalysis(
   }
 }
 
+/** AI 우선 분석: gemini | groq. 기본값 gemini. */
+export type AIPrimaryModel = 'gemini' | 'groq'
+
+export async function getAIPrimaryModelForRequest(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<AIPrimaryModel> {
+  if (!userId) return 'gemini'
+  const { data: row } = await supabase
+    .from('user_settings')
+    .select('ai_primary_model')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const v = (row as { ai_primary_model?: string } | null)?.ai_primary_model
+  return v === 'groq' ? 'groq' : 'gemini'
+}
+
 /**
  * Resolve Groq key for a request: user key from DB if logged in, else system env.
  */

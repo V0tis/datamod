@@ -12,9 +12,34 @@ const DISPLAY_NAMES: Record<NonNullable<AnalysisProviderId>, string> = {
   groq: 'Groq',
 }
 
+/** primary_provider_error (영문) → 한국어 라벨 */
+const ERROR_KO: Record<string, string> = {
+  'quota exceeded': '쿼터 초과',
+  timeout: '타임아웃',
+  'network error': '네트워크 오류',
+  'rate limit': '속도 제한',
+}
+
+/** Returns Korean label for provider status (모델 상태, 분석 단계). */
+export function getProviderStatusKo(
+  primaryProvider: string | null,
+  fallbackProvider: string | null,
+  fallbackUsed: boolean,
+  primaryProviderError?: string | null,
+  status: 'completed' | 'running' = 'completed'
+): string {
+  const errKo = primaryProviderError ? (ERROR_KO[primaryProviderError] ?? primaryProviderError.replace(/_/g, ' ')) : ''
+  if (fallbackUsed && primaryProvider && fallbackProvider && errKo) {
+    const success = status === 'completed' ? '성공' : '실행 중'
+    return `${primaryProvider} → 실패 (${errKo})\n${fallbackProvider} → ${success}`
+  }
+  const name = primaryProvider || fallbackProvider || ''
+  return fallbackUsed ? `${name} (폴백)` : name || ''
+}
+
 /**
  * Returns human-readable model label for timeline and AI 분석 엔진 section.
- * @param provider - from analysis task metadata
+ * @param provider - from analysis task metadata (actual provider used)
  * @param fallbackUsed - when true, used fallback model
  * @param primaryProviderError - when fallback, reason primary failed (e.g. "quota exceeded")
  */
@@ -24,11 +49,14 @@ export function getProviderDisplayName(
   primaryProviderError?: string | null
 ): string {
   if (provider == null) return ''
+  const errKo = primaryProviderError ? (ERROR_KO[primaryProviderError] ?? primaryProviderError) : ''
   if (fallbackUsed && primaryProviderError) {
-    return `Gemini → Failed (${primaryProviderError}) · Groq → Success`
+    const primary = provider === 'groq' ? 'Gemini' : 'Groq'
+    const fallback = provider === 'groq' ? 'Groq' : 'Gemini'
+    return `${primary} → 실패 (${errKo})\n${fallback} → 성공`
   }
   const name = (provider === 'gemini' || provider === 'groq' ? DISPLAY_NAMES[provider] : null) ?? String(provider)
-  return fallbackUsed ? `${name} (Fallback)` : name
+  return fallbackUsed ? `${name} (폴백)` : name
 }
 
 export function getPrimaryModelDisplayName(): string {

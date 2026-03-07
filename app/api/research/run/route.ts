@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getGeminiKeyForRequest, getGroqKeyForRequest } from '@/lib/research-keys'
+import { getGeminiKeyForRequest, getGroqKeyForRequest, getAIPrimaryModelForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 
 export const runtime = 'nodejs'
@@ -46,14 +46,21 @@ export async function POST(req: Request) {
     console.log('[Research Run API] POST 요청', { keyword, countryCode, userId: user.id })
 
     const adminClient = createAdminClient()
-    const [geminiResult, groqKey] = await Promise.all([
+    const [geminiResult, groqKey, primaryProvider] = await Promise.all([
       getGeminiKeyForRequest(adminClient, user.id),
       getGroqKeyForRequest(adminClient, user.id),
+      getAIPrimaryModelForRequest(adminClient, user.id),
     ])
     const { gemini, canSearch } = geminiResult
     if (!canSearch || !gemini) {
       return NextResponse.json(
         { error: '설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
+        { status: 400 }
+      )
+    }
+    if (primaryProvider === 'groq' && !groqKey) {
+      return NextResponse.json(
+        { error: 'AI 우선 분석을 Groq로 설정한 경우 Groq API 키가 필요합니다.' },
         { status: 400 }
       )
     }
@@ -99,6 +106,7 @@ export async function POST(req: Request) {
             userId: user.id,
             geminiKey: gemini,
             groqKey,
+            primaryProvider,
           })
 
           for await (const event of generator) {
