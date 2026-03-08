@@ -194,11 +194,14 @@ Format: {
   "opportunities": ["opportunity1", "opportunity2"],
   "risks": ["risk1", "risk2"],
   "strategy_summary": "2-3 sentence PM-level strategy summary",
+  "product_idea": "구체적 제품 컨셉 (예: SMB용 AI 계약 검토 도구)",
+  "target_customer": "타겟 고객 세그먼트 (예: 소규모 법률사무소)",
+  "monetization": "수익화 모델 (예: 월 29달러 SaaS)",
   "product_actions": [{ "action": "", "priority": "high|medium|low", "reasoning": "" }],
   "feature_ideas": ["idea1", "idea2", "idea3"],
-  "go_to_market_steps": ["step1", "step2"]
+  "go_to_market_steps": ["Product Hunt 출시", "커뮤니티 채널", "SEO 유입"]
 }
-All content in Korean. Identify opportunities/risks/strategy first, then derive concrete product actions, feature ideas, and GTM steps. Be specific and actionable.`
+All content in Korean. Transform strategy into concrete startup concept with product_idea, target_customer, monetization, go_to_market_steps. Be specific and actionable.`
 
 export function buildStrategyExecutionPrompt(
   keyword: string,

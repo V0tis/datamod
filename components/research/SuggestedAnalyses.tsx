@@ -3,12 +3,12 @@
 import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/** Suggested keywords for first-time or empty-state users */
+/** Suggested keywords for first-time or empty-state users (한국 PM 직관적 키워드) */
 export const SUGGESTED_ANALYSES = [
-  'AI Meeting Assistants',
-  'Creator Economy Tools',
-  'AI Coding Assistants',
-  'AI Video Generation',
+  'AI 회의 보조',
+  '크리에이터 이코노미',
+  'AI 코딩 도우미',
+  'AI 영상 생성',
 ] as const
 
 export interface SuggestedAnalysesProps {
@@ -26,7 +26,7 @@ export function SuggestedAnalyses({
     <div className={cn('space-y-2', className)}>
       <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
         <Sparkles className="h-3.5 w-3.5" />
-        Suggested analyses
+        추천 분석 키워드
       </p>
       <div className="flex flex-wrap gap-2">
         {SUGGESTED_ANALYSES.map((keyword) => (

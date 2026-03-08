@@ -33,24 +33,19 @@ export const ENGINE_STAGE_IDS = [
   'execution_layer',
 ] as const
 
+/** Engine step IDs used by runResearch streaming - all depth modes share these for compatibility */
+const SHARED_ENGINE_STEPS: AnalysisModeStep[] = [
+  { id: 'signal_layer', label: '시장 신호 수집', description: '검색 트렌드, 뉴스, 스타트업 런칭, 펀딩 신호 수집' },
+  { id: 'trend_analysis', label: '시장 성장 신호 분석', description: '성장 패턴·신흥 트렌드 식별' },
+  { id: 'competition_analysis', label: '경쟁 환경 매핑', description: '경쟁사 식별·경쟁 지형도 작성' },
+  { id: 'strategy_generation', label: '시장 리스크 평가', description: '포화, 강자, 하락 신호 평가' },
+  { id: 'execution_layer', label: '제품 전략 도출', description: '시장 신호·분석 기반 제품 전략 생성' },
+]
+
 export const ANALYSIS_MODE_STEPS: Record<AnalysisMode, AnalysisModeStep[]> = {
-  standard: [
-    { id: 'signal_layer', label: '시장 신호 수집', description: '검색 트렌드, 뉴스, 스타트업 런칭, 펀딩 신호 수집' },
-    { id: 'trend_analysis', label: '시장 성장 신호 분석', description: '성장 패턴·신흥 트렌드 식별' },
-    { id: 'competition_analysis', label: '경쟁 환경 매핑', description: '경쟁사 식별·경쟁 지형도 작성' },
-    { id: 'strategy_generation', label: '시장 리스크 평가', description: '포화, 강자, 하락 신호 평가' },
-    { id: 'execution_layer', label: '제품 전략 도출', description: '시장 신호·분석 기반 제품 전략 생성' },
-  ],
-  quick: [
-    { id: 'news', label: 'News Collection', description: '뉴스 수집' },
-    { id: 'summary', label: 'Quick Summary', description: '빠른 요약' },
-  ],
-  deep: [
-    { id: 'news', label: 'News Collection', description: '뉴스 수집' },
-    { id: 'pass1', label: 'Initial Analysis', description: '1차 분석' },
-    { id: 'pass2', label: 'Deep Analysis', description: '심층 분석' },
-    { id: 'creative', label: 'Insight Generation', description: '인사이트 생성' },
-  ],
+  standard: SHARED_ENGINE_STEPS,
+  quick: SHARED_ENGINE_STEPS,
+  deep: SHARED_ENGINE_STEPS,
   competitive: [
     { id: 'news', label: 'News Collection', description: '뉴스 수집' },
     { id: 'competitor', label: 'Competitor Scan', description: '경쟁사 스캔' },
@@ -77,7 +72,7 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
   standard: {
     id: 'standard',
     label: 'Standard Analysis',
-    labelKo: '표준 분석 (추천)',
+    labelKo: '표준 분석',
     description: 'Full analysis pipeline – market structure, signals, actions',
     descriptionKo: '전체 분석 파이프라인 실행',
     steps: ANALYSIS_MODE_STEPS.standard,
@@ -86,20 +81,20 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
   },
   quick: {
     id: 'quick',
-    label: 'Quick Snapshot',
-    labelKo: '빠른 스냅샷',
-    description: 'High-level market signals in under 5 minutes',
-    descriptionKo: '5분 내 시장 신호 개요',
+    label: 'Quick Insight',
+    labelKo: '빠른 인사이트',
+    description: 'Short summary and key signals',
+    descriptionKo: '짧은 요약과 핵심 시그널',
     steps: ANALYSIS_MODE_STEPS.quick,
     duration: '~30초',
     outputs: ['시장 요약', '핵심 신호'],
   },
   deep: {
     id: 'deep',
-    label: 'Deep Strategy',
-    labelKo: '심층 전략',
-    description: 'Comprehensive two-pass analysis with creative insights',
-    descriptionKo: '창의적 인사이트 포함 포괄적 2단계 분석',
+    label: 'Deep Research',
+    labelKo: '심층 리서치',
+    description: 'Extended analysis with more data sources and detailed insights',
+    descriptionKo: '더 많은 데이터 소스와 상세 인사이트 포함',
     steps: ANALYSIS_MODE_STEPS.deep,
     duration: '~2분',
     outputs: ['시장 분석', '시장 온도', '인사이트', 'PM 액션', '모니터링 포인트'],

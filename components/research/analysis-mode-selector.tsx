@@ -17,12 +17,16 @@ const MODE_ICONS: Record<AnalysisMode, React.ElementType> = {
   action: ListTodo,
 }
 
+export type DepthMode = 'quick' | 'standard' | 'deep'
+
 interface AnalysisModeSelectorProps {
   value: AnalysisMode
   onChange: (mode: AnalysisMode) => void
   disabled?: boolean
   className?: string
   showDescription?: boolean
+  /** When set, only show these analysis depth options (Quick/Standard/Deep) */
+  depthOnly?: boolean
 }
 
 export function AnalysisModeSelector({
@@ -31,8 +35,12 @@ export function AnalysisModeSelector({
   disabled = false,
   className,
   showDescription = true,
+  depthOnly = false,
 }: AnalysisModeSelectorProps) {
-  const modes = Object.values(ANALYSIS_MODE_CONFIG)
+  const allModes = Object.values(ANALYSIS_MODE_CONFIG)
+  const modes = depthOnly
+    ? (['quick', 'standard', 'deep'] as const).map((id) => ANALYSIS_MODE_CONFIG[id])
+    : allModes
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -42,7 +50,7 @@ export function AnalysisModeSelector({
           결과물의 깊이와 속도를 선택하세요
         </span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className={cn('grid gap-2', depthOnly ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
         {modes.map((mode) => {
           const Icon = MODE_ICONS[mode.id]
           const isSelected = value === mode.id

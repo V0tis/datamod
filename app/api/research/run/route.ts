@@ -31,10 +31,14 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as {
       keyword?: string
       country_code?: string
+      mode?: string
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
       typeof body?.country_code === 'string' ? body.country_code.trim() || 'KR' : 'KR'
+    const mode = ['quick', 'standard', 'deep'].includes(body?.mode ?? '')
+      ? (body.mode as 'quick' | 'standard' | 'deep')
+      : 'standard'
 
     if (!keyword) {
       return NextResponse.json(
@@ -107,6 +111,7 @@ export async function POST(req: Request) {
             geminiKey: gemini,
             groqKey,
             primaryProvider,
+            mode,
           })
 
           for await (const event of generator) {

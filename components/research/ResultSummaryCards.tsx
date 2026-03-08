@@ -97,24 +97,24 @@ export function ResultSummaryCards({
   }
 
   return (
-    <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3', className)}>
+    <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-4', className)}>
       {cards.map((card) => {
         const Icon = card.icon
         return (
           <div
             key={card.id}
             className={cn(
-              'rounded-xl border-2 border-border/60 bg-card p-4 shadow-sm',
-              'transition-colors hover:border-primary/30 hover:bg-muted/5'
+              'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-5 shadow-sm',
+              'transition-colors hover:border-primary/40 hover:from-primary/12'
             )}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="h-4 w-4 text-primary shrink-0" aria-hidden />
+            <div className="flex items-center gap-2 mb-3">
+              <Icon className="h-5 w-5 text-primary shrink-0" aria-hidden />
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {card.label}
               </span>
             </div>
-            <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+            <p className="text-base font-bold text-foreground leading-snug line-clamp-2">
               {card.value || '—'}
             </p>
           </div>

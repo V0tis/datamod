@@ -7,11 +7,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="light"
-      forcedTheme="light"
-      enableSystem={false}
-      disableTransitionOnChange
+      defaultTheme="dark"
+      enableSystem={true}
       storageKey="rin-theme"
+      disableTransitionOnChange
     >
       {children}
     </NextThemesProvider>

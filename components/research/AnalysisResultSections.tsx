@@ -9,6 +9,10 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { ProductStrategySection } from '@/components/research/ProductStrategySection'
+import { AnalysisCharts } from '@/components/research/AnalysisCharts'
+import { MarketGrowthCharts } from '@/components/research/MarketGrowthCharts'
+import { CompetitorTierChart, CompetitorLandscapeMap } from '@/components/research/CompetitorVisualMap'
+import { StartupConceptCard } from '@/components/research/StartupConceptCard'
 import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard'
 import { QuickActions } from '@/components/research/QuickActions'
 import { StrategicActionsSection, type StrategicActionItem } from '@/components/research/StrategicActionsSection'
@@ -94,6 +98,7 @@ export function AnalysisResultSections({
   const trendOutput = getTaskOutput('trend_analysis', taskData, analysisTasks)
   const competitionOutput = getTaskOutput('competition_analysis', taskData, analysisTasks)
   const strategyOutput = getTaskOutput('strategy_generation', taskData, analysisTasks)
+  const executionOutput = getTaskOutput('execution_layer', taskData, analysisTasks)
 
   // Market Opportunity
   const opportunityScore = typeof km.opportunity_score === 'number' ? km.opportunity_score : null
@@ -152,6 +157,12 @@ export function AnalysisResultSections({
   const actionItemsFromConsensus = consensusData?.strategicSummary?.actionItems ?? []
   const allActionItems = [...actionItems, ...actionItemsFromConsensus].filter(Boolean).slice(0, 8)
   const mvpIdeas = opportunities.slice(0, 3)
+  const productIdea = typeof executionOutput?.product_idea === 'string' ? executionOutput.product_idea : undefined
+  const targetCustomer = typeof executionOutput?.target_customer === 'string' ? executionOutput.target_customer : undefined
+  const monetization = typeof executionOutput?.monetization === 'string' ? executionOutput.monetization : undefined
+  const goToMarketSteps = Array.isArray(executionOutput?.go_to_market_steps)
+    ? (executionOutput.go_to_market_steps as string[]).filter((s): s is string => typeof s === 'string')
+    : []
 
   // Strategic Actions for existing component
   const risks = Array.isArray(strategyOutput?.risks)
@@ -274,7 +285,15 @@ export function AnalysisResultSections({
         {loading && !opportunityScore && keyTrends.length === 0 ? (
           <SectionContentSkeleton variant="grid" />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Visual charts: search trend, market size projection, adoption rate */}
+            <MarketGrowthCharts
+              opportunityScore={opportunityScore ?? undefined}
+              breakdown={breakdown}
+              growthSignalsCount={growthSignals.length}
+              marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
+              keyword={keyword}
+            />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {opportunityScore != null && (
                 <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
@@ -293,6 +312,9 @@ export function AnalysisResultSections({
                 </div>
               )}
             </div>
+            {breakdown && Object.keys(breakdown).length > 0 && (
+              <AnalysisCharts opportunityScoreBreakdown={breakdown} className="mb-4" />
+            )}
             {keyTrends.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
@@ -350,22 +372,28 @@ export function AnalysisResultSections({
         ) : (
           <div className="space-y-4">
             {competitiveLandscape.length > 0 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
-                <div className="flex flex-wrap gap-2">
-                  {competitiveLandscape.slice(0, 8).map((c, i) => (
-                    <div
-                      key={i}
-                      className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium text-foreground">{c.name}</span>
-                      {c.positioning && (
-                        <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>
-                      )}
-                    </div>
-                  ))}
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <CompetitorTierChart competitors={competitiveLandscape} />
+                  <CompetitorLandscapeMap competitors={competitiveLandscape} />
                 </div>
-              </div>
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
+                  <div className="flex flex-wrap gap-2">
+                    {competitiveLandscape.slice(0, 8).map((c, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm"
+                      >
+                        <span className="font-medium text-foreground">{c.name}</span>
+                        {c.positioning && (
+                          <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
             {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
               <div>
@@ -411,7 +439,7 @@ export function AnalysisResultSections({
       </ProductStrategySection>
       )}
 
-      {/* 5. Strategy Recommendation / 제품 전략 제안 (pm-analytics: 전략+실행 통합) */}
+      {/* 5. Strategy Recommendation / Actionable Startup Concept */}
       <ProductStrategySection
         id={isPmAnalytics ? 'section-strategy' : undefined}
         title={isPmAnalytics ? '제품 전략 제안' : '전략 추천'}
@@ -424,6 +452,15 @@ export function AnalysisResultSections({
           <SectionContentSkeleton variant="mixed" />
         ) : (
           <div className="space-y-4">
+            <StartupConceptCard
+              productIdea={productIdea}
+              targetCustomer={targetCustomer}
+              monetization={monetization}
+              goToMarket={goToMarketSteps}
+              fallbackProductIdea={allActionItems[0] ?? opportunities[0] ?? strategyBullets[0]}
+              fallbackTargetHint={keyword ? `${keyword} 관련 시장` : null}
+              keyword={keyword}
+            />
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>

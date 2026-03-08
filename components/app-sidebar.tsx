@@ -13,6 +13,7 @@ import {
   Menu,
   X,
 } from 'lucide-react'
+import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
 
@@ -85,8 +86,12 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {/* Footer: user + sign out */}
-      <div className="shrink-0 border-t border-border/60 px-3 py-3">
+      {/* Footer: theme + user + sign out */}
+      <div className="shrink-0 border-t border-border/60 px-3 py-3 space-y-2">
+        <div className="flex justify-between items-center px-2">
+          <span className="text-xs text-muted-foreground">테마</span>
+          <ThemeSwitcher />
+        </div>
         {user ? (
           <div className="space-y-1">
             <p className="truncate px-3 py-1 text-xs text-muted-foreground" title={user.email ?? ''}>

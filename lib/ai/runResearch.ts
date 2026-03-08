@@ -117,6 +117,8 @@ export type RunResearchParams = {
   userId: string
   geminiKey: string
   groqKey?: string | null
+  /** 분석 깊이: quick(빠른 인사이트), standard(전체 리포트), deep(심층 리서치). 기본 standard */
+  mode?: 'quick' | 'standard' | 'deep'
   /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
   primaryProvider?: AIPrimaryModel
 }
@@ -690,7 +692,7 @@ function toRecord(value: unknown): Record<string, string> {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, primaryProvider: primaryProviderParam } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam } = params
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
@@ -906,6 +908,9 @@ export async function* runResearch(
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
     feature_ideas: string[]
     go_to_market_steps: string[]
+    product_idea?: string
+    target_customer?: string
+    monetization?: string
   }
   const unifiedPrompt = buildStrategyExecutionPrompt(keyword, trendData.summary, competitionSummary)
   const tryGemini = () =>
@@ -963,6 +968,9 @@ export async function* runResearch(
       opportunities?: string[]
       risks?: string[]
       strategy_summary?: string
+      product_idea?: string
+      target_customer?: string
+      monetization?: string
       product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
       feature_ideas?: string[]
       go_to_market_steps?: string[]
@@ -982,6 +990,9 @@ export async function* runResearch(
       product_actions: actions,
       feature_ideas: Array.isArray(parsed?.feature_ideas) ? parsed.feature_ideas.filter((s): s is string => typeof s === 'string') : [],
       go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
+      product_idea: typeof parsed?.product_idea === 'string' ? parsed.product_idea.trim() : undefined,
+      target_customer: typeof parsed?.target_customer === 'string' ? parsed.target_customer.trim() : undefined,
+      monetization: typeof parsed?.monetization === 'string' ? parsed.monetization.trim() : undefined,
     }
 
     const stratProvider = stratPrimaryIsGemini ? (usedFallback ? 'groq' : 'gemini') : (usedFallback ? 'gemini' : 'groq')

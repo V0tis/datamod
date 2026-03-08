@@ -284,7 +284,7 @@ function RinAISearchInner() {
               <p className="text-center text-muted-foreground text-sm mt-1">
                 {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
                 typeof streamingState.currentStep === 'number'
-                  ? `Step ${streamingState.currentStep + 1} of 5`
+                  ? `단계 ${streamingState.currentStep + 1}/5`
                   : '잠시만 기다려 주세요.'}
               </p>
             </div>
@@ -328,7 +328,7 @@ function RinAISearchInner() {
                     <Input
                       type="search"
                       aria-label="분석할 시장 키워드"
-                      placeholder="AI Meeting Assistant"
+                      placeholder="예: AI 회의 보조"
                       value={query}
                       onChange={(e) => {
                         setQuery(e.target.value)
@@ -374,7 +374,7 @@ function RinAISearchInner() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
                           typeof streamingState.currentStep === 'number'
-                            ? `Step ${streamingState.currentStep + 1} of 5`
+                            ? `단계 ${streamingState.currentStep + 1}/5`
                             : '시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출'}
                         </p>
                       </div>
@@ -398,16 +398,16 @@ function RinAISearchInner() {
               </div>
             </section>
 
-            {/* 2. Real-time Search Trends */}
+            {/* 2. 실시간 검색 트렌드 */}
             <div className="mx-auto max-w-5xl mb-5">
               <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
                   <div>
                     <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-                      Real-time Search Trends
+                      실시간 검색 트렌드
                     </h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">Real-time trending search keywords from Google RSS.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">구글 실시간 급상승 검색어 (RSS 기반)</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <CountryChips
@@ -513,7 +513,7 @@ function RinAISearchInner() {
                               {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
                                 <span className="inline-flex items-center gap-1">
                                   <Target className="h-3.5 w-3.5 text-primary shrink-0" />
-                                  Opportunity Score {r.opportunity_score}
+                                  기회 점수 {r.opportunity_score}
                                 </span>
                               )}
                               <span><TimeAgo isoString={r.created_at} /></span>
@@ -539,10 +539,10 @@ function RinAISearchInner() {
                                 <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 space-y-1.5">
                                   <div className="flex items-center gap-2">
                                     <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />
-                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-500">Running...</span>
+                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-500">분석 중</span>
                                   </div>
                                   <p className="text-[11px] text-muted-foreground">
-                                    Step {stepNum} / {totalSteps}: {activityMessage}
+                                    단계 {stepNum}/{totalSteps}: {activityMessage}
                                   </p>
                                   <div className="h-1 bg-muted rounded-full overflow-hidden">
                                     <div

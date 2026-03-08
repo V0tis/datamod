@@ -17,7 +17,7 @@ import {
 import { buildCacheKeyParts } from '@/lib/research-cache'
 import { trackUsage } from '@/lib/usage'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const MAX_OUTPUT_TOKENS = 700

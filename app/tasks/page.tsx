@@ -103,13 +103,13 @@ export default function TasksPage() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto min-h-screen bg-background">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-foreground tracking-tight">Analysis Tasks</h1>
+          <h1 className="text-lg font-semibold text-foreground tracking-tight">분석 작업</h1>
           <p className="text-muted-foreground text-xs mt-0.5">
           {runningCount > 0
-            ? `${runningCount} task(s) in progress`
+            ? `${runningCount}건 진행 중`
             : tasks.length === 0
-              ? 'No analyses yet. Start one from Dashboard.'
-              : `${tasks.length} task(s)`}
+              ? '아직 분석이 없습니다. 대시보드에서 새 분석을 시작하세요.'
+              : `${tasks.length}건`}
           </p>
         </div>
         {tasks.length > 0 && (
@@ -151,7 +151,7 @@ export default function TasksPage() {
                 disabled={!!deletingId}
                 onClick={() => setDeleteTarget(null)}
               >
-                Cancel
+                취소
               </Button>
               <Button
                 variant="destructive"
@@ -159,7 +159,7 @@ export default function TasksPage() {
                 disabled={!!deletingId}
                 onClick={() => handleDeleteTask(deleteTarget)}
               >
-                {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+                {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
               </Button>
             </div>
           </div>
@@ -193,7 +193,7 @@ export default function TasksPage() {
                 disabled={!!clearingAll}
                 onClick={() => setClearAllOpen(false)}
               >
-                Cancel
+                취소
               </Button>
               <Button
                 variant="destructive"
@@ -201,7 +201,7 @@ export default function TasksPage() {
                 disabled={!!clearingAll}
                 onClick={handleDeleteAll}
               >
-                {clearingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+                {clearingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
               </Button>
             </div>
           </div>
@@ -210,12 +210,12 @@ export default function TasksPage() {
 
       {tasks.length === 0 ? (
         <div className="rounded-xl border border-border/60 bg-card/50 py-12 px-6 text-center">
-          <p className="text-sm text-muted-foreground">No analysis tasks yet.</p>
+          <p className="text-sm text-muted-foreground">아직 분석 작업이 없습니다.</p>
           <Link
             href="/"
             className="inline-flex items-center gap-2 mt-4 text-sm font-medium text-primary hover:underline"
           >
-            Start Analysis
+            시장 분석 시작
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
@@ -256,7 +256,7 @@ export default function TasksPage() {
                   </div>
                   {task.createdAt && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Started: {formatStarted(task.createdAt)}
+                      시작: {formatStarted(task.createdAt)}
                     </p>
                   )}
                   {task.error && (
@@ -269,7 +269,7 @@ export default function TasksPage() {
                       type="button"
                       className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
                       onClick={() => void retryTask(task.id)}
-                      aria-label="Retry"
+                      aria-label="재시도"
                     >
                       <RefreshCcw className="h-4 w-4" />
                     </button>
@@ -279,7 +279,7 @@ export default function TasksPage() {
                       type="button"
                       className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
                       onClick={() => void cancelTask(task.id)}
-                      aria-label="Cancel"
+                      aria-label="취소"
                     >
                       <Ban className="h-4 w-4" />
                     </button>
@@ -288,7 +288,7 @@ export default function TasksPage() {
                     href={`/results?keyword=${encodeURIComponent(task.keyword)}&country=${encodeURIComponent(task.countryCode || 'KR')}`}
                     onClick={() => void setActiveJob(task.id)}
                     className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-                    aria-label="View"
+                    aria-label="보기"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Link>
