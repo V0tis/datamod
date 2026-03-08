@@ -11,6 +11,8 @@ export interface DataSourceSignal {
   summary: string
   confidence: DataSourceConfidence
   icon?: React.ReactNode
+  /** true = 실제 분석에 사용됨, false = 미통합(Preview) */
+  usedInAnalysis?: boolean
 }
 
 const SOURCE_ICONS: Record<string, React.ReactNode> = {
@@ -80,6 +82,37 @@ export function DataSourcesSection({
 
   if (signals.length === 0) return null
 
+  const used = signals.filter((s) => s.usedInAnalysis !== false)
+  const preview = signals.filter((s) => s.usedInAnalysis === false)
+
+  const renderList = (list: DataSourceSignal[], title: string) => (
+    <div className="space-y-2">
+      <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{title}</h3>
+      <ul className="space-y-2">
+        {list.map((sig) => (
+          <li key={sig.id} className="rounded-lg border border-border/60 bg-muted/20 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                {sig.icon ?? SOURCE_ICONS[sig.source]}
+                {sig.source}
+              </span>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
+                  confidenceColor(sig.confidence)
+                )}
+                title={`신뢰도: ${confidenceLabel(sig.confidence)} - 시장 신호 강도·일관성 반영`}
+              >
+                {confidenceLabel(sig.confidence)}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">{sig.summary}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+
   return (
     <section
       className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
@@ -90,33 +123,13 @@ export function DataSourcesSection({
           <Database className="h-5 w-5 text-primary" />
           데이터 출처
         </h2>
-        <ul className="space-y-3">
-          {signals.map((sig) => (
-            <li
-              key={sig.id}
-              className="rounded-lg border border-border/60 bg-muted/20 p-3 sm:p-4"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  {sig.icon ?? SOURCE_ICONS[sig.source]}
-                  {sig.source}
-                </span>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
-                    confidenceColor(sig.confidence)
-                  )}
-                  title={`신뢰도: ${confidenceLabel(sig.confidence)}`}
-                >
-                  {confidenceLabel(sig.confidence)}
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {sig.summary}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-6">
+          {used.length > 0 && renderList(used, '분석에 사용된 소스')}
+          {preview.length > 0 && renderList(preview, '참고 소스 (본 분석에 미통합)')}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-4 pt-4 border-t border-border/60">
+          신뢰도는 감지된 시장 신호의 강도·일관성을 나타냅니다. 높음: 강한 신호, 중간: 부분적 반영, 낮음: 미사용 또는 제한적.
+        </p>
       </div>
     </section>
   )
