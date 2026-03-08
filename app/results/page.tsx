@@ -25,12 +25,18 @@ import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { StrategyEnginePipeline } from '@/components/research/dashboard/StrategyEnginePipeline'
 import { FirstFiveSecondsBanner } from '@/components/research/FirstFiveSecondsBanner'
-import { ResultSectionNav } from '@/components/research/ResultSectionNav'
+import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
+import { ResultSectionNav } from '@/components/research/ResultSectionNav'
+import { ResultShareActions } from '@/components/research/ResultShareActions'
+import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
+import { ResultPageHero } from '@/components/research/ResultPageHero'
+import { NextExplorationSection } from '@/components/research/NextExplorationSection'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
+import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScoreBreakdown'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
@@ -44,6 +50,25 @@ const TAB_ERROR_TOAST_ID = 'tab-analysis-error'
 const QUOTA_UNIFIED_MESSAGE = 'API 쿼터가 부족하여 분석을 중단했습니다. 설정에서 키를 확인해 주세요.'
 
 type RssNewsItem = { title: string; link: string; pubDate: string; source: string }
+
+/** rssNews 아이템에 매칭되는 AI 인사이트 반환 (newsList ↔ articleSummaries 매칭, 없으면 분석 요약 기반) */
+function getAiInsightForNews(
+  rssItem: RssNewsItem,
+  newsList: NewsItem[] | undefined,
+  articleSummaries: string[] | undefined,
+  fallbackText: string
+): string {
+  if (!newsList?.length || !articleSummaries?.length) return fallbackText
+  const t = (rssItem.title ?? '').trim().toLowerCase()
+  const link = (rssItem.link ?? '').trim()
+  const idx = newsList.findIndex((n) => {
+    const nt = (n.title ?? '').trim().toLowerCase()
+    const nu = (n.url ?? '').trim()
+    return (t && nt && t === nt) || (link && nu && (link === nu || link.startsWith(nu) || nu.startsWith(link)))
+  })
+  if (idx >= 0 && articleSummaries[idx]?.trim()) return articleSummaries[idx].trim()
+  return fallbackText
+}
 
 function NewsDetailModal({
   item,
@@ -169,6 +194,8 @@ function ResultsContent() {
     taskData,
     result,
     error,
+    analysisMode,
+    setAnalysisMode,
     startStreamingResearch,
     abortAnalysis,
     loadFromHistory,
@@ -217,14 +244,15 @@ function ResultsContent() {
   const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
-  /** Mobile: collapse secondary sidebar (momentum, trends, metrics, sources) to reduce scroll; expand for comprehension. */
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  /** AI 분석 진행 상황: 기본 컴팩트, "자세히 보기" 클릭 시 전체 타임라인 확장 */
-  const [pipelineExpanded, setPipelineExpanded] = useState(false)
+  /** AI 분석 과정 모달 (헤더 버튼으로 열기) */
+  const [pipelineModalOpen, setPipelineModalOpen] = useState(false)
   /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
   const [implicationOpen, setImplicationOpen] = useState(false)
+  /** AI 인사이트 생성 시퀀스: 분석 완료 직후 2–4초간 "AI thinking" 연출 후 리포트 표시 */
+  const [showInsightSequence, setShowInsightSequence] = useState(false)
+  const prevLoadingRef = useRef<boolean | null>(null)
   /** Save as Insight modal */
   const [saveInsightOpen, setSaveInsightOpen] = useState(false)
   const [saveInsightName, setSaveInsightName] = useState('')
@@ -414,6 +442,20 @@ function ResultsContent() {
   const showPolledError = polledStatus === 'failed'
   const hasFailure = canonicalStatus === 'failed' || showPolledError
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
+
+  /** 분석 완료 직후 AI 인사이트 생성 시퀀스 표시 (loading → done 전환 시) */
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current ?? false
+    prevLoadingRef.current = loading
+    if (wasLoading && !loading && displayResult && !hasFailure && hasKeyword && !needsRunAction) {
+      setShowInsightSequence(true)
+    }
+  }, [loading, displayResult, hasFailure, hasKeyword, needsRunAction])
+
+  /** 키워드 변경 시 시퀀스 리셋 */
+  useEffect(() => {
+    if (currentKeyword) setShowInsightSequence(false)
+  }, [currentKeyword])
   /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
   const headerTitleKo =
     countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
@@ -890,23 +932,12 @@ function ResultsContent() {
         id: 'google-trends',
         source: '구글 트렌드',
         summary: hasTrendMatch
-          ? '이 키워드에 대한 검색 관심도·볼륨 데이터.'
+          ? '이 키워드에 대한 검색 관심도·볼륨 데이터가 분석에 반영되었습니다.'
           : allTrends.length > 0
-            ? '전역 트렌드 컨텍스트 사용 가능. 현재 키워드는 트렌드 목록에 없을 수 있습니다.'
+            ? '전역 트렌드 컨텍스트가 분석에 사용되었습니다. 현재 키워드는 트렌드 목록에 없을 수 있습니다.'
             : '이 키워드에 대한 트렌드 데이터가 없습니다.',
         confidence: hasTrendMatch ? 'high' : allTrends.length > 0 ? 'medium' : 'low',
-      },
-      {
-        id: 'reddit',
-        source: 'Reddit 커뮤니티 분석',
-        summary: 'Reddit 커뮤니티 논의 및 감성. 아직 본 분석에 통합되지 않았습니다.',
-        confidence: 'low',
-      },
-      {
-        id: 'product-hunt',
-        source: 'Product Hunt 출시 데이터',
-        summary: 'Product Hunt 출시 및 업보트 데이터. 아직 본 분석에 통합되지 않았습니다.',
-        confidence: 'low',
+        usedInAnalysis: hasTrendMatch || allTrends.length > 0,
       },
       {
         id: 'vc-funding',
@@ -915,6 +946,21 @@ function ResultsContent() {
           ? `투자 신호 점수(${fundingNum})가 기회 점수에 반영되었습니다.`
           : '본 분석에 전용 VC 투자 신호가 없습니다.',
         confidence: fundingNum != null ? (fundingNum >= 70 ? 'high' : fundingNum >= 40 ? 'medium' : 'low') : 'low',
+        usedInAnalysis: fundingNum != null,
+      },
+      {
+        id: 'reddit',
+        source: 'Reddit 커뮤니티 분석',
+        summary: 'Reddit 커뮤니티 논의 및 감성. 아직 본 분석에 통합되지 않았습니다.',
+        confidence: 'low',
+        usedInAnalysis: false,
+      },
+      {
+        id: 'product-hunt',
+        source: 'Product Hunt 출시 데이터',
+        summary: 'Product Hunt 출시 및 업보트 데이터. 아직 본 분석에 통합되지 않았습니다.',
+        confidence: 'low',
+        usedInAnalysis: false,
       },
     ]
   })()
@@ -924,87 +970,120 @@ function ResultsContent() {
     return (
       <div className="px-4 py-4 sm:px-5 sm:py-5 md:p-6 min-h-screen bg-background rin-doc">
         {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
-        <div className="mx-auto max-w-[1400px] grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
-          <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
+        <div className="mx-auto max-w-[1600px] reading-gap-lg">
+          <div className="reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
         <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-5 sm:p-6 md:p-7 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
-        {/* 1. 분석 결과 요약 헤더 (AI 신뢰도·분석 시간·데이터 소스 상단 배치) */}
-        <header className="pb-6 border-b border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              분석 결과 요약
-            </p>
-            <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
-              <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
-              <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/50">
-                {(['gemini', 'groq'] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => handleAiPrimaryChange(v)}
-                    disabled={loading}
-                    className={cn(
-                      'px-2.5 py-1 text-xs font-medium rounded transition-colors',
-                      aiPrimaryModel === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    )}
-                  >
-                    {v === 'gemini' ? 'Gemini' : 'Groq'}
-                  </button>
-                ))}
+        {/* 1. Result Page Hero – final AI conclusion in ~3 seconds */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <ResultPageHero
+            title={currentKeyword ?? ''}
+            titleSub={headerTitleKo}
+            opportunityScore={
+              typeof displayResult?.key_metrics?.opportunity_score === 'number'
+                ? displayResult.key_metrics.opportunity_score
+                : null
+            }
+            confidenceScore={
+              (() => {
+                const km = displayResult?.key_metrics
+                const ar = displayResult?.analysis_results as { confidence?: number } | undefined
+                if (typeof km?.confidence_score === 'number') return km.confidence_score
+                const c = ar?.confidence
+                if (typeof c === 'number') return c <= 1 ? c * 100 : c
+                const mc = consensusData?.metadata?.confidence
+                if (mc != null && typeof mc === 'number') return mc <= 1 ? mc * 100 : mc
+                return displayResult ? 75 : null
+              })()
+            }
+            topInsight={
+              (consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '').trim() || null
+            }
+            statusText={
+              (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
+                ? (streamingState.status === 'running' || streamingState.status === 'streaming'
+                    ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                    : (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다'))
+                : canonicalStatus === 'completed' && displayResult?.updated_at
+                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+                  : canonicalStatus === 'failed'
+                    ? '분석 실패'
+                    : undefined
+            }
+            loading={loading && !displayResult}
+            actions={
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
+                  <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
+                  <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/50">
+                    {(['gemini', 'groq'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => handleAiPrimaryChange(v)}
+                        disabled={loading}
+                        className={cn(
+                          'px-2.5 py-1 text-xs font-medium rounded transition-colors',
+                          aiPrimaryModel === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                        )}
+                      >
+                        {v === 'gemini' ? 'Gemini' : 'Groq'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPipelineModalOpen(true)}
+                  className="gap-1.5 text-xs"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  AI 분석 과정
+                </Button>
+                <ResultShareActions
+                  reportId={displayResult?.reportId ?? null}
+                  summaryText={[
+                    currentKeyword ? `# ${currentKeyword} 시장 분석 요약` : '',
+                    consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '',
+                    reportSummary,
+                    displayResult?.key_metrics?.opportunity_score != null
+                      ? `\n기회 점수: ${displayResult.key_metrics.opportunity_score}/100`
+                      : '',
+                  ].filter(Boolean).join('\n\n')}
+                  onDownloadPdf={printReportAsPdf}
+                  disabled={loading}
+                />
               </div>
-            </div>
+            }
+            className="mb-6 border-b border-border/60 pb-6"
+          />
+        )}
+
+        {/* AI 인사이트 생성 시퀀스: 분석 완료 직후 2–4초간 연출 후 리포트 표시 */}
+        {showInsightSequence && displayResult && (
+          <div className="mt-6 mb-6">
+            <AIInsightGenerationSequence
+              keyword={currentKeyword ?? ''}
+              onComplete={() => setShowInsightSequence(false)}
+              durationMs={3200}
+            />
           </div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground tracking-tight break-words">
-            {currentKeyword}
-            {headerTitleKo && (
-              <span className="ml-2 text-base font-normal text-muted-foreground" title="한국어 번역">
-                · {headerTitleKo}
-              </span>
-            )}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-2">
-            {(canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
-              ? (streamingState.status === 'running' || streamingState.status === 'streaming'
-                  ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
-                  : (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다'))
-              : canonicalStatus === 'completed' && displayResult?.updated_at
-                ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
-                : canonicalStatus === 'failed'
-                  ? '분석 실패'
-                  : null}
-          </p>
-          {/* AI 신뢰도·분석 데이터 소스 (요약 메타데이터) */}
-          {(displayResult != null || loading) && !needsRunAction && (
-            <div className="mt-4 flex flex-wrap gap-4 sm:gap-6 py-4 px-4 rounded-lg bg-muted/20 border border-border/40">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground">AI 신뢰도</span>
-                <span className="text-sm font-semibold tabular-nums text-foreground">
-                  {loading && (displayResult?.key_metrics?.confidence_score == null) && ((displayResult?.analysis_results as { confidence?: number })?.confidence == null)
-                    ? '—'
-                    : (() => {
-                        const km = displayResult?.key_metrics
-                        const ar = displayResult?.analysis_results as { confidence?: number } | undefined
-                        if (typeof km?.confidence_score === 'number') return `${Math.round(Math.min(100, Math.max(0, km.confidence_score)))}%`
-                        const c = ar?.confidence
-                        if (typeof c === 'number') return `${c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, Math.max(0, c)))}%`
-                        const mc = consensusData?.metadata?.confidence
-                        if (mc != null && typeof mc === 'number') return `${mc <= 1 ? Math.round(mc * 100) : Math.round(Math.min(100, Math.max(0, mc)))}%`
-                        return displayResult ? '75%' : '—'
-                      })()}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground">분석 데이터 소스</span>
-                <span className="text-sm font-semibold tabular-nums text-foreground">
-                  {newsList?.length ?? 0}개
-                </span>
-              </div>
-            </div>
-          )}
-        </header>
+        )}
+
+        {/* 섹션 네비게이션·요약·인사이트·대시보드 (시퀀스 미표시 시에만) */}
+        {!showInsightSequence && (
+          <>
+        {/* 섹션 네비게이션 (sticky) - 긴 리포트 스크롤 탐색 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <nav className="sticky top-0 z-10 mt-6 -mx-2 px-2 py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/60 mb-4">
+            <ResultSectionNav variant="compact" />
+          </nav>
+        )}
 
         {/* 분석 결과 요약 카드 (핵심 결론 즉시 파악) */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <section className="mt-6" aria-label="분석 결과 요약">
+          <section id="section-summary" className="scroll-mt-24 mt-2" aria-label="분석 결과 요약">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
               핵심 결론
             </h2>
@@ -1018,11 +1097,15 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* 섹션 네비게이션 - 스크롤 이동 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 mb-4 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 border-b border-border/60 -mt-2 pt-4">
-            <ResultSectionNav variant="compact" />
-          </div>
+        {/* Opportunity Score Breakdown – explains how the score was calculated */}
+        {(displayResult != null || loading) && !needsRunAction && (displayResult?.key_metrics?.opportunity_score != null || (displayResult?.key_metrics?.opportunity_score_breakdown && Object.keys(displayResult.key_metrics.opportunity_score_breakdown || {}).length > 0)) && (
+          <section id="section-opportunity" className="scroll-mt-24 mt-8" aria-label="기회 점수 분해">
+            <OpportunityScoreBreakdown
+              score={displayResult?.key_metrics?.opportunity_score ?? null}
+              breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
+              useKoreanLabels
+            />
+          </section>
         )}
 
         {/* First 5 Seconds UX - 즉시 피드백, AI 분석 시작 확인 */}
@@ -1057,8 +1140,17 @@ function ResultsContent() {
         {needsRunAction ? (
           <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4">
             <p className="text-muted-foreground text-sm mb-4">
-              &quot;{currentKeyword}&quot;에 대한 분석이 없습니다. 실행하려면 아래 버튼을 클릭하세요.
+              &quot;{currentKeyword}&quot;에 대한 분석이 없습니다. 분석 깊이를 선택한 뒤 실행하세요.
             </p>
+            <div className="w-full max-w-md mb-6">
+              <AnalysisModeSelector
+                value={analysisMode}
+                onChange={setAnalysisMode}
+                depthOnly
+                showDescription={false}
+                className="mb-4"
+              />
+            </div>
             <Button
               size="lg"
               onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
@@ -1108,83 +1200,22 @@ function ResultsContent() {
               <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} className="mt-5" />
             )}
 
-            {/* 7. AI 분석 진행 로그 (하단 배치, 기본 접힘) */}
-            {(displayResult != null || loading || hasFailure || (analysisTasks?.length ?? 0) > 0) && Boolean((currentKeyword ?? '').trim()) && (
-              <div id="section-pipeline" className="mt-12 pt-8 border-t border-border/60">
-                <div className={cn('overflow-hidden rounded-xl border border-border bg-card', !pipelineExpanded && 'border-dashed')}>
-                  {pipelineExpanded ? (
-                    <>
-                      <div className="max-h-[400px] overflow-y-auto">
-                        <StrategyEnginePipeline
-                          keyword={currentKeyword ?? ''}
-                          currentStep={
-                            polledStatus === 'running' && polledProgressStep != null
-                              ? Math.min(6, Math.max(0, polledProgressStep))
-                              : streamingState.status === 'running' || streamingState.status === 'streaming'
-                                ? streamingState.currentStep
-                                : streamingState.status === 'completed' || (displayResult != null && !loading && !hasFailure)
-                                  ? 6
-                                  : -1
-                          }
-                          allCompleted={displayResult != null && !loading && !hasFailure}
-                          streamingStepId={
-                            streamingState.status === 'running' || streamingState.status === 'streaming'
-                              ? streamingState.stepId
-                              : undefined
-                          }
-                          retryMessage={
-                            streamingState.status === 'running' || streamingState.status === 'streaming'
-                              ? ('retryMessage' in streamingState ? streamingState.retryMessage : undefined)
-                              : undefined
-                          }
-                          taskData={taskData ?? {}}
-                          analysisTasks={analysisTasks ?? null}
-                          newsList={newsList ?? []}
-                          result={displayResult}
-                          onRetryStep={() => {
-                            setPolledStatus(null)
-                            setPolledError(null)
-                            startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
-                          }}
-                          hasError={hasFailure}
-                          errorStepIndex={
-                            streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
-                              ? streamingState.lastSuccessfulStep + 1
-                              : polledProgressStep
-                          }
-                          globalErrorMessage={displayError ?? polledError ?? undefined}
-                        />
-                      </div>
-                      <div className="border-t border-border bg-muted/20 px-4 py-2 flex justify-center">
-                        <button
-                          type="button"
-                          onClick={() => setPipelineExpanded(false)}
-                          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-                        >
-                          <ChevronUp className="h-3.5 w-3.5" />
-                          접기
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPipelineExpanded(true)}
-                      className="w-full px-4 py-4 flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                      AI 분석 과정 보기
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* 실시간 뉴스: 외부 RSS 데이터, AI 분석과 독립적으로 페이지 로드 시 즉시 fetch */}
+        {/* 7. 데이터 출처 (리포트 구조: 분석에 사용된 소스 vs 참고 소스) */}
         {currentKeyword && (
-          <section className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5" aria-label="실시간 뉴스">
+          <div id="section-data" className="mt-12 scroll-mt-24">
+            <DataSourcesSection
+              signals={dataSourceSignals}
+              loading={loading && !displayResult}
+            />
+          </div>
+        )}
+
+        {/* 실시간 뉴스: 외부 RSS 데이터, AI 분석 결과와 연결된 맥락 설명 */}
+        {currentKeyword && (
+          <section id="section-news" className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5 scroll-mt-24" aria-label="뉴스 및 데이터">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <Newspaper className="h-3.5 w-3.5 text-primary" />
@@ -1226,33 +1257,77 @@ function ResultsContent() {
             ) : rssNewsFetched && rssNews.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다.</p>
             ) : rssNews.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {rssNews.map((item, i) => (
-                  <article key={i} className="rounded-lg border border-border bg-card p-3 hover:border-primary/20 transition-colors text-left">
-                    <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2">{item.title || '제목 없음'}</h4>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-1.5">
-                      <span>{item.source || '언론사'}</span>
-                      {item.link && (
-                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
-                          링크 <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
+              (() => {
+                const kw = (currentKeyword ?? '').trim()
+                const fallbackInsight =
+                  consensusData?.strategicSummary?.summary?.trim() ||
+                  displayResult?.key_metrics?.summary_insights?.trim() ||
+                  displayResult?.key_metrics?.keyConclusions?.[0]?.trim() ||
+                  (kw ? `이 뉴스는 ${kw} 시장 분석에 참고된 시장 신호입니다.` : '이 뉴스는 시장 동향 분석에 참고된 시장 신호입니다.')
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {rssNews.map((item, i) => {
+                      const title = item.title || '제목 없음'
+                      const hasKeywordMatch = kw && title.toLowerCase().includes(kw.toLowerCase())
+                      const aiInsight = getAiInsightForNews(
+                        item,
+                        newsList ?? undefined,
+                        displayResult?.articleSummaries,
+                        fallbackInsight
+                      )
+                      return (
+                        <article key={i} className="rounded-lg border border-border bg-card p-4 hover:border-primary/20 transition-colors text-left">
+                          <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2 mb-1">
+                            {hasKeywordMatch && kw ? (
+                              title.split(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')).map((part, j) =>
+                                part.toLowerCase() === kw.toLowerCase() ? (
+                                  <mark key={j} className="bg-primary/20 text-foreground rounded px-0.5">{part}</mark>
+                                ) : (
+                                  part
+                                )
+                              )
+                            ) : (
+                              title
+                            )}
+                          </h4>
+                          <p className="text-xs text-muted-foreground mb-2">{item.source || '언론사'}</p>
+                          <div className="rounded-lg bg-primary/5 border border-primary/10 px-2.5 py-2 mb-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/80 mb-0.5">AI Insight</p>
+                            <p className="text-xs text-foreground leading-relaxed line-clamp-3">&quot;{aiInsight}&quot;</p>
+                          </div>
+                          <div className="flex items-center justify-end text-xs text-muted-foreground">
+                            {item.link && (
+                              <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                                원문 보기 <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )
+              })()
             ) : null}
           </section>
         )}
 
-        {/* 데이터 출처 - 페이지 하단 배치 (PM 분석 도구 레이아웃) */}
-        {currentKeyword && (
-          <div className="mt-6">
-            <DataSourcesSection
-              signals={dataSourceSignals}
-              loading={loading && !displayResult}
-            />
-          </div>
+        {/* 다음 탐색: 관련 시장 아이디어 + 다른 시장 분석하기 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && currentKeyword && (
+          <NextExplorationSection
+            onSelectKeyword={(k) => {
+              router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
+              startStreamingResearch(k, { country_code: countryFromUrl })
+            }}
+            onRunAnalysis={(k) => {
+              router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
+              startStreamingResearch(k, { country_code: countryFromUrl })
+            }}
+            disabled={loading}
+          />
+        )}
+
+          </>
         )}
 
         {displayStatus === 'done' && displayResult && (
@@ -1279,6 +1354,62 @@ function ResultsContent() {
               setSelectedNewsIndex(null)
             }}
           />
+        )}
+
+        {/* AI 분석 과정 모달 */}
+        {pipelineModalOpen && (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="pipeline-modal-title">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setPipelineModalOpen(false)} aria-hidden />
+            <div className="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-xl border border-border bg-card shadow-xl flex flex-col">
+              <div className="flex items-center justify-between gap-2 p-4 border-b border-border shrink-0">
+                <h2 id="pipeline-modal-title" className="text-sm font-semibold text-foreground">AI 분석 과정</h2>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setPipelineModalOpen(false)}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <StrategyEnginePipeline
+                  keyword={currentKeyword ?? ''}
+                  currentStep={
+                    polledStatus === 'running' && polledProgressStep != null
+                      ? Math.min(6, Math.max(0, polledProgressStep))
+                      : streamingState.status === 'running' || streamingState.status === 'streaming'
+                        ? streamingState.currentStep
+                        : streamingState.status === 'completed' || (displayResult != null && !loading && !hasFailure)
+                          ? 6
+                          : -1
+                  }
+                  allCompleted={displayResult != null && !loading && !hasFailure}
+                  streamingStepId={
+                    streamingState.status === 'running' || streamingState.status === 'streaming'
+                      ? streamingState.stepId
+                      : undefined
+                  }
+                  retryMessage={
+                    streamingState.status === 'running' || streamingState.status === 'streaming'
+                      ? ('retryMessage' in streamingState ? streamingState.retryMessage : undefined)
+                      : undefined
+                  }
+                  taskData={taskData ?? {}}
+                  analysisTasks={analysisTasks ?? null}
+                  newsList={newsList ?? []}
+                  result={displayResult}
+                  onRetryStep={() => {
+                    setPolledStatus(null)
+                    setPolledError(null)
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                  }}
+                  hasError={hasFailure}
+                  errorStepIndex={
+                    streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
+                      ? streamingState.lastSuccessfulStep + 1
+                      : polledProgressStep
+                  }
+                  globalErrorMessage={displayError ?? polledError ?? undefined}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
         {saveInsightOpen && (
@@ -1326,27 +1457,6 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* 우측: 섹션 네비게이션 (중복 제거, 스크롤 이동용) */}
-          <div className="lg:col-span-4 reading-space-y bg-transparent rounded-xl p-0 sm:p-1 min-w-0">
-            <div className="lg:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setSidebarOpen((o) => !o)}
-                className="w-full flex items-center justify-between gap-2 min-h-[44px] p-3 sm:p-4 text-left hover:bg-muted/50 transition-colors touch-manipulation"
-                aria-expanded={sidebarOpen}
-                aria-controls="results-sidebar-content"
-              >
-                <span className="text-sm font-medium text-muted-foreground">섹션 이동</span>
-                {sidebarOpen ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
-              </button>
-            </div>
-            <aside id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
-            {/* 섹션 네비게이션 (중복 제거: 시장 요약·상세는 메인에만 표시) */}
-            <div className="rounded-xl border border-border bg-card shadow-sm p-4 sticky top-20">
-              <ResultSectionNav variant="full" />
-            </div>
-            </aside>
-          </div>
         </div>
       </div>
     )

@@ -10,7 +10,6 @@ import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, Chevr
 import { cn } from '@/lib/utils'
 import { getConfidenceDisplay } from '@/lib/confidence-display'
 import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
-import { InsightCard } from '@/components/research/InsightCard'
 import { SentimentFactorBreakdown } from '@/components/research/sentiment-factor-breakdown'
 
 /** API/DB 신형 Consensus (PM 프레임워크) */
@@ -273,26 +272,28 @@ function ConsensusInsightComponent({
       {/* Facts: evidence blocks. Subtle labels, no heavy icons. */}
       <div className={cn(BLOCK_CLASS)}>
         <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">Facts — 근거</span>
-      <InsightCard label="Problem" title="페인포인트·리스크">
-        {painPoints.length > 0 ? (
-          <ul className="space-y-2 list-none pl-0">
-            {painPoints.map((item, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-muted-foreground shrink-0">·</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">페인포인트가 없습니다.</p>
-        )}
-        {threat !== '—' && (
-          <>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4 mb-1">Threat</p>
-            <p className="leading-relaxed">{threat}</p>
-          </>
-        )}
-      </InsightCard>
+        <div className={cn('rounded-xl border border-border/60 bg-card p-4 sm:p-5')}>
+          <h4 className="text-sm font-semibold text-foreground mb-2">페인포인트·리스크</h4>
+          {painPoints.length > 0 ? (
+            <ul className="space-y-2 list-none pl-0">
+              {painPoints.map((item, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-muted-foreground shrink-0">·</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">페인포인트가 없습니다.</p>
+          )}
+          {threat !== '—' && (
+            <>
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4 mb-1">Threat</p>
+              <p className="leading-relaxed">{threat}</p>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Signal: market news, competitor trends. */}
       <div className="mt-4 space-y-3">
@@ -365,7 +366,6 @@ function ConsensusInsightComponent({
             <p className="text-muted-foreground text-sm">데이터 없음</p>
           )}
         </details>
-      </div>
       </div>
 
       {/* Inferences: recommendations. Subtle border, no primary color. */}

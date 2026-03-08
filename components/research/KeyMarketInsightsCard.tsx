@@ -1,10 +1,38 @@
 'use client'
 
-import { useState, useCallback } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { ProductStrategySection } from '@/components/research/ProductStrategySection'
-import { StreamingInsightText } from '@/components/research/StreamingInsightText'
+import { InsightCard } from '@/components/research/InsightCard'
+import { useEffect, useState, useRef } from 'react'
+import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+
+export type StructuredInsight = { title: string; explanation: string }
+
+/** Derive title + explanation from a raw insight string */
+function toStructuredInsight(text: string): StructuredInsight {
+  const t = text.trim()
+  if (!t) return { title: '—', explanation: '—' }
+
+  const colon = t.match(/^([^:]+):\s*([\s\S]+)$/)
+  if (colon) return { title: colon[1].trim().slice(0, 60), explanation: colon[2].trim() }
+
+  const dash = t.match(/^([^–—-]+)[–—-]\s*([\s\S]+)$/)
+  if (dash) return { title: dash[1].trim().slice(0, 60), explanation: dash[2].trim() }
+
+  const dot = t.indexOf('. ')
+  if (dot > 10 && dot < t.length - 2) {
+    const after = t.slice(dot + 2).trim()
+    if (after) return { title: t.slice(0, dot).trim(), explanation: after }
+  }
+
+  if (t.length <= 40) return { title: t, explanation: t }
+
+  const firstPhrase = t.slice(0, 45).trim()
+  const rest = t.slice(45).trim()
+  const title = rest ? firstPhrase + (firstPhrase.endsWith('.') ? '' : '…') : t
+  return { title, explanation: rest || t }
+}
 
 type TaskOutput = Record<string, unknown>
 type AnalysisTask = {
@@ -101,20 +129,52 @@ export function KeyMarketInsightsCard({
 
   const hasContent = result || (analysisTasks?.length ?? 0) > 0
 
-  const [streamComplete, setStreamComplete] = useState(false)
-  const handleStreamComplete = useCallback(() => setStreamComplete(true), [])
-
-  const insightItems: Array<{ label: string; value: string }> = hasEarlyData
+  const trendBullets = marketTrends && marketTrends !== '트렌드 분석 중'
+    ? marketTrends.split(/\s*·\s*/).filter((s) => s.trim().length > 3).map((s) => s.trim())
+    : []
+  const bulletInsights: string[] = hasEarlyData
     ? [
-        { label: '핵심 시장 키워드', value: growthPotential },
-        { label: '초기 트렌드 방향', value: marketTrends },
-        { label: '시장 기회 신호', value: keyOpportunities },
-      ]
+        ...(growthPotential && growthPotential !== '분석 중' ? [growthPotential] : []),
+        ...trendBullets,
+        ...(keyOpportunities && keyOpportunities !== '기회 영역 분석 중' && !trendBullets.includes(keyOpportunities) ? [keyOpportunities] : []),
+        ...(growthSignals?.filter((s) => s && s.length > 5) ?? []),
+        ...(Array.isArray(km.positive_signals) ? km.positive_signals.filter((s): s is string => typeof s === 'string' && s.length > 5).slice(0, 3) : []),
+        ...(Array.isArray(opportunities) ? opportunities.filter((s) => s && s.length > 5).slice(0, 2) : []),
+      ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 8)
     : []
 
   const useStreaming = loading && hasEarlyData
   const skipAnimation = !loading && hasEarlyData
   const showStreamingComplete = !loading && hasEarlyData
+
+  const structuredInsights = bulletInsights.map(toStructuredInsight)
+
+  const [revealedCount, setRevealedCount] = useState(0)
+  const prevKey = useRef('')
+  const key = bulletInsights.join('|')
+
+  useEffect(() => {
+    if (bulletInsights.length === 0) {
+      setRevealedCount(0)
+      return
+    }
+    if (key !== prevKey.current) {
+      prevKey.current = key
+      setRevealedCount(0)
+    }
+  }, [key, bulletInsights.length])
+
+  useEffect(() => {
+    if (skipAnimation || !useStreaming || bulletInsights.length === 0) {
+      setRevealedCount(bulletInsights.length)
+      return
+    }
+    if (revealedCount >= bulletInsights.length) return
+    const t = setTimeout(() => setRevealedCount((c) => Math.min(c + 1, bulletInsights.length)), 320)
+    return () => clearTimeout(t)
+  }, [revealedCount, bulletInsights.length, useStreaming, skipAnimation])
+
+  const showCursor = useStreaming && revealedCount > 0 && revealedCount < bulletInsights.length
 
   if (!hasContent && !loading) return null
 
@@ -125,26 +185,37 @@ export function KeyMarketInsightsCard({
       className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent"
       streamingComplete={showStreamingComplete}
     >
-      <p className="text-xs text-muted-foreground mb-4">
-        분석 결과의 핵심 결론을 한눈에 파악할 수 있습니다.
-      </p>
       {loading && !hasEarlyData ? (
-        <ul className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <li key={i} className="flex gap-3">
-              <span className="text-primary font-medium shrink-0">•</span>
-              <div className="h-5 w-3/4 rounded bg-muted/50 animate-pulse" />
-            </li>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card/50 p-4 h-24 animate-pulse">
+              <div className="h-4 w-3/4 rounded bg-muted/50 mb-2" />
+              <div className="h-3 w-full rounded bg-muted/30" />
+            </div>
           ))}
-        </ul>
+        </div>
       ) : (
-        <StreamingInsightText
-          items={insightItems}
-          streaming={useStreaming}
-          skipAnimation={skipAnimation}
-          onComplete={handleStreamComplete}
-          revealDelayMs={380}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {structuredInsights.slice(0, revealedCount).map((insight, i) => (
+            <InsightCard
+              key={i}
+              title={insight.title}
+              explanation={insight.explanation}
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
+            />
+          ))}
+          {showCursor && (
+            <div
+              className={cn(
+                'rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 flex items-center gap-2 text-xs text-muted-foreground',
+                'animate-in fade-in duration-200'
+              )}
+            >
+              <span className="inline-block w-0.5 h-4 bg-primary animate-pulse" aria-hidden />
+              AI 인사이트 생성중…
+            </div>
+          )}
+        </div>
       )}
     </ProductStrategySection>
   )
