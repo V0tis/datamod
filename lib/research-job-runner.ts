@@ -62,8 +62,10 @@ function toRecord(value: unknown): Record<string, string> {
   return {}
 }
 
-async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>> {
-  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+async function fetchNewsTitles(keyword: string, countryCode: string): Promise<Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>> {
+  const { getNewsLocale } = await import('@/lib/news-rss-locale')
+  const { gl, hl, ceid } = getNewsLocale(countryCode)
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
   })
@@ -169,7 +171,7 @@ export async function runAnalysisJob(jobId: string) {
   }
 
   try {
-    const news = await fetchNewsTitles(keyword)
+    const news = await fetchNewsTitles(keyword, countryCode)
     await updateJob(jobId, { progress_step: 'gemini' })
 
     const newsTitles = news.map((n) => n.title)

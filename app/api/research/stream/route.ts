@@ -18,9 +18,11 @@ const USER_AGENT =
 type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
 
-/** 키워드로 구글 뉴스 RSS 조회 후 제목·URL 반환 (한국어 헤드라인 = news_items_ko) */
-async function fetchNewsTitles(keyword: string): Promise<Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>> {
-  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+/** 키워드로 구글 뉴스 RSS 조회 후 제목·URL 반환 (country에 따라 gl/hl/ceid 적용) */
+async function fetchNewsTitles(keyword: string, countryCode: string): Promise<Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>> {
+  const { getNewsLocale } = await import('@/lib/news-rss-locale')
+  const { gl, hl, ceid } = getNewsLocale(countryCode)
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
   })
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
       let currentStep = 'news'
       try {
         send('progress', { step: 'news_start' })
-        const news = await fetchNewsTitles(keyword)
+        const news = await fetchNewsTitles(keyword, countryCode)
         send('progress', { step: 'news_done', news: news.map((n) => ({ title: n.title, url: n.url })) })
         if (isClosed) {
           safeClose()

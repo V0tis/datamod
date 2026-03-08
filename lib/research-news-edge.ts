@@ -2,6 +2,8 @@
  * Edge-compatible news fetcher. No rss-parser (Node deps).
  * Uses fetch + regex to extract titles from RSS.
  */
+import { getNewsLocale } from '@/lib/news-rss-locale'
+
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -24,8 +26,9 @@ function extractText(tag: string, xml: string): string[] {
   return out
 }
 
-export async function fetchNewsTitlesEdge(keyword: string): Promise<NewsItem[]> {
-  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+export async function fetchNewsTitlesEdge(keyword: string, countryCode = 'KR'): Promise<NewsItem[]> {
+  const { gl, hl, ceid } = getNewsLocale(countryCode)
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
   })

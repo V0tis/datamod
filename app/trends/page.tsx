@@ -181,9 +181,12 @@ function TrendsPageInner() {
   }
 
   const handleTrendClick = (item: TrendItem) => {
-    const keyword = item.title_ko ?? item.keyword
-    startStreamingResearch(keyword, { country_code: country })
-    router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`)
+    const originalKeyword = item.keyword
+    const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
+    startStreamingResearch(originalKeyword, { country_code: country })
+    const params = new URLSearchParams({ keyword: originalKeyword, country })
+    if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
+    router.push(`/results?${params.toString()}`)
   }
 
   const items = trends[country] ?? []

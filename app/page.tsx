@@ -436,10 +436,13 @@ function RinAISearchInner() {
                           key={`${trendCountry}-${i}`}
                           type="button"
                           onClick={() => {
-                            const keyword = item.title_ko ?? item.keyword
+                            const originalKeyword = item.keyword
+                            const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
                             setNavigatingFromTrend(true)
-                            router.push(`/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(trendCountry)}`)
-                            startStreamingResearch(keyword, { country_code: trendCountry })
+                            const params = new URLSearchParams({ keyword: originalKeyword, country: trendCountry })
+                            if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
+                            router.push(`/results?${params.toString()}`)
+                            startStreamingResearch(originalKeyword, { country_code: trendCountry })
                           }}
                           className="group text-left rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
                         >

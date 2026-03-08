@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       }, { status: 400 })
     }
 
-    const news = await fetchNewsTitlesEdge(keyword)
+    const news = await fetchNewsTitlesEdge(keyword, countryCode)
     const newsTitles = news.map((n) => n.title)
     const prompt = buildNdjsonAnalysisPrompt(keyword, newsTitles)
 

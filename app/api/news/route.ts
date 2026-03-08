@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import Parser from 'rss-parser'
+import { getNewsLocale } from '@/lib/news-rss-locale'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const MAX_ITEMS = 10
@@ -34,7 +35,7 @@ const DEFAULT_DAYS = 30
 const MIN_DAYS = 1
 const MAX_DAYS = 365
 
-/** GET: keyword 쿼리로 구글 뉴스 RSS 조회. days(기본 30)일 이내 기사만 반환, 최신순 (AI 호출 없음) */
+/** GET: keyword + country로 구글 뉴스 RSS 조회. days(기본 30)일 이내 기사만 반환 (AI 호출 없음) */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const keyword = searchParams.get('keyword')?.trim()
@@ -42,12 +43,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'keyword required', items: [] }, { status: 400 })
   }
 
+  const country = searchParams.get('country')?.trim() || 'KR'
+  const locale = getNewsLocale(country)
+
   const daysParam = searchParams.get('days')
   const days = Math.min(MAX_DAYS, Math.max(MIN_DAYS, daysParam ? parseInt(daysParam, 10) : DEFAULT_DAYS))
   const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000
 
   try {
-    const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+    const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${locale.hl}&gl=${locale.gl}&ceid=${encodeURIComponent(locale.ceid)}`
     const res = await fetch(url, {
       headers: {
         'User-Agent': USER_AGENT,

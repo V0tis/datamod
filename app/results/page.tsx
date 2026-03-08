@@ -182,6 +182,7 @@ function ResultsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const keyword = searchParams.get('keyword')
+  const keywordTranslated = searchParams.get('keywordTranslated')?.trim() || null
   const countryFromUrl = searchParams.get('country')?.trim() || 'KR'
   const currentTask = useCurrentTask(keyword, countryFromUrl)
   const {
@@ -419,12 +420,12 @@ function ResultsContent() {
       setRssNewsFetched(false)
       return
     }
-    const fetchKey = `${q}|${days}`
+    const fetchKey = `${q}|${days}|${countryFromUrl}`
     if (lastRssFetchKeyRef.current === fetchKey) return
     lastRssFetchKeyRef.current = fetchKey
     setRssNewsLoading(true)
     setRssNewsFetched(false)
-    fetch(`/api/news?keyword=${encodeURIComponent(q)}&days=${days}`)
+    fetch(`/api/news?keyword=${encodeURIComponent(q)}&days=${days}&country=${encodeURIComponent(countryFromUrl)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { items?: RssNewsItem[] } | null) => {
         if (Array.isArray(data?.items)) setRssNews(data.items)
@@ -435,7 +436,7 @@ function ResultsContent() {
         setRssNewsLoading(false)
         setRssNewsFetched(true)
       })
-  }, [keyword, storeKeyword, newsDays])
+  }, [keyword, storeKeyword, newsDays, countryFromUrl])
 
   const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
@@ -456,22 +457,29 @@ function ResultsContent() {
   useEffect(() => {
     if (currentKeyword) setShowInsightSequence(false)
   }, [currentKeyword])
-  /** 한국이 아닌 국가일 때 헤더에 표시할 번역: 현재 키워드와 같은 트렌드 항목의 title_ko */
-  const headerTitleKo =
-    countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
-      ? (() => {
-          const list: TrendItem[] =
-            countryFromUrl === 'US' ? sharedTrends.US
-            : countryFromUrl === 'JP' ? sharedTrends.JP
-            : countryFromUrl === 'TW' ? sharedTrends.TW
-            : countryFromUrl === 'HK' ? sharedTrends.HK
-            : countryFromUrl === 'GB' ? sharedTrends.GB
-            : countryFromUrl === 'DE' ? sharedTrends.DE
-            : []
-          const found = list.find((t: TrendItem) => t.keyword === (currentKeyword ?? '').trim())
-          return found?.title_ko != null && found.title_ko !== found.keyword ? found.title_ko : null
-        })()
-      : null
+  /** non-KR 트렌드 시 원문+번역 둘 다 표시. keywordTranslated(URL) 우선, 없으면 sharedTrends에서 매칭 */
+  const translatedForHeader =
+    keywordTranslated && (currentKeyword ?? '').trim() && keywordTranslated !== (currentKeyword ?? '').trim()
+      ? keywordTranslated
+      : countryFromUrl !== 'KR' && (currentKeyword ?? '').trim()
+        ? (() => {
+            const list: TrendItem[] =
+              countryFromUrl === 'US' ? sharedTrends.US
+              : countryFromUrl === 'JP' ? sharedTrends.JP
+              : countryFromUrl === 'TW' ? sharedTrends.TW
+              : countryFromUrl === 'HK' ? sharedTrends.HK
+              : countryFromUrl === 'GB' ? sharedTrends.GB
+              : countryFromUrl === 'DE' ? sharedTrends.DE
+              : []
+            const found = list.find((t: TrendItem) => (t.keyword ?? '').trim() === (currentKeyword ?? '').trim())
+            return found?.title_ko != null && found.title_ko !== found.keyword ? found.title_ko : null
+          })()
+        : null
+  /** 헤더 타이틀: 번역 있으면 "번역 (원문)", 없으면 원문만 */
+  const heroTitle =
+    translatedForHeader && (currentKeyword ?? '').trim()
+      ? `${translatedForHeader} (${(currentKeyword ?? '').trim()})`
+      : (currentKeyword ?? '').trim()
 
   const reportSummary = displayResult
     ? [
@@ -936,20 +944,6 @@ function ResultsContent() {
         confidence: fundingNum != null ? (fundingNum >= 70 ? 'high' : fundingNum >= 40 ? 'medium' : 'low') : 'low',
         usedInAnalysis: fundingNum != null,
       },
-      {
-        id: 'reddit',
-        source: 'Reddit 커뮤니티 분석',
-        summary: 'Reddit 커뮤니티 논의 및 감성. 아직 본 분석에 통합되지 않았습니다.',
-        confidence: 'low',
-        usedInAnalysis: false,
-      },
-      {
-        id: 'product-hunt',
-        source: 'Product Hunt 출시 데이터',
-        summary: 'Product Hunt 출시 및 업보트 데이터. 아직 본 분석에 통합되지 않았습니다.',
-        confidence: 'low',
-        usedInAnalysis: false,
-      },
     ]
   })()
 
@@ -964,8 +958,7 @@ function ResultsContent() {
         {/* 1. Result Page Hero – final AI conclusion in ~3 seconds */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <ResultPageHero
-            title={currentKeyword ?? ''}
-            titleSub={headerTitleKo}
+            title={heroTitle}
             opportunityScore={
               typeof displayResult?.key_metrics?.opportunity_score === 'number'
                 ? displayResult.key_metrics.opportunity_score

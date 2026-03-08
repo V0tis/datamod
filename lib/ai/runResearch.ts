@@ -132,8 +132,10 @@ type RssItem = {
 }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
 
-async function fetchNewsTitles(keyword: string): Promise<NewsItem[]> {
-  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+async function fetchNewsTitles(keyword: string, countryCode: string): Promise<NewsItem[]> {
+  const { getNewsLocale } = await import('@/lib/news-rss-locale')
+  const { gl, hl, ceid } = getNewsLocale(countryCode)
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
   const res = await fetch(url, {
     headers: {
       'User-Agent': USER_AGENT,
@@ -781,7 +783,7 @@ export async function* runResearch(
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   let news: NewsItem[]
   try {
-    news = await fetchNewsTitles(keyword)
+    news = await fetchNewsTitles(keyword, cacheKey.countryCode)
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
     const signalData = {

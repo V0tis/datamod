@@ -169,8 +169,15 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
             {/* Quadrant labels (subtle) */}
             <text x={padding + plotW / 4 - 20} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">Early</text>
             <text x={padding + (3 * plotW) / 4 - 25} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">Mature</text>
-            {/* Plot competitors */}
+            {/* Plot competitors – color by tier (Leader=amber, Emerging=primary, Early-stage=emerald) */}
             {points.map((p, i) => {
+              const tier = inferTier(p, i, competitors.length)
+              const tierColors: Record<Tier, { fill: string; stroke: string }> = {
+                leader: { fill: '#f59e0b', stroke: '#d97706' },
+                emerging: { fill: '#6366f1', stroke: '#4f46e5' },
+                early: { fill: '#10b981', stroke: '#059669' },
+              }
+              const { fill, stroke } = tierColors[tier]
               const px = padding + (p.x / 100) * plotW
               const py = h - padding - (p.y / 100) * plotH
               return (
@@ -179,12 +186,12 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
                     cx={px}
                     cy={py}
                     r={Math.max(5, 8 - competitors.length * 0.4)}
-                    fill="#6366f1"
+                    fill={fill}
                     fillOpacity={0.85}
                     stroke="var(--background, #fff)"
                     strokeWidth={1.5}
                   />
-                  <title>{`${p.name}${p.positioning ? `: ${p.positioning}` : ''}`}</title>
+                  <title>{`${p.name}${p.positioning ? `: ${p.positioning}` : ''} (${TIER_CONFIG[tier].labelEn})`}</title>
                 </g>
               )
             })}

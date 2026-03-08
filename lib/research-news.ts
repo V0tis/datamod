@@ -17,8 +17,10 @@ export type NewsItem = {
   publishedAt?: string
 }
 
-export async function fetchNewsTitles(keyword: string): Promise<NewsItem[]> {
-  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`
+export async function fetchNewsTitles(keyword: string, countryCode = 'KR'): Promise<NewsItem[]> {
+  const { getNewsLocale } = await import('@/lib/news-rss-locale')
+  const { gl, hl, ceid } = getNewsLocale(countryCode)
+  const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
   })
