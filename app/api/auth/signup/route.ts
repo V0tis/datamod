@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     // 2. 존재하지 않을 때만 확인 메일을 보내기 위해 signUp 실행 (닉네임은 user_metadata에 저장, 인증 후 sync-profile에서 user_settings로 복사)
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {

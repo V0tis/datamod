@@ -6,9 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, History, ChevronRight, Loader2, X, Target } from 'lucide-react'
+import { TrendingUp, History, ChevronRight, Loader2, X, Target } from 'lucide-react'
 import Link from 'next/link'
-import { RinLogo } from '@/components/rin-logo'
 import { RinAnimation, getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -18,9 +17,8 @@ import { normalizeTrendItems, type TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
-import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
+import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
-const MAIN_TRENDS_TOP_N = 10
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
 function RinAISearchInner() {
@@ -35,7 +33,6 @@ function RinAISearchInner() {
   }, [])
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
-  const [licenseOrigin, setLicenseOrigin] = useState<'USER' | 'SYSTEM' | null>(null)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
     KR: [],
     US: [],
@@ -46,7 +43,6 @@ function RinAISearchInner() {
     DE: [],
     updatedAt: null,
   })
-  const [trendStatus, setTrendStatus] = useState<TrendsResponse['trendStatus']>(undefined)
   const [trendsLoading, setTrendsLoading] = useState(false)
   const searchParams = useSearchParams()
   const [trendCountry, setTrendCountryState] = useState<CountryChipCode>('KR')
@@ -102,7 +98,6 @@ function RinAISearchInner() {
   const streamingState = useResearchStore((s) => s.streamingState)
   const currentAnalysisKeyword = useResearchStore((s) => s.keyword)
   const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
-  const engineActive = Object.values(jobs).some((job) => job.status === 'queued' || job.status === 'running') || isAnalyzingNow()
   /** Use analysis UI only when searching from form; trend click should not change main page */
   const showAnalysisUI = (searching || isAnalyzingNow()) && !navigatingFromTrend
 
@@ -117,7 +112,6 @@ function RinAISearchInner() {
 
   useEffect(() => {
     if (!user) {
-      setLicenseOrigin(null)
       setCanSearch(null)
       return
     }
@@ -125,14 +119,10 @@ function RinAISearchInner() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { licenseOrigin?: { gemini: string }; canSearch?: boolean } | null) => {
         if (!data) return
-        if (data.licenseOrigin?.gemini) {
-          setLicenseOrigin(data.licenseOrigin.gemini === 'USER' ? 'USER' : 'SYSTEM')
-        }
         setCanSearch(typeof data.canSearch === 'boolean' ? data.canSearch : null)
       })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했습니다.' })
-        setLicenseOrigin(null)
         setCanSearch(null)
       })
   }, [user])
@@ -179,7 +169,6 @@ function RinAISearchInner() {
           DE: normalizeTrendItems(data.DE),
           updatedAt: data.updatedAt ?? null,
         })
-        setTrendStatus(data.trendStatus)
         if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
         if (data.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
       })

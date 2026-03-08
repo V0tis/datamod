@@ -101,7 +101,7 @@ export async function POST(req: Request) {
         isClosed = true
         try {
           controller.close()
-        } catch (_) {
+        } catch {
           /* already closed */
         }
       }
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
           isClosed = true
           try {
             controller.close()
-          } catch (_) {}
+          } catch {}
         }
       }
 
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
           isClosed = true
           try {
             controller.close()
-          } catch (_) {}
+          } catch {}
         })
       }
 

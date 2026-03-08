@@ -141,8 +141,7 @@ app/
     trends/                # 트렌드 캐시 조회·갱신
     usage/                 # 사용량 조회 (Gemini 일일)
 components/
-  sidebar.tsx              # 네비게이션 + 트렌드 링크
-  research-charts.tsx      # 24시간 감성 추이 스택 영역 차트 (recharts)
+  app-sidebar.tsx          # 앱 네비게이션 (app-shell 사용)
   research-report-view.tsx # 리포트·뉴스 뷰
 lib/
   stores/research-store.ts # 검색·결과·쿼터 상태

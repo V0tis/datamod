@@ -566,9 +566,6 @@ function ResultsContent() {
         countryCode: countryFromUrl,
         ...(tabId === 'fact' && { logicText, creativeText }),
       }
-      if (isReanalyze && tabId === 'creative') {
-        console.log('[AI Insight Consensus] POST /api/research/insights/tab 요청', { tab: tabId, provider, reportId: payload.reportId, summaryLength: typeof payload.summary === 'string' ? payload.summary.length : 0 })
-      }
       try {
         const res = await fetch('/api/research/insights/tab', {
           method: 'POST',
@@ -577,9 +574,6 @@ function ResultsContent() {
           signal: ac.signal,
         })
         const data = await res.json().catch(() => ({}))
-        if (isReanalyze && tabId === 'creative') {
-          console.log('[AI Insight Consensus] POST /api/research/insights/tab 응답', { ok: res.ok, status: res.status, hasConsensus: !!(data as { consensus?: unknown }).consensus })
-        }
         if (!res.ok) {
           const errMsg = (data as { error?: string }).error ?? '분석에 실패했습니다.'
           const isQuota = res.status === 429 || (data as { code?: string }).code === 'QUOTA'
@@ -776,7 +770,6 @@ function ResultsContent() {
     if (retryConsensusInProgressRef.current) return
     const k = currentKeyword?.trim()
     if (!k) return
-    console.log('[AI Insight Consensus] 재분석 시작', { keyword: k, country: countryFromUrl })
     retryConsensusInProgressRef.current = true
     isReanalyzingConsensusRef.current = true
     setConsensusReanalyzing(true)
@@ -787,17 +780,14 @@ function ResultsContent() {
     }
     try {
       if (displayResult?.reportId) {
-        console.log('[AI Insight Consensus] 현재 result.reportId로 Consensus만 재분석', { reportId: displayResult?.reportId })
         setConsensusData(null)
         setTabErrorGroq((prev) => ({ ...prev, creative: null }))
         setTabErrorGemini((prev) => ({ ...prev, creative: null }))
         creativeFetchedForConsensusRef.current = null
         isConsensusStartedRef.current = false
         await fetchTabAnalysis('creative', 'all', { isReanalyze: true })
-        console.log('[AI Insight Consensus] API 호출 완료 (reportId 경로)')
         return
       }
-      console.log('[AI Insight Consensus] reportId 없음, 히스토리에서 캐시 조회')
       const historyStatus = await loadFromHistory(k, countryFromUrl)
       if (historyStatus === 'cached') {
         const cachedResult = useResearchStore.getState().result
@@ -807,14 +797,12 @@ function ResultsContent() {
             cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
             cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
           ].filter(Boolean).join('\n\n')
-          console.log('[AI Insight Consensus] 캐시된 reportId로 Consensus만 재분석', { reportId: cachedResult.reportId, summaryLength: cachedSummary.length })
           setConsensusData(null)
           setTabErrorGroq((prev) => ({ ...prev, creative: null }))
           setTabErrorGemini((prev) => ({ ...prev, creative: null }))
           creativeFetchedForConsensusRef.current = null
           isConsensusStartedRef.current = false
           await fetchTabAnalysis('creative', 'all', { isReanalyze: true, reportId: cachedResult.reportId, summary: cachedSummary })
-          console.log('[AI Insight Consensus] API 호출 완료 (캐시 경로)')
           return
         }
       }

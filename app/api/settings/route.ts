@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getEffectiveAnthropicKey, getSystemGeminiKey } from '@/lib/license'
+import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getSystemGeminiKey } from '@/lib/license'
 
 export const dynamic = 'force-dynamic'
 

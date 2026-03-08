@@ -232,7 +232,7 @@ export async function POST(req: Request) {
         'Cache-Control': 'no-cache, no-store',
       },
     })
-  } catch (e) {
+  } catch {
     return NextResponse.json(
       { error: '분석을 시작하지 못했어요. 다시 시도해 주세요.' },
       { status: 500 }

@@ -5,7 +5,6 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isCacheValid } from '@/lib/research-cache'
 
 export type AnalysisStatus = 'pending' | 'running' | 'completed' | 'failed'
 
