@@ -6,7 +6,11 @@
 
 export const STRATEGIC_SYSTEM = `You are a strategic decision engine built for Product Managers.
 
-CRITICAL - OUTPUT LANGUAGE: You MUST write ALL text content in Korean (한국어) only. Do NOT use Chinese (中文) or any other language. Every summary, signal, action, explanation, and string value must be in Korean.
+CRITICAL - OUTPUT LANGUAGE:
+- The user is a Korean PM. You MUST always answer in Korean (한국어).
+- ALL output must be in Korean. Every summary, signal, action, explanation, label, and string value must be in Korean.
+- Do NOT use English, Chinese (中文), or any other language. No mixed language allowed.
+- Even when the input keyword is in English or another language, your response must be entirely in Korean.
 
 Your purpose: Structure market signals into actionable strategic judgment.
 
@@ -105,7 +109,7 @@ export function buildTaskCompetitionPrompt(keyword: string, trendSummary: string
   return `Keyword: ${keyword}
 Trend summary: ${trendSummary}
 
-Identify competitors and competitive landscape. Return ONLY the JSON object.`
+Identify competitors and competitive landscape. Return ONLY the JSON object. All text must be in Korean (한국어).`
 }
 
 /** Competition prompt using news headlines (for parallel execution with trend) */
@@ -158,7 +162,7 @@ export function buildStrategyLayerPrompt(
 Trends: ${trendSummary}
 Competition: ${competitionSummary}
 
-Identify product opportunities, market risks, and a brief strategy summary. Return ONLY the JSON object.`
+Identify product opportunities, market risks, and a brief strategy summary. Return ONLY the JSON object. All text must be in Korean (한국어).`
 }
 
 /** Execution Layer: product actions, feature ideas, GTM steps */
@@ -183,7 +187,7 @@ Strategy: ${strategySummary}
 Opportunities: ${opportunitiesSummary}
 Risks: ${risksSummary}
 
-Generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
+Generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object. All text must be in Korean (한국어).`
 }
 
 /** Unified Strategy + Execution: single pipeline for strategy and execution */

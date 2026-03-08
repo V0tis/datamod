@@ -50,6 +50,8 @@ function getProviderStatusDisplay(
 }
 
 export interface AnalysisEngineSectionProps {
+  /** Hide the section header when embedded in collapsible */
+  hideHeader?: boolean
   /** From polled analysis_tasks; each may have provider, fallback_used, primary_provider_error */
   analysisTasks?: Array<{
     step_name: string
@@ -66,6 +68,7 @@ export interface AnalysisEngineSectionProps {
 export function AnalysisEngineSection({
   analysisTasks = null,
   aiPrimaryModel = 'gemini',
+  hideHeader = false,
   className,
 }: AnalysisEngineSectionProps) {
   const tasks = analysisTasks ?? []
@@ -82,12 +85,14 @@ export function AnalysisEngineSection({
       )}
       aria-label="AI 분석 엔진"
     >
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60">
-        <Cpu className="h-4 w-4 text-muted-foreground shrink-0" />
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
-          AI 분석 엔진
-        </h2>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60">
+          <Cpu className="h-4 w-4 text-muted-foreground shrink-0" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+            AI 분석 엔진
+          </h2>
+        </div>
+      )}
       <div className="p-4 space-y-4">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-2">

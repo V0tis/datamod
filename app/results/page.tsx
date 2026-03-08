@@ -259,6 +259,8 @@ function ResultsContent() {
   const [saveInsightName, setSaveInsightName] = useState('')
   const [saveInsightNote, setSaveInsightNote] = useState('')
   const [saveInsightSaving, setSaveInsightSaving] = useState(false)
+  const [detailExpanded, setDetailExpanded] = useState(false)
+  const [engineExpanded, setEngineExpanded] = useState(false)
 
   const currentKeyword = keyword ?? storeKeyword
   const urlKeyword = keyword?.trim() ?? null
@@ -1078,34 +1080,59 @@ function ResultsContent() {
               analysisTasks={analysisTasks ?? undefined}
               loading={loading}
             />
-            {/* 데이터 시각화: 시그널 수 + 신뢰도 근거 */}
+            {/* 시각 데이터: 시그널 수, 신뢰도, 리스크 수준, 소스 수 */}
             {displayResult?.key_metrics && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="mt-4 flex flex-wrap gap-3">
                 {(() => {
                   const km = displayResult.key_metrics
                   const pos = Array.isArray(km.positive_signals) ? km.positive_signals.length : 0
                   const neu = Array.isArray(km.neutral_signals) ? km.neutral_signals.length : 0
                   const neg = Array.isArray(km.negative_risks) ? km.negative_risks.length : 0
                   const totalSignals = pos + neu + neg
+                  const conf = typeof km.confidence_score === 'number' ? km.confidence_score : null
+                  const riskLevel = neg >= 5 ? '높음' : neg >= 2 ? '중간' : neg >= 1 ? '낮음' : '없음'
+                  const sourceCount = (displayResult?.source_links?.length ?? 0) + (newsList?.length ?? 0)
                   const reasoning = (km.opportunity_score_reasoning ?? '').trim()
-                  if (totalSignals === 0 && !reasoning) return null
+                  if (totalSignals === 0 && !conf && !reasoning && sourceCount === 0) return null
                   return (
                     <>
                       {totalSignals > 0 && (
-                        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">시그널 수</p>
-                          <div className="flex gap-4 text-sm">
+                        <div className="rounded-lg border border-border/60 bg-muted/10 px-4 py-2.5 shrink-0">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">시그널</p>
+                          <div className="flex gap-3 text-sm">
                             <span className="text-emerald-600 dark:text-emerald-400">긍정 {pos}</span>
                             <span className="text-muted-foreground">중립 {neu}</span>
                             <span className="text-destructive">리스크 {neg}</span>
-                            <span className="font-medium">총 {totalSignals}개</span>
                           </div>
                         </div>
                       )}
+                      {conf != null && (
+                        <div className="rounded-lg border border-border/60 bg-muted/10 px-4 py-2.5 shrink-0">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">신뢰도</p>
+                          <p className="text-sm font-semibold tabular-nums">{Math.round(conf)}%</p>
+                        </div>
+                      )}
+                      {neg > 0 && (
+                        <div className="rounded-lg border border-border/60 bg-muted/10 px-4 py-2.5 shrink-0">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">리스크 수준</p>
+                          <p className={cn(
+                            'text-sm font-semibold',
+                            riskLevel === '높음' && 'text-destructive',
+                            riskLevel === '중간' && 'text-amber-600 dark:text-amber-500',
+                            riskLevel === '낮음' && 'text-muted-foreground',
+                          )}>{riskLevel}</p>
+                        </div>
+                      )}
+                      {sourceCount > 0 && (
+                        <div className="rounded-lg border border-border/60 bg-muted/10 px-4 py-2.5 shrink-0">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">소스</p>
+                          <p className="text-sm font-semibold tabular-nums">{sourceCount}건</p>
+                        </div>
+                      )}
                       {reasoning && (
-                        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">신뢰도 근거</p>
-                          <p className="text-sm text-foreground line-clamp-3">{reasoning}</p>
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-4 min-w-0 flex-1 max-w-xl">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">신뢰도 근거</p>
+                          <p className="text-sm text-foreground line-clamp-2">{reasoning}</p>
                         </div>
                       )}
                     </>
@@ -1209,7 +1236,7 @@ function ResultsContent() {
                 startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
               }}
               onAbort={abortAnalysis}
-              reanalyzing={loading}
+              reanalyzing={streamingState.status === 'running' || streamingState.status === 'streaming'}
               hasError={canonicalStatus === 'failed' || showPolledError}
               errorStepIndex={
                 streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
@@ -1218,26 +1245,51 @@ function ResultsContent() {
               }
               globalErrorMessage={displayError ?? polledError ?? undefined}
             />
+            {/* AI 분석 엔진 (토글) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
-              <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} className="mt-5" />
+              <div className="mt-5 border border-border/60 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setEngineExpanded((e) => !e)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-muted/30 hover:bg-muted/50 transition-colors"
+                  aria-expanded={engineExpanded}
+                >
+                  <span className="text-sm font-semibold text-foreground">AI 분석 엔진</span>
+                  {engineExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+                {engineExpanded && (
+                  <div className="p-0">
+                    <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} hideHeader className="border-0 rounded-none" />
+                  </div>
+                )}
+              </div>
             )}
 
           </div>
         )}
 
-        {/* 7. 데이터 출처 (리포트 구조: 분석에 사용된 소스 vs 참고 소스) */}
+        {/* 상세 섹션 (접기/펼치기): 데이터 출처 + 뉴스 */}
         {currentKeyword && (
-          <div id="section-data" className="mt-12 scroll-mt-24">
-            <DataSourcesSection
-              signals={dataSourceSignals}
-              loading={loading && !displayResult}
-            />
-          </div>
-        )}
+          <div className="mt-8 border border-border/60 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setDetailExpanded((e) => !e)}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-muted/30 hover:bg-muted/50 transition-colors"
+              aria-expanded={detailExpanded}
+            >
+              <span className="text-sm font-semibold text-foreground">상세 (데이터 출처 · 뉴스)</span>
+              {detailExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {detailExpanded && (
+              <div className="space-y-6 p-4 pt-0">
+                <div id="section-data" className="scroll-mt-24">
+                  <DataSourcesSection
+                    signals={dataSourceSignals}
+                    loading={loading && !displayResult}
+                  />
+                </div>
 
-        {/* 실시간 뉴스: 외부 RSS 데이터, AI 분석 결과와 연결된 맥락 설명 */}
-        {currentKeyword && (
-          <section id="section-news" className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5 scroll-mt-24" aria-label="뉴스 및 데이터">
+                <section id="section-news" className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5 scroll-mt-24" aria-label="뉴스 및 데이터">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <Newspaper className="h-3.5 w-3.5 text-primary" />
@@ -1314,7 +1366,7 @@ function ResultsContent() {
                           </h4>
                           <p className="text-xs text-muted-foreground mb-2">{item.source || '언론사'}</p>
                           <div className="rounded-lg bg-primary/5 border border-primary/10 px-2.5 py-2 mb-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/80 mb-0.5">AI Insight</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/80 mb-0.5">AI 인사이트</p>
                             <p className="text-xs text-foreground leading-relaxed line-clamp-3">&quot;{aiInsight}&quot;</p>
                           </div>
                           <div className="flex items-center justify-end text-xs text-muted-foreground">
@@ -1332,6 +1384,9 @@ function ResultsContent() {
               })()
             ) : null}
           </section>
+              </div>
+            )}
+          </div>
         )}
 
         {/* 다음 탐색: 관련 시장 아이디어 + 다른 시장 분석하기 */}
@@ -1345,7 +1400,7 @@ function ResultsContent() {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
               startStreamingResearch(k, { country_code: countryFromUrl })
             }}
-            disabled={loading}
+            disabled={false}
           />
         )}
 

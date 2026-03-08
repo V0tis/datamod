@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef } from 'react'
-import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Loader2, Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getProviderDisplayName } from '@/lib/ai/provider-display'
 import { Button } from '@/components/ui/button'
@@ -195,7 +195,7 @@ function getStageInsight(
           ...go_to_market.slice(0, 2),
         ].filter(Boolean)
         const strategySummary = actionSignals[0]
-          ? `Target early adopters: ${actionSignals[0]}`
+          ? `초기 수용자 타겟: ${actionSignals[0]}`
           : feature_ideas[0]
             ? `Core value: ${feature_ideas[0]}`
             : execSignals4.length > 0
@@ -289,6 +289,7 @@ export function StrategyEnginePipeline({
   result,
   className,
 }: StrategyEnginePipelineProps) {
+  const [expanded, setExpanded] = useState(false)
   type TaskItem = NonNullable<typeof analysisTasks> extends (infer U)[] ? U : never
   const taskMap = (analysisTasks ?? []).reduce(
     (acc, t) => { acc[t.step_name] = t; return acc },
@@ -327,6 +328,9 @@ export function StrategyEnginePipeline({
     return 'pending'
   }
 
+  const currentIdx = allCompleted ? 6 : Math.min(effectiveIndex, 5)
+  const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[5]
+
   return (
     <div
       className={cn(
@@ -336,19 +340,109 @@ export function StrategyEnginePipeline({
       )}
     >
       <div className="p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-primary shrink-0" />
-          <div>
-            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              AI 분석 진행 상황
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {allCompleted ? `분석 완료 · "${keyword}"` : `AI가 단계별로 분석 중 · "${keyword}"`}
-            </p>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="h-5 w-5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                AI 분석 진행 상황
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                {allCompleted ? `분석 완료 · "${keyword}"` : `AI가 단계별로 분석 중 · "${keyword}"`}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            className="shrink-0 text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" />
+                타임라인 접기
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" />
+                전체 타임라인 보기
+              </>
+            )}
+          </button>
         </div>
 
-        <div className="relative">
+        {/* Collapsed: compact step list + current step detail */}
+        {!expanded && (
+          <div className="space-y-3 mb-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {PIPELINE_STAGES.slice(0, 6).map((s, i) => {
+                const st = getStatus(i)
+                return (
+                  <span
+                    key={s.id}
+                    className={cn(
+                      st === 'completed' && 'text-primary font-medium',
+                      st === 'running' && 'text-primary font-semibold',
+                      st === 'pending' && 'text-muted-foreground',
+                      st === 'failed' && 'text-destructive',
+                    )}
+                  >
+                    {st === 'completed' && '✔ '}
+                    {st === 'running' && '▶ '}
+                    {st === 'pending' && '○ '}
+                    {st === 'failed' && '✕ '}
+                    {s.label}
+                  </span>
+                )
+              })}
+            </div>
+            <div
+              className={cn(
+                'rounded-lg border-2 px-4 py-3',
+                getStatus(currentIdx) === 'completed' && 'border-primary/50 bg-primary/5',
+                getStatus(currentIdx) === 'running' && 'border-primary bg-primary/10 ring-2 ring-primary/20',
+                getStatus(currentIdx) === 'pending' && 'border-border/60 bg-muted/20',
+                getStatus(currentIdx) === 'failed' && 'border-destructive/50 bg-destructive/5',
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={cn(
+                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                    getStatus(currentIdx) === 'completed' && 'bg-primary text-primary-foreground',
+                    getStatus(currentIdx) === 'running' && 'bg-primary/20 text-primary',
+                    getStatus(currentIdx) === 'pending' && 'bg-muted text-muted-foreground',
+                    getStatus(currentIdx) === 'failed' && 'bg-destructive/20 text-destructive',
+                  )}
+                >
+                  {getStatus(currentIdx) === 'completed' && <Check className="h-4 w-4" strokeWidth={2.5} />}
+                  {getStatus(currentIdx) === 'running' && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />}
+                  {getStatus(currentIdx) === 'pending' && <Circle className="h-3.5 w-3.5" strokeWidth={2} />}
+                  {getStatus(currentIdx) === 'failed' && <AlertCircle className="h-4 w-4" strokeWidth={2} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">{currentStage?.label ?? '분석 완료'}</p>
+                  {getStatus(currentIdx) === 'running' && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {getAnalysisActivityMessage(currentStage?.id ?? 'done', currentIdx, { short: true })}
+                    </p>
+                  )}
+                  {getStatus(currentIdx) === 'completed' && allCompleted && (
+                    <p className="text-xs text-muted-foreground mt-0.5">모든 분석이 완료되었습니다</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Expanded: full timeline with max-height scroll */}
+        <div
+          className={cn(
+            'relative',
+            expanded ? 'max-h-[420px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20' : 'hidden',
+          )}
+        >
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
             const analysisTask = taskMap[stage.id] ?? null
@@ -410,11 +504,11 @@ export function StrategyEnginePipeline({
                         status === 'failed' && 'text-destructive',
                       )}
                     >
-                      {status === 'completed' && '✓ '}
-                      {status === 'running' && '● '}
+                      {status === 'completed' && '✔ '}
+                      {status === 'running' && '▶ '}
                       {status === 'pending' && '○ '}
                       {status === 'failed' && '✕ '}
-                      {i + 1}️⃣ {stage.label}
+                      {stage.label}
                       <span className="ml-1.5 text-xs font-normal opacity-80">
                         {status === 'completed' && '완료'}
                         {status === 'running' && '진행중'}
@@ -471,7 +565,7 @@ export function StrategyEnginePipeline({
                     {status === 'failed' && (
                       <div className="mt-1 space-y-2">
                         <p className="text-xs text-destructive font-medium">
-                          Error: {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
+                          오류: {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
                         </p>
                         {(task?.error_message ?? globalErrorMessage) && /quota|429|rate limit|한도|초과|혼잡/i.test((task?.error_message ?? globalErrorMessage) ?? '') && (
                           <p className="text-xs text-muted-foreground">재시도가 필요할 수 있습니다.</p>
