@@ -3,7 +3,7 @@
  * Model must output newline-delimited JSON. Each line valid JSON.
  * Max 700 tokens. Concise. No markdown. No arrays. No nested objects.
  */
-export const NDJSON_ANALYSIS_SYSTEM = `Respond ONLY in newline-delimited JSON. Each line must be valid JSON. Max 700 tokens. Korean. Concise. No markdown. No arrays. No nested objects.
+export const NDJSON_ANALYSIS_SYSTEM = `Respond ONLY in newline-delimited JSON. Each line must be valid JSON. Max 700 tokens. Korean (한국어) only - Do NOT use Chinese (中文). Concise. No markdown. No arrays. No nested objects.
 Format (one event per line):
 {"type":"summary","content":"한 줄 요약"}
 {"type":"temperature","content":"75"}

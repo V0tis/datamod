@@ -1,19 +1,21 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
-import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle, RefreshCw, AlertTriangle } from 'lucide-react'
+import { useRef } from 'react'
+import { Check, Loader2, Circle, ChevronDown, Sparkles, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getProviderDisplayName } from '@/lib/ai/provider-display'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-/** AI Analysis Timeline - 5 PM strategy steps with real reasoning output */
+/** AI Analysis Timeline - 7 steps matching real analysis pipeline */
 const PIPELINE_STAGES = [
-  { id: 'signal_layer', label: '시장 신호 수집', taskId: 'signal_layer' as const, sectionLabel: '수집된 시그널' },
+  { id: 'signal_layer', label: '데이터 수집', taskId: 'signal_layer' as const, sectionLabel: '수집된 시그널' },
   { id: 'trend_analysis', label: '시장 성장 분석', taskId: 'trend_analysis' as const, sectionLabel: 'AI 인사이트' },
   { id: 'competition_analysis', label: '경쟁 환경 분석', taskId: 'competition_analysis' as const, sectionLabel: '감지된 경쟁사' },
   { id: 'strategy_generation', label: '리스크 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 신호' },
   { id: 'execution_layer', label: '제품 전략 도출', taskId: 'execution_layer' as const, sectionLabel: '제안 전략' },
+  { id: 'risks_opportunities', label: '리스크 및 기회 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 및 기회', isVirtual: true },
+  { id: 'done', label: '분석 완료', taskId: 'done' as const, sectionLabel: '', isVirtual: true },
 ] as const
 
 const STREAM_TO_INDEX: Record<string, number> = {
@@ -26,7 +28,8 @@ const STREAM_TO_INDEX: Record<string, number> = {
   execution_layer: 4,
   pass2: 4,
   creative: 4,
-  done: 4,
+  risks_opportunities: 5,
+  done: 6,
 }
 
 export interface PipelineStageInsight {
@@ -40,7 +43,7 @@ export interface PipelineStageInsight {
 
 export interface StrategyEnginePipelineProps {
   keyword: string
-  /** Backend current step (0–4). -1 = not started. 4 = all done. */
+  /** Backend current step (0–6). -1 = not started. 6 = all done. */
   currentStep: number
   /** When true, all stages show as completed */
   allCompleted?: boolean
@@ -185,8 +188,8 @@ function getStageInsight(
           summary: strategy_summary,
           signals: [...risks.slice(0, 4), ...opportunities.slice(0, 2)].filter(Boolean).slice(0, 6),
         }
-      case 4:
-        const execSignals = [
+    case 4:
+      const execSignals4 = [
           ...actionSignals,
           ...feature_ideas.slice(0, 3),
           ...go_to_market.slice(0, 2),
@@ -195,14 +198,23 @@ function getStageInsight(
           ? `Target early adopters: ${actionSignals[0]}`
           : feature_ideas[0]
             ? `Core value: ${feature_ideas[0]}`
-            : execSignals.length > 0
-              ? `${execSignals.length}개 전략 액션 도출`
+            : execSignals4.length > 0
+              ? `${execSignals4.length}개 전략 액션 도출`
               : undefined
         return {
           sectionLabel: '제안 전략',
           summary: strategySummary,
-          signals: execSignals.slice(0, 5),
+          signals: execSignals4.slice(0, 5),
         }
+    case 5:
+      // 리스크 및 기회 평가 - from strategy_generation
+      return {
+        sectionLabel: '리스크 및 기회',
+        summary: strategy_summary,
+        signals: [...risks.slice(0, 3), ...opportunities.slice(0, 3)].filter(Boolean).slice(0, 6),
+      }
+    case 6:
+      return null
     }
   }
 
@@ -246,6 +258,16 @@ function getStageInsight(
         summary: actions.length ? `${actions.length}개 전략 액션 도출` : undefined,
         signals: actions.slice(0, 4).map((a) => a?.title ?? '').filter(Boolean),
       }
+    case 5:
+      const pos5 = km.positive_signals ?? []
+      const neg5 = km.negative_risks ?? result?.painPoints ?? []
+      return {
+        sectionLabel: '리스크 및 기회',
+        summary: pos5.length || neg5.length ? `${pos5.length}개 기회, ${neg5.length}개 리스크` : undefined,
+        signals: [...neg5.slice(0, 3), ...pos5.slice(0, 3)].filter(Boolean),
+      }
+    case 6:
+      return null
   }
 
   return null
@@ -273,30 +295,30 @@ export function StrategyEnginePipeline({
     {} as Record<string, TaskItem>
   )
 
-  const stepRefs = useRef<(HTMLDivElement | null)[]>([])
-
   const effectiveIndex = allCompleted
-    ? 5
+    ? 6
     : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
       ? STREAM_TO_INDEX[streamingStepId]
       : currentStep >= 0
         ? currentStep
         : 0
 
-  const runningStepIndex = PIPELINE_STAGES.findIndex((_, i) => getStatus(i) === 'running')
-  useEffect(() => {
-    const el = runningStepIndex >= 0 ? stepRefs.current[runningStepIndex] : null
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [runningStepIndex])
-
   type StageStatus = 'pending' | 'running' | 'completed' | 'failed'
   function getStatus(i: number): StageStatus {
     const stage = PIPELINE_STAGES[i]
-    const task = stage ? taskMap[stage.id] : null
+    const taskId = stage?.taskId
+    const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
+    // Virtual steps: 5 = risks_opportunities (done when strategy_generation done), 6 = done (allCompleted)
+    if (i === 5) {
+      const stratTask = taskMap['strategy_generation']
+      return stratTask?.status === 'completed' || allCompleted ? 'completed' : stratTask?.status === 'running' ? 'running' : 'pending'
+    }
+    if (i === 6) return allCompleted ? 'completed' : 'pending'
     // Global error: failed step + completed before + pending after
     if (hasError) {
-      if (i === errorStepIndex) return 'failed'
-      if (i < errorStepIndex) return 'completed'
+      const failIdx = Math.min(errorStepIndex, 4)
+      if (i === failIdx) return 'failed'
+      if (i < failIdx) return 'completed'
       return 'pending'
     }
     if (task) return task.status
@@ -318,10 +340,10 @@ export function StrategyEnginePipeline({
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div>
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              AI 분석 타임라인
+              AI 분석 진행 상황
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              AI가 단계별로 분석 중 · &quot;{keyword}&quot;
+              {allCompleted ? `분석 완료 · "${keyword}"` : `AI가 단계별로 분석 중 · "${keyword}"`}
             </p>
           </div>
         </div>
@@ -339,11 +361,7 @@ export function StrategyEnginePipeline({
             const task = taskMap[stage.id]
 
             return (
-              <div
-                key={stage.id}
-                ref={(el) => { stepRefs.current[i] = el }}
-                className="relative"
-              >
+              <div key={stage.id} className="relative">
                 {/* Node */}
                 <div
                   className={cn(

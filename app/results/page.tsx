@@ -21,18 +21,17 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { AnalysisQualityIndicator } from '@/components/research/analysis-quality-indicator'
-import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { StrategyEnginePipeline } from '@/components/research/dashboard/StrategyEnginePipeline'
+import { FirstFiveSecondsBanner } from '@/components/research/FirstFiveSecondsBanner'
+import { ResultSectionNav } from '@/components/research/ResultSectionNav'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
+import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
-import { AnalysisHistorySidebar } from '@/components/research/AnalysisHistorySidebar'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
-import { AIConfidenceCard } from '@/components/research/AIConfidenceCard'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
-import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import type { TabAnalysisRecord } from '@/lib/research-types'
@@ -220,6 +219,8 @@ function ResultsContent() {
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** Mobile: collapse secondary sidebar (momentum, trends, metrics, sources) to reduce scroll; expand for comprehension. */
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  /** AI 분석 진행 상황: 기본 컴팩트, "자세히 보기" 클릭 시 전체 타임라인 확장 */
+  const [pipelineExpanded, setPipelineExpanded] = useState(false)
   /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
@@ -335,7 +336,7 @@ function ResultsContent() {
     }
 
     poll()
-    const interval = setInterval(poll, 4000)
+    const interval = setInterval(poll, 3000)
     return () => clearInterval(interval)
   }, [
     keyword,
@@ -347,6 +348,19 @@ function ResultsContent() {
     loadFromHistory,
     hydrateFromStatusResult,
   ])
+
+  // 분석 완료 시 결과 데이터 자동 리프레시 (streaming 완료 → DB에 저장된 전체 결과 로드)
+  const prevStreamingCompletedRef = useRef(false)
+  useEffect(() => {
+    const k = (keyword ?? storeKeyword)?.trim()
+    if (!k) return
+    const justCompleted =
+      streamingState.status === 'completed' && !prevStreamingCompletedRef.current
+    prevStreamingCompletedRef.current = streamingState.status === 'completed'
+    if (justCompleted) {
+      loadFromHistory(k, countryFromUrl)
+    }
+  }, [keyword, storeKeyword, countryFromUrl, streamingState.status, loadFromHistory])
 
   useEffect(() => {
     fetch('/api/trends')
@@ -910,14 +924,14 @@ function ResultsContent() {
     return (
       <div className="px-4 py-4 sm:px-5 sm:py-5 md:p-6 min-h-screen bg-background rin-doc">
         {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
-        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
+        <div className="mx-auto max-w-[1400px] grid grid-cols-1 lg:grid-cols-12 reading-gap-lg">
           <div className="lg:col-span-8 reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-4 sm:p-5 md:p-6 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
-        {/* AI Product Strategy Report header */}
+        <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-5 sm:p-6 md:p-7 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
+        {/* 1. 분석 결과 요약 헤더 (AI 신뢰도·분석 시간·데이터 소스 상단 배치) */}
         <header className="pb-6 border-b border-border/60">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              시장 분석 결과
+              분석 결과 요약
             </p>
             <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
               <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
@@ -958,53 +972,85 @@ function ResultsContent() {
                   ? '분석 실패'
                   : null}
           </p>
+          {/* AI 신뢰도·분석 데이터 소스 (요약 메타데이터) */}
+          {(displayResult != null || loading) && !needsRunAction && (
+            <div className="mt-4 flex flex-wrap gap-4 sm:gap-6 py-4 px-4 rounded-lg bg-muted/20 border border-border/40">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">AI 신뢰도</span>
+                <span className="text-sm font-semibold tabular-nums text-foreground">
+                  {loading && (displayResult?.key_metrics?.confidence_score == null) && ((displayResult?.analysis_results as { confidence?: number })?.confidence == null)
+                    ? '—'
+                    : (() => {
+                        const km = displayResult?.key_metrics
+                        const ar = displayResult?.analysis_results as { confidence?: number } | undefined
+                        if (typeof km?.confidence_score === 'number') return `${Math.round(Math.min(100, Math.max(0, km.confidence_score)))}%`
+                        const c = ar?.confidence
+                        if (typeof c === 'number') return `${c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, Math.max(0, c)))}%`
+                        const mc = consensusData?.metadata?.confidence
+                        if (mc != null && typeof mc === 'number') return `${mc <= 1 ? Math.round(mc * 100) : Math.round(Math.min(100, Math.max(0, mc)))}%`
+                        return displayResult ? '75%' : '—'
+                      })()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">분석 데이터 소스</span>
+                <span className="text-sm font-semibold tabular-nums text-foreground">
+                  {newsList?.length ?? 0}개
+                </span>
+              </div>
+            </div>
+          )}
         </header>
 
-        {/* 분석 중 사용자 안내 메시지 - 초기 인사이트 표시 전에만 노출 */}
-        {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
-          <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 flex items-start gap-4 animate-in fade-in duration-300">
-            <Loader2 className="h-6 w-6 shrink-0 animate-spin text-primary mt-0.5" aria-hidden />
-            <div>
-              <p className="font-medium text-foreground">AI가 시장 데이터를 분석하고 있습니다.</p>
-              <p className="text-sm text-muted-foreground mt-1">초기 인사이트는 약 10초 내에 표시됩니다.</p>
-            </div>
+        {/* 분석 결과 요약 카드 (핵심 결론 즉시 파악) */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <section className="mt-6" aria-label="분석 결과 요약">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              핵심 결론
+            </h2>
+            <ResultSummaryCards
+              result={displayResult}
+              consensusData={consensusData ?? undefined}
+              taskData={taskData}
+              analysisTasks={analysisTasks ?? undefined}
+              loading={loading}
+            />
+          </section>
+        )}
+
+        {/* 섹션 네비게이션 - 스크롤 이동 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 mb-4 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 border-b border-border/60 -mt-2 pt-4">
+            <ResultSectionNav variant="compact" />
           </div>
         )}
 
-        {/* 핵심 시장 인사이트 - 3초 내 주요 결론 파악 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {/* First 5 Seconds UX - 즉시 피드백, AI 분석 시작 확인 */}
+        {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
           <div className="mb-4">
+            <FirstFiveSecondsBanner
+              keyword={currentKeyword ?? ''}
+              showMicroInsight
+            />
+            <p className="text-xs text-muted-foreground mt-3 px-1">
+              초기 인사이트는 약 10초 내에 표시됩니다. 전체 분석에는 약 1~3분이 소요될 수 있습니다.
+            </p>
+          </div>
+        )}
+
+        {/* 2. 핵심 시장 인사이트 (결과 우선 배치) */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div id="section-insights" className="mt-12 first:mt-0 scroll-mt-24">
             <KeyMarketInsightsCard
               result={displayResult}
               taskData={taskData}
               analysisTasks={analysisTasks ?? undefined}
+              newsList={newsList ?? []}
               consensusData={consensusData ?? undefined}
               loading={loading}
+              keyword={currentKeyword ?? ''}
             />
           </div>
-        )}
-
-        {/* AI 신뢰도 — 신뢰층 */}
-        {displayResult && (
-          <AIConfidenceCard
-            score={(() => {
-              const km = displayResult?.key_metrics
-              const ar = displayResult?.analysis_results as { confidence?: number } | undefined
-              if (typeof km?.confidence_score === 'number') return Math.round(Math.min(100, Math.max(0, km.confidence_score)))
-              const c = ar?.confidence
-              if (typeof c === 'number') return c <= 1 ? Math.round(c * 100) : Math.round(Math.min(100, Math.max(0, c)))
-              const mc = consensusData?.metadata?.confidence
-              if (mc != null && typeof mc === 'number') return mc <= 1 ? Math.round(mc * 100) : Math.round(Math.min(100, Math.max(0, mc)))
-              return loading ? null : 75
-            })()}
-            loading={loading && displayResult?.key_metrics?.confidence_score == null && (displayResult?.analysis_results as { confidence?: number } | undefined)?.confidence == null}
-            loadingMessage={
-              loading && (streamingState.status === 'running' || streamingState.status === 'streaming')
-                ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
-                : undefined
-            }
-            className="mb-4"
-          />
         )}
 
         {/* No cache + not analyzing: show Run Analysis CTA. Analysis only runs on explicit user click. */}
@@ -1030,7 +1076,8 @@ function ResultsContent() {
             />
           </div>
         ) : (
-          <>
+          <div role="region" aria-label="Progressive AI 리포트" className="mt-12 space-y-12">
+            {/* 3~6. 시장 성장 / 경쟁 / 전략 / 리스크 및 기회 (리포트 구조) */}
             <PMDecisionDashboard
               keyword={currentKeyword ?? ''}
               result={displayResult}
@@ -1060,7 +1107,79 @@ function ResultsContent() {
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
               <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} className="mt-5" />
             )}
-          </>
+
+            {/* 7. AI 분석 진행 로그 (하단 배치, 기본 접힘) */}
+            {(displayResult != null || loading || hasFailure || (analysisTasks?.length ?? 0) > 0) && Boolean((currentKeyword ?? '').trim()) && (
+              <div id="section-pipeline" className="mt-12 pt-8 border-t border-border/60">
+                <div className={cn('overflow-hidden rounded-xl border border-border bg-card', !pipelineExpanded && 'border-dashed')}>
+                  {pipelineExpanded ? (
+                    <>
+                      <div className="max-h-[400px] overflow-y-auto">
+                        <StrategyEnginePipeline
+                          keyword={currentKeyword ?? ''}
+                          currentStep={
+                            polledStatus === 'running' && polledProgressStep != null
+                              ? Math.min(6, Math.max(0, polledProgressStep))
+                              : streamingState.status === 'running' || streamingState.status === 'streaming'
+                                ? streamingState.currentStep
+                                : streamingState.status === 'completed' || (displayResult != null && !loading && !hasFailure)
+                                  ? 6
+                                  : -1
+                          }
+                          allCompleted={displayResult != null && !loading && !hasFailure}
+                          streamingStepId={
+                            streamingState.status === 'running' || streamingState.status === 'streaming'
+                              ? streamingState.stepId
+                              : undefined
+                          }
+                          retryMessage={
+                            streamingState.status === 'running' || streamingState.status === 'streaming'
+                              ? ('retryMessage' in streamingState ? streamingState.retryMessage : undefined)
+                              : undefined
+                          }
+                          taskData={taskData ?? {}}
+                          analysisTasks={analysisTasks ?? null}
+                          newsList={newsList ?? []}
+                          result={displayResult}
+                          onRetryStep={() => {
+                            setPolledStatus(null)
+                            setPolledError(null)
+                            startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                          }}
+                          hasError={hasFailure}
+                          errorStepIndex={
+                            streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
+                              ? streamingState.lastSuccessfulStep + 1
+                              : polledProgressStep
+                          }
+                          globalErrorMessage={displayError ?? polledError ?? undefined}
+                        />
+                      </div>
+                      <div className="border-t border-border bg-muted/20 px-4 py-2 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setPipelineExpanded(false)}
+                          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                          접기
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPipelineExpanded(true)}
+                      className="w-full px-4 py-4 flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      AI 분석 과정 보기
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* 실시간 뉴스: 외부 RSS 데이터, AI 분석과 독립적으로 페이지 로드 시 즉시 fetch */}
@@ -1207,7 +1326,7 @@ function ResultsContent() {
         </div>
           </div>
 
-          {/* 우측: 보조 맥락만 (트렌드, 수치, 출처). 메인 인사이트는 왼쪽 컬럼에만. */}
+          {/* 우측: 섹션 네비게이션 (중복 제거, 스크롤 이동용) */}
           <div className="lg:col-span-4 reading-space-y bg-transparent rounded-xl p-0 sm:p-1 min-w-0">
             <div className="lg:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <button
@@ -1217,208 +1336,16 @@ function ResultsContent() {
                 aria-expanded={sidebarOpen}
                 aria-controls="results-sidebar-content"
               >
-                <span className="text-sm font-medium text-muted-foreground">참고: 트렌드 · 수치 · 출처</span>
+                <span className="text-sm font-medium text-muted-foreground">섹션 이동</span>
                 {sidebarOpen ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
               </button>
             </div>
-            <div id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
-            {/* Analysis history: recent analyses, click to reopen */}
-            <AnalysisHistorySidebar
-              currentKeyword={currentKeyword}
-              currentCountry={countryFromUrl}
-              refetchTrigger={displayResult?.updated_at}
-              className="mb-4"
-            />
-            {/* Market Summary: 핵심 인사이트 우선 표시, 인지 부담 감소 */}
-            {displayResult && (
-              <section className="mb-4 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                <h3 className="px-4 py-3 text-sm font-semibold text-foreground border-b border-border/60 bg-muted/30">
-                  시장 요약
-                </h3>
-                <div className="grid grid-cols-1 gap-2 p-4">
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">시장 규모</p>
-                    <p className="text-sm font-semibold text-foreground tabular-nums">
-                      {typeof displayResult?.key_metrics?.opportunity_score === 'number'
-                        ? `${displayResult.key_metrics.opportunity_score}/100`
-                        : '—'}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">시장 매력도 점수</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">성장률</p>
-                    <p className="text-sm font-semibold text-foreground tabular-nums">
-                      {typeof displayResult?.key_metrics?.opportunity_score_breakdown?.market_growth === 'number'
-                        ? `${displayResult.key_metrics.opportunity_score_breakdown.market_growth}/100`
-                        : typeof displayResult?.key_metrics?.opportunity_score_breakdown?.trend_momentum === 'number'
-                          ? `${displayResult.key_metrics.opportunity_score_breakdown.trend_momentum}/100`
-                          : '—'}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">주요 플레이어</p>
-                    <p className="text-sm font-medium text-foreground line-clamp-3">
-                      {(() => {
-                        const raw = displayResult?.competitorTrends ?? (displayResult as { competitive_landscape?: Array<{ name?: string }> })?.competitive_landscape
-                          ?.map((c) => c.name)
-                          .filter(Boolean)
-                          .join(', ')
-                        const text = (raw ?? '').trim()
-                        return text ? (text.length > 100 ? text.slice(0, 100) + '…' : text) : '—'
-                      })()}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">경쟁사·트렌드 요약</p>
-                  </div>
-                </div>
-              </section>
-            )}
-            {/* Advanced Details: 부가 정보 접이식으로 인지 부담 감소 */}
-            <CollapsibleSection title="상세 정보" defaultExpanded={false} className="mb-4">
-            <div className="space-y-4">
-            {/* 데이터 출처는 메인 컬럼 하단으로 이동됨 */}
-            {/* Analysis quality: trustworthiness score (fact coverage, signal consistency, hypothesis discipline, uncertainty disclosure). */}
-            {displayStatus === 'done' && displayResult && (() => {
-              const qualityInput = {
-                marketNews: displayResult?.marketNews ?? consensusData?.marketNews,
-                painPoints: displayResult?.painPoints ?? consensusData?.painPoints,
-                competitorTrends: displayResult?.competitorTrends ?? consensusData?.competitorTrends,
-                sentiment: consensusData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
-                impactAnalysis: consensusData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
-                strategicSummary: consensusData?.strategicSummary,
-                metadata: consensusData?.metadata,
-              }
-              const quality = computeAnalysisQualityScore(qualityInput)
-              return (
-                <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-                  <h3 className="text-xs font-medium text-muted-foreground mb-2">분석 품질</h3>
-                  <AnalysisQualityIndicator quality={quality} compact />
-                </div>
-              )
-            })()}
-            {/* Market Temperature: score, trend, explanation from AI JSON (key_metrics) or consensus. */}
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-              <h3 className="text-xs font-medium text-muted-foreground mb-2">시장 온도</h3>
-              <MarketTemperature
-                score={
-                  typeof consensusData?.sentiment?.score === 'number'
-                    ? consensusData.sentiment.score
-                    : displayResult?.key_metrics?.market_temperature_score != null
-                      ? (displayResult.key_metrics.market_temperature_score - 50) * 2
-                      : (displayResult?.key_metrics?.sentiment != null || displayResult?.sentiment != null)
-                        ? (Number(displayResult?.key_metrics?.sentiment ?? displayResult?.sentiment ?? 50) - 50) * 2
-                        : null
-                }
-                trend={consensusData?.sentiment?.trend ?? 'stable'}
-                factors={consensusData?.sentiment?.ratio ?? displayResult?.key_metrics?.chartData?.sentiment ?? displayResult?.chartData?.sentiment}
-                positiveSignals={
-                  (displayResult?.key_metrics?.positive_signals?.length ?? 0) > 0
-                    ? (displayResult?.key_metrics?.positive_signals ?? [])
-                    : (consensusData?.marketNews?.length ?? 0) > 0
-                      ? (consensusData?.marketNews ?? []).slice(0, 3)
-                      : []
-                }
-                neutralSignals={displayResult?.key_metrics?.neutral_signals ?? []}
-                negativeRisks={
-                  (displayResult?.key_metrics?.negative_risks?.length ?? 0) > 0
-                    ? (displayResult?.key_metrics?.negative_risks ?? [])
-                    : (consensusData?.painPoints?.length ?? 0) > 0
-                      ? (consensusData?.painPoints ?? []).slice(0, 3)
-                      : []
-                }
-                loading={loading}
-              />
+            <aside id="results-sidebar-content" className={cn('reading-space-y', sidebarOpen ? 'block' : 'hidden', 'lg:block')} aria-hidden={!sidebarOpen}>
+            {/* 섹션 네비게이션 (중복 제거: 시장 요약·상세는 메인에만 표시) */}
+            <div className="rounded-xl border border-border bg-card shadow-sm p-4 sticky top-20">
+              <ResultSectionNav variant="full" />
             </div>
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-              <h3 className="text-xs font-medium text-muted-foreground mb-2">실시간 트렌드</h3>
-              {(sharedTrends.KR.length + sharedTrends.US.length + sharedTrends.JP.length) > 0 ? (
-                <>
-                  <ul className="space-y-2 mb-3">
-                    {([...sharedTrends.KR, ...sharedTrends.US, ...sharedTrends.JP] as TrendItem[]).slice(0, 6).map((item, i) => (
-                      <li key={`${item.keyword}-${i}`}>
-                        <div className="rounded-md border border-border/40 bg-muted/10 p-2.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link
-                              href={`/results?keyword=${encodeURIComponent(item.keyword)}`}
-                              className="text-sm font-medium text-foreground truncate hover:text-primary"
-                            >
-                              {item.keyword}
-                            </Link>
-                            {countryFromUrl !== 'KR' && item.title_ko != null && item.title_ko !== item.keyword && (
-                              <>
-                                <span className="text-muted-foreground">·</span>
-                                <span className="text-xs text-muted-foreground truncate" title="한국어 번역">
-                                  {item.title_ko}
-                                </span>
-                              </>
-                            )}
-                            {item.search_volume != null && (
-                              <span className="text-xs shrink-0 tabular-nums text-muted-foreground text-muted-foreground">
-                                {item.search_volume}
-                              </span>
-                            )}
-                          </div>
-                          {item.started_at && (
-                            <p className="text-xs text-muted-foreground text-muted-foreground mt-1">{item.started_at}</p>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-muted-foreground text-muted-foreground">최근 업데이트: <TimeAgo isoString={sharedTrends.updatedAt} /></p>
-                  <Link href="/trends" className="text-xs text-primary hover:underline mt-1 inline-block">전체 보기</Link>
-                </>
-              ) : (
-                <p className="text-muted-foreground text-muted-foreground text-xs">트렌드 데이터를 불러오는 중입니다.</p>
-              )}
-            </div>
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-              <h3 className="text-xs font-medium text-muted-foreground mb-2">참고 수치</h3>
-              <dl className="space-y-1.5 text-sm text-muted-foreground">
-                <div className="flex justify-between">
-                  <dt>감성 지수</dt>
-                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.key_metrics?.sentiment ?? displayResult.sentiment ?? '—') : '—'}%</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>시장 뉴스</dt>
-                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.marketNews?.length ?? 0) : '—'}건</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>페인포인트</dt>
-                  <dd className="text-foreground tabular-nums">{displayResult ? (displayResult.painPoints?.length ?? 0) : '—'}건</dd>
-                </div>
-              </dl>
-              <details className="mt-2 pt-2 border-t border-border/50" open>
-                <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none [&::-webkit-details-marker]:hidden">
-                  근거
-                </summary>
-                <p className="text-[11px] text-muted-foreground mt-2">감성: 뉴스·신호 종합 톤. 뉴스·페인포인트: 이 리포트에 반영된 항목 수. 본문 통찰과 함께 보세요.</p>
-              </details>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-              <h3 className="text-xs font-medium text-muted-foreground mb-2">인용 출처</h3>
-              {newsList.length === 0 ? (
-                <p className="text-muted-foreground text-xs">없음</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {newsList.map((item, i) => (
-                    <li key={i}>
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline truncate block break-all"
-                      >
-                        {item.title || item.url || `출처 ${i + 1}`}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            </div>
-            </CollapsibleSection>
-            </div>
+            </aside>
           </div>
         </div>
       </div>

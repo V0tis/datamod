@@ -21,7 +21,7 @@ export type AnalysisTasksResponse = {
   running_step: string | null
 }
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 1500
 
 export function useAnalysisTasksPoll(
   analysisId: string | null,

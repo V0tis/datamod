@@ -13,8 +13,11 @@ import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard
 import { QuickActions } from '@/components/research/QuickActions'
 import { StrategicActionsSection, type StrategicActionItem } from '@/components/research/StrategicActionsSection'
 import { textToBullets } from '@/lib/text-to-bullets'
+import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
+import { StreamingBulletList } from '@/components/research/StreamingInsightText'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+import type { SectionStatus } from '@/components/research/ProductStrategySection'
 
 type TaskOutput = Record<string, unknown>
 type AnalysisTask = {
@@ -33,6 +36,31 @@ function getTaskOutput(
     ? task.output_data
     : taskData[step]) as TaskOutput | null
   return raw && typeof raw === 'object' ? raw : null
+}
+
+function getSectionStatus(
+  stepName: string,
+  analysisTasks: AnalysisTask[] | null | undefined,
+  loading: boolean
+): SectionStatus | undefined {
+  const task = analysisTasks?.find((t) => t.step_name === stepName)
+  if (task) {
+    const s = task.status as SectionStatus
+    if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed') return s
+  }
+  if (!loading && (!analysisTasks?.length || !task)) return undefined
+  const order = ['signal_layer', 'trend_analysis', 'competition_analysis', 'strategy_generation', 'execution_layer']
+  const idx = order.indexOf(stepName)
+  if (idx < 0) return undefined
+  const runningNow = analysisTasks?.find((t) => t.step_name === stepName && t.status === 'running')
+  if (runningNow) return 'running'
+  if (task?.status === 'completed') return 'completed'
+  if (task?.status === 'failed') return 'failed'
+  const prevCompleted = order.slice(0, idx).every((prev) =>
+    analysisTasks?.some((t) => t.step_name === prev && t.status === 'completed')
+  )
+  if (prevCompleted && loading) return 'pending'
+  return 'pending'
 }
 
 export type AnalysisResultLayout = 'default' | 'pm-analytics'
@@ -196,12 +224,12 @@ export function AnalysisResultSections({
     allActionItems.length > 0 ||
     strategicActions.length > 0
 
-  if (!hasAnyContent && !loading) return null
-
   const isPmAnalytics = layout === 'pm-analytics'
+  const showProgressiveSections = isPmAnalytics && (loading || (analysisTasks?.length ?? 0) > 0 || result != null)
+  if (!hasAnyContent && !loading && !showProgressiveSections) return null
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-12 animate-in fade-in duration-300">
       {/* Hero: Key Insight + Quick Actions (default layout only) */}
       {!isPmAnalytics && (keyInsight || loading) && (
         <div
@@ -236,15 +264,15 @@ export function AnalysisResultSections({
 
       {/* 1. 시장 성장 분석 / 시장 기회 */}
       <ProductStrategySection
+        id={isPmAnalytics ? 'section-market' : undefined}
         title={isPmAnalytics ? '시장 성장 분석' : '시장 기회'}
         icon={<BarChart3 className="h-5 w-5" />}
+        status={isPmAnalytics ? getSectionStatus('trend_analysis', analysisTasks, loading) : undefined}
+        loading={isPmAnalytics && loading}
+        streamingComplete={isPmAnalytics && !loading && (keyTrends.length > 0 || opportunityScore != null)}
       >
         {loading && !opportunityScore && keyTrends.length === 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 rounded-lg bg-muted/40 animate-pulse" />
-            ))}
-          </div>
+          <SectionContentSkeleton variant="grid" />
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -268,14 +296,12 @@ export function AnalysisResultSections({
             {keyTrends.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
-                <ul className="space-y-1.5 list-none pl-0">
-                  {keyTrends.map((t, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-foreground">
-                      <span className="text-primary shrink-0">•</span>
-                      <span>{t}</span>
-                    </li>
-                  ))}
-                </ul>
+                <StreamingBulletList
+                  items={keyTrends}
+                  streaming={loading}
+                  skipAnimation={!loading}
+                  revealDelayMs={320}
+                />
               </div>
             )}
             {!opportunityScore && keyTrends.length === 0 && !loading && (
@@ -312,14 +338,15 @@ export function AnalysisResultSections({
 
       {/* 3. Competitive Landscape / 경쟁 환경 분석 */}
       <ProductStrategySection
+        id={isPmAnalytics ? 'section-competition' : undefined}
         title={isPmAnalytics ? '경쟁 환경 분석' : '경쟁 환경'}
         icon={<Users className="h-5 w-5" />}
+        status={isPmAnalytics ? getSectionStatus('competition_analysis', analysisTasks, loading) : undefined}
+        loading={isPmAnalytics && loading}
+        streamingComplete={isPmAnalytics && !loading && (competitiveLandscape.length > 0 || competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0)}
       >
         {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
-          <div className="space-y-3">
-            <div className="h-16 rounded-lg bg-muted/40 animate-pulse" />
-            <div className="h-12 rounded-lg bg-muted/30 animate-pulse" />
-          </div>
+          <SectionContentSkeleton variant="mixed" />
         ) : (
           <div className="space-y-4">
             {competitiveLandscape.length > 0 && (
@@ -343,14 +370,12 @@ export function AnalysisResultSections({
             {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>
-                <ul className="space-y-1.5 list-none pl-0">
-                  {(competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets).map((b, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-foreground">
-                      <span className="text-muted-foreground shrink-0">•</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
+                <StreamingBulletList
+                  items={competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets}
+                  streaming={loading}
+                  skipAnimation={!loading}
+                  revealDelayMs={280}
+                />
               </div>
             )}
             {competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 && marketStructureBullets.length === 0 && !loading && (
@@ -362,22 +387,24 @@ export function AnalysisResultSections({
 
       {/* 4. 리스크 평가 (pm-analytics only) */}
       {isPmAnalytics && (
-      <ProductStrategySection title="리스크 평가" icon={<AlertTriangle className="h-5 w-5" />}>
+      <ProductStrategySection
+        id="section-risks"
+        title="리스크 평가"
+        icon={<AlertTriangle className="h-5 w-5" />}
+        status={getSectionStatus('strategy_generation', analysisTasks, loading)}
+        loading={loading}
+        streamingComplete={!loading && risks.length > 0}
+      >
         {loading && risks.length === 0 ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-5 rounded bg-muted/40 animate-pulse" />
-            ))}
-          </div>
+          <SectionContentSkeleton variant="list" />
         ) : risks.length > 0 ? (
-          <ul className="space-y-2">
-            {risks.slice(0, 5).map((r, i) => (
-              <li key={i} className="flex gap-2 text-sm">
-                <span className="text-destructive shrink-0">•</span>
-                <span>{r}</span>
-              </li>
-            ))}
-          </ul>
+          <StreamingBulletList
+            items={risks.slice(0, 5)}
+            streaming={loading}
+            skipAnimation={!loading}
+            revealDelayMs={300}
+            variant="risk"
+          />
         ) : (
           <p className="text-sm text-muted-foreground">리스크 데이터가 없습니다.</p>
         )}
@@ -386,27 +413,26 @@ export function AnalysisResultSections({
 
       {/* 5. Strategy Recommendation / 제품 전략 제안 (pm-analytics: 전략+실행 통합) */}
       <ProductStrategySection
+        id={isPmAnalytics ? 'section-strategy' : undefined}
         title={isPmAnalytics ? '제품 전략 제안' : '전략 추천'}
         icon={<Target className="h-5 w-5" />}
+        status={isPmAnalytics ? getSectionStatus('execution_layer', analysisTasks, loading) : undefined}
+        loading={isPmAnalytics && loading}
+        streamingComplete={isPmAnalytics && !loading && (strategyBullets.length > 0 || allActionItems.length > 0 || strategicActions.length > 0)}
       >
         {loading && strategyBullets.length === 0 && !opportunityReason && allActionItems.length === 0 ? (
-          <div className="space-y-3">
-            <div className="h-12 rounded-lg bg-muted/40 animate-pulse" />
-            <div className="h-8 rounded-lg bg-muted/30 animate-pulse" />
-          </div>
+          <SectionContentSkeleton variant="mixed" />
         ) : (
           <div className="space-y-4">
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
-                <ul className="space-y-1.5 list-none pl-0">
-                  {strategyBullets.map((b, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-foreground">
-                      <span className="text-primary shrink-0">•</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
+                <StreamingBulletList
+                  items={strategyBullets}
+                  streaming={loading}
+                  skipAnimation={!loading}
+                  revealDelayMs={320}
+                />
               </div>
             )}
             {opportunityReason && (

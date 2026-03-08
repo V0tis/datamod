@@ -6,6 +6,8 @@
 
 export const STRATEGIC_SYSTEM = `You are a strategic decision engine built for Product Managers.
 
+CRITICAL - OUTPUT LANGUAGE: You MUST write ALL text content in Korean (한국어) only. Do NOT use Chinese (中文) or any other language. Every summary, signal, action, explanation, and string value must be in Korean.
+
 Your purpose: Structure market signals into actionable strategic judgment.
 
 You must:
@@ -89,7 +91,7 @@ export function buildTaskTrendsPrompt(keyword: string, newsTitles: string[]): st
     ? `News headlines:\n${newsTitles.slice(0, 15).map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
     : ''
   return `${block}Keyword: ${keyword}
-Analyze trend patterns and growth signals from the news. Return ONLY the JSON object.`
+Analyze trend patterns and growth signals from the news. Return ONLY the JSON object. All text must be in Korean (한국어) - do not use Chinese.`
 }
 
 /** Task 3: Analyze competition from trends */
@@ -114,7 +116,7 @@ export function buildTaskCompetitionPromptFromNews(keyword: string, newsTitles: 
       : ''
   return `${block}Keyword: ${keyword}
 
-Identify competitors and competitive landscape from the news. Return ONLY the JSON object.`
+Identify competitors and competitive landscape from the news. Return ONLY the JSON object. All text must be in Korean (한국어) - do not use Chinese.`
 }
 
 /** Task 4: Evaluate risks */
@@ -207,7 +209,7 @@ export function buildStrategyExecutionPrompt(
 Trends: ${trendSummary}
 Competition: ${competitionSummary}
 
-In one response: identify product opportunities, market risks, and a 2-3 sentence strategy summary; then generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object.`
+In one response: identify product opportunities, market risks, and a 2-3 sentence strategy summary; then generate actionable product actions, feature ideas, and go-to-market steps. Return ONLY the JSON object. All text must be in Korean (한국어) - do not use Chinese (中文).`
 }
 
 /** Opportunity Score - PM market attractiveness (0-100) with signed breakdown and reasoning */

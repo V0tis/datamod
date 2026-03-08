@@ -1,12 +1,43 @@
 'use client'
 
+import { Loader2, Check, Circle, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+export type SectionStatus = 'pending' | 'running' | 'completed' | 'failed'
 
 export interface ProductStrategySectionProps {
   title: string
   icon?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** Scroll target id for section navigation */
+  id?: string
+  /** 분석 상태 - 카드 헤더에 표시 (PM 분석 도구용) */
+  status?: SectionStatus
+  loading?: boolean
+  /** 스트리밍 완료 시 "✓ 생성 완료" 표시 (Progressive Streaming UX) */
+  streamingComplete?: boolean
+}
+
+const STATUS_LABELS: Record<SectionStatus, string> = {
+  pending: '대기중',
+  running: '분석중...',
+  completed: '완료',
+  failed: '실패',
+}
+
+const StatusIcon = ({ status, loading }: { status: SectionStatus; loading?: boolean }) => {
+  if (loading) return <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+  switch (status) {
+    case 'completed':
+      return <Check className="h-3.5 w-3.5 text-primary" />
+    case 'running':
+      return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+    case 'failed':
+      return <XCircle className="h-3.5 w-3.5 text-destructive" />
+    default:
+      return <Circle className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
+  }
 }
 
 /**
@@ -17,25 +48,43 @@ export function ProductStrategySection({
   icon,
   children,
   className,
+  id,
+  status,
+  loading,
+  streamingComplete,
 }: ProductStrategySectionProps) {
+  const showStatus = status != null || streamingComplete
+  const displayLabel = streamingComplete ? '✓ 생성 완료' : status != null ? STATUS_LABELS[status] : null
+  const displayIcon = streamingComplete ? <Check className="h-3.5 w-3.5 text-primary" /> : status != null ? <StatusIcon status={status} loading={status === 'running'} /> : null
   return (
     <section
+      id={id}
       className={cn(
-        'rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden',
+        'rounded-xl border-2 border-border/70 bg-card shadow-sm overflow-hidden scroll-mt-24',
+        'bg-gradient-to-b from-card to-muted/5',
         className
       )}
       aria-labelledby={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}
     >
-      <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-border/60 bg-muted/20">
+      <div className="px-5 py-4 sm:px-6 sm:py-4 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2">
         <h2
           id={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}
-          className="text-sm font-semibold text-foreground flex items-center gap-2"
+          className="text-base font-semibold text-foreground flex items-center gap-2"
         >
           {icon}
           {title}
         </h2>
+        {showStatus && displayLabel && (
+          <span className={cn(
+            'flex items-center gap-1.5 text-xs font-medium shrink-0',
+            streamingComplete ? 'text-primary' : 'text-muted-foreground'
+          )}>
+            {displayIcon}
+            {displayLabel}
+          </span>
+        )}
       </div>
-      <div className="p-4 sm:p-5">{children}</div>
+      <div className="p-5 sm:p-6">{children}</div>
     </section>
   )
 }
