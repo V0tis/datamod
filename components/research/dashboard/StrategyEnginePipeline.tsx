@@ -161,7 +161,7 @@ function getStageInsight(
           ? headlineSignals
           : sourceSignals
         return {
-          sectionLabel: 'Signals detected',
+          sectionLabel: '수집된 시그널',
           summary: news_activity.length > 0
             ? `${news_activity.length}건 뉴스·시장 데이터 수집 완료`
             : undefined,
@@ -169,19 +169,19 @@ function getStageInsight(
         }
       case 1:
         return {
-          sectionLabel: 'AI Insight',
+          sectionLabel: 'AI 인사이트',
           summary: trend_summary,
           signals: growth_signals?.slice(0, 5),
         }
       case 2:
         return {
-          sectionLabel: 'Detected competitors',
+          sectionLabel: '감지된 경쟁사',
           summary: typeof obj.market_structure === 'string' ? obj.market_structure : undefined,
           signals: compSignals.slice(0, 6),
         }
       case 3:
         return {
-          sectionLabel: 'Risk signals',
+          sectionLabel: '리스크 신호',
           summary: strategy_summary,
           signals: [...risks.slice(0, 4), ...opportunities.slice(0, 2)].filter(Boolean).slice(0, 6),
         }
@@ -199,7 +199,7 @@ function getStageInsight(
               ? `${execSignals.length}개 전략 액션 도출`
               : undefined
         return {
-          sectionLabel: 'Suggested Strategy',
+          sectionLabel: '제안 전략',
           summary: strategySummary,
           signals: execSignals.slice(0, 5),
         }
@@ -392,7 +392,17 @@ export function StrategyEnginePipeline({
                         status === 'failed' && 'text-destructive',
                       )}
                     >
-                      단계 {i + 1} · {stage.label}
+                      {status === 'completed' && '✓ '}
+                      {status === 'running' && '● '}
+                      {status === 'pending' && '○ '}
+                      {status === 'failed' && '✕ '}
+                      {i + 1}️⃣ {stage.label}
+                      <span className="ml-1.5 text-xs font-normal opacity-80">
+                        {status === 'completed' && '완료'}
+                        {status === 'running' && '진행중'}
+                        {status === 'pending' && '대기중'}
+                        {status === 'failed' && '실패'}
+                      </span>
                     </h3>
                     {status !== 'pending' && (
                       <p className="text-[11px] font-medium text-muted-foreground mt-0.5 uppercase tracking-wider whitespace-pre-line">

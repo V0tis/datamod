@@ -61,12 +61,12 @@ export function DataSourcesSection({
     return (
       <section
         className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-        aria-label="Data Sources"
+        aria-label="데이터 출처"
       >
         <div className="p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
             <Database className="h-5 w-5 text-primary" />
-            Data Sources
+            데이터 출처
           </h2>
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
@@ -83,7 +83,7 @@ export function DataSourcesSection({
   return (
     <section
       className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-      aria-label="Data Sources"
+      aria-label="데이터 출처"
     >
       <div className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">

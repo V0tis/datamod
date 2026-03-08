@@ -130,7 +130,7 @@ export function AIConfidenceCard({
         'bg-gradient-to-b from-muted/10 to-transparent',
         className
       )}
-      aria-label="AI Confidence"
+      aria-label="AI 신뢰도"
     >
       <div className="p-6 sm:p-8">
         <div className="flex items-center gap-2 mb-4">

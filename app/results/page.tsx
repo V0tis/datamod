@@ -25,6 +25,7 @@ import { AnalysisQualityIndicator } from '@/components/research/analysis-quality
 import { MarketTemperature } from '@/components/research/market-temperature'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
+import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { AnalysisHistorySidebar } from '@/components/research/AnalysisHistorySidebar'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
@@ -172,6 +173,7 @@ function ResultsContent() {
     startStreamingResearch,
     abortAnalysis,
     loadFromHistory,
+    hydrateFromStatusResult,
     mergeResultAnalysis,
   } = useResearchStore()
 
@@ -319,6 +321,9 @@ function ResultsContent() {
         setPolledStatus(status)
         setPolledProgressStep(step)
         if (status === 'completed') {
+          if (data.result?.reportId) {
+            hydrateFromStatusResult(k, countryCode, data.result)
+          }
           await loadFromHistory(k, countryCode)
         }
         if (status === 'failed') {
@@ -330,7 +335,7 @@ function ResultsContent() {
     }
 
     poll()
-    const interval = setInterval(poll, 2000)
+    const interval = setInterval(poll, 4000)
     return () => clearInterval(interval)
   }, [
     keyword,
@@ -340,6 +345,7 @@ function ResultsContent() {
     displayResult?.reportId,
     polledStatus,
     loadFromHistory,
+    hydrateFromStatusResult,
   ])
 
   useEffect(() => {
@@ -868,32 +874,32 @@ function ResultsContent() {
     return [
       {
         id: 'google-trends',
-        source: 'Google Trends',
+        source: '구글 트렌드',
         summary: hasTrendMatch
-          ? 'Search interest and volume data for this topic from trending queries.'
+          ? '이 키워드에 대한 검색 관심도·볼륨 데이터.'
           : allTrends.length > 0
-            ? 'Global trend context available; this keyword may not be in the current trend list.'
-            : 'Trend data not available for this keyword.',
+            ? '전역 트렌드 컨텍스트 사용 가능. 현재 키워드는 트렌드 목록에 없을 수 있습니다.'
+            : '이 키워드에 대한 트렌드 데이터가 없습니다.',
         confidence: hasTrendMatch ? 'high' : allTrends.length > 0 ? 'medium' : 'low',
       },
       {
         id: 'reddit',
-        source: 'Reddit discussions',
-        summary: 'Community discussions and sentiment from Reddit. Not yet integrated into this analysis.',
+        source: 'Reddit 커뮤니티 분석',
+        summary: 'Reddit 커뮤니티 논의 및 감성. 아직 본 분석에 통합되지 않았습니다.',
         confidence: 'low',
       },
       {
         id: 'product-hunt',
-        source: 'Product Hunt launches',
-        summary: 'Product launches and upvotes from Product Hunt. Not yet integrated into this analysis.',
+        source: 'Product Hunt 출시 데이터',
+        summary: 'Product Hunt 출시 및 업보트 데이터. 아직 본 분석에 통합되지 않았습니다.',
         confidence: 'low',
       },
       {
         id: 'vc-funding',
-        source: 'VC funding data',
+        source: '스타트업 투자 데이터',
         summary: fundingNum != null
-          ? `Funding signal score (${fundingNum}) reflected in the opportunity score breakdown.`
-          : 'No dedicated VC funding signal in this analysis.',
+          ? `투자 신호 점수(${fundingNum})가 기회 점수에 반영되었습니다.`
+          : '본 분석에 전용 VC 투자 신호가 없습니다.',
         confidence: fundingNum != null ? (fundingNum >= 70 ? 'high' : fundingNum >= 40 ? 'medium' : 'low') : 'low',
       },
     ]
@@ -911,7 +917,7 @@ function ResultsContent() {
         <header className="pb-6 border-b border-border/60">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              시장 분석
+              시장 분석 결과
             </p>
             <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
               <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
@@ -954,28 +960,31 @@ function ResultsContent() {
           </p>
         </header>
 
-        {/* Opportunity Score - prominent at top (show when we have score, or loading during analysis) */}
-        {(displayResult?.key_metrics?.opportunity_score != null ||
-          (loading && displayResult)) && (
-          <OpportunityScoreCard
-            score={
-              typeof displayResult?.key_metrics?.opportunity_score === 'number'
-                ? displayResult.key_metrics.opportunity_score
-                : null
-            }
-            breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
-            reasoning={displayResult?.key_metrics?.opportunity_score_reasoning ?? undefined}
-            loading={loading && displayResult?.key_metrics?.opportunity_score == null}
-            loadingMessage={
-              loading && (streamingState.status === 'running' || streamingState.status === 'streaming')
-                ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
-                : undefined
-            }
-            className="mb-4"
-          />
+        {/* 분석 중 사용자 안내 메시지 - 초기 인사이트 표시 전에만 노출 */}
+        {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
+          <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 flex items-start gap-4 animate-in fade-in duration-300">
+            <Loader2 className="h-6 w-6 shrink-0 animate-spin text-primary mt-0.5" aria-hidden />
+            <div>
+              <p className="font-medium text-foreground">AI가 시장 데이터를 분석하고 있습니다.</p>
+              <p className="text-sm text-muted-foreground mt-1">초기 인사이트는 약 10초 내에 표시됩니다.</p>
+            </div>
+          </div>
         )}
 
-        {/* AI Confidence — trust layer, below Opportunity Score */}
+        {/* 핵심 시장 인사이트 - 3초 내 주요 결론 파악 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div className="mb-4">
+            <KeyMarketInsightsCard
+              result={displayResult}
+              taskData={taskData}
+              analysisTasks={analysisTasks ?? undefined}
+              consensusData={consensusData ?? undefined}
+              loading={loading}
+            />
+          </div>
+        )}
+
+        {/* AI 신뢰도 — 신뢰층 */}
         {displayResult && (
           <AIConfidenceCard
             score={(() => {
@@ -1010,7 +1019,7 @@ function ResultsContent() {
               className="gap-2 mb-6"
             >
               <RefreshCw className="h-4 w-4" />
-              Run Analysis
+              분석 실행
             </Button>
             <SuggestedAnalyses
               onSelect={(k) => {
@@ -1049,7 +1058,7 @@ function ResultsContent() {
               globalErrorMessage={displayError ?? polledError ?? undefined}
             />
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
-              <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} className="mt-5" />
+              <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} className="mt-5" />
             )}
           </>
         )}
@@ -1115,6 +1124,16 @@ function ResultsContent() {
               </div>
             ) : null}
           </section>
+        )}
+
+        {/* 데이터 출처 - 페이지 하단 배치 (PM 분석 도구 레이아웃) */}
+        {currentKeyword && (
+          <div className="mt-6">
+            <DataSourcesSection
+              signals={dataSourceSignals}
+              loading={loading && !displayResult}
+            />
+          </div>
         )}
 
         {displayStatus === 'done' && displayResult && (
@@ -1214,11 +1233,11 @@ function ResultsContent() {
             {displayResult && (
               <section className="mb-4 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
                 <h3 className="px-4 py-3 text-sm font-semibold text-foreground border-b border-border/60 bg-muted/30">
-                  Market Summary
+                  시장 요약
                 </h3>
                 <div className="grid grid-cols-1 gap-2 p-4">
                   <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Market Size</p>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">시장 규모</p>
                     <p className="text-sm font-semibold text-foreground tabular-nums">
                       {typeof displayResult?.key_metrics?.opportunity_score === 'number'
                         ? `${displayResult.key_metrics.opportunity_score}/100`
@@ -1227,7 +1246,7 @@ function ResultsContent() {
                     <p className="text-[11px] text-muted-foreground mt-0.5">시장 매력도 점수</p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Growth Rate</p>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">성장률</p>
                     <p className="text-sm font-semibold text-foreground tabular-nums">
                       {typeof displayResult?.key_metrics?.opportunity_score_breakdown?.market_growth === 'number'
                         ? `${displayResult.key_metrics.opportunity_score_breakdown.market_growth}/100`
@@ -1238,7 +1257,7 @@ function ResultsContent() {
                     <p className="text-[11px] text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Key Players</p>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">주요 플레이어</p>
                     <p className="text-sm font-medium text-foreground line-clamp-3">
                       {(() => {
                         const raw = displayResult?.competitorTrends ?? (displayResult as { competitive_landscape?: Array<{ name?: string }> })?.competitive_landscape
@@ -1255,15 +1274,9 @@ function ResultsContent() {
               </section>
             )}
             {/* Advanced Details: 부가 정보 접이식으로 인지 부담 감소 */}
-            <CollapsibleSection title="Advanced Details" defaultExpanded={false} className="mb-4">
+            <CollapsibleSection title="상세 정보" defaultExpanded={false} className="mb-4">
             <div className="space-y-4">
-            {/* Data Sources: signals with source, summary, confidence */}
-            <div>
-              <DataSourcesSection
-                signals={dataSourceSignals}
-                loading={loading && !displayResult}
-              />
-            </div>
+            {/* 데이터 출처는 메인 컬럼 하단으로 이동됨 */}
             {/* Analysis quality: trustworthiness score (fact coverage, signal consistency, hypothesis discipline, uncertainty disclosure). */}
             {displayStatus === 'done' && displayResult && (() => {
               const qualityInput = {

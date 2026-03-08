@@ -441,23 +441,31 @@ function SettingsPageInner() {
                 </div>
               </div>
               <div>
-                <Label className="text-sm font-medium mb-2 block">AI 우선 분석</Label>
-                <p className="text-xs text-muted-foreground mb-2">먼저 사용할 AI 모델을 선택하세요. 실패 시 다른 모델로 자동 폴백됩니다.</p>
-                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                <Label className="text-sm font-medium mb-2 block">AI 우선 분석 모델</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  선택한 AI 모델이 먼저 분석을 수행합니다. 실패할 경우 다른 AI 모델이 자동으로 대체 실행됩니다.
+                </p>
+                <div className="flex flex-col gap-2">
                   {AI_PRIMARY_OPTIONS.map((opt) => (
-                    <button
+                    <label
                       key={opt.value}
-                      type="button"
-                      onClick={() => handleAiPrimaryChange(opt.value)}
                       className={cn(
-                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors',
                         aiPrimaryModel === opt.value
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/30 hover:bg-muted/30'
                       )}
                     >
-                      {opt.label}
-                    </button>
+                      <input
+                        type="radio"
+                        name="ai-primary-model"
+                        value={opt.value}
+                        checked={aiPrimaryModel === opt.value}
+                        onChange={() => handleAiPrimaryChange(opt.value)}
+                        className="h-4 w-4 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium">{opt.label}</span>
+                    </label>
                   ))}
                 </div>
               </div>

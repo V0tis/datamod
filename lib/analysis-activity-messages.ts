@@ -16,23 +16,23 @@ const STREAM_TO_INDEX: Record<string, number> = {
   done: 4,
 }
 
-/** Activity messages per analysis step - shown during loading */
+/** Activity messages per analysis step - shown during loading (한국어) */
 export const ANALYSIS_ACTIVITY_MESSAGES: readonly string[] = [
-  'Analyzing Market Signals...',
-  'Collecting community discussions...',
-  'Detecting growth signals...',
-  'Mapping competition landscape...',
-  'Evaluating risks & opportunities...',
-  'Generating strategic insights...',
+  '시장 신호 분석 중...',
+  '커뮤니티 논의 수집 중...',
+  '성장 신호 감지 중...',
+  '경쟁 환경 매핑 중...',
+  '리스크 및 기회 평가 중...',
+  '전략 인사이트 생성 중...',
 ]
 
 /** Alternative shorter messages for compact UI */
 export const ANALYSIS_ACTIVITY_SHORT: readonly string[] = [
-  'Collecting signals...',
-  'Analyzing trends...',
-  'Mapping competition...',
-  'Evaluating risks...',
-  'Generating insights...',
+  '신호 수집 중...',
+  '트렌드 분석 중...',
+  '경쟁 환경 매핑 중...',
+  '리스크 평가 중...',
+  '인사이트 생성 중...',
 ]
 
 /**

@@ -397,6 +397,8 @@ interface ResearchStore extends ResearchState {
   cancelJob: (jobId: string) => Promise<void>
   /** research_history 캐시 조회. 캐시 있으면 복원 후 'cached', 비어있으면 'empty', 없으면 'none'. */
   loadFromHistory: (keyword: string, countryCode?: string) => Promise<LoadHistoryResult>
+  /** 폴링 결과로 즉시 result 갱신 (분석 완료 시 자동 렌더용) */
+  hydrateFromStatusResult: (keyword: string, countryCode: string, pollResult: { reportId?: string; key_metrics?: unknown; content?: Record<string, unknown>; source_links?: unknown[]; updated_at?: string }) => void
   /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
   loadReportByKeyword: (keyword: string) => Promise<boolean>
   /** 탭 API 응답을 result에 병합. refetch 없이 UI/동기화 effect에 반영. */
@@ -1111,6 +1113,29 @@ export const useResearchStore = create<ResearchStore>()(
         } catch {
           return 'error'
         }
+      },
+
+      hydrateFromStatusResult: (keyword, countryCode, pollResult) => {
+        const k = keyword?.trim()
+        if (!k || !pollResult.reportId) return
+        const content = (pollResult.content ?? {}) as Record<string, unknown>
+        const km = parseJsonField(pollResult.key_metrics) as ResearchResponse['key_metrics']
+        const fullResult: ResearchResponse = {
+          ...content,
+          reportId: pollResult.reportId,
+          source_links: (pollResult.source_links ?? []) as Array<{ title?: string; url?: string }>,
+          updated_at: pollResult.updated_at,
+          key_metrics: km,
+        } as ResearchResponse
+        set({
+            keyword: k,
+            status: 'done',
+            analysisStatus: 'completed',
+            result: fullResult,
+            streamingState: createCompletedState(pollResult.reportId),
+            error: null,
+            newsList: (pollResult.source_links ?? []) as NewsItem[],
+          })
       },
 
       loadReportByKeyword: async (keyword: string) => {
