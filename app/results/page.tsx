@@ -379,6 +379,7 @@ function ResultsContent() {
   ])
 
   // 분석 완료 시 결과 데이터 자동 리프레시 (streaming 완료 → DB에 저장된 전체 결과 로드)
+  // DB 쓰기가 비동기이므로 즉시 + 600ms 후 재시도로 렌더 버그 방지
   const prevStreamingCompletedRef = useRef(false)
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
@@ -388,6 +389,8 @@ function ResultsContent() {
     prevStreamingCompletedRef.current = streamingState.status === 'completed'
     if (justCompleted) {
       loadFromHistory(k, countryFromUrl)
+      const t = setTimeout(() => loadFromHistory(k, countryFromUrl), 600)
+      return () => clearTimeout(t)
     }
   }, [keyword, storeKeyword, countryFromUrl, streamingState.status, loadFromHistory])
 
@@ -1075,6 +1078,41 @@ function ResultsContent() {
               analysisTasks={analysisTasks ?? undefined}
               loading={loading}
             />
+            {/* 데이터 시각화: 시그널 수 + 신뢰도 근거 */}
+            {displayResult?.key_metrics && (
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(() => {
+                  const km = displayResult.key_metrics
+                  const pos = Array.isArray(km.positive_signals) ? km.positive_signals.length : 0
+                  const neu = Array.isArray(km.neutral_signals) ? km.neutral_signals.length : 0
+                  const neg = Array.isArray(km.negative_risks) ? km.negative_risks.length : 0
+                  const totalSignals = pos + neu + neg
+                  const reasoning = (km.opportunity_score_reasoning ?? '').trim()
+                  if (totalSignals === 0 && !reasoning) return null
+                  return (
+                    <>
+                      {totalSignals > 0 && (
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">시그널 수</p>
+                          <div className="flex gap-4 text-sm">
+                            <span className="text-emerald-600 dark:text-emerald-400">긍정 {pos}</span>
+                            <span className="text-muted-foreground">중립 {neu}</span>
+                            <span className="text-destructive">리스크 {neg}</span>
+                            <span className="font-medium">총 {totalSignals}개</span>
+                          </div>
+                        </div>
+                      )}
+                      {reasoning && (
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">신뢰도 근거</p>
+                          <p className="text-sm text-foreground line-clamp-3">{reasoning}</p>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
           </section>
         )}
 
@@ -1149,7 +1187,7 @@ function ResultsContent() {
             />
           </div>
         ) : (
-          <div role="region" aria-label="Progressive AI 리포트" className="mt-12 space-y-12">
+          <div role="region" aria-label="AI 리포트" className="mt-12 space-y-12">
             {/* 3~6. 시장 성장 / 경쟁 / 전략 / 리스크 및 기회 (리포트 구조) */}
             <PMDecisionDashboard
               keyword={currentKeyword ?? ''}
@@ -1157,6 +1195,9 @@ function ResultsContent() {
               loading={loading}
               streamingState={streamingState}
               polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : (canonicalStatus === 'failed' || showPolledError ? Math.min(4, Math.max(0, polledProgressStep)) : undefined)}
+              polledStatus={polledStatus}
+              hasFailure={canonicalStatus === 'failed' || showPolledError}
+              displayResult={displayResult}
               newsList={newsList}
               taskData={taskData}
               consensusData={consensusData}

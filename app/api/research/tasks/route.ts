@@ -40,7 +40,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 })
     }
 
-    console.log('[research/tasks] GET 폴링', { analysisId: analysisId.slice(0, 50) + '...' })
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[research/tasks] GET 폴링', { analysisId: analysisId.slice(0, 50) + '...' })
+    }
 
     const admin = createAdminClient()
     const { data: rows, error } = await admin

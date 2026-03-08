@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TrendingUp, History, ChevronRight, Loader2, X, Target } from 'lucide-react'
+import { TrendingUp, History, ChevronRight, Loader2, X, Target, Bookmark, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { RinAnimation, getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -386,6 +386,46 @@ function RinAISearchInner() {
                 )}
               </div>
             </section>
+
+            {/* 예시 프롬프트 & 저장한 인사이트 */}
+            <div className="mx-auto max-w-5xl mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                    예시 프롬프트
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {['AI 회의 보조', '푸드테크', '에듀테크', '건강 모니터링', '전동킥보드 공유'].map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setQuery(k)
+                          setError(null)
+                        }}
+                        className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                    <Bookmark className="h-4 w-4 text-primary shrink-0" />
+                    저장한 인사이트
+                  </h2>
+                  <p className="text-xs text-muted-foreground mb-3">분석 결과를 저장해 두었다가 나중에 참고할 수 있습니다.</p>
+                  <Link
+                    href="/insights"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                  >
+                    저장 목록 보기 <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </section>
+              </div>
+            </div>
 
             {/* 2. 실시간 검색 트렌드 */}
             <div className="mx-auto max-w-5xl mb-5">

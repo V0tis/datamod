@@ -16,6 +16,8 @@ export interface DataSourceSignal {
 }
 
 const SOURCE_ICONS: Record<string, React.ReactNode> = {
+  '구글 트렌드': <TrendingUp className="h-4 w-4" />,
+  '스타트업 투자 데이터': <Wallet className="h-4 w-4" />,
   'Google Trends': <TrendingUp className="h-4 w-4" />,
   'Reddit discussions': <MessageCircle className="h-4 w-4" />,
   'Product Hunt launches': <Rocket className="h-4 w-4" />,

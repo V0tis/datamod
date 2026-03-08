@@ -47,10 +47,10 @@ export function StartupConceptCard({
   if (!hasAny) return null
 
   const blocks = [
-    { key: 'product', label: 'Product Idea', value: idea, icon: Lightbulb },
-    { key: 'target', label: 'Target Customer', value: target, icon: Users },
-    { key: 'monetization', label: 'Monetization', value: monet, icon: DollarSign },
-    { key: 'gtm', label: 'Go-to-Market Strategy', value: gtm.length > 0 ? gtm.join(' · ') : null, icon: Rocket },
+    { key: 'product', label: '제품 아이디어', value: idea, icon: Lightbulb },
+    { key: 'target', label: '타겟 고객', value: target, icon: Users },
+    { key: 'monetization', label: '수익화 방안', value: monet, icon: DollarSign },
+    { key: 'gtm', label: 'Go-to-Market 전략', value: gtm.length > 0 ? gtm.join(' · ') : null, icon: Rocket },
   ].filter((b) => b.value)
 
   return (
@@ -62,7 +62,7 @@ export function StartupConceptCard({
     >
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
         <Lightbulb className="h-4 w-4 text-primary" />
-        Actionable Startup Concept
+        실행 가능한 스타트업 컨셉
       </h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

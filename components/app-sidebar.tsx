@@ -12,15 +12,19 @@ import {
   LogOut,
   Menu,
   X,
+  Bookmark,
+  BarChart3,
 } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/tasks', label: 'Analysis Tasks', icon: ListTodo },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/', label: '대시보드', icon: LayoutDashboard },
+  { href: '/history', label: '분석 기록', icon: BarChart3 },
+  { href: '/insights', label: '저장한 인사이트', icon: Bookmark },
+  { href: '/tasks', label: '분석 작업', icon: ListTodo },
+  { href: '/settings', label: '설정', icon: Settings },
 ]
 
 export function AppSidebar() {
@@ -106,7 +110,7 @@ export function AppSidebar() {
               )}
             >
               <LogOut className="h-4 w-4 shrink-0 opacity-80" />
-              Sign out
+              로그아웃
             </button>
           </div>
         ) : (
@@ -118,7 +122,7 @@ export function AppSidebar() {
             )}
           >
             <LogOut className="h-4 w-4 shrink-0 opacity-80" />
-            Sign in
+            로그인
           </Link>
         )}
       </div>
@@ -132,7 +136,7 @@ export function AppSidebar() {
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
         className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground lg:hidden"
-        aria-label="Open menu"
+        aria-label="메뉴 열기"
       >
         {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>

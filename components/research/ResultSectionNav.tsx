@@ -1,12 +1,14 @@
 'use client'
 
-import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspaper, Database } from 'lucide-react'
+import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspaper, Database, GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const SECTIONS = [
   { id: 'section-summary', label: '분석 결과 요약', icon: LayoutGrid },
   { id: 'section-opportunity', label: '기회 점수 분해', icon: Target },
   { id: 'section-insights', label: '핵심 시장 인사이트', icon: Lightbulb },
+  { id: 'section-timeline', label: 'AI 분석 타임라인', icon: GitBranch },
+  { id: 'section-risks-opportunities', label: '리스크 및 기회 평가', icon: AlertTriangle },
   { id: 'section-market', label: '시장 성장 분석', icon: TrendingUp },
   { id: 'section-competition', label: '경쟁 환경 분석', icon: Users },
   { id: 'section-strategy', label: '전략 제안', icon: Target },

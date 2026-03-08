@@ -775,6 +775,7 @@ export async function* runResearch(
 
   await updateProgress(0, 'analyzing')
   log('start', 'analysis_started')
+  console.log('[AI Analysis] 시작', { keyword: cacheKey.keyword, countryCode: cacheKey.countryCode, analysisId: analysisId.slice(0, 50) + '...' })
   yield { type: 'analysis_started', analysisId }
 
   // Layer 1: Signal Layer - collect market signals (no AI)
@@ -1245,5 +1246,6 @@ export async function* runResearch(
     return
   }
 
+  console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured })
   yield { type: 'done', reportId, sourceLinks: news }
 }

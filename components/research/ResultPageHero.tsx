@@ -12,9 +12,9 @@ function opportunityToOutlook(score: number): MarketOutlook {
 
 function outlookLabel(outlook: MarketOutlook): string {
   switch (outlook) {
-    case 'high': return 'High'
-    case 'medium': return 'Medium'
-    case 'low': return 'Low'
+    case 'high': return '높음'
+    case 'medium': return '중간'
+    case 'low': return '낮음'
   }
 }
 
@@ -160,7 +160,7 @@ export function ResultPageHero({
               </span>
               <span className="text-lg text-muted-foreground font-medium">/100</span>
             </div>
-            <span className="text-xs font-medium text-muted-foreground mt-0.5">Opportunity Score</span>
+            <span className="text-xs font-medium text-muted-foreground mt-0.5">기회 점수</span>
           </div>
 
           {/* Badges: Market Outlook + AI Confidence */}
@@ -168,7 +168,7 @@ export function ResultPageHero({
             {outlook != null && (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Market Outlook
+                  시장 전망
                 </span>
                 <span
                   className={cn(
@@ -183,7 +183,7 @@ export function ResultPageHero({
             {confDisplay != null && (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  AI Confidence
+                  AI 신뢰도
                 </span>
                 <span className="inline-flex items-center px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-foreground">
                   {confDisplay}%
@@ -196,7 +196,7 @@ export function ResultPageHero({
         {/* Top Insight Summary */}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Top Insight
+            핵심 인사이트
           </p>
           {loading && !topInsight ? (
             <div className="space-y-2">

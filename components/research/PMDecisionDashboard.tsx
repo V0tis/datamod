@@ -7,6 +7,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { Button } from '@/components/ui/button'
 import { AnalysisResultSections } from './AnalysisResultSections'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
+import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import type { StreamingState } from '@/lib/types/analysis-modes'
 
@@ -48,6 +49,10 @@ export interface PMDecisionDashboardProps {
   errorStepIndex?: number
   /** Global error message to show in failed step */
   globalErrorMessage?: string
+  /** For inline timeline */
+  polledStatus?: string | null
+  hasFailure?: boolean
+  displayResult?: ResearchResponse | null
 }
 
 export function PMDecisionDashboard({
@@ -66,6 +71,10 @@ export function PMDecisionDashboard({
   hasError = false,
   errorStepIndex = 0,
   globalErrorMessage,
+  polledProgressStep,
+  polledStatus,
+  hasFailure = false,
+  displayResult,
 }: PMDecisionDashboardProps) {
   const isAnalyzing =
     loading ||
@@ -90,23 +99,39 @@ export function PMDecisionDashboard({
   const analysisComplete = result != null && !isAnalyzing
   const showResultSections = (result != null || isAnalyzing || (effectiveAnalysisTasks?.length ?? 0) > 0) && Boolean(keyword?.trim())
 
+  const timelineStep =
+    polledStatus === 'running' && polledProgressStep != null
+      ? Math.min(6, Math.max(0, polledProgressStep))
+      : streamingState.status === 'running' || streamingState.status === 'streaming'
+        ? streamingState.currentStep
+        : displayResult != null && !isAnalyzing && !hasError
+          ? 6
+          : -1
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 시장 성장 분석, 경쟁 환경, 리스크 평가, 제품 전략 (PM 분석 도구 레이아웃) - 타임라인은 페이지 최상단에 별도 렌더링 */}
-      {showResultSections && (
-        <AnalysisResultSections
-          result={result}
-          taskData={taskData}
-          analysisTasks={effectiveAnalysisTasks ?? undefined}
-          consensusData={consensusData ?? undefined}
-          loading={isAnalyzing}
-          keyword={keyword}
-          onSaveToWorkspace={onSaveInsight}
-          layout="pm-analytics"
-        />
+      {/* 1. 인라인 타임라인 (사용자 요청: Timeline → 리스크/기회 → 전략 → 액션 플랜) */}
+      {showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null) && (
+        <div id="section-timeline" className="scroll-mt-24 rounded-lg border border-border bg-card/50 p-4 sm:p-5">
+          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">AI 분석 타임라인</h3>
+          <StrategyEnginePipeline
+            keyword={keyword}
+            currentStep={timelineStep}
+            allCompleted={displayResult != null && !isAnalyzing && !hasError}
+            streamingStepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState.stepId : undefined}
+            retryMessage={'retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined}
+            taskData={taskData ?? {}}
+            analysisTasks={effectiveAnalysisTasks ?? null}
+            newsList={newsList ?? []}
+            result={displayResult ?? result}
+            hasError={hasError}
+            errorStepIndex={errorStepIndex}
+            globalErrorMessage={globalErrorMessage}
+          />
+        </div>
       )}
 
-      {/* Section 5: 리스크 및 기회 평가 (final) - 항상 표시, skeleton으로 대기 */}
+      {/* 2. 리스크 및 기회 평가 (타임라인 바로 아래) */}
       {showResultSections && (() => {
         const strategyTask = effectiveAnalysisTasks?.find((t) => t.step_name === 'strategy_generation')
         const output = (strategyTask?.output_data && typeof strategyTask.output_data === 'object'
@@ -120,7 +145,7 @@ export function PMDecisionDashboard({
         const fallbackRisks = km?.negative_risks ?? result?.painPoints ?? []
         const fallbackOpps = km?.positive_signals ?? result?.marketNews ?? []
         return (
-          <div className="rounded-lg border border-border bg-card/50 p-4 sm:p-5 animate-in fade-in duration-300">
+          <div id="section-risks-opportunities" className="scroll-mt-24 rounded-lg border border-border bg-card/50 p-4 sm:p-5 animate-in fade-in duration-300">
             <div className="flex items-center justify-between gap-2 mb-3">
               <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
                 리스크 및 기회 평가
@@ -164,6 +189,20 @@ export function PMDecisionDashboard({
           </div>
         )
       })()}
+
+      {/* 3. 시장 성장 분석, 경쟁 환경, 전략 제안, 실행 아이디어 (전략 → 액션 플랜 순) */}
+      {showResultSections && (
+        <AnalysisResultSections
+          result={result}
+          taskData={taskData}
+          analysisTasks={effectiveAnalysisTasks ?? undefined}
+          consensusData={consensusData ?? undefined}
+          loading={isAnalyzing}
+          keyword={keyword}
+          onSaveToWorkspace={onSaveInsight}
+          layout="pm-analytics"
+        />
+      )}
 
       {/* 액션 버튼 */}
       {showResultSections && (

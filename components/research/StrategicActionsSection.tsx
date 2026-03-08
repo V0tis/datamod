@@ -21,7 +21,7 @@ export interface StrategicActionsSectionProps {
 }
 
 function formatActionForClipboard(a: StrategicActionItem): string {
-  return `${a.title}\n\nDescription:\n${a.description}\n\nOpportunity:\n${a.opportunity}`
+  return `${a.title}\n\n설명:\n${a.description}\n\n기회:\n${a.opportunity}`
 }
 
 export function StrategicActionsSection({
@@ -46,9 +46,9 @@ export function StrategicActionsSection({
   const handleExportAll = () => {
     try {
       const lines = actions.map((a, i) =>
-        `## ${i + 1}. ${a.title}\n\n**Description:**\n${a.description}\n\n**Opportunity:**\n${a.opportunity}`
+        `## ${i + 1}. ${a.title}\n\n**설명:**\n${a.description}\n\n**기회:**\n${a.opportunity}`
       ).join('\n\n---\n\n')
-      const md = `# Strategic Actions\n\n${lines}`
+      const md = `# 전략 액션\n\n${lines}`
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -66,12 +66,12 @@ export function StrategicActionsSection({
     return (
       <section
         className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-        aria-label="Strategic Actions"
+        aria-label="전략 액션"
       >
         <div className="p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
             <Target className="h-5 w-5 text-primary" />
-            Strategic Actions
+            전략 액션
           </h2>
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -88,13 +88,13 @@ export function StrategicActionsSection({
   return (
     <section
       className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-      aria-label="Strategic Actions"
+      aria-label="전략 액션"
     >
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
             <Target className="h-5 w-5 text-primary" />
-            Strategic Actions
+            전략 액션
           </h2>
           <Button
             variant="ghost"

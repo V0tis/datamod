@@ -22,6 +22,8 @@ export type AnalysisTasksResponse = {
 }
 
 const POLL_INTERVAL_MS = 1500
+/** Stop polling after 15 min even if client never received done/error (prevents infinite polling) */
+const MAX_POLL_DURATION_MS = 15 * 60 * 1000
 
 export function useAnalysisTasksPoll(
   analysisId: string | null,
@@ -29,22 +31,37 @@ export function useAnalysisTasksPoll(
   onTasks: (data: AnalysisTasksResponse) => void
 ) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+
+  const stopPolling = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    startTimeRef.current = null
+  }
 
   useEffect(() => {
     if (!analysisId || !isAnalyzing) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
+      stopPolling()
       return
     }
 
+    startTimeRef.current = Date.now()
+
     const poll = async () => {
       try {
+        if (startTimeRef.current && Date.now() - startTimeRef.current > MAX_POLL_DURATION_MS) {
+          stopPolling()
+          return
+        }
         const res = await fetch(`/api/research/tasks?analysis_id=${encodeURIComponent(analysisId)}`)
         if (!res.ok) return
         const data = (await res.json()) as AnalysisTasksResponse
         onTasks(data)
+        if (data.all_completed || data.any_failed) {
+          stopPolling()
+        }
       } catch {
         /* ignore */
       }
@@ -52,11 +69,6 @@ export function useAnalysisTasksPoll(
 
     poll()
     intervalRef.current = setInterval(poll, POLL_INTERVAL_MS)
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
+    return stopPolling
   }, [analysisId, isAnalyzing, onTasks])
 }

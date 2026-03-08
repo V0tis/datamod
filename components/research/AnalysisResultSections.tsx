@@ -203,7 +203,7 @@ export function AnalysisResultSections({
       lines.push('')
     }
     lines.push('## 시장 기회')
-    if (opportunityScore != null) lines.push(`- Market size / opportunity: ${opportunityScore}/100`)
+    if (opportunityScore != null) lines.push(`- 시장 규모/기회 점수: ${opportunityScore}/100`)
     if (marketGrowth != null) lines.push(`- Growth: ${marketGrowth}/100`)
     keyTrends.forEach((t) => lines.push(`- ${t}`))
     lines.push('')
