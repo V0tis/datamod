@@ -52,6 +52,8 @@ export interface PMDecisionDashboardProps {
   polledStatus?: string | null
   hasFailure?: boolean
   displayResult?: ResearchResponse | null
+  /** When true, timeline is rendered by parent at top; omit here */
+  hideTimeline?: boolean
 }
 
 export function PMDecisionDashboard({
@@ -73,6 +75,7 @@ export function PMDecisionDashboard({
   polledStatus,
   hasFailure = false,
   displayResult,
+  hideTimeline = false,
 }: PMDecisionDashboardProps) {
   const isAnalyzing =
     loading ||
@@ -108,8 +111,8 @@ export function PMDecisionDashboard({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 1. 인라인 타임라인 (사용자 요청: Timeline → 리스크/기회 → 전략 → 액션 플랜) */}
-      {showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null) && (
+      {/* 1. 타임라인 (hideTimeline이면 상단에서 렌더링) */}
+      {!hideTimeline && showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null) && (
         <div id="section-timeline" className="scroll-mt-24 rounded-lg border border-border bg-card/50 p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">AI 분석 타임라인</h3>
           <StrategyEnginePipeline

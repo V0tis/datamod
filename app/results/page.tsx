@@ -12,7 +12,7 @@ import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/st
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { printReportAsPdf } from '@/lib/pdf-export'
-import { FileDown, X, ExternalLink, BarChart3, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
+import { FileDown, X, ExternalLink, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { parseJsonResponse } from '@/lib/fetch-json'
@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
-import { StrategyEnginePipeline } from '@/components/research/dashboard/StrategyEnginePipeline'
+import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
 import { FirstFiveSecondsBanner } from '@/components/research/FirstFiveSecondsBanner'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
@@ -246,7 +246,6 @@ function ResultsContent() {
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** AI 분석 과정 모달 (헤더 버튼으로 열기) */
-  const [pipelineModalOpen, setPipelineModalOpen] = useState(false)
   /** Mobile: Evidence (뉴스·상세 분석) collapsed by default so Summary + Key findings + Insight stay above the fold. */
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   /** Mobile: Implication (Next steps) collapsed by default; secondary to main insight. */
@@ -954,12 +953,17 @@ function ResultsContent() {
   const showTabs = hasKeyword
   if (showTabs) {
     return (
-      <div className="px-4 py-4 sm:px-5 sm:py-5 md:p-6 min-h-screen bg-background rin-doc">
-        {/* Reading mode: grid gap and main column spacing use CSS variables from data-reading-mode */}
-        <div className="mx-auto max-w-[1600px] reading-gap-lg">
-          <div className="reading-space-y-lg bg-card rounded-xl p-0 sm:p-1 min-w-0">
-        <div id="pm-dashboard-top" className="rounded-lg border border-border bg-card shadow-sm p-5 sm:p-6 md:p-7 transition-colors duration-200 rin-reading reading-space-y-lg reading-text">
-        {/* 1. Result Page Hero – final AI conclusion in ~3 seconds */}
+      <div className="px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-3 min-h-screen bg-background rin-doc">
+        <div className="flex gap-4 lg:gap-6 min-w-0 max-w-[1920px] mx-auto">
+          {/* 좌측 섹션 사이드바 – 결과 페이지만, sticky + 활성 하이라이트 */}
+          {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+            <aside className="hidden lg:block shrink-0">
+              <ResultSectionNav variant="sidebar" />
+            </aside>
+          )}
+          <main className="flex-1 min-w-0 min-h-[320px]">
+        <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
+        {/* 1. Result Page Hero – single control area (PDF, Save, Retry) */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <ResultPageHero
             title={heroTitle}
@@ -1022,16 +1026,6 @@ function ResultsContent() {
                     ))}
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPipelineModalOpen(true)}
-                  className="gap-1.5 text-xs"
-                >
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  AI 분석 과정
-                </Button>
                 <ResultShareActions
                   reportId={displayResult?.reportId ?? null}
                   summaryText={[
@@ -1045,15 +1039,43 @@ function ResultsContent() {
                   onDownloadPdf={printReportAsPdf}
                   disabled={loading}
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveInsightOpen}
+                  disabled={loading}
+                  className="gap-1.5 text-xs"
+                >
+                  <Bookmark className="h-3.5 w-3.5" />
+                  인사이트 저장
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPolledStatus(null)
+                    setPolledError(null)
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                  }}
+                  disabled={loading || streamingState.status === 'running' || streamingState.status === 'streaming'}
+                  className="gap-1.5 text-xs"
+                >
+                  {(streamingState.status === 'running' || streamingState.status === 'streaming') ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  다시 분석하기
+                </Button>
               </div>
             }
-            className="mb-6 border-b border-border/60 pb-6"
+            className="mb-3 border-b border-border/60 pb-3"
           />
         )}
 
         {/* AI 인사이트 생성 시퀀스: 분석 완료 직후 2–4초간 연출 후 리포트 표시 */}
         {showInsightSequence && displayResult && (
-          <div className="mt-6 mb-6">
+          <div className="mt-4 mb-4">
             <AIInsightGenerationSequence
               keyword={currentKeyword ?? ''}
               onComplete={() => setShowInsightSequence(false)}
@@ -1062,20 +1084,44 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* 섹션 네비게이션·요약·인사이트·대시보드 (시퀀스 미표시 시에만) */}
+        {/* 섹션 콘텐츠 (시퀀스 미표시 시에만) – 좌측 섹션 사이드바로 이동 */}
         {!showInsightSequence && (
           <>
-        {/* 섹션 네비게이션 (sticky) - 긴 리포트 스크롤 탐색 */}
+        <div className="space-y-5 mt-4">
+        {/* AI 분석 타임라인 – 상단 배치, max-height + 내부 스크롤 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <nav className="sticky top-0 z-10 mt-6 -mx-2 px-2 py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/60 mb-4">
-            <ResultSectionNav variant="compact" />
-          </nav>
+          <ResultTimelineSection
+            keyword={currentKeyword ?? ''}
+            streamingState={streamingState}
+            polledProgressStep={polledStatus === 'running' ? Math.min(6, Math.max(0, polledProgressStep)) : undefined}
+            polledStatus={polledStatus}
+            taskData={taskData}
+            analysisTasks={analysisTasks ?? null}
+            newsList={newsList ?? []}
+            result={displayResult}
+            displayResult={displayResult}
+            hasError={canonicalStatus === 'failed' || !!showPolledError}
+            errorStepIndex={
+              streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
+                ? streamingState.lastSuccessfulStep + 1
+                : polledProgressStep ?? 0
+            }
+            globalErrorMessage={displayError ?? polledError ?? undefined}
+            loading={loading}
+            onRetryStep={() => {
+              setPolledStatus(null)
+              setPolledError(null)
+              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+            }}
+            maxHeight="280px"
+            className="scroll-mt-24"
+          />
         )}
 
-        {/* 분석 결과 요약 카드 (핵심 결론 즉시 파악) */}
+        {/* 분석 결과 요약 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <section id="section-summary" className="scroll-mt-24 mt-2" aria-label="분석 결과 요약">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          <section id="section-summary" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="분석 결과 요약">
+            <h2 className="text-sm font-semibold text-foreground mb-3">
               핵심 결론
             </h2>
             <ResultSummaryCards
@@ -1148,9 +1194,9 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* Opportunity Score Breakdown – explains how the score was calculated */}
+        {/* Opportunity Score Breakdown */}
         {(displayResult != null || loading) && !needsRunAction && (displayResult?.key_metrics?.opportunity_score != null || (displayResult?.key_metrics?.opportunity_score_breakdown && Object.keys(displayResult.key_metrics.opportunity_score_breakdown || {}).length > 0)) && (
-          <section id="section-opportunity" className="scroll-mt-24 mt-8" aria-label="기회 점수 분해">
+          <section id="section-opportunity" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="기회 점수 분해">
             <OpportunityScoreBreakdown
               score={displayResult?.key_metrics?.opportunity_score ?? null}
               breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
@@ -1177,9 +1223,9 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* 2. 핵심 시장 인사이트 (결과 우선 배치) */}
+        {/* 핵심 시장 인사이트 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <div id="section-insights" className="mt-12 first:mt-0 scroll-mt-24">
+          <div id="section-insights" className="scroll-mt-24">
             <KeyMarketInsightsCard
               result={displayResult}
               taskData={taskData}
@@ -1224,7 +1270,7 @@ function ResultsContent() {
             />
           </div>
         ) : (
-          <div role="region" aria-label="AI 리포트" className="mt-12 space-y-12">
+          <div role="region" aria-label="AI 리포트" className="space-y-6">
             {/* 3~6. 시장 성장 / 경쟁 / 전략 / 리스크 및 기회 (리포트 구조) */}
             <PMDecisionDashboard
               keyword={currentKeyword ?? ''}
@@ -1253,6 +1299,7 @@ function ResultsContent() {
                   : polledProgressStep
               }
               globalErrorMessage={displayError ?? polledError ?? undefined}
+              hideTimeline
             />
             {/* AI 분석 엔진 (토글) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
@@ -1421,6 +1468,7 @@ function ResultsContent() {
           />
         )}
 
+          </div>
           </>
         )}
 
@@ -1448,62 +1496,6 @@ function ResultsContent() {
               setSelectedNewsIndex(null)
             }}
           />
-        )}
-
-        {/* AI 분석 과정 모달 */}
-        {pipelineModalOpen && (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="pipeline-modal-title">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setPipelineModalOpen(false)} aria-hidden />
-            <div className="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-xl border border-border bg-card shadow-xl flex flex-col">
-              <div className="flex items-center justify-between gap-2 p-4 border-b border-border shrink-0">
-                <h2 id="pipeline-modal-title" className="text-sm font-semibold text-foreground">AI 분석 과정</h2>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setPipelineModalOpen(false)}>
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <StrategyEnginePipeline
-                  keyword={currentKeyword ?? ''}
-                  currentStep={
-                    polledStatus === 'running' && polledProgressStep != null
-                      ? Math.min(6, Math.max(0, polledProgressStep))
-                      : streamingState.status === 'running' || streamingState.status === 'streaming'
-                        ? streamingState.currentStep
-                        : streamingState.status === 'completed' || (displayResult != null && !loading && !hasFailure)
-                          ? 6
-                          : -1
-                  }
-                  allCompleted={displayResult != null && !loading && !hasFailure}
-                  streamingStepId={
-                    streamingState.status === 'running' || streamingState.status === 'streaming'
-                      ? streamingState.stepId
-                      : undefined
-                  }
-                  retryMessage={
-                    streamingState.status === 'running' || streamingState.status === 'streaming'
-                      ? ('retryMessage' in streamingState ? streamingState.retryMessage : undefined)
-                      : undefined
-                  }
-                  taskData={taskData ?? {}}
-                  analysisTasks={analysisTasks ?? null}
-                  newsList={newsList ?? []}
-                  result={displayResult}
-                  onRetryStep={() => {
-                    setPolledStatus(null)
-                    setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
-                  }}
-                  hasError={hasFailure}
-                  errorStepIndex={
-                    streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
-                      ? streamingState.lastSuccessfulStep + 1
-                      : polledProgressStep
-                  }
-                  globalErrorMessage={displayError ?? polledError ?? undefined}
-                />
-              </div>
-            </div>
-          </div>
         )}
 
         {saveInsightOpen && (
@@ -1549,8 +1541,7 @@ function ResultsContent() {
           </div>
         )}
         </div>
-          </div>
-
+        </main>
         </div>
       </div>
     )

@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AnalysisJobSync } from '@/components/research/analysis-job-sync'
 import { useResearchStore } from '@/lib/stores/research-store'
+import { cn } from '@/lib/utils'
 
 const isAuthOnlyPath = (path: string) =>
   path === '/login' ||
@@ -51,10 +52,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const isResultsPage = pathname?.startsWith('/results')
+
   return (
     <>
       <AppSidebar />
-      <div className="min-h-screen pt-14 lg:pt-0 lg:pl-[220px]">
+      <div
+        className={cn(
+          'min-h-screen',
+          isResultsPage ? 'pt-14' : 'pt-14 lg:pt-0 lg:pl-[220px]'
+        )}
+      >
         <main className="min-h-screen bg-background overflow-auto">
           <ErrorBoundary>
             <PageTransition>{children}</PageTransition>

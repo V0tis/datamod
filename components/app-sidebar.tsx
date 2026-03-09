@@ -56,6 +56,8 @@ export function AppSidebar() {
     return pathname === item.href || pathname?.startsWith(item.href + '/')
   }
 
+  const isResultsPage = pathname?.startsWith('/results')
+
   const sidebarContent = (
     <div className="flex h-full w-full flex-col">
       {/* Logo */}
@@ -128,6 +130,78 @@ export function AppSidebar() {
       </div>
     </div>
   )
+
+  const topbarContent = (
+    <div className="flex h-14 w-full items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 border-b border-border/60 bg-background">
+      <div className="flex items-center gap-2 sm:gap-6 min-w-0 overflow-x-auto">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity shrink-0">
+          <RinLogo size={22} className="shrink-0" />
+          <span className="font-semibold text-foreground text-sm tracking-tight">rin-ai</span>
+        </Link>
+        <nav className="flex items-center gap-1 shrink-0">
+          {navItems.map((item) => {
+            const active = isActive(item)
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.href + item.label}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  active
+                    ? 'bg-accent/50 text-foreground'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <ThemeSwitcher />
+        {user ? (
+          <>
+            <span className="truncate max-w-[140px] text-xs text-muted-foreground" title={user.email ?? ''}>
+              {user.email ?? 'User'}
+            </span>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+              )}
+            >
+              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+              로그아웃
+            </button>
+          </>
+        ) : (
+          <Link
+            href="/login"
+            className={cn(
+              'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+              'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+            로그인
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+
+  if (isResultsPage) {
+    return (
+      <header className="fixed left-0 right-0 top-0 z-40 h-14 border-b border-border/60 bg-background">
+        {topbarContent}
+      </header>
+    )
+  }
 
   return (
     <>
