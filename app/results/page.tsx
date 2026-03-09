@@ -39,7 +39,9 @@ import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard
 import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScoreBreakdown'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
+import { useResultPageState } from '@/lib/hooks/use-result-page-state'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
@@ -240,9 +242,9 @@ function ResultsContent() {
   const retryConsensusInProgressRef = useRef(false)
   /** Consensus 재분석 중일 때는 DB analysis_results로 덮어쓰지 않음 */
   const isReanalyzingConsensusRef = useRef(false)
+  const prevReportIdRef = useRef<string | null>(null)
 
-  /** AI Insight Consensus: PM 관점 JSON (summary, sentiment, strategic_insight, action_item, confidence) */
-  const [consensusData, setConsensusData] = useState<ConsensusData | null>(null)
+  /** AI Insight Consensus: managed by useResultPageState (insightData), never overwrite success with fail */
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
   const [consensusReanalyzing, setConsensusReanalyzing] = useState(false)
   /** AI 분석 과정 모달 (헤더 버튼으로 열기) */
@@ -448,14 +450,66 @@ function ResultsContent() {
   const hasFailure = canonicalStatus === 'failed' || showPolledError
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
 
-  /** 분석 완료 직후 AI 인사이트 생성 시퀀스 표시 (loading → done 전환 시) */
+  const {
+    resultState,
+    analysisData: pageAnalysisData,
+    insightData,
+    insightStatus,
+    setInsightData,
+    setInsightStatus,
+    isAnalysisLoading,
+    cachedKeywordRef,
+  } = useResultPageState({
+    keyword: urlKeyword ?? currentKeyword ?? null,
+    countryFromUrl,
+    displayResult,
+    displayStatus,
+    displayError,
+    canonicalStatus,
+    polledStatus,
+    historyLoadDone,
+    hasCachedResult,
+    loading,
+    hasFailure,
+    needsRunAction,
+    isViewingActiveJob,
+  })
+
+  const effectiveDisplayResult = pageAnalysisData ?? displayResult
+
+  /** reportId 변경 시 insight 초기화 */
+  useEffect(() => {
+    const id = displayResult?.reportId ?? null
+    if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) {
+      setInsightData(null, { force: true })
+      setInsightStatus('idle')
+      isConsensusStartedRef.current = false
+      tabHasFetchedRef.current = { logic: false, creative: false, fact: false }
+    }
+    prevReportIdRef.current = id
+  }, [displayResult?.reportId, setInsightData])
+
+  /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 재분석 중이면 덮어쓰지 않음 */
+  useEffect(() => {
+    if (!isViewingActiveJob || isReanalyzingConsensusRef.current) return
+    const ar = displayResult?.analysis_results
+    if (!ar || typeof ar !== 'object') return
+    const normalized = normalizeConsensusData(ar)
+    if (normalized) {
+      setInsightData(normalized)
+      setInsightStatus('success')
+    }
+  }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_results, setInsightData])
+
+  /** AI 인사이트 시퀀스: resultState가 loading→success 전환 시에만. 캐시에서 온 결과는 생략. */
   useEffect(() => {
     const wasLoading = prevLoadingRef.current ?? false
-    prevLoadingRef.current = loading
-    if (wasLoading && !loading && displayResult && !hasFailure && hasKeyword && !needsRunAction) {
+    prevLoadingRef.current = resultState === 'loading'
+    if (hasCachedResult === true) return
+    if (wasLoading && resultState === 'success' && effectiveDisplayResult && hasKeyword && !needsRunAction) {
       setShowInsightSequence(true)
     }
-  }, [loading, displayResult, hasFailure, hasKeyword, needsRunAction])
+  }, [resultState, effectiveDisplayResult, hasFailure, hasKeyword, needsRunAction, hasCachedResult])
 
   /** 키워드 변경 시 시퀀스 리셋 */
   useEffect(() => {
@@ -524,26 +578,6 @@ function ResultsContent() {
     })
   }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini])
 
-  const prevReportIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    const id = displayResult?.reportId ?? null
-    if (prevReportIdRef.current !== null && prevReportIdRef.current !== id) {
-      setConsensusData(null)
-      isConsensusStartedRef.current = false
-      tabHasFetchedRef.current = { logic: false, creative: false, fact: false }
-    }
-    prevReportIdRef.current = id
-  }, [displayResult?.reportId])
-
-  /** [우선순위 1] DB analysis_results 있으면 즉시 렌더링. 재분석 중이면 덮어쓰지 않음 */
-  useEffect(() => {
-    if (!isViewingActiveJob || isReanalyzingConsensusRef.current) return
-    const ar = displayResult?.analysis_results
-    if (!ar || typeof ar !== 'object') return
-    const normalized = normalizeConsensusData(ar)
-    if (normalized) setConsensusData(normalized)
-  }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_results])
-
   const fetchTabAnalysis = useCallback(
     async (tabId: AiTabId, provider: 'groq' | 'gemini' | 'all' = 'all', options?: { isReanalyze?: boolean; reportId?: string; summary?: string }) => {
       if (quotaExceeded) {
@@ -559,6 +593,7 @@ function ResultsContent() {
       const doGroq = provider === 'groq' || provider === 'all'
       const doGemini = (provider === 'all' || provider === 'gemini') && !geminiQuotaExceeded
       const consensusOnlyReanalyze = (options?.isReanalyze === true && tabId === 'creative')
+      if (tabId === 'creative') setInsightStatus('loading')
       if (!consensusOnlyReanalyze) {
         if (doGroq) setTabLoadingGroq((prev) => ({ ...prev, [tabId]: true }))
         if (doGemini) setTabLoadingGemini((prev) => ({ ...prev, [tabId]: true }))
@@ -616,6 +651,7 @@ function ResultsContent() {
             toast.error(errMsg, { id: TAB_ERROR_TOAST_ID, duration: 5000 })
             showErrorToast(errForModal, { fallbackMessage: errMsg })
           }
+          if (tabId === 'creative') setInsightStatus('fail')
           return
         }
         const groqText = typeof (data as { groq?: { text?: string } }).groq?.text === 'string' ? (data as { groq: { text: string } }).groq.text : null
@@ -638,7 +674,17 @@ function ResultsContent() {
         }
         const rawConsensus = (data as { consensus?: unknown }).consensus
         const normalized = rawConsensus && typeof rawConsensus === 'object' ? normalizeConsensusData(rawConsensus) : null
-        if (normalized) setConsensusData(normalized)
+        const fallbackSummary = '분석 불가. 데이터가 부족합니다.'
+        if (tabId === 'creative') {
+          if (normalized && normalized.strategicSummary?.summary && normalized.strategicSummary.summary !== fallbackSummary) {
+            setInsightData(normalized)
+            setInsightStatus('success')
+          } else {
+            setInsightStatus('fail')
+          }
+        } else if (normalized && normalized.strategicSummary?.summary && normalized.strategicSummary.summary !== fallbackSummary) {
+          setInsightData(normalized)
+        }
         if (groqText !== null || geminiText !== null) {
           mergeResultAnalysis(tabId, groqText, geminiText)
         }
@@ -654,6 +700,7 @@ function ResultsContent() {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
+        if (tabId === 'creative') setInsightStatus('fail')
         const fallback = '분석을 불러오지 못했습니다. 다시 시도해 주세요.'
         if (provider === 'all' || provider === 'groq') {
           setRetryCountTabGroq((prev) => ({ ...prev, [tabId]: Math.min((prev[tabId] ?? 0) + 1, 3) }))
@@ -670,7 +717,7 @@ function ResultsContent() {
         setTabLoadingGemini((prev) => ({ ...prev, [tabId]: false }))
       }
     },
-    [currentKeyword, countryFromUrl, reportSummary, displayResult?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, mergeResultAnalysis]
+    [currentKeyword, countryFromUrl, reportSummary, displayResult?.reportId, tabCacheGroq, tabCacheGemini, newsHeadlines, quotaExceeded, geminiQuotaExceeded, mergeResultAnalysis, setInsightData, setInsightStatus]
   )
 
   // 탭 분석: DB(result.analysis_groq/analysis_gemini)에 이미 있으면 API 호출 절대 안 함. 재시도 버튼으로만 호출.
@@ -751,7 +798,7 @@ function ResultsContent() {
       isConsensusStartedRef.current = true
       return
     }
-    if (consensusData != null) return
+    if (insightData != null) return
     if (isConsensusStartedRef.current) return
     const groqCreative = (displayResult?.analysis_groq as TabAnalysisRecord | undefined)?.creative
     const geminiCreative = (displayResult?.analysis_gemini as TabAnalysisRecord | undefined)?.creative
@@ -775,7 +822,7 @@ function ResultsContent() {
     isConsensusStartedRef.current = true
     creativeFetchedForConsensusRef.current = displayResult?.reportId ?? null
     fetchTabAnalysis('creative', 'all')
-  }, [displayStatus, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, consensusData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
+  }, [displayStatus, displayResult?.reportId, displayResult?.analysis_groq, displayResult?.analysis_gemini, quotaExceeded, geminiQuotaExceeded, insightData, bothSettledForConsensus, tabCacheGroq.creative, tabCacheGemini.creative, fetchTabAnalysis])
 
   /** AI Insight Consensus 전용 재시도: 한 번만 API 호출. Consensus API(tab creative)만 호출. */
   const retryConsensus = useCallback(async () => {
@@ -792,7 +839,8 @@ function ResultsContent() {
     }
     try {
       if (displayResult?.reportId) {
-        setConsensusData(null)
+        setInsightData(null, { force: true })
+        setInsightStatus('idle')
         setTabErrorGroq((prev) => ({ ...prev, creative: null }))
         setTabErrorGemini((prev) => ({ ...prev, creative: null }))
         creativeFetchedForConsensusRef.current = null
@@ -809,7 +857,8 @@ function ResultsContent() {
             cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
             cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
           ].filter(Boolean).join('\n\n')
-          setConsensusData(null)
+          setInsightData(null, { force: true })
+          setInsightStatus('idle')
           setTabErrorGroq((prev) => ({ ...prev, creative: null }))
           setTabErrorGemini((prev) => ({ ...prev, creative: null }))
           creativeFetchedForConsensusRef.current = null
@@ -822,12 +871,12 @@ function ResultsContent() {
     } finally {
       clearProgress()
     }
-  }, [currentKeyword, countryFromUrl, displayResult?.reportId, loadFromHistory, fetchTabAnalysis])
+  }, [currentKeyword, countryFromUrl, displayResult?.reportId, loadFromHistory, fetchTabAnalysis, setInsightData, setInsightStatus])
 
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
-    const previousInsights = displayResult?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? ''
+    const previousInsights = displayResult?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? insightData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? ''
     setFollowUpLoading(true)
     setFollowUpQuestion('')
     try {
@@ -853,21 +902,21 @@ function ResultsContent() {
     } finally {
       setFollowUpLoading(false)
     }
-  }, [followUpQuestion, followUpLoading, currentKeyword, displayResult, tabCacheGroq.creative, tabCacheGemini.creative, consensusData])
+  }, [followUpQuestion, followUpLoading, currentKeyword, displayResult, tabCacheGroq.creative, tabCacheGemini.creative, insightData])
 
   const buildInsightSnapshot = useCallback((): InsightSnapshot => {
     const summary =
-      consensusData?.strategicSummary?.summary?.trim() ||
+      insightData?.strategicSummary?.summary?.trim() ||
       (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
       ''
     const qualityInput = {
-      marketNews: displayResult?.marketNews ?? consensusData?.marketNews,
-      painPoints: displayResult?.painPoints ?? consensusData?.painPoints,
-      competitorTrends: displayResult?.competitorTrends ?? consensusData?.competitorTrends,
-      sentiment: consensusData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
-      impactAnalysis: consensusData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
-      strategicSummary: consensusData?.strategicSummary,
-      metadata: consensusData?.metadata,
+      marketNews: displayResult?.marketNews ?? insightData?.marketNews,
+      painPoints: displayResult?.painPoints ?? insightData?.painPoints,
+      competitorTrends: displayResult?.competitorTrends ?? insightData?.competitorTrends,
+      sentiment: insightData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
+      impactAnalysis: insightData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
+      strategicSummary: insightData?.strategicSummary,
+      metadata: insightData?.metadata,
     }
     const q = computeAnalysisQualityScore(qualityInput)
     const qualityScore: InsightQualityScore = { score: q.score, label: q.label, explanation: q.explanation }
@@ -875,19 +924,19 @@ function ResultsContent() {
       keyword: currentKeyword ?? '',
       countryCode: countryFromUrl,
       summary: summary || undefined,
-      strategicSummary: consensusData?.strategicSummary
+      strategicSummary: insightData?.strategicSummary
         ? {
-            summary: consensusData.strategicSummary.summary || undefined,
-            actionItems: consensusData.strategicSummary.actionItems,
-            opportunity: consensusData.strategicSummary.opportunity,
-            threat: consensusData.strategicSummary.threat,
+            summary: insightData.strategicSummary.summary || undefined,
+            actionItems: insightData.strategicSummary.actionItems,
+            opportunity: insightData.strategicSummary.opportunity,
+            threat: insightData.strategicSummary.threat,
           }
         : undefined,
       reportId: displayResult?.reportId ?? null,
       savedAt: new Date().toISOString(),
       qualityScore,
     }
-  }, [consensusData, displayResult, currentKeyword, countryFromUrl])
+  }, [insightData, displayResult, currentKeyword, countryFromUrl])
 
   const handleSaveInsightOpen = useCallback(() => {
     setSaveInsightName((currentKeyword ?? '').trim() || '인사이트')
@@ -954,38 +1003,43 @@ function ResultsContent() {
   if (showTabs) {
     return (
       <div className="px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-3 min-h-screen bg-background rin-doc">
-        <div className="flex gap-4 lg:gap-6 min-w-0 max-w-[1920px] mx-auto">
-          {/* 좌측 섹션 사이드바 – 결과 페이지만, sticky + 활성 하이라이트 */}
-          {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-            <aside className="hidden lg:block shrink-0">
-              <ResultSectionNav variant="sidebar" />
-            </aside>
-          )}
+        {/* 좌측 섹션 네비 – 스크롤해도 화면에 고정 (fixed), lg 이상에서만 표시 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-background/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden">
+            <ResultSectionNav variant="sidebar" />
+          </aside>
+        )}
+        <div className={cn(
+          'flex min-w-0 max-w-[1920px] mx-auto',
+          (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && 'lg:pl-[208px]'
+        )}>
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
         {/* 1. Result Page Hero – single control area (PDF, Save, Retry) */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {(effectiveDisplayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <ResultPageHero
             title={heroTitle}
             opportunityScore={
-              typeof displayResult?.key_metrics?.opportunity_score === 'number'
-                ? displayResult.key_metrics.opportunity_score
+              typeof effectiveDisplayResult?.key_metrics?.opportunity_score === 'number'
+                ? effectiveDisplayResult.key_metrics.opportunity_score
                 : null
             }
             confidenceScore={
               (() => {
-                const km = displayResult?.key_metrics
-                const ar = displayResult?.analysis_results as { confidence?: number } | undefined
+                const km = effectiveDisplayResult?.key_metrics
+                const ar = effectiveDisplayResult?.analysis_results as { confidence?: number } | undefined
                 if (typeof km?.confidence_score === 'number') return km.confidence_score
                 const c = ar?.confidence
                 if (typeof c === 'number') return c <= 1 ? c * 100 : c
-                const mc = consensusData?.metadata?.confidence
+                const mc = insightData?.metadata?.confidence
                 if (mc != null && typeof mc === 'number') return mc <= 1 ? mc * 100 : mc
-                return displayResult ? 75 : null
+                return effectiveDisplayResult ? 75 : null
               })()
             }
             topInsight={
-              (consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '').trim() || null
+              sanitizeForKoreanDisplay(
+                insightData?.strategicSummary?.summary ?? effectiveDisplayResult?.key_metrics?.summary_insights ?? (effectiveDisplayResult?.key_metrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
+              ) || null
             }
             statusText={
               (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
@@ -1004,6 +1058,36 @@ function ResultsContent() {
               : canonicalStatus === 'failed' || showPolledError ? 'fail'
               : displayResult && (canonicalStatus === 'completed' || polledStatus === 'completed') ? 'success'
               : 'idle'
+            }
+            timelineSlot={
+              <div id="section-timeline" className="scroll-mt-24">
+                <ResultTimelineSection
+                  embedded
+                  keyword={currentKeyword ?? ''}
+                  streamingState={streamingState}
+                  polledProgressStep={polledStatus === 'running' ? Math.min(6, Math.max(0, polledProgressStep)) : undefined}
+                  polledStatus={polledStatus}
+                  taskData={taskData}
+                  analysisTasks={analysisTasks ?? null}
+                  newsList={newsList ?? []}
+                  result={displayResult}
+                  displayResult={displayResult}
+                  hasError={canonicalStatus === 'failed' || !!showPolledError}
+                  errorStepIndex={
+                    streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
+                      ? streamingState.lastSuccessfulStep + 1
+                      : polledProgressStep ?? 0
+                  }
+                  globalErrorMessage={displayError ?? polledError ?? undefined}
+                  loading={loading}
+                  onRetryStep={() => {
+                    setPolledStatus(null)
+                    setPolledError(null)
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                  }}
+                  maxHeight="280px"
+                />
+              </div>
             }
             actions={
               <div className="flex flex-wrap items-center gap-3">
@@ -1030,7 +1114,7 @@ function ResultsContent() {
                   reportId={displayResult?.reportId ?? null}
                   summaryText={[
                     currentKeyword ? `# ${currentKeyword} 시장 분석 요약` : '',
-                    consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '',
+                    insightData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '',
                     reportSummary,
                     displayResult?.key_metrics?.opportunity_score != null
                       ? `\n기회 점수: ${displayResult.key_metrics.opportunity_score}/100`
@@ -1074,7 +1158,7 @@ function ResultsContent() {
         )}
 
         {/* AI 인사이트 생성 시퀀스: 분석 완료 직후 2–4초간 연출 후 리포트 표시 */}
-        {showInsightSequence && displayResult && (
+        {showInsightSequence && effectiveDisplayResult && (
           <div className="mt-4 mb-4">
             <AIInsightGenerationSequence
               keyword={currentKeyword ?? ''}
@@ -1084,40 +1168,17 @@ function ResultsContent() {
           </div>
         )}
 
+        {/* 모바일/태블릿: 스크롤 시 따라오는 섹션 탭 (lg 이상은 좌측 사이드바) */}
+        {!showInsightSequence && (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div className="lg:hidden mt-3 -mx-2 sm:-mx-3 md:-mx-4">
+            <ResultSectionNav variant="tabs" className="!top-14" />
+          </div>
+        )}
+
         {/* 섹션 콘텐츠 (시퀀스 미표시 시에만) – 좌측 섹션 사이드바로 이동 */}
         {!showInsightSequence && (
           <>
         <div className="space-y-5 mt-4">
-        {/* AI 분석 타임라인 – 상단 배치, max-height + 내부 스크롤 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <ResultTimelineSection
-            keyword={currentKeyword ?? ''}
-            streamingState={streamingState}
-            polledProgressStep={polledStatus === 'running' ? Math.min(6, Math.max(0, polledProgressStep)) : undefined}
-            polledStatus={polledStatus}
-            taskData={taskData}
-            analysisTasks={analysisTasks ?? null}
-            newsList={newsList ?? []}
-            result={displayResult}
-            displayResult={displayResult}
-            hasError={canonicalStatus === 'failed' || !!showPolledError}
-            errorStepIndex={
-              streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
-                ? streamingState.lastSuccessfulStep + 1
-                : polledProgressStep ?? 0
-            }
-            globalErrorMessage={displayError ?? polledError ?? undefined}
-            loading={loading}
-            onRetryStep={() => {
-              setPolledStatus(null)
-              setPolledError(null)
-              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
-            }}
-            maxHeight="280px"
-            className="scroll-mt-24"
-          />
-        )}
-
         {/* 분석 결과 요약 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <section id="section-summary" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="분석 결과 요약">
@@ -1126,7 +1187,7 @@ function ResultsContent() {
             </h2>
             <ResultSummaryCards
               result={displayResult}
-              consensusData={consensusData ?? undefined}
+              consensusData={insightData ?? undefined}
               taskData={taskData}
               analysisTasks={analysisTasks ?? undefined}
               loading={loading}
@@ -1217,7 +1278,7 @@ function ResultsContent() {
             </p>
             {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
               <p className="text-sm font-medium text-primary mt-2">
-                {getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)} ({(streamingState.currentStep ?? 0) + 1}/5)
+                {getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)} ({Math.min(6, (streamingState.currentStep ?? 0) + 1)}/6)
               </p>
             )}
           </div>
@@ -1227,12 +1288,12 @@ function ResultsContent() {
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <div id="section-insights" className="scroll-mt-24">
             <KeyMarketInsightsCard
-              result={displayResult}
+              result={effectiveDisplayResult}
               taskData={taskData}
               analysisTasks={analysisTasks ?? undefined}
               newsList={newsList ?? []}
-              consensusData={consensusData ?? undefined}
-              loading={loading}
+              consensusData={insightData ?? undefined}
+              loading={isAnalysisLoading}
               keyword={currentKeyword ?? ''}
             />
           </div>
@@ -1283,7 +1344,7 @@ function ResultsContent() {
               displayResult={displayResult}
               newsList={newsList}
               taskData={taskData}
-              consensusData={consensusData}
+              consensusData={insightData}
               onSaveInsight={handleSaveInsightOpen}
               onReanalyze={() => {
                 setPolledStatus(null)
@@ -1390,7 +1451,7 @@ function ResultsContent() {
               (() => {
                 const kw = (currentKeyword ?? '').trim()
                 const fallbackInsight =
-                  consensusData?.strategicSummary?.summary?.trim() ||
+                  insightData?.strategicSummary?.summary?.trim() ||
                   displayResult?.key_metrics?.summary_insights?.trim() ||
                   displayResult?.key_metrics?.keyConclusions?.[0]?.trim() ||
                   (kw ? `이 뉴스는 ${kw} 시장 분석에 참고된 시장 신호입니다.` : '이 뉴스는 시장 동향 분석에 참고된 시장 신호입니다.')

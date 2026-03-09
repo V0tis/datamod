@@ -802,7 +802,7 @@ export const useResearchStore = create<ResearchStore>()(
           const setStepProgress = get().setStepProgress
           const setAnalysisId = get().setAnalysisId
 
-          // Product Strategy Engine - 5 layers
+          // Product Strategy Engine - 5 layers + post_processing (6)
           const stepMap: Record<string, number> = {
             signal_layer: 0,
             news: 0,
@@ -813,6 +813,10 @@ export const useResearchStore = create<ResearchStore>()(
             execution_layer: 4,
             pass2: 4,
             creative: 4,
+            post_processing: 5,
+            post_processing_key_metrics: 5,
+            post_processing_creative: 5,
+            post_processing_saving: 5,
           }
 
           while (!streamEnded) {
@@ -908,6 +912,15 @@ export const useResearchStore = create<ResearchStore>()(
                   const stepIdx = stepMap[type]
                   setStepProgress(stepIdx, type)
                   lastSuccessfulStep = stepIdx
+                }
+
+                if (type === 'post_processing') {
+                  const ev = event as { stepId?: string }
+                  const stepId = ev.stepId ?? 'key_metrics'
+                  const mapped = `post_processing_${stepId}`
+                  if (mapped in stepMap) {
+                    setStepProgress(stepMap[mapped], mapped)
+                  }
                 }
 
                 if (type === 'news') {
@@ -1225,9 +1238,18 @@ export const useResearchStore = create<ResearchStore>()(
 
           if (activeJobId && jobs[activeJobId]) {
             const active = jobs[activeJobId]
+            const prev = get()
+            // Do not overwrite keyword/result when user is viewing a cached result for a different keyword (e.g. from URL).
+            // Prevents "분석 불가" / loading flash when results page shows cached data and refreshJobs picks another job.
+            const viewingCachedOtherKeyword =
+              Boolean(prev.result?.reportId && (prev.keyword ?? '').trim()) &&
+              (active.keyword?.trim() ?? '') !== (prev.keyword?.trim() ?? '')
+            if (viewingCachedOtherKeyword) {
+              set({ activeJobId })
+              return
+            }
             const nextStatus = active.status === 'succeeded' ? 'done' : active.status === 'failed' || active.status === 'cancelled' ? 'error' : 'loading'
             const nextAnalysisStatus = jobStatusToTaskStatus(active.status)
-            const prev = get()
             const isTerminal = prev.analysisStatus === 'completed' || prev.analysisStatus === 'failed'
             const wouldRevert = isTerminal && (nextAnalysisStatus === 'queued' || nextAnalysisStatus === 'analyzing')
             if (!wouldRevert) {

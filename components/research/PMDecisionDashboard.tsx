@@ -1,10 +1,8 @@
 'use client'
 
 import { useCallback } from 'react'
-import { RefreshCw, Loader2, Bookmark } from 'lucide-react'
 import { useAnalysisTasksPoll } from '@/lib/hooks/use-analysis-tasks-poll'
 import { useResearchStore } from '@/lib/stores/research-store'
-import { Button } from '@/components/ui/button'
 import { AnalysisResultSections } from './AnalysisResultSections'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
@@ -205,38 +203,6 @@ export function PMDecisionDashboard({
         />
       )}
 
-      {/* 액션 버튼 (PDF는 상단 ResultShareActions에 있음, 여기서는 인사이트 저장·재분석만) */}
-      {showResultSections && (
-        <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">
-        {onSaveInsight && (
-          <Button variant="outline" size="sm" onClick={onSaveInsight} className="gap-1.5">
-            <Bookmark className="h-4 w-4" />
-            인사이트로 저장
-          </Button>
-        )}
-        {onReanalyze && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onReanalyze}
-            disabled={reanalyzing}
-            className="gap-2"
-          >
-            {reanalyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                재분석 중...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4" />
-                다시 분석하기
-              </>
-            )}
-          </Button>
-        )}
-        </div>
-      )}
     </div>
   )
 }

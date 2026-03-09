@@ -7,7 +7,7 @@ import { getProviderDisplayName } from '@/lib/ai/provider-display'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-/** AI Analysis Timeline - 7 steps matching real analysis pipeline */
+/** AI Analysis Timeline - 8 steps: 5파이프라인 + 리스크평가 + 기회점수산출 + 완료 */
 const PIPELINE_STAGES = [
   { id: 'signal_layer', label: '데이터 수집', taskId: 'signal_layer' as const, sectionLabel: '수집된 시그널' },
   { id: 'trend_analysis', label: '시장 성장 분석', taskId: 'trend_analysis' as const, sectionLabel: 'AI 인사이트' },
@@ -15,6 +15,7 @@ const PIPELINE_STAGES = [
   { id: 'strategy_generation', label: '리스크 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 신호' },
   { id: 'execution_layer', label: '제품 전략 도출', taskId: 'execution_layer' as const, sectionLabel: '제안 전략' },
   { id: 'risks_opportunities', label: '리스크 및 기회 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 및 기회', isVirtual: true },
+  { id: 'post_processing', label: '기회 점수·차트 산출', taskId: 'post_processing' as const, sectionLabel: '기회 점수·차트', isVirtual: true },
   { id: 'done', label: '분석 완료', taskId: 'done' as const, sectionLabel: '', isVirtual: true },
 ] as const
 
@@ -29,7 +30,11 @@ const STREAM_TO_INDEX: Record<string, number> = {
   pass2: 4,
   creative: 4,
   risks_opportunities: 5,
-  done: 6,
+  post_processing: 6,
+  post_processing_key_metrics: 6,
+  post_processing_creative: 6,
+  post_processing_saving: 6,
+  done: 7,
 }
 
 export interface PipelineStageInsight {
@@ -69,6 +74,8 @@ export interface StrategyEnginePipelineProps {
   errorStepIndex?: number
   /** Error message to show in failed step when task.error_message is empty */
   globalErrorMessage?: string
+  /** Hero 내장 시 카드/박스 중첩 제거, 기회 점수 그리드와 시각적 통일 */
+  embedded?: boolean
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -214,6 +221,9 @@ function getStageInsight(
         signals: [...risks.slice(0, 3), ...opportunities.slice(0, 3)].filter(Boolean).slice(0, 6),
       }
     case 6:
+      // 기회 점수·차트 산출 (post_processing) - 별도 task 데이터 없음
+      return null
+    case 7:
       return null
     }
   }
@@ -267,6 +277,7 @@ function getStageInsight(
         signals: [...neg5.slice(0, 3), ...pos5.slice(0, 3)].filter(Boolean),
       }
     case 6:
+    case 7:
       return null
   }
 
@@ -287,6 +298,7 @@ export function StrategyEnginePipeline({
   errorStepIndex = 0,
   globalErrorMessage,
   result,
+  embedded = false,
   className,
 }: StrategyEnginePipelineProps) {
   const [expanded, setExpanded] = useState(false)
@@ -297,7 +309,7 @@ export function StrategyEnginePipeline({
   )
 
   const effectiveIndex = allCompleted
-    ? 6
+    ? 7
     : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
       ? STREAM_TO_INDEX[streamingStepId]
       : currentStep >= 0
@@ -309,12 +321,16 @@ export function StrategyEnginePipeline({
     const stage = PIPELINE_STAGES[i]
     const taskId = stage?.taskId
     const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
-    // Virtual steps: 5 = risks_opportunities (done when strategy_generation done), 6 = done (allCompleted)
+    // Virtual steps: 5 = risks_opportunities, 6 = post_processing (기회 점수·차트), 7 = done (allCompleted)
     if (i === 5) {
       const stratTask = taskMap['strategy_generation']
       return stratTask?.status === 'completed' || allCompleted ? 'completed' : stratTask?.status === 'running' ? 'running' : 'pending'
     }
-    if (i === 6) return allCompleted ? 'completed' : 'pending'
+    if (i === 6) {
+      const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
+      return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
+    }
+    if (i === 7) return allCompleted ? 'completed' : 'pending'
     // Global error: failed step + completed before + pending after
     if (hasError) {
       const failIdx = Math.min(errorStepIndex, 4)
@@ -328,28 +344,24 @@ export function StrategyEnginePipeline({
     return 'pending'
   }
 
-  const currentIdx = allCompleted ? 6 : Math.min(effectiveIndex, 5)
+  const currentIdx = allCompleted ? 7 : Math.min(effectiveIndex, 6)
   const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[5]
 
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-card shadow-sm overflow-hidden',
-        'bg-gradient-to-b from-primary/5 to-transparent',
+        !embedded && 'rounded-lg border border-border bg-card shadow-sm overflow-hidden bg-gradient-to-b from-primary/5 to-transparent',
         className
       )}
     >
-      <div className="p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-2 mb-3">
+      <div className={embedded ? 'py-2' : 'p-4 sm:p-5'}>
+        <div className={cn('flex items-center justify-between gap-2', embedded ? 'mb-2' : 'mb-3')}>
           <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="h-5 w-5 text-primary shrink-0" />
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-                AI 분석 진행 상황
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              <span className={cn(embedded ? 'text-xs font-medium text-muted-foreground' : 'text-sm font-semibold text-foreground uppercase tracking-wider')}>
                 {allCompleted ? `분석 완료 · "${keyword}"` : `AI가 단계별로 분석 중 · "${keyword}"`}
-              </p>
+              </span>
             </div>
           </div>
           <button
@@ -373,9 +385,9 @@ export function StrategyEnginePipeline({
 
         {/* Collapsed: compact step list + current step detail */}
         {!expanded && (
-          <div className="space-y-3 mb-3">
+          <div className={cn('space-y-3', embedded ? 'mb-0' : 'mb-3')}>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-              {PIPELINE_STAGES.slice(0, 6).map((s, i) => {
+              {PIPELINE_STAGES.slice(0, 7).map((s, i) => {
                 const st = getStatus(i)
                 return (
                   <span
@@ -398,11 +410,11 @@ export function StrategyEnginePipeline({
             </div>
             <div
               className={cn(
-                'rounded-lg border-2 px-4 py-3',
-                getStatus(currentIdx) === 'completed' && 'border-primary/50 bg-primary/5',
-                getStatus(currentIdx) === 'running' && 'border-primary bg-primary/10 ring-2 ring-primary/20',
-                getStatus(currentIdx) === 'pending' && 'border-border/60 bg-muted/20',
-                getStatus(currentIdx) === 'failed' && 'border-destructive/50 bg-destructive/5',
+                embedded ? 'rounded-md px-3 py-2 bg-muted/30' : 'rounded-lg border-2 px-4 py-3',
+                !embedded && getStatus(currentIdx) === 'completed' && 'border-primary/50 bg-primary/5',
+                !embedded && getStatus(currentIdx) === 'running' && 'border-primary bg-primary/10 ring-2 ring-primary/20',
+                !embedded && getStatus(currentIdx) === 'pending' && 'border-border/60 bg-muted/20',
+                !embedded && getStatus(currentIdx) === 'failed' && 'border-destructive/50 bg-destructive/5',
               )}
             >
               <div className="flex items-center gap-3">

@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Loader2, RefreshCw, CheckCircle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { getConfidenceDisplay } from '@/lib/confidence-display'
 import { ConfidenceIndicator } from '@/components/research/confidence-indicator'
 import { SentimentFactorBreakdown } from '@/components/research/sentiment-factor-breakdown'
@@ -68,8 +69,8 @@ export function normalizeConsensusData(raw: unknown): ConsensusData | null {
       },
       impactAnalysis: impact,
       strategicSummary: {
-        summary: typeof ss.summary === 'string' ? ss.summary : '—',
-        opportunity: typeof ss.opportunity === 'string' ? ss.opportunity : '—',
+        summary: sanitizeForKoreanDisplay(typeof ss.summary === 'string' ? ss.summary : '—') || '—',
+        opportunity: sanitizeForKoreanDisplay(typeof ss.opportunity === 'string' ? ss.opportunity : '—') || '—',
         threat: typeof ss.threat === 'string' ? ss.threat : '—',
         actionItems: Array.isArray(ss.actionItems) ? (ss.actionItems as string[]) : [],
       },
@@ -77,7 +78,7 @@ export function normalizeConsensusData(raw: unknown): ConsensusData | null {
     }
   }
   if (typeof o.summary === 'string' || typeof o.sentiment === 'number') {
-    const summary = typeof o.summary === 'string' ? o.summary : '—'
+    const summary = sanitizeForKoreanDisplay(typeof o.summary === 'string' ? o.summary : '—') || '—'
     const score = typeof o.sentiment === 'number' ? Math.max(-100, Math.min(100, o.sentiment)) : 0
     const confidence = typeof o.confidence === 'number' ? Math.max(0, Math.min(100, o.confidence)) : 0
     const actionItems = Array.isArray(o.action_item)
@@ -99,7 +100,7 @@ export function normalizeConsensusData(raw: unknown): ConsensusData | null {
       ],
       strategicSummary: {
         summary,
-        opportunity: typeof o.strategic_insight === 'string' ? o.strategic_insight : '—',
+        opportunity: sanitizeForKoreanDisplay(typeof o.strategic_insight === 'string' ? o.strategic_insight : '—') || '—',
         threat: '—',
         actionItems,
       },

@@ -50,6 +50,8 @@ export interface ResultPageHeroProps {
   actions?: React.ReactNode
   /** Analysis state for success/fail badge near score */
   analysisStatus?: 'idle' | 'loading' | 'success' | 'fail'
+  /** AI 분석 타임라인 – 마지막 업데이트 하단, 핵심 인사이트 위에 배치 */
+  timelineSlot?: React.ReactNode
   className?: string
 }
 
@@ -67,6 +69,7 @@ export function ResultPageHero({
   loading = false,
   actions,
   analysisStatus,
+  timelineSlot,
   className,
 }: ResultPageHeroProps) {
   const hasScore = opportunityScore != null && Number.isFinite(opportunityScore)
@@ -106,6 +109,9 @@ export function ResultPageHero({
         </div>
         {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
       </div>
+
+      {/* AI 분석 타임라인 – 마지막 업데이트 하단, 핵심 인사이트 위 */}
+      {timelineSlot && <div className="mb-6">{timelineSlot}</div>}
 
       {/* Row 2: Gauge + Badges + Insight */}
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">

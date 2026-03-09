@@ -26,6 +26,8 @@ export interface ResultTimelineSectionProps {
   onRetryStep?: () => void
   /** Max height + scroll for compact view */
   maxHeight?: string
+  /** Hero 내장 시 카드 중첩 제거, 기회 점수 그리드와 UI 통일 */
+  embedded?: boolean
   className?: string
 }
 
@@ -49,15 +51,16 @@ export function ResultTimelineSection({
   loading = false,
   onRetryStep,
   maxHeight = '320px',
+  embedded = false,
   className,
 }: ResultTimelineSectionProps) {
   const timelineStep =
     polledStatus === 'running' && polledProgressStep != null
-      ? Math.min(6, Math.max(0, polledProgressStep))
+      ? Math.min(7, Math.max(0, polledProgressStep))
       : streamingState.status === 'running' || streamingState.status === 'streaming'
         ? streamingState.currentStep
         : displayResult != null && !loading && !hasError
-          ? 6
+          ? 7
           : -1
 
   const show = polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null
@@ -69,9 +72,10 @@ export function ResultTimelineSection({
       className={className}
       style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
     >
-      <div className="rounded-lg border border-border bg-card/50 p-4 sm:p-5 scroll-mt-24">
-        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">AI 분석 타임라인</h3>
+      <div className={embedded ? 'scroll-mt-24' : 'rounded-lg border border-border bg-card/50 p-4 sm:p-5 scroll-mt-24'}>
+        {!embedded && <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">AI 분석 타임라인</h3>}
         <StrategyEnginePipeline
+          embedded={embedded}
           keyword={keyword}
           currentStep={timelineStep}
           allCompleted={displayResult != null && !loading && !hasError}

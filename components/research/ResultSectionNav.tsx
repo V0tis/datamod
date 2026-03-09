@@ -5,10 +5,10 @@ import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspa
 import { cn } from '@/lib/utils'
 
 const SECTIONS = [
+  { id: 'section-timeline', label: 'AI 분석 타임라인', icon: GitBranch },
   { id: 'section-summary', label: '분석 결과 요약', icon: LayoutGrid },
   { id: 'section-opportunity', label: '기회 점수 분해', icon: Target },
   { id: 'section-insights', label: '핵심 시장 인사이트', icon: Lightbulb },
-  { id: 'section-timeline', label: 'AI 분석 타임라인', icon: GitBranch },
   { id: 'section-risks-opportunities', label: '리스크 및 기회 평가', icon: AlertTriangle },
   { id: 'section-market', label: '시장 성장 분석', icon: TrendingUp },
   { id: 'section-competition', label: '경쟁 환경 분석', icon: Users },
@@ -29,22 +29,51 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
 
   useEffect(() => {
     if (variant !== 'tabs' && variant !== 'sidebar') return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            setActiveId(e.target.id)
-            break
-          }
+    const updateActive = () => {
+      const triggerY = 120
+      let active: string | null = null
+      for (let i = SECTIONS.length - 1; i >= 0; i--) {
+        const el = document.getElementById(SECTIONS[i].id)
+        if (!el) continue
+        const rect = el.getBoundingClientRect()
+        if (rect.top <= triggerY && rect.bottom > triggerY) {
+          active = SECTIONS[i].id
+          break
         }
+        if (rect.top < triggerY) {
+          active = SECTIONS[i].id
+          break
+        }
+      }
+      if (!active && SECTIONS.length > 0) {
+        const first = document.getElementById(SECTIONS[0].id)
+        if (first && first.getBoundingClientRect().top > 0) active = SECTIONS[0].id
+        else active = SECTIONS[SECTIONS.length - 1].id
+      }
+      setActiveId((prev) => (prev !== active ? active : prev))
+    }
+    const observer = new IntersectionObserver(
+      () => {
+        updateActive()
       },
-      { rootMargin: '-15% 0px -75% 0px', threshold: 0 }
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
     )
     SECTIONS.forEach((s) => {
       const el = document.getElementById(s.id)
       if (el) observer.observe(el)
     })
-    return () => observer.disconnect()
+    updateActive()
+    const onScroll = () => requestAnimationFrame(updateActive)
+    const main = document.querySelector('main')
+    if (main) main.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', updateActive)
+    return () => {
+      observer.disconnect()
+      if (main) main.removeEventListener('scroll', onScroll)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', updateActive)
+    }
   }, [variant])
 
   const scrollTo = (id: string) => {
@@ -56,7 +85,8 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
     return (
       <nav
         className={cn(
-          'sticky top-14 flex flex-col gap-0.5 w-48 shrink-0 py-2',
+          'flex flex-col gap-0.5 w-full shrink-0 py-2',
+          'overflow-y-auto overflow-x-hidden',
           className
         )}
         aria-label="결과 섹션 탐색"

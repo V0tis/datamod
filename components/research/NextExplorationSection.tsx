@@ -89,15 +89,16 @@ export function NextExplorationSection({
                 <Input
                   type="text"
                   placeholder={followUp.placeholder ?? '예: 이 시장에서 경쟁 우위를 얻으려면?'}
-                  value={followUp.value}
+                  value={followUp.value ?? ''}
                   onChange={(e) => followUp.onChange(e.target.value)}
-                  disabled={followUp.disabled || followUp.loading}
+                  disabled={followUp.loading}
+                  autoComplete="off"
                   className="flex-1"
                   aria-label="추가 질문"
                 />
                 <Button
                   type="submit"
-                  disabled={followUp.disabled || followUp.loading || !followUp.value.trim()}
+                  disabled={followUp.loading || !(followUp.value ?? '').trim()}
                   className="gap-1.5 shrink-0"
                 >
                   {followUp.loading ? (
@@ -146,7 +147,7 @@ export function NextExplorationSection({
                 placeholder="새로운 시장 아이디어 입력 (예: AI Contract Review)"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                disabled={disabled}
+                autoComplete="off"
                 className="flex-1"
                 aria-label="분석할 시장 키워드"
               />

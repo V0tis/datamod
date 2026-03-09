@@ -98,12 +98,15 @@ const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
 
 export type AnalysisStepProvider = 'gemini' | 'groq'
 
+export type PostProcessingStepId = 'key_metrics' | 'creative' | 'saving'
+
 export type ResearchStreamEvent =
   | { type: 'analysis_started'; analysisId: string }
   | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
+  | { type: 'post_processing'; stepId: PostProcessingStepId }
   | { type: 'creative'; groqText: string | null; geminiText: string | null }
   | { type: 'done'; reportId: string; sourceLinks: NewsItem[] }
   | { type: 'cached'; reportId: string }
@@ -1100,6 +1103,8 @@ export async function* runResearch(
       : undefined,
   }
 
+  // Post-processing: 기회 점수·차트 산출 (파이프라인 5단계 완료 후, done 전)
+  yield { type: 'post_processing', stepId: 'key_metrics' }
   yield { type: 'pass2', structured }
 
   // Opportunity Score - deterministic formula (no LLM call)
@@ -1117,6 +1122,7 @@ export async function* runResearch(
   structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
 
   // Step 4: Creative analysis
+  yield { type: 'post_processing', stepId: 'creative' }
   let creativeGroq: string | null = null
   let creativeGemini: string | null = null
   try {
@@ -1146,6 +1152,7 @@ export async function* runResearch(
   }
 
   // Step 5: Persist to DB (only after all analysis succeeds)
+  yield { type: 'post_processing', stepId: 'saving' }
   let reportId: string | null = null
   try {
     const { data: report, error: insertError } = await supabase
