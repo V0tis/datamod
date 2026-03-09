@@ -2,6 +2,7 @@
 
 import { Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
 /** Display labels: English primary (user spec) + Korean */
 const LABELS: Record<string, string> = {
@@ -69,12 +70,14 @@ export function OpportunityScoreBreakdown({
   compact = false,
   className,
 }: OpportunityScoreBreakdownProps) {
+  /** 분석 중에도 UI 표시(경쟁 환경 분석 탭처럼): 데이터 없으면 default 사용 */
+  const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const hasScore = score != null && Number.isFinite(score)
-  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : null
+  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : 50
 
-  const items = breakdown
-    ? ORDER.filter((k) => breakdown[k as keyof typeof breakdown] != null).map((k) => {
-        const raw = Number(breakdown[k as keyof typeof breakdown])
+  const items = effectiveBreakdown
+    ? ORDER.filter((k) => effectiveBreakdown[k as keyof typeof effectiveBreakdown] != null).map((k) => {
+        const raw = Number(effectiveBreakdown[k as keyof typeof effectiveBreakdown])
         const value =
           k === 'competition_density' || k === 'risk_factors'
             ? raw
@@ -88,8 +91,6 @@ export function OpportunityScoreBreakdown({
         }
       })
     : []
-
-  if (!hasScore && items.length === 0) return null
 
   const maxAbs = Math.max(30, ...items.map((i) => Math.abs(i.value)), 1)
   const base = 50

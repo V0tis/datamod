@@ -40,6 +40,7 @@ import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScor
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
+import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
 import { useResultPageState } from '@/lib/hooks/use-result-page-state'
 import type { TabAnalysisRecord } from '@/lib/research-types'
@@ -476,6 +477,15 @@ function ResultsContent() {
   })
 
   const effectiveDisplayResult = pageAnalysisData ?? displayResult
+  /** 분석 중 key_metrics가 없을 때 default 값 사용 (차트·기회점수 등 UI 표시) */
+  const effectiveKeyMetrics =
+    effectiveDisplayResult?.key_metrics ??
+    (loading && !needsRunAction ? DEFAULT_KEY_METRICS_LOADING : undefined)
+  /** ResultSummaryCards용: 로딩 시 default key_metrics 병합 */
+  const effectiveResultForCards =
+    effectiveDisplayResult
+      ? { ...effectiveDisplayResult, key_metrics: effectiveKeyMetrics ?? effectiveDisplayResult.key_metrics }
+      : (loading && !needsRunAction ? { key_metrics: DEFAULT_KEY_METRICS_LOADING } as ResearchResponse : null)
 
   /** reportId 변경 시 insight 초기화 */
   useEffect(() => {
@@ -909,12 +919,13 @@ function ResultsContent() {
       insightData?.strategicSummary?.summary?.trim() ||
       (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ||
       ''
+    const km = effectiveKeyMetrics ?? displayResult?.key_metrics
     const qualityInput = {
       marketNews: displayResult?.marketNews ?? insightData?.marketNews,
       painPoints: displayResult?.painPoints ?? insightData?.painPoints,
       competitorTrends: displayResult?.competitorTrends ?? insightData?.competitorTrends,
-      sentiment: insightData?.sentiment ?? (displayResult?.key_metrics?.sentiment != null ? { score: (displayResult.key_metrics.sentiment - 50) * 2 } : undefined),
-      impactAnalysis: insightData?.impactAnalysis ?? displayResult?.key_metrics?.chartData?.impact,
+      sentiment: insightData?.sentiment ?? (km?.sentiment != null ? { score: (km.sentiment - 50) * 2 } : undefined),
+      impactAnalysis: insightData?.impactAnalysis ?? km?.chartData?.impact,
       strategicSummary: insightData?.strategicSummary,
       metadata: insightData?.metadata,
     }
@@ -936,7 +947,7 @@ function ResultsContent() {
       savedAt: new Date().toISOString(),
       qualityScore,
     }
-  }, [insightData, displayResult, currentKeyword, countryFromUrl])
+  }, [insightData, displayResult, effectiveKeyMetrics, currentKeyword, countryFromUrl])
 
   const handleSaveInsightOpen = useCallback(() => {
     setSaveInsightName((currentKeyword ?? '').trim() || '인사이트')
@@ -1020,25 +1031,25 @@ function ResultsContent() {
           <ResultPageHero
             title={heroTitle}
             opportunityScore={
-              typeof effectiveDisplayResult?.key_metrics?.opportunity_score === 'number'
-                ? effectiveDisplayResult.key_metrics.opportunity_score
-                : null
+              (typeof effectiveKeyMetrics?.opportunity_score === 'number'
+                ? effectiveKeyMetrics.opportunity_score
+                : (loading && !needsRunAction ? DEFAULT_KEY_METRICS_LOADING.opportunity_score : null)) ?? null
             }
             confidenceScore={
               (() => {
-                const km = effectiveDisplayResult?.key_metrics
+                const km = effectiveKeyMetrics ?? effectiveDisplayResult?.key_metrics
                 const ar = effectiveDisplayResult?.analysis_results as { confidence?: number } | undefined
                 if (typeof km?.confidence_score === 'number') return km.confidence_score
                 const c = ar?.confidence
                 if (typeof c === 'number') return c <= 1 ? c * 100 : c
                 const mc = insightData?.metadata?.confidence
                 if (mc != null && typeof mc === 'number') return mc <= 1 ? mc * 100 : mc
-                return effectiveDisplayResult ? 75 : null
+                return (effectiveDisplayResult || (loading && !needsRunAction)) ? 75 : null
               })()
             }
             topInsight={
               sanitizeForKoreanDisplay(
-                insightData?.strategicSummary?.summary ?? effectiveDisplayResult?.key_metrics?.summary_insights ?? (effectiveDisplayResult?.key_metrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
+                insightData?.strategicSummary?.summary ?? effectiveKeyMetrics?.summary_insights ?? (effectiveKeyMetrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
               ) || null
             }
             statusText={
@@ -1186,17 +1197,17 @@ function ResultsContent() {
               핵심 결론
             </h2>
             <ResultSummaryCards
-              result={displayResult}
+              result={effectiveResultForCards ?? displayResult}
               consensusData={insightData ?? undefined}
               taskData={taskData}
               analysisTasks={analysisTasks ?? undefined}
               loading={loading}
             />
-            {/* 시각 데이터: 시그널 수, 신뢰도, 리스크 수준, 소스 수 */}
-            {displayResult?.key_metrics && (
+            {/* 시각 데이터: 시그널 수, 신뢰도, 리스크 수준, 소스 수 - 분석 중에도 default로 표시 */}
+            {(effectiveKeyMetrics || displayResult?.key_metrics) && (
               <div className="mt-4 flex flex-wrap gap-3">
                 {(() => {
-                  const km = displayResult.key_metrics
+                  const km = effectiveKeyMetrics ?? displayResult?.key_metrics ?? {}
                   const pos = Array.isArray(km.positive_signals) ? km.positive_signals.length : 0
                   const neu = Array.isArray(km.neutral_signals) ? km.neutral_signals.length : 0
                   const neg = Array.isArray(km.negative_risks) ? km.negative_risks.length : 0
@@ -1255,12 +1266,12 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* Opportunity Score Breakdown */}
-        {(displayResult != null || loading) && !needsRunAction && (displayResult?.key_metrics?.opportunity_score != null || (displayResult?.key_metrics?.opportunity_score_breakdown && Object.keys(displayResult.key_metrics.opportunity_score_breakdown || {}).length > 0)) && (
+        {/* Opportunity Score Breakdown - 분석 중에도 default 차트 표시 */}
+        {(displayResult != null || loading) && !needsRunAction && (
           <section id="section-opportunity" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="기회 점수 분해">
             <OpportunityScoreBreakdown
-              score={displayResult?.key_metrics?.opportunity_score ?? null}
-              breakdown={displayResult?.key_metrics?.opportunity_score_breakdown ?? undefined}
+              score={effectiveKeyMetrics?.opportunity_score ?? null}
+              breakdown={effectiveKeyMetrics?.opportunity_score_breakdown ?? undefined}
               useKoreanLabels
             />
           </section>
@@ -1288,7 +1299,7 @@ function ResultsContent() {
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <div id="section-insights" className="scroll-mt-24">
             <KeyMarketInsightsCard
-              result={effectiveDisplayResult}
+              result={effectiveResultForCards ?? effectiveDisplayResult}
               taskData={taskData}
               analysisTasks={analysisTasks ?? undefined}
               newsList={newsList ?? []}
@@ -1335,13 +1346,13 @@ function ResultsContent() {
             {/* 3~6. 시장 성장 / 경쟁 / 전략 / 리스크 및 기회 (리포트 구조) */}
             <PMDecisionDashboard
               keyword={currentKeyword ?? ''}
-              result={displayResult}
+              result={effectiveResultForCards ?? displayResult}
               loading={loading}
               streamingState={streamingState}
               polledProgressStep={polledStatus === 'running' ? Math.min(4, Math.max(0, polledProgressStep)) : (canonicalStatus === 'failed' || showPolledError ? Math.min(4, Math.max(0, polledProgressStep)) : undefined)}
               polledStatus={polledStatus}
               hasFailure={canonicalStatus === 'failed' || showPolledError}
-              displayResult={displayResult}
+              displayResult={effectiveResultForCards ?? displayResult}
               newsList={newsList}
               taskData={taskData}
               consensusData={insightData}

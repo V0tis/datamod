@@ -10,6 +10,7 @@ import {
   Cell,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
 const CHART_COLORS = ['#2563EB', '#009588', '#104e64', '#fcbb00', '#f99c00', '#60a5fa', '#34d399', '#a78bfa']
 
@@ -71,8 +72,12 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
 }
 
 export function AnalysisCharts({ opportunityScoreBreakdown, className }: AnalysisChartsProps) {
-  if (!opportunityScoreBreakdown || Object.keys(opportunityScoreBreakdown).length === 0) return null
-  const data = breakdownToData(opportunityScoreBreakdown)
+  /** 분석 중에도 시장 점수 분포 표시: breakdown 없으면 default 사용 */
+  const breakdown =
+    opportunityScoreBreakdown && Object.keys(opportunityScoreBreakdown).length > 0
+      ? opportunityScoreBreakdown
+      : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
+  const data = breakdownToData(breakdown)
   if (data.length === 0) return null
 
   return (
@@ -80,7 +85,7 @@ export function AnalysisCharts({ opportunityScoreBreakdown, className }: Analysi
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
         시장 점수 분포
       </p>
-      <MarketGrowthChart breakdown={opportunityScoreBreakdown} />
+      <MarketGrowthChart breakdown={breakdown} />
     </div>
   )
 }

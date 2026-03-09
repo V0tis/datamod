@@ -21,6 +21,7 @@ import { SectionContentSkeleton } from '@/components/research/SectionContentSkel
 import { StreamingBulletList } from '@/components/research/StreamingInsightText'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import type { SectionStatus } from '@/components/research/ProductStrategySection'
 
 type TaskOutput = Record<string, unknown>
@@ -94,7 +95,8 @@ export function AnalysisResultSections({
   onSaveToWorkspace,
   layout = 'default',
 }: AnalysisResultSectionsProps) {
-  const km = result?.key_metrics ?? {}
+  /** 분석 중에도 차트/기회점수 표시: key_metrics 없으면 default 사용 */
+  const km = result?.key_metrics ?? (loading ? DEFAULT_KEY_METRICS_LOADING : {})
   const trendOutput = getTaskOutput('trend_analysis', taskData, analysisTasks)
   const competitionOutput = getTaskOutput('competition_analysis', taskData, analysisTasks)
   const strategyOutput = getTaskOutput('strategy_generation', taskData, analysisTasks)
@@ -282,7 +284,7 @@ export function AnalysisResultSections({
         loading={isPmAnalytics && loading}
         streamingComplete={isPmAnalytics && !loading && (keyTrends.length > 0 || opportunityScore != null)}
       >
-        {loading && !opportunityScore && keyTrends.length === 0 ? (
+        {(loading && !opportunityScore && keyTrends.length === 0 && Object.keys(breakdown).length === 0) ? (
           <SectionContentSkeleton variant="grid" />
         ) : (
           <div className="space-y-6">
@@ -312,9 +314,7 @@ export function AnalysisResultSections({
                 </div>
               )}
             </div>
-            {breakdown && Object.keys(breakdown).length > 0 && (
-              <AnalysisCharts opportunityScoreBreakdown={breakdown} className="mb-4" />
-            )}
+            <AnalysisCharts opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined} className="mb-4" />
             {keyTrends.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
