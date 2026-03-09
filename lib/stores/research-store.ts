@@ -748,7 +748,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
 
         try {
-          const checkRes = await fetch('/api/settings', { signal })
+          const checkRes = await fetch('/api/settings', { signal, credentials: 'include' })
           if (checkRes.ok) {
             const checkData = (await checkRes.json()) as { canSearch?: boolean }
             if (checkData.canSearch === false) {
@@ -768,6 +768,7 @@ export const useResearchStore = create<ResearchStore>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keyword: k, country_code: countryCode, mode }),
             signal,
+            credentials: 'include',
           })
 
           if (!res.ok) {
@@ -1348,7 +1349,7 @@ export const useResearchStore = create<ResearchStore>()(
 
         const run = async () => {
           try {
-            const checkRes = await fetch('/api/settings')
+            const checkRes = await fetch('/api/settings', { credentials: 'include' })
             if (checkRes.ok) {
               const checkData = (await checkRes.json()) as { canSearch?: boolean }
               if (checkData.canSearch === false) {

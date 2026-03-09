@@ -5,7 +5,6 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getGroqKeyForRequest, getAIPrimaryModelForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 
@@ -51,20 +50,11 @@ export async function POST(req: Request) {
 
     console.log('[Research Run API] POST 요청', { keyword, countryCode, userId: user.id })
 
-    let adminClient
-    try {
-      adminClient = createAdminClient()
-    } catch (e) {
-      console.error('[Research Run API] createAdminClient failed:', e)
-      return NextResponse.json(
-        { error: '서버 설정 오류: Supabase 환경 변수를 확인해 주세요. (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)' },
-        { status: 500 }
-      )
-    }
+    // Use session client for key resolution (same as GET /api/settings) so keys are read with user context; works with RLS on Vercel.
     const [geminiResult, groqKey, primaryProvider] = await Promise.all([
-      getGeminiKeyForRequest(adminClient, user.id),
-      getGroqKeyForRequest(adminClient, user.id),
-      getAIPrimaryModelForRequest(adminClient, user.id),
+      getGeminiKeyForRequest(supabase, user.id),
+      getGroqKeyForRequest(supabase, user.id),
+      getAIPrimaryModelForRequest(supabase, user.id),
     ])
     const { gemini, canSearch } = geminiResult
     if (!canSearch || !gemini) {
