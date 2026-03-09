@@ -11,6 +11,8 @@ import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+/** Vercel: analysis takes 1-3 min; default 10s would timeout. Hobby max 300s. */
+export const maxDuration = 300
 
 export async function POST(req: Request) {
   try {
@@ -49,7 +51,16 @@ export async function POST(req: Request) {
 
     console.log('[Research Run API] POST 요청', { keyword, countryCode, userId: user.id })
 
-    const adminClient = createAdminClient()
+    let adminClient
+    try {
+      adminClient = createAdminClient()
+    } catch (e) {
+      console.error('[Research Run API] createAdminClient failed:', e)
+      return NextResponse.json(
+        { error: '서버 설정 오류: Supabase 환경 변수를 확인해 주세요. (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)' },
+        { status: 500 }
+      )
+    }
     const [geminiResult, groqKey, primaryProvider] = await Promise.all([
       getGeminiKeyForRequest(adminClient, user.id),
       getGroqKeyForRequest(adminClient, user.id),
