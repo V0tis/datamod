@@ -63,6 +63,12 @@ const SKELETON_ROWS = 8
 function TrendsSkeleton() {
   return (
     <div className="space-y-1">
+      <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border mb-1 items-center">
+        <span className="col-span-1">순위</span>
+        <span className="col-span-7">키워드</span>
+        <span className="col-span-2 text-right">검색량</span>
+        <span className="col-span-2 text-right">등록</span>
+      </div>
       {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
         <div
           key={i}

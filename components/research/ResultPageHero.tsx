@@ -48,6 +48,8 @@ export interface ResultPageHeroProps {
   loading?: boolean
   /** Optional actions (share, AI model toggle) – render as children or slot */
   actions?: React.ReactNode
+  /** Analysis state for success/fail badge near score */
+  analysisStatus?: 'idle' | 'loading' | 'success' | 'fail'
   className?: string
 }
 
@@ -64,6 +66,7 @@ export function ResultPageHero({
   statusText,
   loading = false,
   actions,
+  analysisStatus,
   className,
 }: ResultPageHeroProps) {
   const hasScore = opportunityScore != null && Number.isFinite(opportunityScore)
@@ -163,8 +166,28 @@ export function ResultPageHero({
             <span className="text-xs font-medium text-muted-foreground mt-0.5">기회 점수</span>
           </div>
 
-          {/* Badges: Market Outlook + AI Confidence */}
+          {/* Badges: Status (success/fail) + Market Outlook + AI Confidence */}
           <div className="flex flex-wrap gap-2 sm:flex-col sm:gap-3">
+            {analysisStatus === 'success' && !loading && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  분석
+                </span>
+                <span className="inline-flex items-center px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-sm font-bold">
+                  완료
+                </span>
+              </div>
+            )}
+            {analysisStatus === 'fail' && !loading && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  분석
+                </span>
+                <span className="inline-flex items-center px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-400 text-sm font-bold">
+                  실패
+                </span>
+              </div>
+            )}
             {outlook != null && (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

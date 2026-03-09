@@ -20,14 +20,11 @@ export async function getGeminiKeyForRequest(
 ): Promise<ResearchKeysResult> {
   let userGemini: string | null = null
   if (userId) {
-    const { data: row, error } = await supabase
+    const { data: row } = await supabase
       .from('user_settings')
       .select('gemini_api_key')
       .eq('user_id', userId)
       .maybeSingle()
-    if (error) {
-      console.warn('[ResearchKeys] user_settings gemini query failed:', error.code, error.message)
-    }
     userGemini = row?.gemini_api_key ?? null
   }
   const effective = getEffectiveLicenseKeys(userGemini)
@@ -116,14 +113,11 @@ export async function getGroqKeyForRequest(
 ): Promise<string> {
   let userGroq: string | null = null
   if (userId) {
-    const { data: row, error } = await supabase
+    const { data: row } = await supabase
       .from('user_settings')
       .select('groq_api_key')
       .eq('user_id', userId)
       .maybeSingle()
-    if (error) {
-      console.warn('[ResearchKeys] user_settings groq query failed:', error.code, error.message)
-    }
     userGroq = (row as { groq_api_key?: string } | null)?.groq_api_key ?? null
   }
   const systemGroq = (process.env.GROQ_API_KEY ?? '').trim()

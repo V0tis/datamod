@@ -828,8 +828,7 @@ function ResultsContent() {
   const handleFollowUp = useCallback(async () => {
     const q = followUpQuestion.trim()
     if (!q || followUpLoading) return
-    const previousInsights = displayResult?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? ''
-    if (!previousInsights) return
+    const previousInsights = displayResult?.publicReactionTrends ?? tabCacheGroq.creative ?? tabCacheGemini.creative ?? consensusData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? ''
     setFollowUpLoading(true)
     setFollowUpQuestion('')
     try {
@@ -855,7 +854,7 @@ function ResultsContent() {
     } finally {
       setFollowUpLoading(false)
     }
-  }, [followUpQuestion, followUpLoading, currentKeyword, displayResult?.publicReactionTrends, tabCacheGroq.creative, tabCacheGemini.creative])
+  }, [followUpQuestion, followUpLoading, currentKeyword, displayResult, tabCacheGroq.creative, tabCacheGemini.creative, consensusData])
 
   const buildInsightSnapshot = useCallback((): InsightSnapshot => {
     const summary =
@@ -996,6 +995,12 @@ function ResultsContent() {
                     : undefined
             }
             loading={loading && !displayResult}
+            analysisStatus={
+              loading ? 'loading'
+              : canonicalStatus === 'failed' || showPolledError ? 'fail'
+              : displayResult && (canonicalStatus === 'completed' || polledStatus === 'completed') ? 'success'
+              : 'idle'
+            }
             actions={
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
@@ -1154,16 +1159,21 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* First 5 Seconds UX - 즉시 피드백, AI 분석 시작 확인 */}
+        {/* First 5 Seconds UX - 즉시 피드백, AI 분석 시작 확인 (중앙 배치, 진행 상태 명확히) */}
         {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
-          <div className="mb-4">
+          <div className="flex flex-col items-center justify-center py-12 px-4 mb-4 rounded-xl border border-border/60 bg-muted/20 min-h-[200px]">
             <FirstFiveSecondsBanner
               keyword={currentKeyword ?? ''}
               showMicroInsight
             />
-            <p className="text-xs text-muted-foreground mt-3 px-1">
+            <p className="text-xs text-muted-foreground mt-4 text-center">
               초기 인사이트는 약 10초 내에 표시됩니다. 전체 분석에는 약 1~3분이 소요될 수 있습니다.
             </p>
+            {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
+              <p className="text-sm font-medium text-primary mt-2">
+                {getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)} ({(streamingState.currentStep ?? 0) + 1}/5)
+              </p>
+            )}
           </div>
         )}
 
@@ -1228,7 +1238,6 @@ function ResultsContent() {
               newsList={newsList}
               taskData={taskData}
               consensusData={consensusData}
-              onPrint={printReportAsPdf}
               onSaveInsight={handleSaveInsightOpen}
               onReanalyze={() => {
                 setPolledStatus(null)
@@ -1389,9 +1398,17 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* 다음 탐색: 관련 시장 아이디어 + 다른 시장 분석하기 */}
+        {/* 다음 탐색: 같은 키워드로 추가 질문 + 관련 시장 아이디어 + 다른 시장 분석하기 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && currentKeyword && (
           <NextExplorationSection
+            followUp={displayResult ? {
+              value: followUpQuestion,
+              onChange: setFollowUpQuestion,
+              onSubmit: handleFollowUp,
+              loading: followUpLoading,
+              disabled: loading,
+              placeholder: '예: 이 시장에서 경쟁 우위를 얻으려면?',
+            } : undefined}
             onSelectKeyword={(k) => {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
               startStreamingResearch(k, { country_code: countryFromUrl })
@@ -1400,7 +1417,7 @@ function ResultsContent() {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
               startStreamingResearch(k, { country_code: countryFromUrl })
             }}
-            disabled={false}
+            disabled={loading}
           />
         )}
 

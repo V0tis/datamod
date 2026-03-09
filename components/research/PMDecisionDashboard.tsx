@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { FileDown, RefreshCw, Loader2, Bookmark } from 'lucide-react'
+import { RefreshCw, Loader2, Bookmark } from 'lucide-react'
 import { useAnalysisTasksPoll } from '@/lib/hooks/use-analysis-tasks-poll'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { Button } from '@/components/ui/button'
@@ -38,7 +38,6 @@ export interface PMDecisionDashboardProps {
     output_data: unknown
     error_message: string | null
   }> | null
-  onPrint?: () => void
   onSaveInsight?: () => void
   onReanalyze?: () => void
   onAbort?: () => void
@@ -63,7 +62,6 @@ export function PMDecisionDashboard({
   newsList = [],
   taskData = {},
   analysisTasks: analysisTasksProp,
-  onPrint,
   onSaveInsight,
   onReanalyze,
   reanalyzing = false,
@@ -204,15 +202,9 @@ export function PMDecisionDashboard({
         />
       )}
 
-      {/* 액션 버튼 */}
+      {/* 액션 버튼 (PDF는 상단 ResultShareActions에 있음, 여기서는 인사이트 저장·재분석만) */}
       {showResultSections && (
         <div className="flex flex-wrap gap-2 pt-4 border-t border-border/60">
-        {onPrint && (
-          <Button variant="outline" size="sm" onClick={onPrint} className="gap-1.5">
-            <FileDown className="h-4 w-4" />
-            PDF
-          </Button>
-        )}
         {onSaveInsight && (
           <Button variant="outline" size="sm" onClick={onSaveInsight} className="gap-1.5">
             <Bookmark className="h-4 w-4" />

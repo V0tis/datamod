@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Suspense, useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
@@ -127,31 +127,46 @@ function RinAISearchInner() {
       })
   }, [user])
 
-  useEffect(() => {
+  const fetchRecentReports = useCallback(() => {
     if (!user) {
       setRecentReports([])
       setRecentReportsLoading(false)
       return
     }
     setRecentReportsLoading(true)
-          fetch('/api/research/history')
-            .then((res) => res.json())
-            .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null; analysis_status?: string | null }> }) => {
-              const list = data?.list ?? []
-              setRecentReports(list.slice(0, 6).map((r) => ({
-                keyword: r.keyword,
-                created_at: r.updated_at ?? null,
-                country_code: r.country_code ?? 'KR',
-                opportunity_score: r.opportunity_score ?? null,
-                analysis_status: r.analysis_status ?? null,
-              })))
-            })
+    fetch('/api/research/history')
+      .then((res) => res.json())
+      .then((data: { list?: Array<{ keyword: string; updated_at?: string | null; country_code?: string; opportunity_score?: number | null; analysis_status?: string | null }> }) => {
+        const list = data?.list ?? []
+        setRecentReports(list.slice(0, 6).map((r) => ({
+          keyword: r.keyword,
+          created_at: r.updated_at ?? null,
+          country_code: r.country_code ?? 'KR',
+          opportunity_score: r.opportunity_score ?? null,
+          analysis_status: r.analysis_status ?? null,
+        })))
+      })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '최근 리서치 기록을 불러오지 못했습니다.' })
         setRecentReports([])
       })
       .finally(() => setRecentReportsLoading(false))
   }, [user])
+
+  useEffect(() => {
+    fetchRecentReports()
+  }, [fetchRecentReports])
+
+  useEffect(() => {
+    if (!user) return
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchRecentReports()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [user, fetchRecentReports])
 
   const fetchTrends = (forceRefresh = false) => {
     const url = `/api/trends?country=${trendCountry}${forceRefresh ? '&refresh=1' : ''}`

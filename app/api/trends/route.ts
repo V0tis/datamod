@@ -97,17 +97,6 @@ export async function GET(req: Request) {
     }
 
     if (shouldRefresh) {
-      const hasStale = list.length > 0
-      // Stale-while-revalidate: return stale data immediately and refresh in background to avoid blocking the client.
-      if (hasStale && !forceRefresh) {
-        const trendStatusRows = await selectTrendStatus()
-        const body = buildTrendsResponse(list, trendStatusRows)
-        refreshTrendsForCountry(country).catch((err) => {
-          if (isDev) console.log('[Trends GET] background refresh failed:', err)
-          console.warn('[Trends GET] background refresh failed:', err?.message ?? err)
-        })
-        return NextResponse.json({ ...body, revalidating: true }, { headers: JSON_HEADERS })
-      }
       if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 없음/만료', { country, lastUpdatedAt })
       try {
         await refreshTrendsForCountry(country)

@@ -21,6 +21,15 @@ export interface NextExplorationSectionProps {
   onSelectKeyword: (keyword: string) => void
   /** Called when user runs analysis on a new keyword from input */
   onRunAnalysis: (keyword: string) => void
+  /** Follow-up Q&A: same keyword, ask more. Shown as primary when provided. */
+  followUp?: {
+    value: string
+    onChange: (v: string) => void
+    onSubmit: () => void
+    loading?: boolean
+    disabled?: boolean
+    placeholder?: string
+  }
   disabled?: boolean
   className?: string
 }
@@ -33,6 +42,7 @@ export interface NextExplorationSectionProps {
 export function NextExplorationSection({
   onSelectKeyword,
   onRunAnalysis,
+  followUp,
   disabled = false,
   className,
 }: NextExplorationSectionProps) {
@@ -44,6 +54,11 @@ export function NextExplorationSection({
     if (!keyword || disabled) return
     onRunAnalysis(keyword)
     setInputValue('')
+  }
+
+  const handleFollowUpSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    followUp?.onSubmit()
   }
 
   return (
@@ -60,11 +75,43 @@ export function NextExplorationSection({
           다음 탐색
         </h2>
         <p className="text-sm text-muted-foreground mb-6">
-          다른 시장 아이디어를 분석해 보세요.
+          {followUp ? '동일 키워드로 추가 질문하거나, 다른 시장을 분석해 보세요.' : '다른 시장 아이디어를 분석해 보세요.'}
         </p>
 
         <div className="space-y-6">
-          {/* Related Market Ideas */}
+          {/* 1. Follow-up Q&A (primary when available) */}
+          {followUp && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                같은 키워드로 추가 질문
+              </p>
+              <form onSubmit={handleFollowUpSubmit} className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder={followUp.placeholder ?? '예: 이 시장에서 경쟁 우위를 얻으려면?'}
+                  value={followUp.value}
+                  onChange={(e) => followUp.onChange(e.target.value)}
+                  disabled={followUp.disabled || followUp.loading}
+                  className="flex-1"
+                  aria-label="추가 질문"
+                />
+                <Button
+                  type="submit"
+                  disabled={followUp.disabled || followUp.loading || !followUp.value.trim()}
+                  className="gap-1.5 shrink-0"
+                >
+                  {followUp.loading ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  전송
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {/* 2. Related Market Ideas */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
               관련 시장 아이디어
@@ -88,7 +135,7 @@ export function NextExplorationSection({
             </div>
           </div>
 
-          {/* Run Another Analysis */}
+          {/* 3. Run Another Analysis */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
               다른 시장 분석하기
