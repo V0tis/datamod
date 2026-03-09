@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { refreshGlobalTrends, TrendsFetchError, TRENDS_CACHE_TTL_MS } from '@/lib/trends-cache'
+import { refreshTrendsForCountry, TrendsFetchError, TRENDS_CACHE_TTL_MS } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
 
-/** 트렌드 캐시 저장 테이블: global_trends. Cache key = region (country_code); expiration = max(created_at) + TRENDS_CACHE_TTL_MS. */
+/** 트렌드 캐시 저장 테이블: global_trends. 국가별 캐시, 1시간 유효. */
 const TRENDS_TABLE = 'global_trends'
 
 const COUNTRY_CODES = ['KR', 'US', 'JP', 'TW', 'HK', 'GB', 'DE'] as const
+type CountryCode = (typeof COUNTRY_CODES)[number]
+
 const isDev = process.env.NODE_ENV === 'development'
 
 const JSON_HEADERS = {
@@ -41,7 +43,12 @@ function formatErrorPayload(err: unknown): Record<string, unknown> {
   return { ...summary, message: String(err) }
 }
 
-/** global_trends 테이블 행에서 마지막 갱신 시각(created_at 최대값) 반환. 없으면 null */
+function parseCountry(param: string | null): CountryCode {
+  const c = (param ?? 'KR').trim().toUpperCase()
+  return COUNTRY_CODES.includes(c as CountryCode) ? (c as CountryCode) : 'KR'
+}
+
+/** global_trends 행에서 해당 국가의 마지막 갱신 시각(created_at 최대값) 반환. 없으면 null */
 function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null {
   let latest: string | null = null
   for (const r of rows) {
@@ -50,17 +57,18 @@ function getLastUpdatedAt(rows: { created_at: string | null }[]): string | null 
   return latest
 }
 
-/** GET: Cache-Aside. Key = country_code; valid while max(created_at) within TRENDS_CACHE_TTL_MS. ?refresh=1 forces refresh. */
+/** GET: 선택 국가만 조회. DB에 1시간 이내 데이터 있으면 반환, 없으면 해당 국가만 RSS 수집 후 저장·반환. ?country=KR & ?refresh=1 지원. */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
+    const country = parseCountry(searchParams.get('country'))
     const forceRefresh = searchParams.get('refresh') === '1' || searchParams.get('refresh') === 'true'
 
     const supabase = await createClient()
     const { data: rows, error } = await supabase
       .from(TRENDS_TABLE)
       .select('country_code, keyword, rank, search_volume, started_at, news_items, title_ko, created_at')
-      .in('country_code', COUNTRY_CODES)
+      .eq('country_code', country)
       .order('rank', { ascending: true })
 
     if (error) {
@@ -76,25 +84,26 @@ export async function GET(req: Request) {
     const lastUpdatedAt = getLastUpdatedAt(list)
     const now = Date.now()
     const lastMs = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0
-    const isStale = list.length === 0 || now - lastMs > TRENDS_CACHE_TTL_MS
+    const cacheValid = list.length > 0 && now - lastMs <= TRENDS_CACHE_TTL_MS
+    const shouldRefresh = forceRefresh || !cacheValid
 
     const selectTrendStatus = async (): Promise<{ country_code: string; source_type: 'API' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]> => {
       const { data: statusRows, error: statusErr } = await supabase
         .from('trend_status')
         .select('country_code, source_type, last_updated_at, target_hours')
-        .in('country_code', COUNTRY_CODES)
+        .eq('country_code', country)
       if (statusErr) return []
       return (statusRows ?? []) as { country_code: string; source_type: 'API' | 'RSS'; last_updated_at: string | null; target_hours: number | null }[]
     }
 
-    if (forceRefresh || isStale) {
-      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '1시간 경과로 자동 갱신', { lastUpdatedAt, isStale })
+    if (shouldRefresh) {
+      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 없음/만료', { country, lastUpdatedAt })
       try {
-        await refreshGlobalTrends()
+        await refreshTrendsForCountry(country)
         const { data: freshRows, error: selectError } = await supabase
           .from(TRENDS_TABLE)
           .select('country_code, keyword, rank, search_volume, started_at, news_items, title_ko, created_at')
-          .in('country_code', COUNTRY_CODES)
+          .eq('country_code', country)
           .order('rank', { ascending: true })
         if (selectError) {
           console.error('[Trends GET] select after refresh', selectError)

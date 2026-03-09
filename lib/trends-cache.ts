@@ -336,39 +336,49 @@ async function upsertTrendStatus(
   )
 }
 
+/** 단일 국가 트렌드만 RSS로 수집 후 DB 저장. 공유 캐시용. */
+export async function refreshTrendsForCountry(countryCode: string): Promise<TrendItem[]> {
+  const code = countryCode.toUpperCase()
+  if (!COUNTRY_GEO[code]) {
+    throw new TrendsFetchError(`지원하지 않는 국가 코드: ${countryCode}`, countryCode, [])
+  }
+  const supabase = getSupabase()
+  const items = await fetchTrendsFromRss(code)
+  const itemsWithKo = await translateTrendsToKo(items, code)
+  const rowsForRpc = itemsWithKo.map((t) => ({
+    keyword: t.keyword,
+    rank: t.rank,
+    search_volume: t.search_volume,
+    started_at: t.started_at,
+    news_items: t.news_items ?? [],
+    title_ko: t.title_ko ?? null,
+    created_at: new Date().toISOString(),
+  }))
+  const { error: rpcError } = await supabase.rpc('upsert_country_trends', {
+    p_country_code: code,
+    p_rows: rowsForRpc,
+  })
+  if (rpcError) {
+    console.error('[Trends] upsert_country_trends error:', code, rpcError)
+    throw rpcError
+  }
+  await upsertTrendStatus(supabase, code, 'RSS', 24)
+  if (itemsWithKo.length > 0) {
+    console.log('[Trends] Saved:', { country_code: code, count: itemsWithKo.length, source_type: 'RSS' })
+  }
+  return itemsWithKo
+}
+
 /**
  * RSS 전용 수집. 저장 대상은 DB 테이블 global_trends (RPC upsert_country_trends가 DELETE 후 INSERT).
  * p_rows에 title_ko 포함. trend_status에 출처·갱신 시각 기록.
+ * 전체 국가 일괄 갱신 시에만 사용 (예: POST /api/trends/update).
  */
 export async function refreshGlobalTrends(): Promise<{ KR: TrendItem[]; US: TrendItem[]; JP: TrendItem[]; TW: TrendItem[]; HK: TrendItem[]; GB: TrendItem[]; DE: TrendItem[] }> {
   const results: Record<string, TrendItem[]> = { KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [] }
-  const supabase = getSupabase()
-
-  console.log('[Trends] 수집 시작. RSS 전용')
+  console.log('[Trends] 수집 시작. RSS 전용 (전체 국가)')
   for (const [countryCode] of Object.entries(COUNTRY_GEO)) {
-    const items = await fetchTrendsFromRss(countryCode)
-    const itemsWithKo = await translateTrendsToKo(items, countryCode)
-    results[countryCode] = itemsWithKo
-
-    const rowsForRpc = itemsWithKo.map((t) => ({
-      keyword: t.keyword,
-      rank: t.rank,
-      search_volume: t.search_volume,
-      started_at: t.started_at,
-      news_items: t.news_items ?? [],
-      title_ko: t.title_ko ?? null,
-      created_at: new Date().toISOString(),
-    }))
-    const { error: rpcError } = await supabase.rpc('upsert_country_trends', {
-      p_country_code: countryCode,
-      p_rows: rowsForRpc,
-    })
-    if (rpcError) {
-      console.error('[Trends] upsert_country_trends error:', countryCode, rpcError)
-      throw rpcError
-    }
-    await upsertTrendStatus(supabase, countryCode, 'RSS', 24)
-    if (itemsWithKo.length > 0) console.log('Saved:', { country_code: countryCode, count: itemsWithKo.length, source_type: 'RSS' })
+    results[countryCode] = await refreshTrendsForCountry(countryCode)
   }
   console.log('[Trends] 수집 종료. KR:', results.KR.length, 'US:', results.US.length, 'JP:', results.JP.length, 'TW:', results.TW.length, 'HK:', results.HK.length, 'GB:', results.GB.length, 'DE:', results.DE.length)
   return {

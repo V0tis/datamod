@@ -124,7 +124,7 @@ function TrendsPageInner() {
     setTimeout(() => setChipChanging(false), CHIP_LOADING_MS)
   }
 
-  const trendsUrl = '/api/trends'
+  const trendsUrl = `/api/trends?country=${country}`
   const { data, error, isLoading, isValidating, mutate } = useSWR<TrendsResponse>(trendsUrl, (u: string) => trendsFetcher(u), {
     revalidateOnFocus: false,
     revalidateIfStale: true,

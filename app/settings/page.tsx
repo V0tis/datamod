@@ -29,6 +29,9 @@ type SettingsData = {
   hasServerOpenAI?: boolean
   hasServerAnthropic?: boolean
   licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
+  /** 현재 사용자 user_settings의 API 키 (수정용, 해당 사용자에게만 반환) */
+  geminiApiKey?: string
+  groqApiKey?: string
 }
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
@@ -106,21 +109,25 @@ function SettingsPageInner() {
           setData(json)
           setNickname(json.nickname ?? '')
           setAiPrimaryModel(json.aiPrimaryModel === 'groq' ? 'groq' : 'gemini')
-          setGeminiApiKey('')
-          setGroqApiKey('')
+          setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
+          setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
       .finally(() => setLoading(false))
   }, [user, router])
 
-  // 라이선스 탭 진입 시 설정 재조회 (input에 연동 상태가 확실히 반영되도록)
+  // 라이선스 탭 진입 시 설정 재조회 (input에 연동 상태·저장된 키가 확실히 반영되도록)
   useEffect(() => {
     if (!user || activeTab !== TAB_LICENSE) return
     fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((json: SettingsData | null) => {
-        if (json) setData(json)
+        if (json) {
+          setData(json)
+          setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
+          setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
+        }
       })
       .catch(() => {})
   }, [user, activeTab])
@@ -194,11 +201,13 @@ function SettingsPageInner() {
         showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
         return
       }
-      setGeminiApiKey('')
       const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
+        setGeminiApiKey(typeof nextJson.geminiApiKey === 'string' ? nextJson.geminiApiKey : '')
+      } else {
+        setGeminiApiKey('')
       }
       toast.success('Gemini API 키가 저장되었습니다.')
     } finally {
@@ -221,11 +230,13 @@ function SettingsPageInner() {
         showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
         return
       }
-      setGroqApiKey('')
       const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
       if (nextRes.ok) {
         const nextJson = (await nextRes.json()) as SettingsData
         setData(nextJson)
+        setGroqApiKey(typeof nextJson.groqApiKey === 'string' ? nextJson.groqApiKey : '')
+      } else {
+        setGroqApiKey('')
       }
       toast.success('Groq API 키가 저장되었습니다.')
     } finally {

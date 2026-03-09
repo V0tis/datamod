@@ -4,7 +4,7 @@ import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getSystemGeminiKey } fr
 
 export const dynamic = 'force-dynamic'
 
-/** GET: 현재 사용자 설정 조회 (키 원문은 절대 노출하지 않음) + 검색 가능 여부 + 키 출처 */
+/** GET: 현재 사용자 설정 조회. 사용자별 user_settings의 API 키를 반환 (해당 사용자만 조회). */
 export async function GET() {
   const supabase = await createClient()
   const {
@@ -53,6 +53,9 @@ export async function GET() {
   const systemGroq = !!(process.env.GROQ_API_KEY ?? '').trim()
 
   const aiPrimaryModel = (row as { ai_primary_model?: string } | null)?.ai_primary_model
+  const geminiApiKey = hasGeminiKey && row?.gemini_api_key ? String(row.gemini_api_key) : ''
+  const groqApiKeyValue = hasGroqKey && groqKey ? groqKey : ''
+
   const res = NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
@@ -61,6 +64,8 @@ export async function GET() {
     hasOpenAIKey,
     hasAnthropicKey,
     hasGroqKey,
+    geminiApiKey,
+    groqApiKey: groqApiKeyValue,
     hasServerGemini: systemGemini,
     hasServerOpenAI: systemOpenAI,
     hasServerAnthropic: systemAnthropic,

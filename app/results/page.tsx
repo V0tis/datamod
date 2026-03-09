@@ -397,24 +397,24 @@ function ResultsContent() {
   }, [keyword, storeKeyword, countryFromUrl, streamingState.status, loadFromHistory])
 
   useEffect(() => {
-    fetch('/api/trends')
+    const url = `/api/trends?country=${countryFromUrl}`
+    fetch(url)
       .then((res) => parseJsonResponse<TrendsResponse & { refreshed?: boolean; refreshFailed?: boolean }>(res))
       .then((data) => {
-        setSharedTrends({
-          KR: normalizeTrendItems(data.KR),
-          US: normalizeTrendItems(data.US),
-          JP: normalizeTrendItems(data.JP),
-          TW: normalizeTrendItems(data.TW),
-          HK: normalizeTrendItems(data.HK),
-          GB: normalizeTrendItems(data.GB),
-          DE: normalizeTrendItems(data.DE),
-          updatedAt: data.updatedAt ?? null,
-        })
+        setSharedTrends((prev) => ({
+          ...prev,
+          [countryFromUrl]: normalizeTrendItems(
+          Array.isArray((data as unknown as Record<string, unknown>)[countryFromUrl])
+            ? ((data as unknown as Record<string, TrendItem[]>)[countryFromUrl])
+            : [],
+        ),
+          updatedAt: data.updatedAt ?? prev.updatedAt ?? null,
+        }))
         if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
         if (data.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드를 불러오지 못했습니다.' }))
-  }, [])
+  }, [countryFromUrl])
 
   useEffect(() => {
     const q = (keyword ?? storeKeyword ?? '').trim()
