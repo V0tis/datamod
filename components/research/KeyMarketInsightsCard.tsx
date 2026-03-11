@@ -2,36 +2,68 @@
 
 import { Lightbulb } from 'lucide-react'
 import { ProductStrategySection } from '@/components/research/ProductStrategySection'
-import { InsightCard } from '@/components/research/InsightCard'
+import { StructuredInsightCard, type StructuredInsight } from '@/components/research/StructuredInsightCard'
 import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
-export type StructuredInsight = { title: string; explanation: string }
+/** Extract key metrics (numbers, scores) from text */
+function extractKeyMetrics(text: string): string[] {
+  const metrics: string[] = []
+  const m1 = text.match(/\d+\s*\/\s*100/g)
+  const m2 = text.match(/\d+%/g)
+  const m3 = text.match(/\d+점/g)
+  if (m1) metrics.push(...m1)
+  if (m2) metrics.push(...m2)
+  if (m3) metrics.push(...m3)
+  return [...new Set(metrics)].slice(0, 4)
+}
 
-/** Derive title + explanation from a raw insight string */
+/** Derive structured insight from a raw insight string */
 function toStructuredInsight(text: string): StructuredInsight {
   const t = text.trim()
-  if (!t) return { title: '—', explanation: '—' }
+  if (!t) return { title: '—', summary: '—' }
+
+  let title = ''
+  let summary = t
 
   const colon = t.match(/^([^:]+):\s*([\s\S]+)$/)
-  if (colon) return { title: colon[1].trim().slice(0, 60), explanation: colon[2].trim() }
-
-  const dash = t.match(/^([^–—-]+)[–—-]\s*([\s\S]+)$/)
-  if (dash) return { title: dash[1].trim().slice(0, 60), explanation: dash[2].trim() }
-
-  const dot = t.indexOf('. ')
-  if (dot > 10 && dot < t.length - 2) {
-    const after = t.slice(dot + 2).trim()
-    if (after) return { title: t.slice(0, dot).trim(), explanation: after }
+  if (colon) {
+    title = colon[1].trim().slice(0, 60)
+    summary = colon[2].trim()
+  } else {
+    const dash = t.match(/^([^–—-]+)[–—-]\s*([\s\S]+)$/)
+    if (dash) {
+      title = dash[1].trim().slice(0, 60)
+      summary = dash[2].trim()
+    } else {
+      const dot = t.indexOf('. ')
+      if (dot > 10 && dot < t.length - 2) {
+        const after = t.slice(dot + 2).trim()
+        if (after) {
+          title = t.slice(0, dot).trim()
+          summary = after
+        }
+      }
+      if (!title) {
+        if (t.length <= 40) {
+          title = t
+          summary = t
+        } else {
+          const firstPhrase = t.slice(0, 45).trim()
+          const rest = t.slice(45).trim()
+          title = rest ? firstPhrase + (firstPhrase.endsWith('.') ? '' : '…') : t
+          summary = rest || t
+        }
+      }
+    }
   }
 
-  if (t.length <= 40) return { title: t, explanation: t }
+  // Keep summary to 1–2 sentences (first ~150 chars)
+  const shortSummary = summary.length > 150 ? summary.slice(0, 147).trim() + '…' : summary
+  const keyMetrics = extractKeyMetrics(text)
 
-  const firstPhrase = t.slice(0, 45).trim()
-  const rest = t.slice(45).trim()
-  const title = rest ? firstPhrase + (firstPhrase.endsWith('.') ? '' : '…') : t
-  return { title, explanation: rest || t }
+  return { title, summary: shortSummary, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
 }
 
 type TaskOutput = Record<string, unknown>
@@ -197,10 +229,9 @@ export function KeyMarketInsightsCard({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {structuredInsights.slice(0, revealedCount).map((insight, i) => (
-            <InsightCard
+            <StructuredInsightCard
               key={i}
-              title={insight.title}
-              explanation={insight.explanation}
+              insight={insight}
               className="animate-in fade-in slide-in-from-bottom-2 duration-200"
             />
           ))}

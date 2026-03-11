@@ -10,6 +10,7 @@ import {
   Cell,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
 const CHART_COLORS = ['#2563EB', '#009588', '#104e64', '#fcbb00', '#f99c00', '#60a5fa', '#34d399', '#a78bfa']
@@ -44,6 +45,7 @@ function breakdownToData(breakdown: Record<string, number | undefined>): Breakdo
 
 export interface AnalysisChartsProps {
   opportunityScoreBreakdown?: Record<string, number | undefined>
+  chartInsights?: { score_distribution?: { insight?: string; takeaway?: string } }
   className?: string
 }
 
@@ -71,7 +73,7 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
   )
 }
 
-export function AnalysisCharts({ opportunityScoreBreakdown, className }: AnalysisChartsProps) {
+export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, className }: AnalysisChartsProps) {
   /** 분석 중에도 시장 점수 분포 표시: breakdown 없으면 default 사용 */
   const breakdown =
     opportunityScoreBreakdown && Object.keys(opportunityScoreBreakdown).length > 0
@@ -80,12 +82,32 @@ export function AnalysisCharts({ opportunityScoreBreakdown, className }: Analysi
   const data = breakdownToData(breakdown)
   if (data.length === 0) return null
 
+  const sd = chartInsights?.score_distribution
+
   return (
-    <div className={cn('rounded-xl border border-border/60 bg-muted/5 p-4', className)}>
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-        시장 점수 분포
-      </p>
-      <MarketGrowthChart breakdown={breakdown} />
-    </div>
+    <ChartWithInsight
+      title="시장 점수 분포"
+      insight={sd?.insight}
+      takeaway={sd?.takeaway}
+      className={className}
+    >
+      <div className="h-[220px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
+            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(v: number) => [`${v}/100`, '점수']}
+              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            />
+            <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </ChartWithInsight>
   )
 }

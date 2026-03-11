@@ -31,6 +31,15 @@ export type StructuredRecommendedAction = {
   related_risk?: string
 }
 
+/** PM Action Plan item – actionable output for product strategy. */
+export type PMActionPlanItem = {
+  action_title: string
+  description?: string
+  expected_outcome?: string
+  priority?: 'high' | 'medium' | 'low'
+  category?: 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market'
+}
+
 /** Structured PM analysis fields for DB persistence and frontend parsing. */
 export type StructuredAnalysisFields = {
   analysis_target?: string
@@ -48,7 +57,16 @@ export type StructuredAnalysisFields = {
     monitoring_points?: string[]
     decision_risks?: string[]
   }
-  competitive_landscape?: Array<{ name?: string; positioning?: string; strength?: string; weakness?: string }>
+  competitive_landscape?: Array<{
+    name?: string
+    positioning?: string
+    target_market?: string
+    key_feature?: string
+    pricing?: string
+    differentiation?: string
+    strength?: string
+    weakness?: string
+  }>
   market_structure?: { competition_density?: string; summary?: string }
   market_phase?: string
   /** Opportunity Score (0-100) - PM market attractiveness */
@@ -70,6 +88,72 @@ export type StructuredAnalysisFields = {
     immediate?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     risk_mitigation?: Array<{ action?: string; priority?: string; risk_addressed?: string }>
+  }
+  /** Strategy Evaluation - AI-scored dimensions 1-10 */
+  strategy_evaluation?: {
+    market_attractiveness?: number
+    competition_risk?: number
+    execution_difficulty?: number
+    growth_potential?: number
+  }
+  /** Product strategy focus: short market summary */
+  market_summary?: string
+  /** 3–5 key strategic insights */
+  key_strategic_insights?: string[]
+  /** Opportunity areas (from opportunities) */
+  opportunity_areas?: string[]
+  /** Recommended product strategy: product idea, target customer, monetization */
+  recommended_product_strategy?: {
+    summary?: string
+    product_idea?: string
+    target_customer?: string
+    monetization?: string
+  }
+  /** PM Action Plan – concrete actions with title, description, expected_outcome, priority */
+  pm_action_plan?: PMActionPlanItem[]
+    /** Chart insights – AI-generated interpretation per chart */
+    chart_insights?: {
+      search_trend?: { insight?: string; takeaway?: string }
+      market_size?: { insight?: string; takeaway?: string }
+      adoption_rate?: { insight?: string; takeaway?: string }
+      score_distribution?: { insight?: string; takeaway?: string }
+    }
+    /** Next Actions for PM – 5 actionable steps with why, how, priority, effort */
+    next_actions_pm?: Array<{
+      action?: string
+      why?: string
+      how_to_execute?: string
+      priority?: 'high' | 'medium' | 'low'
+      estimated_effort?: string
+    }>
+    /** Strategic Decision Layer – market opportunity, competition, PMF, entry timing with AI explanations */
+    strategic_decision_layer?: {
+    market_opportunity_explanation?: string
+    competition_intensity?: 'low' | 'medium' | 'high'
+    competition_explanation?: string
+    product_market_fit?: 'low' | 'medium' | 'high'
+    product_market_fit_explanation?: string
+    entry_strategy?: string
+    entry_explanation?: string
+  }
+  /** Product strategy frameworks: concise bullet insights */
+  swot_analysis?: {
+    strengths?: string[]
+    weaknesses?: string[]
+    opportunities?: string[]
+    threats?: string[]
+  }
+  jtbd?: {
+    main_jobs?: string[]
+    pains?: string[]
+    gains?: string[]
+  }
+  porter_5_forces?: {
+    rivalry?: string[]
+    supplier_power?: string[]
+    buyer_power?: string[]
+    substitutes?: string[]
+    new_entrants?: string[]
   }
 }
 

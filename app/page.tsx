@@ -19,11 +19,12 @@ import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { LandingPage } from '@/components/landing/landing-page'
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
 function RinAISearchInner() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null | undefined>(undefined)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
@@ -256,6 +257,17 @@ function RinAISearchInner() {
       return '분석 중...'
     }
     return '시장 분석 시작'
+  }
+
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    )
+  }
+  if (user === null) {
+    return <LandingPage />
   }
 
   return (

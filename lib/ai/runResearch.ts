@@ -12,9 +12,17 @@ import {
   buildTaskTrendsPrompt,
   TASK_COMPETITION_SYSTEM,
   buildTaskCompetitionPromptFromNews,
-  STRATEGY_EXECUTION_SYSTEM,
-  buildStrategyExecutionPrompt,
 } from './pm-strategic-prompt'
+import {
+  INSIGHT_EXTRACTION_SYSTEM,
+  buildInsightExtractionPrompt,
+  STRATEGIC_RECOMMENDATION_SYSTEM,
+  buildStrategicRecommendationPrompt,
+  PM_ACTION_PLAN_SYSTEM,
+  buildPMActionPlanPrompt,
+  STRATEGY_EVALUATION_SYSTEM,
+  buildStrategyEvaluationPrompt,
+} from './pipeline-prompts'
 import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
 import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
 import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep } from './retry-with-backoff'
@@ -40,11 +48,13 @@ function toUserFriendlyError(err: unknown, fallback: string): string {
 }
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
+import { searchWeb, formatWebContext } from '@/lib/web-search'
 import type {
   InitialResearchSummary,
   ChartData,
   StructuredAnalysisFields,
   StructuredRecommendedAction,
+  PMActionPlanItem,
 } from '@/lib/research-parser'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
@@ -72,19 +82,21 @@ export type Pass2Result = {
   signals?: { pos?: string[]; neu?: string[]; neg?: string[] }
 }
 
-/** Product Strategy Engine stage IDs - layered analysis */
+/** Product Strategy Engine - 5-step pipeline (each outputs structured JSON) */
 export type AnalysisTaskId =
   | 'signal_layer'
-  | 'trend_analysis'
-  | 'competition_analysis'
-  | 'strategy_generation'
-  | 'execution_layer'
+  | 'trend_analysis'      // Step 1: Market Research
+  | 'competition_analysis' // Step 2: Competitor Analysis
+  | 'insight_extraction'   // Step 3: Insight Extraction
+  | 'strategy_generation'  // Step 4: Strategic Recommendation
+  | 'execution_layer'      // Step 5: PM Action Plan
 
 export type TaskCompletedPayload = {
   signal_layer?: { signals: string[]; news_activity?: Array<{ title: string; url?: string; publisher?: string }> }
   trend_analysis?: { trend_summary: string; market_temperature_score: number; growth_signals?: string[] }
   competition_analysis?: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
-  strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string }
+  insight_extraction?: { key_insights: string[]; opportunity_signals: string[]; risk_signals: string[] }
+  strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string; market_summary?: string; key_strategic_insights?: string[] }
   execution_layer?: { product_actions: Array<{ action: string; priority?: string; reasoning?: string }>; feature_ideas?: string[]; go_to_market_steps?: string[] }
 }
 
@@ -92,6 +104,7 @@ const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
   'signal_layer',
   'trend_analysis',
   'competition_analysis',
+  'insight_extraction',
   'strategy_generation',
   'execution_layer',
 ]
@@ -205,9 +218,20 @@ type TrendTaskResult = {
   primaryProviderError?: string
 }
 
+type CompetitorEntry = {
+  name: string
+  positioning?: string
+  target_market?: string
+  key_feature?: string
+  pricing?: string
+  differentiation?: string
+  strength?: string
+  weakness?: string
+}
+
 type CompetitionTaskResult = {
   competitionData: {
-    competitive_landscape: Array<{ name: string; positioning?: string }>
+    competitive_landscape: CompetitorEntry[]
     market_structure?: string
   }
   usedFallback: boolean
@@ -220,9 +244,10 @@ async function runTrendTask(
   groqKey: string | null | undefined,
   keyword: string,
   newsTitles: string[],
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  webContext?: string
 ): Promise<TrendTaskResult> {
-  const prompt = buildTaskTrendsPrompt(keyword, newsTitles)
+  const prompt = buildTaskTrendsPrompt(keyword, newsTitles, webContext)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -294,16 +319,17 @@ async function runCompetitionTask(
   groqKey: string | null | undefined,
   keyword: string,
   newsTitles: string[],
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  webContext?: string
 ): Promise<CompetitionTaskResult> {
-  const prompt = buildTaskCompetitionPromptFromNews(keyword, newsTitles)
+  const prompt = buildTaskCompetitionPromptFromNews(keyword, newsTitles, webContext)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 600, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL })
   const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 600 })
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
   const primaryIsGemini = primaryProvider === 'gemini'
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
     try {
@@ -342,19 +368,428 @@ async function runCompetitionTask(
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
   const parsed = parseJson<{
-    competitive_landscape?: Array<{ name?: string; positioning?: string }>
+    competitive_landscape?: Array<{
+      name?: string
+      positioning?: string
+      target_market?: string
+      key_feature?: string
+      pricing?: string
+      differentiation?: string
+      strength?: string
+      weakness?: string
+    }>
     market_structure?: { summary?: string }
   }>(typeof text === 'string' ? text : '')
   const landscape = Array.isArray(parsed?.competitive_landscape)
     ? parsed.competitive_landscape
-        .filter((c): c is { name: string; positioning?: string } => typeof c?.name === 'string')
+        .filter((c): c is NonNullable<typeof parsed.competitive_landscape>[number] => typeof c?.name === 'string')
         .slice(0, 10)
+        .map((c) => ({
+          name: String(c.name),
+          positioning: typeof c.positioning === 'string' ? c.positioning : undefined,
+          target_market: typeof c.target_market === 'string' ? c.target_market.trim() : undefined,
+          key_feature: typeof c.key_feature === 'string' ? c.key_feature.trim() : undefined,
+          pricing: typeof c.pricing === 'string' ? c.pricing.trim() : undefined,
+          differentiation: typeof c.differentiation === 'string' ? c.differentiation.trim() : undefined,
+          strength: typeof c.strength === 'string' ? c.strength.trim() : undefined,
+          weakness: typeof c.weakness === 'string' ? c.weakness.trim() : undefined,
+        }))
     : []
   const competitionData = {
     competitive_landscape: landscape,
     market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
   }
   return { competitionData, usedFallback, primaryProviderError }
+}
+
+type InsightExtractionResult = {
+  key_insights: string[]
+  opportunity_signals: string[]
+  risk_signals: string[]
+}
+
+/** Step 3: Insight Extraction - structured JSON from market + competition */
+async function runInsightExtractionTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  marketOverview: string,
+  competitionSummary: string,
+  primaryProvider: AIPrimaryModel
+): Promise<{ data: InsightExtractionResult; usedFallback: boolean; primaryProviderError?: string }> {
+  const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary)
+  let text!: string
+  let usedFallback = false
+  let primaryProviderError: string | undefined
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: INSIGHT_EXTRACTION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
+  const primaryIsGemini = primaryProvider === 'gemini'
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    try {
+      if (primaryIsGemini) {
+        text = (await tryGemini()) ?? ''
+      } else if (groqKey) {
+        const groqRes = await tryGroq()
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+        text = groqRes.text
+      } else throw new Error('Groq key not available')
+      break
+    } catch (err) {
+      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+        await sleep(AI_RETRY_DELAY_MS)
+      } else if (isFallbackTriggerError(err)) {
+        primaryProviderError = getFallbackErrorReason(err)
+        try {
+          if (primaryIsGemini && groqKey) {
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            text = groqRes.text
+          } else if (!primaryIsGemini && geminiKey) {
+            const gemRes = await tryGemini()
+            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+          } else throw err
+          usedFallback = true
+          break
+        } catch {
+          throw err
+        }
+      } else {
+        throw err
+      }
+    }
+  }
+  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
+  if (usedGemini) await trackUsage('gemini')
+  const parsed = parseJson<{ key_insights?: string[]; opportunity_signals?: string[]; risk_signals?: string[] }>(typeof text === 'string' ? text : '')
+  const key_insights = Array.isArray(parsed?.key_insights) ? parsed.key_insights.filter((s): s is string => typeof s === 'string') : []
+  const opportunity_signals = Array.isArray(parsed?.opportunity_signals) ? parsed.opportunity_signals.filter((s): s is string => typeof s === 'string') : []
+  const risk_signals = Array.isArray(parsed?.risk_signals) ? parsed.risk_signals.filter((s): s is string => typeof s === 'string') : []
+  return {
+    data: { key_insights, opportunity_signals, risk_signals },
+    usedFallback,
+    primaryProviderError,
+  }
+}
+
+type StrategicRecommendationResult = {
+  opportunities: string[]
+  risks: string[]
+  strategy_summary: string
+  market_summary?: string
+  key_strategic_insights?: string[]
+}
+
+/** Step 4: Strategic Recommendation - structured JSON */
+async function runStrategicRecommendationTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  marketOverview: string,
+  competitionSummary: string,
+  extractedInsights: InsightExtractionResult,
+  primaryProvider: AIPrimaryModel
+): Promise<{ data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }> {
+  const prompt = buildStrategicRecommendationPrompt(keyword, marketOverview, competitionSummary, extractedInsights)
+  let text!: string
+  let usedFallback = false
+  let primaryProviderError: string | undefined
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM, maxOutputTokens: 1000, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGIC_RECOMMENDATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1000 })
+  const primaryIsGemini = primaryProvider === 'gemini'
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    try {
+      if (primaryIsGemini) {
+        text = (await tryGemini()) ?? ''
+      } else if (groqKey) {
+        const groqRes = await tryGroq()
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+        text = groqRes.text
+      } else throw new Error('Groq key not available')
+      break
+    } catch (err) {
+      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+        await sleep(AI_RETRY_DELAY_MS)
+      } else if (isFallbackTriggerError(err)) {
+        primaryProviderError = getFallbackErrorReason(err)
+        try {
+          if (primaryIsGemini && groqKey) {
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            text = groqRes.text
+          } else if (!primaryIsGemini && geminiKey) {
+            const gemRes = await tryGemini()
+            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+          } else throw err
+          usedFallback = true
+          break
+        } catch {
+          throw err
+        }
+      } else {
+        throw err
+      }
+    }
+  }
+  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
+  if (usedGemini) await trackUsage('gemini')
+  const parsed = parseJson<StrategicRecommendationResult>(typeof text === 'string' ? text : '')
+  return {
+    data: {
+      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : extractedInsights.opportunity_signals,
+      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : extractedInsights.risk_signals,
+      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : marketOverview,
+      market_summary: typeof parsed?.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
+      key_strategic_insights: Array.isArray(parsed?.key_strategic_insights)
+        ? parsed.key_strategic_insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
+        : undefined,
+    },
+    usedFallback,
+    primaryProviderError,
+  }
+}
+
+/** Step 5: PM Action Plan - structured JSON */
+async function runPMActionPlanTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  strategySummary: string,
+  opportunitiesSummary: string,
+  risksSummary: string,
+  primaryProvider: AIPrimaryModel
+): Promise<{
+  executionData: {
+    product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
+    feature_ideas: string[]
+    go_to_market_steps: string[]
+    product_idea?: string
+    target_customer?: string
+    monetization?: string
+    pm_action_plan?: PMActionPlanItem[]
+    strategic_decision_layer?: {
+      market_opportunity_explanation?: string
+      competition_intensity?: 'low' | 'medium' | 'high'
+      competition_explanation?: string
+      product_market_fit?: 'low' | 'medium' | 'high'
+      product_market_fit_explanation?: string
+      entry_strategy?: string
+      entry_explanation?: string
+    }
+    swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
+    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
+    next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
+  }
+  usedFallback: boolean
+  primaryProviderError?: string
+}> {
+  const prompt = buildPMActionPlanPrompt(keyword, strategySummary, opportunitiesSummary, risksSummary)
+  let text!: string
+  let usedFallback = false
+  let primaryProviderError: string | undefined
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1600 })
+  const primaryIsGemini = primaryProvider === 'gemini'
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    try {
+      if (primaryIsGemini) {
+        text = (await tryGemini()) ?? ''
+      } else if (groqKey) {
+        const groqRes = await tryGroq()
+        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+        text = groqRes.text
+      } else throw new Error('Groq key not available')
+      break
+    } catch (err) {
+      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+        await sleep(AI_RETRY_DELAY_MS)
+      } else if (isFallbackTriggerError(err)) {
+        primaryProviderError = getFallbackErrorReason(err)
+        try {
+          if (primaryIsGemini && groqKey) {
+            const groqRes = await tryGroq()
+            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            text = groqRes.text
+          } else if (!primaryIsGemini && geminiKey) {
+            const gemRes = await tryGemini()
+            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
+          } else throw err
+          usedFallback = true
+          break
+        } catch {
+          throw err
+        }
+      } else {
+        throw err
+      }
+    }
+  }
+  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
+  if (usedGemini) await trackUsage('gemini')
+  const parsed = parseJson<{
+    product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
+    feature_ideas?: string[]
+    go_to_market_steps?: string[]
+    product_idea?: string
+    target_customer?: string
+    monetization?: string
+    pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string; category?: string }>
+    strategic_decision_layer?: {
+      market_opportunity_explanation?: string
+      competition_intensity?: 'low' | 'medium' | 'high'
+      competition_explanation?: string
+      product_market_fit?: 'low' | 'medium' | 'high'
+      product_market_fit_explanation?: string
+      entry_strategy?: string
+      entry_explanation?: string
+    }
+    swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
+    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
+    next_actions_pm?: Array<{ action?: string; why?: string; how_to_execute?: string; priority?: string; estimated_effort?: string }>
+  }>(typeof text === 'string' ? text : '')
+  const toStrArr = (arr: unknown): string[] =>
+    Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : []
+  const actions = Array.isArray(parsed?.product_actions)
+    ? parsed.product_actions
+        .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
+        .map((a) => ({ action: String((a as { action: string }).action), priority: (a as { priority?: string }).priority, reasoning: (a as { reasoning?: string }).reasoning }))
+    : []
+  const pmPlan: PMActionPlanItem[] = Array.isArray(parsed?.pm_action_plan)
+    ? parsed.pm_action_plan
+        .filter((a): a is { action_title: string } => typeof (a as { action_title?: string })?.action_title === 'string')
+        .map((a): PMActionPlanItem => ({
+          action_title: String((a as { action_title: string }).action_title),
+          description: typeof (a as Record<string, unknown>).description === 'string' ? String((a as Record<string, unknown>).description) : undefined,
+          expected_outcome: typeof (a as Record<string, unknown>).expected_outcome === 'string' ? String((a as Record<string, unknown>).expected_outcome) : undefined,
+          priority: (['high', 'medium', 'low'] as const).includes((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
+            ? ((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
+            : undefined,
+          category: (['mvp_experiment', 'user_interview', 'feature_prioritization', 'go_to_market'] as const).includes((a as Record<string, unknown>).category as 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market')
+            ? ((a as Record<string, unknown>).category as 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market')
+            : undefined,
+        }))
+    : []
+  const napm = Array.isArray(parsed?.next_actions_pm)
+    ? parsed.next_actions_pm
+        .filter((a): a is { action: string } => typeof (a as { action?: string })?.action === 'string')
+        .slice(0, 5)
+        .map((a) => ({
+          action: String((a as { action: string }).action).trim(),
+          why: typeof (a as Record<string, unknown>).why === 'string' ? String((a as Record<string, unknown>).why).trim() : undefined,
+          how_to_execute: typeof (a as Record<string, unknown>).how_to_execute === 'string' ? String((a as Record<string, unknown>).how_to_execute).trim() : undefined,
+          priority: (['high', 'medium', 'low'] as const).includes((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
+            ? ((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
+            : undefined,
+          estimated_effort: typeof (a as Record<string, unknown>).estimated_effort === 'string' ? String((a as Record<string, unknown>).estimated_effort).trim() : undefined,
+        }))
+    : []
+  const swot = parsed?.swot_analysis && typeof parsed.swot_analysis === 'object'
+    ? {
+        strengths: toStrArr(parsed.swot_analysis.strengths),
+        weaknesses: toStrArr(parsed.swot_analysis.weaknesses),
+        opportunities: toStrArr(parsed.swot_analysis.opportunities),
+        threats: toStrArr(parsed.swot_analysis.threats),
+      }
+    : undefined
+  const jtbdRaw = parsed?.jtbd && typeof parsed.jtbd === 'object'
+    ? {
+        main_jobs: toStrArr(parsed.jtbd.main_jobs),
+        pains: toStrArr(parsed.jtbd.pains),
+        gains: toStrArr(parsed.jtbd.gains),
+      }
+    : undefined
+  return {
+    executionData: {
+      product_actions: actions,
+      feature_ideas: toStrArr(parsed?.feature_ideas),
+      go_to_market_steps: toStrArr(parsed?.go_to_market_steps),
+      product_idea: typeof parsed?.product_idea === 'string' ? parsed.product_idea.trim() : undefined,
+      target_customer: typeof parsed?.target_customer === 'string' ? parsed.target_customer.trim() : undefined,
+      monetization: typeof parsed?.monetization === 'string' ? parsed.monetization.trim() : undefined,
+      pm_action_plan: pmPlan.length > 0 ? pmPlan : undefined,
+      strategic_decision_layer: parsed?.strategic_decision_layer && typeof parsed.strategic_decision_layer === 'object'
+        ? (parsed.strategic_decision_layer as {
+            market_opportunity_explanation?: string
+            competition_intensity?: 'low' | 'medium' | 'high'
+            competition_explanation?: string
+            product_market_fit?: 'low' | 'medium' | 'high'
+            product_market_fit_explanation?: string
+            entry_strategy?: string
+            entry_explanation?: string
+          })
+        : undefined,
+      swot_analysis: swot,
+      jtbd: jtbdRaw,
+      next_actions_pm: napm.length > 0 ? napm : undefined,
+    },
+    usedFallback,
+    primaryProviderError,
+  }
+}
+
+/** Strategy Evaluation - score each dimension 1-10 */
+type StrategyEvaluationResult = {
+  market_attractiveness: number
+  competition_risk: number
+  execution_difficulty: number
+  growth_potential: number
+}
+
+function clampScore(n: unknown): number {
+  const v = typeof n === 'number' ? n : typeof n === 'string' ? parseInt(String(n), 10) : 5
+  return Math.min(10, Math.max(1, isNaN(v) ? 5 : Math.round(v)))
+}
+
+async function runStrategyEvaluationTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  strategyData: { strategy_summary: string; opportunities: string[]; risks: string[] },
+  competitionSummary: string,
+  executionData: { product_actions: Array<{ action: string }> },
+  primaryProvider: AIPrimaryModel
+): Promise<StrategyEvaluationResult> {
+  const prompt = buildStrategyEvaluationPrompt(
+    keyword,
+    strategyData.strategy_summary,
+    strategyData.opportunities.join('. '),
+    strategyData.risks.join('. '),
+    competitionSummary,
+    executionData.product_actions.map((a) => a.action)
+  )
+  let text!: string
+  const tryGemini = () =>
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 300, model: GEMINI_MODEL })
+  const tryGroq = () =>
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EVALUATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 300 })
+  const primaryIsGemini = primaryProvider === 'gemini'
+  try {
+    if (primaryIsGemini) {
+      text = (await tryGemini()) ?? ''
+    } else if (groqKey) {
+      const groqRes = await tryGroq()
+      text = groqRes?.text ?? ''
+    } else {
+      text = (await tryGemini()) ?? ''
+    }
+  } catch {
+    return { market_attractiveness: 5, competition_risk: 5, execution_difficulty: 5, growth_potential: 5 }
+  }
+  const parsed = parseJson<StrategyEvaluationResult>(typeof text === 'string' ? text : '')
+  if (!parsed || typeof parsed !== 'object') {
+    return { market_attractiveness: 5, competition_risk: 5, execution_difficulty: 5, growth_potential: 5 }
+  }
+  return {
+    market_attractiveness: clampScore(parsed.market_attractiveness),
+    competition_risk: clampScore(parsed.competition_risk),
+    execution_difficulty: clampScore(parsed.execution_difficulty),
+    growth_potential: clampScore(parsed.growth_potential),
+  }
 }
 
 function validatePass1(data: unknown): ValidationResult<Pass1Result> {
@@ -760,6 +1195,18 @@ export async function* runResearch(
     return
   }
 
+  // Web search grounding: user input → web search → top sources → feed to LLM
+  let webContext = ''
+  try {
+    const webResults = await searchWeb(keyword, { num: 10 })
+    webContext = formatWebContext(webResults, 10)
+    if (webResults.length > 0) {
+      log('web_grounding', 'completed', { sourcesCount: webResults.length })
+    }
+  } catch (err) {
+    console.warn('[AI Timeline] web search failed (continuing without)', { keyword, err })
+  }
+
   const updateProgress = async (step: number, status: 'analyzing' | 'completed' | 'failed') => {
     await supabase
       .from('research_history')
@@ -827,8 +1274,8 @@ export async function* runResearch(
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
 
   const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider),
-    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider),
+    runTrendTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider, webContext),
+    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider, webContext),
   ])
 
   if (trendSettled.status === 'rejected') {
@@ -902,14 +1349,85 @@ export async function* runResearch(
     .map((c) => (c.positioning ? `${c.name}: ${c.positioning}` : c.name))
     .join('. ') || competitionData.market_structure || ''
 
-  // Layer 4+5: Unified Strategy + Execution (single AI call)
+  const marketOverview = trendData.summary
+
+  // Step 3: Insight Extraction
+  log('insight_extraction', 'running')
+  await upsertAnalysisTask('insight_extraction', 'running', { provider: 'gemini', fallback_used: false })
+  yield { type: 'task', task: 'insight_extraction', status: 'running', provider: 'gemini', fallback_used: false }
+  let insightData: InsightExtractionResult
+  try {
+    const insightResult = await runInsightExtractionTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      marketOverview,
+      competitionSummary,
+      primaryProvider
+    )
+    insightData = insightResult.data
+    const insightProvider = primaryProvider === 'gemini' ? (insightResult.usedFallback ? 'groq' : 'gemini') : (insightResult.usedFallback ? 'gemini' : 'groq')
+    await upsertAnalysisTask('insight_extraction', 'completed', {
+      outputData: insightData,
+      provider: insightProvider,
+      fallback_used: insightResult.usedFallback,
+      primary_provider_error: insightResult.usedFallback ? insightResult.primaryProviderError ?? null : null,
+    })
+    log('insight_extraction', 'completed')
+    yield { type: 'task', task: 'insight_extraction', status: 'completed', data: insightData, provider: insightProvider, fallback_used: insightResult.usedFallback }
+  } catch (err) {
+    const msg = toUserFriendlyError(err, '인사이트 추출 중 오류가 발생했습니다.')
+    log('insight_extraction', 'failed', { error: msg, err })
+    await upsertAnalysisTask('insight_extraction', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'error', message: msg, step: 'insight_extraction' }
+    insightData = {
+      key_insights: trendData.positive_signals,
+      opportunity_signals: trendData.positive_signals,
+      risk_signals: [],
+    }
+  }
+
   const stratPrimaryIsGemini = primaryProvider === 'gemini'
-  log('strategy_execution', 'running')
+
+  // Step 4: Strategic Recommendation
+  log('strategic_recommendation', 'running')
   await upsertAnalysisTask('strategy_generation', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
-  await upsertAnalysisTask('execution_layer', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
   yield { type: 'task', task: 'strategy_generation', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
-  yield { type: 'task', task: 'execution_layer', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
-  let strategyData: { opportunities: string[]; risks: string[]; strategy_summary: string }
+  let strategyData: StrategicRecommendationResult
+  try {
+    const stratResult = await runStrategicRecommendationTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      marketOverview,
+      competitionSummary,
+      insightData,
+      primaryProvider
+    )
+    strategyData = stratResult.data
+    const stratProvider = stratPrimaryIsGemini ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
+    await upsertAnalysisTask('strategy_generation', 'completed', {
+      outputData: strategyData,
+      provider: stratProvider,
+      fallback_used: stratResult.usedFallback,
+      primary_provider_error: stratResult.usedFallback ? stratResult.primaryProviderError ?? null : null,
+    })
+    log('strategic_recommendation', 'completed')
+    yield { type: 'task', task: 'strategy_generation', status: 'completed', data: strategyData, provider: stratProvider, fallback_used: stratResult.usedFallback }
+  } catch (err) {
+    const msg = toUserFriendlyError(err, '전략 추천 생성 중 오류가 발생했습니다.')
+    log('strategy_generation', 'failed', { error: msg, err })
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    await updateProgress(4, 'failed')
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'error', message: msg, step: 'strategy_generation' }
+    return
+  }
+
+  // Step 5: PM Action Plan
+  const opportunitiesSummary = strategyData.opportunities.join('. ')
+  const risksSummary = strategyData.risks.join('. ')
   let executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
     feature_ideas: string[]
@@ -917,133 +1435,77 @@ export async function* runResearch(
     product_idea?: string
     target_customer?: string
     monetization?: string
+    pm_action_plan?: PMActionPlanItem[]
+    strategic_decision_layer?: {
+      market_opportunity_explanation?: string
+      competition_intensity?: 'low' | 'medium' | 'high'
+      competition_explanation?: string
+      product_market_fit?: 'low' | 'medium' | 'high'
+      product_market_fit_explanation?: string
+      entry_strategy?: string
+      entry_explanation?: string
+    }
+    chart_insights?: { search_trend?: { insight?: string; takeaway?: string }; market_size?: { insight?: string; takeaway?: string }; adoption_rate?: { insight?: string; takeaway?: string }; score_distribution?: { insight?: string; takeaway?: string } }
+    swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
+    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
+    porter_5_forces?: { rivalry?: string[]; supplier_power?: string[]; buyer_power?: string[]; substitutes?: string[]; new_entrants?: string[] }
+    next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
-  const unifiedPrompt = buildStrategyExecutionPrompt(keyword, trendData.summary, competitionSummary)
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt: unifiedPrompt, systemInstruction: STRATEGY_EXECUTION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EXECUTION_SYSTEM }, { role: 'user', content: unifiedPrompt }], maxTokens: 1200 })
   try {
-    let unifiedText!: string
-    let usedFallback = false
-    let primaryProviderError: string | undefined
-    for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-      try {
-        if (stratPrimaryIsGemini) {
-          unifiedText = (await tryGemini()) ?? ''
-        } else if (groqKey) {
-          const groqRes = await tryGroq()
-          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-          unifiedText = groqRes.text
-        } else throw new Error('Groq key not available')
-        break
-      } catch (err) {
-        const primaryName = stratPrimaryIsGemini ? 'gemini' : 'groq'
-        const reason = is429OrQuotaError(err) ? 'quota_exceeded' : 'api_error'
-        logAiError(primaryName, 'strategy_execution', reason, attempt, err)
-        if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-          yield { type: 'task', task: 'strategy_generation', status: 'running', retryMessage: '재시도 중...', retryAttempt: attempt + 1 }
-          await sleep(AI_RETRY_DELAY_MS)
-        } else if (isFallbackTriggerError(err)) {
-          primaryProviderError = getFallbackErrorReason(err)
-          if (stratPrimaryIsGemini && groqKey) {
-            yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'groq', fallback_used: true, primaryProviderError }
-            await upsertAnalysisTask('strategy_generation', 'running', { provider: 'groq', fallback_used: true, primary_provider_error: primaryProviderError })
-            const groqRes = await tryGroq()
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            unifiedText = groqRes.text
-            usedFallback = true
-            break
-          } else if (!stratPrimaryIsGemini && geminiKey) {
-            yield { type: 'task', task: 'strategy_generation', status: 'running', provider: 'gemini', fallback_used: true, primaryProviderError }
-            await upsertAnalysisTask('strategy_generation', 'running', { provider: 'gemini', fallback_used: true, primary_provider_error: primaryProviderError })
-            const gemRes = await tryGemini()
-            unifiedText = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-            usedFallback = true
-            break
-          } else throw err
-        } else {
-          throw err
-        }
-      }
-    }
-    const usedGemini = stratPrimaryIsGemini ? !usedFallback : usedFallback
-    if (usedGemini) await trackUsage('gemini')
-
-    const parsed = parseJson<{
-      opportunities?: string[]
-      risks?: string[]
-      strategy_summary?: string
-      product_idea?: string
-      target_customer?: string
-      monetization?: string
-      product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
-      feature_ideas?: string[]
-      go_to_market_steps?: string[]
-    }>(typeof unifiedText === 'string' ? unifiedText : '')
-
-    strategyData = {
-      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : trendData.positive_signals,
-      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : [],
-      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : trendData.summary,
-    }
-    const actions = Array.isArray(parsed?.product_actions)
-      ? parsed.product_actions
-          .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
-          .map((a) => ({ action: (a as { action: string }).action, priority: a.priority, reasoning: a.reasoning }))
-      : []
+    const pmResult = await runPMActionPlanTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      strategyData.strategy_summary,
+      opportunitiesSummary,
+      risksSummary,
+      primaryProvider
+    )
     executionData = {
-      product_actions: actions,
-      feature_ideas: Array.isArray(parsed?.feature_ideas) ? parsed.feature_ideas.filter((s): s is string => typeof s === 'string') : [],
-      go_to_market_steps: Array.isArray(parsed?.go_to_market_steps) ? parsed.go_to_market_steps.filter((s): s is string => typeof s === 'string') : [],
-      product_idea: typeof parsed?.product_idea === 'string' ? parsed.product_idea.trim() : undefined,
-      target_customer: typeof parsed?.target_customer === 'string' ? parsed.target_customer.trim() : undefined,
-      monetization: typeof parsed?.monetization === 'string' ? parsed.monetization.trim() : undefined,
+      ...pmResult.executionData,
+      chart_insights: undefined as {
+        search_trend?: { insight?: string; takeaway?: string }
+        market_size?: { insight?: string; takeaway?: string }
+        adoption_rate?: { insight?: string; takeaway?: string }
+        score_distribution?: { insight?: string; takeaway?: string }
+      } | undefined,
+      porter_5_forces: undefined as {
+        rivalry?: string[]
+        supplier_power?: string[]
+        buyer_power?: string[]
+        substitutes?: string[]
+        new_entrants?: string[]
+      } | undefined,
     }
 
-    const stratProvider = stratPrimaryIsGemini ? (usedFallback ? 'groq' : 'gemini') : (usedFallback ? 'gemini' : 'groq')
-    await upsertAnalysisTask('strategy_generation', 'completed', {
-      outputData: strategyData,
-      provider: stratProvider,
-      fallback_used: usedFallback,
-      primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
-    })
+    const stratProvider = stratPrimaryIsGemini ? (pmResult.usedFallback ? 'groq' : 'gemini') : (pmResult.usedFallback ? 'gemini' : 'groq')
     await upsertAnalysisTask('execution_layer', 'completed', {
       outputData: executionData,
       provider: stratProvider,
-      fallback_used: usedFallback,
-      primary_provider_error: usedFallback ? primaryProviderError ?? null : null,
+      fallback_used: pmResult.usedFallback,
+      primary_provider_error: pmResult.usedFallback ? pmResult.primaryProviderError ?? null : null,
     })
-    log('strategy_execution', 'completed', { usedFallback })
+    log('pm_action_plan', 'completed', { usedFallback: pmResult.usedFallback })
     await updateProgress(5, 'analyzing')
 
-    yield {
-      type: 'task',
-      task: 'strategy_generation',
-      status: 'completed',
-      data: strategyData,
-      provider: stratProvider,
-      fallback_used: usedFallback,
-      primaryProviderError: usedFallback ? primaryProviderError : undefined,
-    }
     yield {
       type: 'task',
       task: 'execution_layer',
       status: 'completed',
       data: executionData,
       provider: stratProvider,
-      fallback_used: usedFallback,
-      primaryProviderError: usedFallback ? primaryProviderError : undefined,
+      fallback_used: pmResult.usedFallback,
+      primaryProviderError: pmResult.usedFallback ? pmResult.primaryProviderError : undefined,
     }
   } catch (err) {
-    const msg = toUserFriendlyError(err, '전략 및 실행 계획 생성 중 오류가 발생했습니다.')
-    log('strategy_execution', 'failed', { error: msg, err })
+    const msg = toUserFriendlyError(err, 'PM 액션 플랜 생성 중 오류가 발생했습니다.')
+    log('pm_action_plan', 'failed', { error: msg, err })
     await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await updateProgress(4, 'failed')
     yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'task', task: 'execution_layer', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
-    yield { type: 'error', message: msg, step: 'strategy_execution' }
+    yield { type: 'error', message: msg, step: 'execution_layer' }
     return
   }
 
@@ -1073,9 +1535,43 @@ export async function* runResearch(
     keyConclusions: keyConclusions.slice(0, 5),
   }
 
+  let strategyEvaluation: StrategyEvaluationResult | undefined
+  try {
+    strategyEvaluation = await runStrategyEvaluationTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      strategyData,
+      competitionSummary,
+      executionData,
+      primaryProvider
+    )
+  } catch {
+    strategyEvaluation = undefined
+  }
+
   const structured: StructuredAnalysisFields = {
     market_temperature_score: trendData.market_score,
     summary_insights: strategyData.strategy_summary,
+    market_summary: strategyData.market_summary,
+    key_strategic_insights: strategyData.key_strategic_insights,
+    opportunity_areas: strategyData.opportunities.length > 0 ? strategyData.opportunities : undefined,
+    recommended_product_strategy:
+      executionData.product_idea || executionData.target_customer || executionData.monetization || strategyData.strategy_summary
+        ? {
+            summary: strategyData.strategy_summary,
+            product_idea: executionData.product_idea,
+            target_customer: executionData.target_customer,
+            monetization: executionData.monetization,
+          }
+        : undefined,
+    pm_action_plan: executionData.pm_action_plan,
+    strategic_decision_layer: executionData.strategic_decision_layer,
+    chart_insights: executionData.chart_insights,
+    swot_analysis: executionData.swot_analysis,
+    jtbd: executionData.jtbd,
+    porter_5_forces: executionData.porter_5_forces,
+    next_actions_pm: executionData.next_actions_pm,
     facts: pos.length ? pos : undefined,
     hypotheses: strategyData.risks.slice(0, 3),
     inferences: neg.length ? neg : undefined,
@@ -1095,11 +1591,23 @@ export async function* runResearch(
     competitive_landscape: competitionData.competitive_landscape.map((c) => ({
       name: c.name,
       positioning: c.positioning,
-      strength: undefined,
-      weakness: undefined,
+      target_market: c.target_market,
+      key_feature: c.key_feature,
+      pricing: c.pricing,
+      differentiation: c.differentiation,
+      strength: c.strength,
+      weakness: c.weakness,
     })),
     market_structure: competitionData.market_structure
       ? { competition_density: undefined, summary: competitionData.market_structure }
+      : undefined,
+    strategy_evaluation: strategyEvaluation
+      ? {
+          market_attractiveness: strategyEvaluation.market_attractiveness,
+          competition_risk: strategyEvaluation.competition_risk,
+          execution_difficulty: strategyEvaluation.execution_difficulty,
+          growth_potential: strategyEvaluation.growth_potential,
+        }
       : undefined,
   }
 
@@ -1233,6 +1741,42 @@ export async function* runResearch(
         .upsert(upsertPayload, { onConflict: 'user_id,keyword,country_code' })
 
       await supabase.from('reports').update({ content: fullSummary }).eq('id', reportId)
+
+      // Save to analysis_history for "My Analyses" page (every analysis, no overwrite)
+      try {
+        const productName = structured.recommended_product_strategy?.product_idea
+          ?? executionData.product_idea
+          ?? null
+        const strategyText = strategyData.strategy_summary
+          ?? structured.recommended_product_strategy?.summary
+          ?? null
+        const actionPlanJson = (structured.pm_action_plan?.length
+          ? structured.pm_action_plan.map((a) => ({
+              title: a.action_title,
+              description: a.description,
+              priority: a.priority,
+            }))
+          : (structured.pm_actions?.recommended_actions ?? []).slice(0, 8).map((a) =>
+              typeof a === 'string' ? { title: a } : { title: (a as { title?: string })?.title, reasoning: (a as { reasoning?: string })?.reasoning }
+            )
+          ) as Array<{ title?: string; description?: string; priority?: string }>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('analysis_history').insert({
+            user_id: cacheKey.userId,
+            report_id: reportId,
+            market_keyword: keyword,
+            product_name: typeof productName === 'string' ? productName.trim() || null : null,
+            generated_insights: {
+              summary: structured.summary_insights ?? null,
+              insights: structured.key_strategic_insights ?? null,
+            },
+            strategy_recommendation: typeof strategyText === 'string' ? strategyText.trim() || null : null,
+            action_plan: actionPlanJson.length > 0 ? actionPlanJson : null,
+            country_code: cacheKey.countryCode ?? 'KR',
+          })
+      } catch (ahErr) {
+        console.warn('[AI Analysis] analysis_history insert skipped:', ahErr)
+      }
     }
   } catch (err) {
     await updateProgress(5, 'failed')

@@ -14,6 +14,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
 const CHART_PRIMARY = '#6366f1'
@@ -75,6 +76,13 @@ function buildAdoptionData(
   })
 }
 
+export interface ChartInsights {
+  search_trend?: { insight?: string; takeaway?: string }
+  market_size?: { insight?: string; takeaway?: string }
+  adoption_rate?: { insight?: string; takeaway?: string }
+  score_distribution?: { insight?: string; takeaway?: string }
+}
+
 export interface MarketGrowthChartsProps {
   opportunityScore?: number | null
   breakdown?: {
@@ -85,6 +93,7 @@ export interface MarketGrowthChartsProps {
   growthSignalsCount?: number
   marketTemperatureScore?: number | null
   keyword?: string
+  chartInsights?: ChartInsights
   className?: string
 }
 
@@ -97,6 +106,7 @@ export function MarketGrowthCharts({
   breakdown = {},
   growthSignalsCount = 0,
   marketTemperatureScore,
+  chartInsights,
   className,
 }: MarketGrowthChartsProps) {
   /** 분석 중에도 차트 표시: 값 없으면 default 사용 */
@@ -110,13 +120,18 @@ export function MarketGrowthCharts({
   const sizeData = buildMarketSizeData(score)
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
 
+  const st = chartInsights?.search_trend
+  const ms = chartInsights?.market_size
+  const ar = chartInsights?.adoption_rate
+
   return (
     <div className={cn('grid grid-cols-1 lg:grid-cols-3 gap-4', className)}>
       {/* 1. Search trend growth line chart */}
-      <div className="rounded-xl border border-border/60 bg-muted/5 p-4">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          검색 트렌드 성장
-        </h4>
+      <ChartWithInsight
+        title="검색 트렌드 성장"
+        insight={st?.insight}
+        takeaway={st?.takeaway}
+      >
         <div className="h-[160px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -138,13 +153,14 @@ export function MarketGrowthCharts({
             </LineChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </ChartWithInsight>
 
       {/* 2. Market size projection chart */}
-      <div className="rounded-xl border border-border/60 bg-muted/5 p-4">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          시장 규모 전망
-        </h4>
+      <ChartWithInsight
+        title="시장 규모 전망"
+        insight={ms?.insight}
+        takeaway={ms?.takeaway}
+      >
         <div className="h-[160px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -159,13 +175,14 @@ export function MarketGrowthCharts({
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </ChartWithInsight>
 
       {/* 3. Adoption rate trend */}
-      <div className="rounded-xl border border-border/60 bg-muted/5 p-4">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          시장 도입 추이
-        </h4>
+      <ChartWithInsight
+        title="시장 도입 추이"
+        insight={ar?.insight}
+        takeaway={ar?.takeaway}
+      >
         <div className="h-[160px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -192,7 +209,7 @@ export function MarketGrowthCharts({
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </ChartWithInsight>
     </div>
   )
 }

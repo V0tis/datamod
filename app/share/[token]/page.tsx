@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ResearchReportView, type ResearchContent } from '@/components/research-report-view'
@@ -93,20 +91,18 @@ export default function SharedReportPage() {
   }
 
   return (
-    <div className="pb-8">
-      <div className="max-w-6xl mx-auto px-4 pt-4">
-        <p className="text-sm text-muted-foreground mb-2">공유된 리포트</p>
-        <Link href="/">
-          <Button variant="outline" size="sm">Rin-AI 홈으로</Button>
-        </Link>
+    <div className="min-h-screen pb-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">공유된 리포트</p>
+        <ResearchReportView
+          keyword={data.keyword}
+          content={content}
+          reportId={null}
+          showLoginCta={false}
+          embedded={false}
+          shared={true}
+        />
       </div>
-      <ResearchReportView
-        keyword={data.keyword}
-        content={content}
-        reportId={null}
-        showLoginCta={false}
-        embedded={false}
-      />
     </div>
   )
 }

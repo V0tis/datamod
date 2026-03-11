@@ -1,54 +1,85 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspaper, Database, GitBranch } from 'lucide-react'
+import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspaper, Database, GitBranch, Briefcase, Gauge, CheckSquare2, Loader2, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/** Core 5 sections for sticky quick-jump nav */
+const CORE_SECTIONS = [
+  { id: 'section-market', label: 'Market Analysis', icon: TrendingUp },
+  { id: 'section-insights', label: 'Insights', icon: Lightbulb },
+  { id: 'section-strategy', label: 'Strategy', icon: Target },
+  { id: 'section-competition', label: 'Competitors', icon: Users },
+  { id: 'section-next-actions-pm', label: 'Action Plan', icon: CheckSquare2 },
+] as const
 
 const SECTIONS = [
   { id: 'section-timeline', label: 'AI 분석 타임라인', icon: GitBranch },
   { id: 'section-summary', label: '분석 결과 요약', icon: LayoutGrid },
   { id: 'section-opportunity', label: '기회 점수 분해', icon: Target },
+  { id: 'section-strategic-decision', label: '전략적 의사결정', icon: Gauge },
+  { id: 'section-strategy-evaluation', label: '전략 평가', icon: BarChart3 },
   { id: 'section-insights', label: '핵심 시장 인사이트', icon: Lightbulb },
+  { id: 'section-product-strategy', label: '제품 전략 결과', icon: Briefcase },
   { id: 'section-risks-opportunities', label: '리스크 및 기회 평가', icon: AlertTriangle },
   { id: 'section-market', label: '시장 성장 분석', icon: TrendingUp },
   { id: 'section-competition', label: '경쟁 환경 분석', icon: Users },
+  { id: 'section-frameworks', label: '전략 프레임워크', icon: LayoutGrid },
   { id: 'section-strategy', label: '전략 제안', icon: Target },
   { id: 'section-risks', label: '리스크 평가', icon: AlertTriangle },
   { id: 'section-news', label: '뉴스 및 데이터', icon: Newspaper },
   { id: 'section-data', label: '데이터 출처', icon: Database },
+  { id: 'section-next-actions-pm', label: 'Next Actions for PM', icon: CheckSquare2 },
 ] as const
+
+export interface ResultSectionNavProgress {
+  /** Whether analysis is in progress */
+  loading: boolean
+  /** 0-100 completeness percent */
+  percent: number
+}
 
 export interface ResultSectionNavProps {
   className?: string
   /** compact: horizontal pills. full: vertical. tabs: sticky top tabs. sidebar: sticky left sidebar with active highlight */
   variant?: 'compact' | 'full' | 'tabs' | 'sidebar'
+  /** When 'core', show only 5 key sections for quick jump (Market Analysis, Insights, Strategy, Competitors, Action Plan) */
+  mode?: 'full' | 'core'
+  /** Progress indicator for analysis completeness (shown in tabs/sidebar when provided) */
+  progress?: ResultSectionNavProgress
 }
 
-export function ResultSectionNav({ className, variant = 'compact' }: ResultSectionNavProps) {
+export function ResultSectionNav({
+  className,
+  variant = 'compact',
+  mode = 'full',
+  progress,
+}: ResultSectionNavProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
+  const sections = mode === 'core' ? CORE_SECTIONS : SECTIONS
 
   useEffect(() => {
     if (variant !== 'tabs' && variant !== 'sidebar') return
     const updateActive = () => {
       const triggerY = 120
       let active: string | null = null
-      for (let i = SECTIONS.length - 1; i >= 0; i--) {
-        const el = document.getElementById(SECTIONS[i].id)
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sections[i].id)
         if (!el) continue
         const rect = el.getBoundingClientRect()
         if (rect.top <= triggerY && rect.bottom > triggerY) {
-          active = SECTIONS[i].id
+          active = sections[i].id
           break
         }
         if (rect.top < triggerY) {
-          active = SECTIONS[i].id
+          active = sections[i].id
           break
         }
       }
-      if (!active && SECTIONS.length > 0) {
-        const first = document.getElementById(SECTIONS[0].id)
-        if (first && first.getBoundingClientRect().top > 0) active = SECTIONS[0].id
-        else active = SECTIONS[SECTIONS.length - 1].id
+      if (!active && sections.length > 0) {
+        const first = document.getElementById(sections[0].id)
+        if (first && first.getBoundingClientRect().top > 0) active = sections[0].id
+        else active = sections[sections.length - 1].id
       }
       setActiveId((prev) => (prev !== active ? active : prev))
     }
@@ -58,7 +89,7 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
       },
       { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
     )
-    SECTIONS.forEach((s) => {
+    sections.forEach((s) => {
       const el = document.getElementById(s.id)
       if (el) observer.observe(el)
     })
@@ -74,12 +105,42 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', updateActive)
     }
-  }, [variant])
+  }, [variant, mode])
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id)
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  const showProgress = progress != null
+  const pct = progress?.percent ?? 0
+  const ProgressBar = showProgress ? (
+    <div className="px-2 py-2 border-b border-border/60 mb-2">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          분석 진행
+        </span>
+        {progress!.loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden />
+        ) : (
+          <span className="text-[11px] font-medium tabular-nums text-primary">
+            {Math.round(pct)}%
+          </span>
+        )}
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full bg-primary transition-all duration-500 ease-out rounded-full"
+          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+          role="progressbar"
+          aria-valuenow={Math.round(pct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="분석 완료율"
+        />
+      </div>
+    </div>
+  ) : null
 
   if (variant === 'sidebar') {
     return (
@@ -91,10 +152,11 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
         )}
         aria-label="결과 섹션 탐색"
       >
+        {ProgressBar}
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-2">
           섹션
         </p>
-        {SECTIONS.map((s) => {
+        {sections.map((s) => {
           const Icon = s.icon
           const isActive = activeId === s.id
           return (
@@ -120,16 +182,43 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
 
   if (variant === 'tabs') {
     return (
-      <nav
-        className={cn(
-          'sticky top-0 z-20 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 py-0',
-          'bg-background/95 backdrop-blur border-b border-border',
-          'flex gap-0 overflow-x-auto scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-          className
+      <div className={cn('sticky top-0 z-20 -mx-3 sm:-mx-4 md:-mx-6', className)}>
+        {showProgress && (
+          <div className="px-3 sm:px-4 md:px-6 py-2 bg-background/95 backdrop-blur border-b border-border/60">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-muted-foreground">
+                분석 진행
+              </span>
+              {progress!.loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden />
+              ) : (
+                <span className="text-xs font-semibold tabular-nums text-primary">
+                  {Math.round(pct)}%
+                </span>
+              )}
+            </div>
+            <div className="h-1.5 mt-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-500 ease-out rounded-full"
+                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                role="progressbar"
+                aria-valuenow={Math.round(pct)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="분석 완료율"
+              />
+            </div>
+          </div>
         )}
-        aria-label="결과 섹션 탐색"
-      >
-        {SECTIONS.map((s) => {
+        <nav
+          className={cn(
+            'flex gap-0 overflow-x-auto scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            'bg-background/95 backdrop-blur border-b border-border',
+            showProgress ? 'px-3 sm:px-4 md:px-6 py-2' : 'px-3 sm:px-4 md:px-6 py-0'
+          )}
+          aria-label="결과 섹션 탐색"
+        >
+        {sections.map((s) => {
           const Icon = s.icon
           const isActive = activeId === s.id
           return (
@@ -149,7 +238,8 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
             </button>
           )
         })}
-      </nav>
+        </nav>
+      </div>
     )
   }
 
@@ -159,7 +249,7 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
           섹션 이동
         </p>
-        {SECTIONS.map((s) => {
+        {sections.map((s) => {
           const Icon = s.icon
           return (
             <button
@@ -185,7 +275,7 @@ export function ResultSectionNav({ className, variant = 'compact' }: ResultSecti
       )}
       aria-label="결과 섹션 탐색"
     >
-      {SECTIONS.map((s) => {
+      {sections.map((s) => {
         const Icon = s.icon
         return (
           <button

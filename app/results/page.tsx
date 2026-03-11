@@ -11,7 +11,7 @@ import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimat
 import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
-import { printReportAsPdf } from '@/lib/pdf-export'
+import { exportAnalysisToPdf } from '@/lib/pdf-export'
 import { FileDown, X, ExternalLink, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
@@ -24,7 +24,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
-import { FirstFiveSecondsBanner } from '@/components/research/FirstFiveSecondsBanner'
+import { AnalysisProgressBanner } from '@/components/research/AnalysisProgressBanner'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
@@ -35,8 +35,11 @@ import { ResultShareActions } from '@/components/research/ResultShareActions'
 import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
 import { ResultPageHero } from '@/components/research/ResultPageHero'
 import { NextExplorationSection } from '@/components/research/NextExplorationSection'
+import { NextActionsForPM } from '@/components/research/NextActionsForPM'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScoreBreakdown'
+import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionLayer'
+import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
@@ -1010,6 +1013,23 @@ function ResultsContent() {
     ]
   })()
 
+  const navProgress = (() => {
+    const isAnalyzing = loading
+    if (displayResult?.reportId && !isAnalyzing) return { loading: false, percent: 100 }
+    if (analysisTasks?.length) {
+      const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer']
+      const done = analysisTasks.filter((t) => MAIN.includes(t.step_name) && t.status === 'completed').length
+      return { loading: isAnalyzing, percent: Math.min(100, (done / MAIN.length) * 100) }
+    }
+    const step = (streamingState.status === 'running' || streamingState.status === 'streaming')
+      ? Math.min(5, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
+      : -1
+    if (isAnalyzing && step >= 0) {
+      return { loading: true, percent: Math.round(((step + 1) / 6) * 100) }
+    }
+    return { loading: isAnalyzing, percent: isAnalyzing ? 10 : 0 }
+  })()
+
   const showTabs = hasKeyword
   if (showTabs) {
     return (
@@ -1017,7 +1037,7 @@ function ResultsContent() {
         {/* 좌측 섹션 네비 – 스크롤해도 화면에 고정 (fixed), lg 이상에서만 표시 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-background/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden">
-            <ResultSectionNav variant="sidebar" />
+            <ResultSectionNav variant="sidebar" mode="core" progress={navProgress} />
           </aside>
         )}
         <div className={cn(
@@ -1131,7 +1151,14 @@ function ResultsContent() {
                       ? `\n기회 점수: ${displayResult.key_metrics.opportunity_score}/100`
                       : '',
                   ].filter(Boolean).join('\n\n')}
-                  onDownloadPdf={printReportAsPdf}
+                  onDownloadPdf={() =>
+                    exportAnalysisToPdf(
+                      currentKeyword ?? '',
+                      displayResult ?? null,
+                      taskData ?? {},
+                      { countryCode: countryFromUrl }
+                    )
+                  }
                   disabled={loading}
                 />
                 <Button
@@ -1182,7 +1209,7 @@ function ResultsContent() {
         {/* 모바일/태블릿: 스크롤 시 따라오는 섹션 탭 (lg 이상은 좌측 사이드바) */}
         {!showInsightSequence && (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <div className="lg:hidden mt-3 -mx-2 sm:-mx-3 md:-mx-4">
-            <ResultSectionNav variant="tabs" className="!top-14" />
+            <ResultSectionNav variant="tabs" mode="core" className="!top-14" progress={navProgress} />
           </div>
         )}
 
@@ -1277,21 +1304,36 @@ function ResultsContent() {
           </section>
         )}
 
-        {/* First 5 Seconds UX - 즉시 피드백, AI 분석 시작 확인 (중앙 배치, 진행 상태 명확히) */}
-        {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
-          <div className="flex flex-col items-center justify-center py-12 px-4 mb-4 rounded-xl border border-border/60 bg-muted/20 min-h-[200px]">
-            <FirstFiveSecondsBanner
+        {/* Strategic Decision Layer - Market Opportunity, Competition, PMF, Entry Strategy */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div className="mt-5">
+            <StrategicDecisionLayer
+              result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
+              loading={loading}
               keyword={currentKeyword ?? ''}
+            />
+            <div className="mt-5">
+              <StrategyEvaluationSection
+                result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
+                loading={loading}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Progressive loading UX - 4 steps, progress bar, dynamic messages */}
+        {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
+          <div className="flex flex-col items-center justify-center py-8 px-4 mb-4 max-w-2xl mx-auto">
+            <AnalysisProgressBanner
+              keyword={currentKeyword ?? ''}
+              streamingState={streamingState}
+              stepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : null}
+              currentStep={streamingState.status === 'running' || streamingState.status === 'streaming' ? ('currentStep' in streamingState ? streamingState.currentStep : 0) : 0}
               showMicroInsight
             />
             <p className="text-xs text-muted-foreground mt-4 text-center">
               초기 인사이트는 약 10초 내에 표시됩니다. 전체 분석에는 약 1~3분이 소요될 수 있습니다.
             </p>
-            {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
-              <p className="text-sm font-medium text-primary mt-2">
-                {getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)} ({Math.min(6, (streamingState.currentStep ?? 0) + 1)}/6)
-              </p>
-            )}
           </div>
         )}
 
@@ -1514,6 +1556,16 @@ function ResultsContent() {
           </section>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Next Actions for PM – 5 actionable steps at bottom */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <div className="mt-8 mb-6">
+            <NextActionsForPM
+              result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
+              loading={loading}
+            />
           </div>
         )}
 

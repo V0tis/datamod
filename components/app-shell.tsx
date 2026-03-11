@@ -21,6 +21,8 @@ const isAuthOnlyPath = (path: string) =>
   path === '/auth/callback' ||
   path.startsWith('/auth/callback/')
 
+const isSharePath = (path: string) => path?.startsWith('/share/')
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthPage = isAuthOnlyPath(pathname ?? '')
@@ -43,6 +45,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname, abortAnalysis, isAnalyzingNow])
 
   if (isAuthPage) {
+    return (
+      <main className="min-h-screen overflow-auto bg-background text-foreground">
+        <ErrorBoundary>
+          <PageTransition>{children}</PageTransition>
+        </ErrorBoundary>
+      </main>
+    )
+  }
+
+  // 공유 페이지: 사이드바·내부 UI 없이 읽기 전용 리포트만 표시
+  if (isSharePath(pathname ?? '')) {
     return (
       <main className="min-h-screen overflow-auto bg-background text-foreground">
         <ErrorBoundary>

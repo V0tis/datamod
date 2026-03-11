@@ -11,6 +11,7 @@ const STEP_ORDER = [
   'signal_layer',
   'trend_analysis',
   'competition_analysis',
+  'insight_extraction',
   'strategy_generation',
   'execution_layer',
 ] as const

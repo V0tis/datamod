@@ -89,6 +89,10 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 # 리서치 — Groq (탭 분석용)
 GROQ_API_KEY=your_groq_api_key
 
+# 리서치 — 웹 검색 그라운딩 (선택, Serper API)
+# 설정 시 분석 전 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달합니다.
+SERPER_API_KEY=your_serper_api_key
+
 # 선택 (기본값 사용 시 생략 가능)
 GEMINI_MODEL=gemini-2.5-flash
 GEMINI_TAB_MODEL=gemini-2.5-flash

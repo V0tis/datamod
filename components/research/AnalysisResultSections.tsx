@@ -7,11 +7,13 @@ import {
   Target,
   TrendingUp,
   AlertTriangle,
+  LayoutGrid,
 } from 'lucide-react'
 import { ProductStrategySection } from '@/components/research/ProductStrategySection'
 import { AnalysisCharts } from '@/components/research/AnalysisCharts'
 import { MarketGrowthCharts } from '@/components/research/MarketGrowthCharts'
 import { CompetitorTierChart, CompetitorLandscapeMap } from '@/components/research/CompetitorVisualMap'
+import { CompetitorLandscapeTable } from '@/components/research/CompetitorLandscapeTable'
 import { StartupConceptCard } from '@/components/research/StartupConceptCard'
 import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard'
 import { QuickActions } from '@/components/research/QuickActions'
@@ -54,7 +56,7 @@ function getSectionStatus(
     if (s === 'pending' || s === 'running' || s === 'completed' || s === 'failed') return s
   }
   if (!loading && (!analysisTasks?.length || !task)) return undefined
-  const order = ['signal_layer', 'trend_analysis', 'competition_analysis', 'strategy_generation', 'execution_layer']
+  const order = ['signal_layer', 'trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer']
   const idx = order.indexOf(stepName)
   if (idx < 0) return undefined
   const runningNow = analysisTasks?.find((t) => t.step_name === stepName && t.status === 'running')
@@ -134,10 +136,28 @@ export function AnalysisResultSections({
     strategySummary,
   ].filter((s) => s && s.length > 0).slice(0, 3)
 
-  // Competitive Landscape
+  // Competitive Landscape (task output or key_metrics fallback for cached/history)
   const competitiveLandscape = Array.isArray(competitionOutput?.competitive_landscape)
-    ? (competitionOutput.competitive_landscape as Array<{ name?: string; positioning?: string }>)
-    : []
+    ? (competitionOutput.competitive_landscape as Array<{
+        name?: string
+        positioning?: string
+        target_market?: string
+        key_feature?: string
+        pricing?: string
+        differentiation?: string
+        strength?: string
+        weakness?: string
+      }>)
+    : Array.isArray(km.competitive_landscape)
+      ? (km.competitive_landscape as Array<{
+          name?: string
+          positioning?: string
+          target_market?: string
+          key_feature?: string
+          pricing?: string
+          differentiation?: string
+        }>)
+      : []
   const competitorTrendsBullets = textToBullets(result?.competitorTrends ?? '', 4)
   const marketStructureBullets = textToBullets(
     typeof competitionOutput?.market_structure === 'string' ? competitionOutput.market_structure : '',
@@ -165,6 +185,15 @@ export function AnalysisResultSections({
   const goToMarketSteps = Array.isArray(executionOutput?.go_to_market_steps)
     ? (executionOutput.go_to_market_steps as string[]).filter((s): s is string => typeof s === 'string')
     : []
+
+  // Strategy frameworks (SWOT, JTBD, Porter 5 Forces) - from km or execution output
+  const swot = km.swot_analysis ?? (executionOutput?.swot_analysis as typeof km.swot_analysis)
+  const jtbd = km.jtbd ?? (executionOutput?.jtbd as typeof km.jtbd)
+  const porter5 = km.porter_5_forces ?? (executionOutput?.porter_5_forces as typeof km.porter_5_forces)
+  const hasFrameworks =
+    (swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length)) ||
+    (jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length)) ||
+    (porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length))
 
   // Strategic Actions for existing component
   const risks = Array.isArray(strategyOutput?.risks)
@@ -235,7 +264,8 @@ export function AnalysisResultSections({
     marketStructureBullets.length > 0 ||
     strategyBullets.length > 0 ||
     allActionItems.length > 0 ||
-    strategicActions.length > 0
+    strategicActions.length > 0 ||
+    !!hasFrameworks
 
   const isPmAnalytics = layout === 'pm-analytics'
   const showProgressiveSections = isPmAnalytics && (loading || (analysisTasks?.length ?? 0) > 0 || result != null)
@@ -294,6 +324,7 @@ export function AnalysisResultSections({
               breakdown={breakdown}
               growthSignalsCount={growthSignals.length}
               marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
+              chartInsights={km.chart_insights}
               keyword={keyword}
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -314,7 +345,11 @@ export function AnalysisResultSections({
                 </div>
               )}
             </div>
-            <AnalysisCharts opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined} className="mb-4" />
+            <AnalysisCharts
+              opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
+              chartInsights={km.chart_insights}
+              className="mb-4"
+            />
             {keyTrends.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
@@ -347,7 +382,7 @@ export function AnalysisResultSections({
             {topInsights.map((insight, i) => (
               <KeyInsightBulletCard
                 key={i}
-                title={insight.length > 140 ? insight.slice(0, 137).trim() + '...' : insight}
+                title={insight}
                 index={i + 1}
               />
             ))}
@@ -373,6 +408,10 @@ export function AnalysisResultSections({
           <div className="space-y-4">
             {competitiveLandscape.length > 0 && (
               <>
+                <CompetitorLandscapeTable
+                  competitors={competitiveLandscape}
+                  loading={loading}
+                />
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <CompetitorTierChart competitors={competitiveLandscape} />
                   <CompetitorLandscapeMap competitors={competitiveLandscape} />
@@ -412,6 +451,218 @@ export function AnalysisResultSections({
           </div>
         )}
       </ProductStrategySection>
+
+      {/* 3b. Strategy Frameworks: SWOT, JTBD, Porter 5 Forces */}
+      {(hasFrameworks || (isPmAnalytics && loading)) && (
+      <ProductStrategySection
+        id={isPmAnalytics ? 'section-frameworks' : undefined}
+        title="제품 전략 프레임워크"
+        icon={<LayoutGrid className="h-5 w-5" />}
+        status={isPmAnalytics ? getSectionStatus('execution_layer', analysisTasks, loading) : undefined}
+        loading={isPmAnalytics && loading}
+        streamingComplete={isPmAnalytics && !loading && !!hasFrameworks}
+      >
+        {loading && !hasFrameworks ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl border border-border/60 bg-card p-4">
+                <div className="h-4 w-24 rounded bg-muted/50 animate-pulse mb-3" />
+                <div className="space-y-2">
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="h-3 rounded bg-muted/30 animate-pulse" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* SWOT Analysis */}
+          {swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length) ? (
+            <div className="rounded-xl border border-border/60 bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">SWOT</h3>
+              <div className="space-y-3 text-sm">
+                {swot.strengths?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mb-1">강점</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {swot.strengths.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-emerald-500 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {swot.weaknesses?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">약점</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {swot.weaknesses.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-amber-500 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {swot.opportunities?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 mb-1">기회</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {swot.opportunities.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-blue-500 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {swot.threats?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mb-1">위협</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {swot.threats.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-rose-500 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* JTBD */}
+          {jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length) ? (
+            <div className="rounded-xl border border-border/60 bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Jobs-To-Be-Done</h3>
+              <div className="space-y-3 text-sm">
+                {jtbd.main_jobs?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-primary mb-1">핵심 작업</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {jtbd.main_jobs.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {jtbd.pains?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">페인포인트</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {jtbd.pains.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-muted-foreground shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {jtbd.gains?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">기대 이득</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {jtbd.gains.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Porter 5 Forces */}
+          {porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length) ? (
+            <div className="rounded-xl border border-border/60 bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Porter 5 Forces</h3>
+              <div className="space-y-3 text-sm">
+                {porter5.rivalry?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">경쟁 강도</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {porter5.rivalry.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {porter5.supplier_power?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">공급자 교섭력</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {porter5.supplier_power.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {porter5.buyer_power?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">구매자 교섭력</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {porter5.buyer_power.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {porter5.substitutes?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">대체재 위협</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {porter5.substitutes.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {porter5.new_entrants?.length ? (
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">신규 진입 위협</p>
+                    <ul className="list-none pl-0 space-y-1">
+                      {porter5.new_entrants.map((s, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-primary/70 shrink-0">•</span>
+                          <span className="text-foreground">{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        )}
+      </ProductStrategySection>
+      )}
 
       {/* 4. 리스크 평가 (pm-analytics only) */}
       {isPmAnalytics && (

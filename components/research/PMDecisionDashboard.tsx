@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { useAnalysisTasksPoll } from '@/lib/hooks/use-analysis-tasks-poll'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { AnalysisResultSections } from './AnalysisResultSections'
+import { ProductStrategyResult } from './ProductStrategyResult'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -189,7 +190,17 @@ export function PMDecisionDashboard({
         )
       })()}
 
-      {/* 3. 시장 성장 분석, 경쟁 환경, 전략 제안, 실행 아이디어 (전략 → 액션 플랜 순) */}
+      {/* 3. Product Strategy Result: 5-part structure (Market Summary, Key Insights, Opportunity Areas, Strategy, PM Action Plan) */}
+      {showResultSections && (
+        <ProductStrategyResult
+          result={displayResult ?? result}
+          taskData={taskData}
+          loading={isAnalyzing}
+          keyword={keyword}
+        />
+      )}
+
+      {/* 4. 시장 성장 분석, 경쟁 환경, 전략 제안 (상세 리포트) */}
       {showResultSections && (
         <AnalysisResultSections
           result={result}

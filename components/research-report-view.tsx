@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   Card,
@@ -9,8 +10,9 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Copy, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 
 /**
  * Single shape for AI result and DB content (reports.content).
@@ -49,6 +51,8 @@ export interface ResearchReportViewProps {
   loginCallbackUrl?: string
   /** When true, use compact layout (e.g. inside tabs) */
   embedded?: boolean
+  /** When true, show read-only shared layout (minimal footer: Copy link + Home) */
+  shared?: boolean
 }
 
 export function ResearchReportView({
@@ -58,8 +62,22 @@ export function ResearchReportView({
   showLoginCta = false,
   loginCallbackUrl,
   embedded = false,
+  shared = false,
 }: ResearchReportViewProps) {
+  const [copied, setCopied] = useState(false)
   const { marketNews, painPoints, competitorTrends, sentiment } = normalizeContent(content)
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.href : '')
+      setCopied(true)
+      toast.success('링크가 클립보드에 복사되었습니다.')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+      toast.error('복사에 실패했습니다.')
+    }
+  }
   const wrapperClass = embedded
     ? 'space-y-6'
     : 'min-h-screen bg-background p-8 max-w-6xl mx-auto space-y-8'
@@ -185,7 +203,20 @@ export function ResearchReportView({
         ))}
       </motion.div>
 
-      {!embedded && (
+      {!embedded && shared && (
+        <div className="pt-6 flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-2">
+            {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
+            {copied ? '복사됨' : '링크 복사'}
+          </Button>
+          <Link href="/">
+            <Button variant="outline" size="sm">
+              Rin-AI 홈으로
+            </Button>
+          </Link>
+        </div>
+      )}
+      {!embedded && !shared && (
         <div className="pt-4 flex gap-2">
           <Link href="/history">
             <Button variant="outline">

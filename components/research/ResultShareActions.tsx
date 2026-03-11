@@ -12,8 +12,8 @@ export interface ResultShareActionsProps {
   reportId?: string | null
   /** Summary text to copy (key insights) */
   summaryText?: string
-  /** Called when PDF download is triggered */
-  onDownloadPdf?: () => void
+  /** Called when PDF download is triggered. Can return Promise for async export. */
+  onDownloadPdf?: () => void | Promise<void>
   disabled?: boolean
   className?: string
 }
@@ -32,6 +32,7 @@ export function ResultShareActions({
   className,
 }: ResultShareActionsProps) {
   const [shareLoading, setShareLoading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
   const [copied, setCopied] = useState<'link' | 'summary' | null>(null)
 
   const handleShareReport = async () => {
@@ -66,10 +67,23 @@ export function ResultShareActions({
     }
   }
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (disabled) return
-    ;(onDownloadPdf ?? printReportAsPdf)()
-    toast.success('PDF로 저장할 수 있는 인쇄 창이 열립니다.')
+    const fn = onDownloadPdf ?? printReportAsPdf
+    setPdfLoading(true)
+    try {
+      const result = fn()
+      if (result != null && typeof (result as Promise<unknown>).then === 'function') {
+        await (result as unknown as Promise<void>)
+        toast.success('PDF 리포트가 다운로드되었습니다.')
+      } else {
+        toast.success('PDF로 저장할 수 있는 인쇄 창이 열립니다.')
+      }
+    } catch {
+      toast.error('PDF 생성에 실패했습니다.')
+    } finally {
+      setPdfLoading(false)
+    }
   }
 
   const handleCopySummary = async () => {
@@ -109,10 +123,14 @@ export function ResultShareActions({
         variant="outline"
         size="sm"
         onClick={handleDownloadPdf}
-        disabled={disabled}
+        disabled={disabled || pdfLoading}
         className="gap-1.5 text-xs"
       >
-        <FileDown className="h-3.5 w-3.5" />
+        {pdfLoading ? (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          <FileDown className="h-3.5 w-3.5" />
+        )}
         PDF 저장
       </Button>
       <Button

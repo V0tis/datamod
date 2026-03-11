@@ -100,6 +100,71 @@ export interface ResearchResponse {
       monitoring_points?: string[]
       decision_risks?: string[]
     }
+    /** Product strategy focus */
+    market_summary?: string
+    key_strategic_insights?: string[]
+    competitive_landscape?: Array<{
+      name?: string
+      positioning?: string
+      target_market?: string
+      key_feature?: string
+      strength?: string
+      weakness?: string
+    }>
+    opportunity_areas?: string[]
+    recommended_product_strategy?: {
+      summary?: string
+      product_idea?: string
+      target_customer?: string
+      monetization?: string
+    }
+    pm_action_plan?: Array<{
+      action_title: string
+      description?: string
+      expected_outcome?: string
+      priority?: 'high' | 'medium' | 'low'
+      category?: 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market'
+    }>
+    next_actions_pm?: Array<{
+      action?: string
+      why?: string
+      how_to_execute?: string
+      priority?: 'high' | 'medium' | 'low'
+      estimated_effort?: string
+    }>
+    chart_insights?: {
+      search_trend?: { insight?: string; takeaway?: string }
+      market_size?: { insight?: string; takeaway?: string }
+      adoption_rate?: { insight?: string; takeaway?: string }
+      score_distribution?: { insight?: string; takeaway?: string }
+    }
+    strategic_decision_layer?: {
+      market_opportunity_explanation?: string
+      competition_intensity?: 'low' | 'medium' | 'high'
+      competition_explanation?: string
+      product_market_fit?: 'low' | 'medium' | 'high'
+      product_market_fit_explanation?: string
+      entry_strategy?: string
+      entry_explanation?: string
+    }
+    swot_analysis?: {
+      strengths?: string[]
+      weaknesses?: string[]
+      opportunities?: string[]
+      threats?: string[]
+    }
+    jtbd?: {
+      main_jobs?: string[]
+      pains?: string[]
+      gains?: string[]
+    }
+    porter_5_forces?: {
+      rivalry?: string[]
+      supplier_power?: string[]
+      buyer_power?: string[]
+      substitutes?: string[]
+      new_entrants?: string[]
+    }
   }
 }
 
@@ -809,14 +874,15 @@ export const useResearchStore = create<ResearchStore>()(
             trend_analysis: 1,
             pass1: 1,
             competition_analysis: 2,
-            strategy_generation: 3,
-            execution_layer: 4,
-            pass2: 4,
-            creative: 4,
-            post_processing: 5,
-            post_processing_key_metrics: 5,
-            post_processing_creative: 5,
-            post_processing_saving: 5,
+            insight_extraction: 3,
+            strategy_generation: 4,
+            execution_layer: 5,
+            pass2: 5,
+            creative: 5,
+            post_processing: 6,
+            post_processing_key_metrics: 6,
+            post_processing_creative: 6,
+            post_processing_saving: 6,
           }
 
           while (!streamEnded) {
