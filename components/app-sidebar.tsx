@@ -7,14 +7,12 @@ import type { User } from '@supabase/supabase-js'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
-  ListTodo,
   Settings,
   LogOut,
   Menu,
   X,
   Bookmark,
   BarChart3,
-  FileText,
 } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
@@ -22,10 +20,8 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
-  { href: '/analyses', label: '내 분석', icon: FileText },
   { href: '/history', label: '분석 기록', icon: BarChart3 },
   { href: '/insights', label: '저장한 인사이트', icon: Bookmark },
-  { href: '/tasks', label: '분석 작업', icon: ListTodo },
   { href: '/settings', label: '설정', icon: Settings },
 ]
 

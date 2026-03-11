@@ -15,7 +15,7 @@ export interface ConfidenceDisplay {
 const HIGH_MIN = 70
 const MEDIUM_MIN = 40
 
-export interface ConfidenceContext {
+interface ConfidenceContext {
   /** True when only one AI engine was used (e.g. partial data). */
   partialData?: boolean
   hasSummary?: boolean

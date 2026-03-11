@@ -11,8 +11,3 @@ export function getSupabase(): SupabaseClient {
   }
   return _client
 }
-
-export interface Profile {
-  id: string
-  email: string
-}

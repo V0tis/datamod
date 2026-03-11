@@ -5,9 +5,6 @@
   "functions": {
     "app/api/research/run/route.ts": {
       "maxDuration": 300
-    },
-    "app/api/research/stream/route.ts": {
-      "maxDuration": 300
     }
   }
 }

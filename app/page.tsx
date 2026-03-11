@@ -12,8 +12,8 @@ import { RinAnimation, getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/compo
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { parseJsonResponse } from '@/lib/fetch-json'
-import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
+import { fetchTrendsForCountry } from '@/lib/fetch-trends'
+import type { TrendsResponse } from '@/lib/trends-types'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
@@ -170,22 +170,16 @@ function RinAISearchInner() {
   }, [user, fetchRecentReports])
 
   const fetchTrends = (forceRefresh = false) => {
-    const url = `/api/trends?country=${trendCountry}${forceRefresh ? '&refresh=1' : ''}`
     setTrendsLoading(true)
-    fetch(url)
-      .then((res) => parseJsonResponse<TrendsResponse & { refreshed?: boolean; refreshFailed?: boolean }>(res))
-      .then((data) => {
+    fetchTrendsForCountry(trendCountry, { refresh: forceRefresh })
+      .then(({ items, updatedAt, refreshed, refreshFailed }) => {
         setSharedTrends((prev) => ({
           ...prev,
-          [trendCountry]: normalizeTrendItems(
-          Array.isArray((data as unknown as Record<string, unknown>)[trendCountry])
-            ? ((data as unknown as Record<string, TrendItem[]>)[trendCountry])
-            : [],
-        ),
-          updatedAt: data.updatedAt ?? prev.updatedAt ?? null,
+          [trendCountry]: items,
+          updatedAt: updatedAt ?? prev.updatedAt ?? null,
         }))
-        if (data.refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
-        if (data.refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
+        if (refreshed) toast.success('데이터가 최신 상태로 업데이트되었습니다')
+        if (refreshFailed) toast.warning('일시적 오류로 갱신에 실패했습니다. 기존 데이터를 표시합니다.')
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '트렌드 데이터를 불러오지 못했습니다.' }))
       .finally(() => setTrendsLoading(false))

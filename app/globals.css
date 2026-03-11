@@ -156,12 +156,6 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
 
-  /* 연한 포인트용 애니메이션만 유지 (복잡한 배경 애니메이션 없음) */
-  --animate-bounce-slow: bounce-slow 2.5s ease-in-out infinite;
-  @keyframes bounce-slow {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
-  }
 }
 
 /* Sonner 토스트: 에러(빨강) / 성공(초록) / 알림(중립) 구분 */
@@ -272,24 +266,13 @@
 
 /* Result report layout: readable, report-like density */
 body {
-  --reading-gap: 0.75rem;
   --reading-gap-lg: 1rem;
-  --reading-space-y: 1rem;
-  --reading-space-y-lg: 1.375rem;
   --reading-text: 1rem;
-  --reading-text-lg: 1.0625rem;
   --reading-leading: 1.7;
   --reading-section-gap: 1.25rem;
-  --section-spacing: 2.5rem;
-  --card-padding: 1.25rem;
-  --container-padding: 1rem;
 }
-.reading-gap { gap: var(--reading-gap); }
 .reading-gap-lg { gap: var(--reading-gap-lg); }
-.reading-space-y > * + * { margin-top: var(--reading-space-y); }
-.reading-space-y-lg > * + * { margin-top: var(--reading-space-y-lg); }
 .reading-text { font-size: var(--reading-text); line-height: var(--reading-leading); }
-.reading-text-lg { font-size: var(--reading-text-lg); line-height: var(--reading-leading); }
 .reading-section-gap { margin-top: var(--reading-section-gap); }
 
 /* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */

@@ -1,16 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/api/require-auth'
 import type { InsightSnapshot } from '@/lib/insights-types'
 
 /** GET /api/insights — list saved insights for current user. ?q= filters by name/keyword. */
 export async function GET(req: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user?.id) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
-  }
+  const auth = await requireAuth()
+  if ('response' in auth) return auth.response
+  const { user, supabase } = auth
 
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim()?.toLowerCase() ?? ''
@@ -50,13 +46,9 @@ export async function GET(req: Request) {
 
 /** POST /api/insights — save new insight. Body: { name, note?, snapshot }. */
 export async function POST(req: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user?.id) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
-  }
+  const auth = await requireAuth()
+  if ('response' in auth) return auth.response
+  const { user, supabase } = auth
 
   let body: { name?: string; note?: string; snapshot?: InsightSnapshot }
   try {

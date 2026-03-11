@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/api/require-auth'
 import { isCacheValid, RESEARCH_CACHE_TTL_MS } from '@/lib/research-cache'
 
 /** Authoritative analysis status. UI renders ONLY from this; no inference from partial data. */
@@ -22,11 +22,9 @@ type HistoryRow = {
 /** GET: no params → list of research_history for current user. ?keyword=xxx&country=KR → single cached report. */
 export async function GET(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ cached: false, list: [] }, { status: 401 })
-    }
+    const auth = await requireAuth({ body: { cached: false, list: [] } })
+    if ('response' in auth) return auth.response
+    const { user, supabase } = auth
 
     const { searchParams } = new URL(req.url)
     const keyword = searchParams.get('keyword')?.trim()
@@ -172,11 +170,10 @@ export async function GET(req: Request) {
 /** DELETE body: { id?: string, ids?: string[], deleteAll?: boolean } — delete research_history row(s) for current user. */
 export async function DELETE(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if ('response' in auth) return auth.response
+    const { user, supabase } = auth
+
     const body = await req.json().catch(() => ({})) as { id?: string; ids?: string[]; deleteAll?: boolean }
     const deleteAll = body?.deleteAll === true
     const ids: string[] = deleteAll

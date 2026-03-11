@@ -7,7 +7,7 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
   '42703': '시스템 스키마 오류가 발생했습니다.',
 }
 
-export interface ErrorDetailPayload {
+interface ErrorDetailPayload {
   code?: string | null
   message?: string | null
   hint?: string | null

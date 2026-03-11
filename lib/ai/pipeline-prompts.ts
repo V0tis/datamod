@@ -13,36 +13,6 @@ export const PIPELINE_BASE_SYSTEM = `You are a strategic market analyst for Prod
 CRITICAL: Output ONLY valid JSON. No markdown, no commentary, no extra text.
 All content must be in Korean (한국어). Do NOT use Chinese (中文).`
 
-/** Step 1: Market Research - structured JSON */
-export const MARKET_RESEARCH_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-Format: {
-  "market_overview": "2-3문장 시장 개요 (동향, 규모, 성장성)",
-  "market_temperature": number (0-100, 시장 열기/관심도),
-  "growth_signals": ["신호1", "신호2", "신호3"],
-  "news_synthesis": "뉴스 기반 핵심 요약 (1-2문장)"
-}`
-
-export function buildMarketResearchPrompt(keyword: string, newsTitles: string[]): string {
-  const block = newsTitles.length
-    ? `News headlines:\n${newsTitles.slice(0, 15).map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
-    : ''
-  return `${block}Keyword: ${keyword}
-Analyze market trends and growth signals from the news. Return ONLY the JSON object. All text in Korean.`
-}
-
-/** Step 2: Competitor Analysis - already in pm-strategic-prompt, re-export schema */
-export const COMPETITOR_ANALYSIS_JSON_SCHEMA = `{
-  "competitive_landscape": [{
-    "name": "경쟁사명",
-    "positioning": "포지셔닝",
-    "target_market": "타겟 시장",
-    "key_feature": "핵심 기능",
-    "strength": "강점",
-    "weakness": "약점"
-  }],
-  "market_structure": { "summary": "시장 구조 요약" }
-}`
-
 /** Step 3: Insight Extraction - key insights from market + competitor */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 Format: {
