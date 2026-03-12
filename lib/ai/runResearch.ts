@@ -23,13 +23,13 @@ import {
   STRATEGY_EVALUATION_SYSTEM,
   buildStrategyEvaluationPrompt,
 } from './pipeline-prompts'
-import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
-import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
-import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep } from './retry-with-backoff'
+import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
+import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
+import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep, getExponentialDelayMs } from './retry-with-backoff'
 import { computeOpportunityScore } from './opportunity-score-formula'
 
-const AI_RETRY_DELAY_MS = 2000
-const AI_MAX_RETRIES = 3
+const AI_BASE_DELAY_MS = 1000
+const AI_MAX_RETRIES = 2
 
 function logAiError(provider: string, step: string, reason: string, retryAttempt: number, err: unknown) {
   console.log('[AI Error]', {
@@ -43,7 +43,7 @@ function logAiError(provider: string, step: string, reason: string, retryAttempt
 }
 
 function toUserFriendlyError(err: unknown, fallback: string): string {
-  if (is429OrQuotaError(err)) return RATE_LIMIT_USER_MESSAGE
+  if (is429OrQuotaError(err)) return RATE_LIMIT_GRACEFUL_MESSAGE
   return err instanceof Error ? err.message : fallback
 }
 import { trackUsage } from '@/lib/usage'
@@ -137,6 +137,8 @@ export type RunResearchParams = {
   mode?: 'quick' | 'standard' | 'deep'
   /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
   primaryProvider?: AIPrimaryModel
+  /** AbortSignal for timeout/client disconnect. When aborted, generator yields error and stops. */
+  signal?: AbortSignal
 }
 
 type RssItem = {
@@ -193,22 +195,15 @@ type ValidationResult<T> =
   | { success: true; data: T }
   | { success: false; errors: ValidationError[] }
 
-function parseJson<T>(text: string): T | null {
-  const raw = extractJsonFromText(text)
-  try {
-    return JSON.parse(raw) as T
-  } catch (err) {
-    const parseError = err instanceof Error ? err : new Error(String(err))
-    const repaired = tryRepairTruncatedJson(raw, parseError)
-    if (repaired) {
-      try {
-        return JSON.parse(repaired) as T
-      } catch {
-        /* fallback to null */
-      }
-    }
-    return null
-  }
+/** Parse AI JSON with validation and fallback. Never throws. */
+function parseAiJson<T>(text: string, fallback: T, context?: string): T {
+  const result = safeParseAiJson<T>(text, {
+    fallback,
+    repair: true,
+    logFailures: true,
+    context: context ?? 'runResearch',
+  })
+  return result.ok ? result.data : result.fallback
 }
 
 type TrendTaskResult = {
@@ -268,7 +263,7 @@ async function runTrendTask(
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(AI_RETRY_DELAY_MS)
+        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
       } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
         try {
@@ -293,12 +288,15 @@ async function runTrendTask(
   // Track usage when Gemini was used (primary or fallback)
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const parsed = parseJson<{ market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }>(
-    typeof text === 'string' ? text : ''
-  )
-  if (!parsed || (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string')) {
-    throw new Error('Invalid trend response')
+  const fallbackTrend = {
+    market_score: 50 as number,
+    summary: '데이터를 불러오지 못했습니다.',
+    positive_signals: [] as string[],
+    neutral_signals: [] as string[],
   }
+  const parsed = parseAiJson<
+    { market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }
+  >(typeof text === 'string' ? text : '', fallbackTrend, 'trend_analysis')
   const trendData = {
     summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
     market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
@@ -343,7 +341,7 @@ async function runCompetitionTask(
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(AI_RETRY_DELAY_MS)
+        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
       } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
         try {
@@ -367,7 +365,11 @@ async function runCompetitionTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const parsed = parseJson<{
+  const fallbackCompetition = {
+    competitive_landscape: [] as Array<{ name?: string; positioning?: string }>,
+    market_structure: undefined as { summary?: string } | undefined,
+  }
+  const parsed = parseAiJson<{
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
@@ -379,7 +381,7 @@ async function runCompetitionTask(
       weakness?: string
     }>
     market_structure?: { summary?: string }
-  }>(typeof text === 'string' ? text : '')
+  }>(typeof text === 'string' ? text : '', fallbackCompetition, 'competition_analysis')
   const landscape = Array.isArray(parsed?.competitive_landscape)
     ? parsed.competitive_landscape
         .filter((c): c is NonNullable<typeof parsed.competitive_landscape>[number] => typeof c?.name === 'string')
@@ -438,7 +440,7 @@ async function runInsightExtractionTask(
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(AI_RETRY_DELAY_MS)
+        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
       } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
         try {
@@ -462,7 +464,12 @@ async function runInsightExtractionTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const parsed = parseJson<{ key_insights?: string[]; opportunity_signals?: string[]; risk_signals?: string[] }>(typeof text === 'string' ? text : '')
+  const fallbackInsight = { key_insights: [] as string[], opportunity_signals: [] as string[], risk_signals: [] as string[] }
+  const parsed = parseAiJson<{ key_insights?: string[]; opportunity_signals?: string[]; risk_signals?: string[] }>(
+    typeof text === 'string' ? text : '',
+    fallbackInsight,
+    'insight_extraction'
+  )
   const key_insights = Array.isArray(parsed?.key_insights) ? parsed.key_insights.filter((s): s is string => typeof s === 'string') : []
   const opportunity_signals = Array.isArray(parsed?.opportunity_signals) ? parsed.opportunity_signals.filter((s): s is string => typeof s === 'string') : []
   const risk_signals = Array.isArray(parsed?.risk_signals) ? parsed.risk_signals.filter((s): s is string => typeof s === 'string') : []
@@ -512,7 +519,7 @@ async function runStrategicRecommendationTask(
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(AI_RETRY_DELAY_MS)
+        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
       } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
         try {
@@ -536,16 +543,25 @@ async function runStrategicRecommendationTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const parsed = parseJson<StrategicRecommendationResult>(typeof text === 'string' ? text : '')
+  const fallbackStrategy: StrategicRecommendationResult = {
+    opportunities: extractedInsights.opportunity_signals,
+    risks: extractedInsights.risk_signals,
+    strategy_summary: marketOverview,
+  }
+  const parsed = parseAiJson<StrategicRecommendationResult>(
+    typeof text === 'string' ? text : '',
+    fallbackStrategy,
+    'strategy_generation'
+  )
   return {
     data: {
-      opportunities: Array.isArray(parsed?.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : extractedInsights.opportunity_signals,
-      risks: Array.isArray(parsed?.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : extractedInsights.risk_signals,
-      strategy_summary: typeof parsed?.strategy_summary === 'string' ? parsed.strategy_summary : marketOverview,
-      market_summary: typeof parsed?.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
-      key_strategic_insights: Array.isArray(parsed?.key_strategic_insights)
+      opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : extractedInsights.opportunity_signals,
+      risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : extractedInsights.risk_signals,
+      strategy_summary: typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary : marketOverview,
+      market_summary: typeof parsed.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
+      key_strategic_insights: Array.isArray(parsed.key_strategic_insights)
         ? parsed.key_strategic_insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
-        : undefined,
+        : undefined as string[] | undefined,
     },
     usedFallback,
     primaryProviderError,
@@ -607,7 +623,7 @@ async function runPMActionPlanTask(
       break
     } catch (err) {
       if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(AI_RETRY_DELAY_MS)
+        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
       } else if (isFallbackTriggerError(err)) {
         primaryProviderError = getFallbackErrorReason(err)
         try {
@@ -631,7 +647,16 @@ async function runPMActionPlanTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const parsed = parseJson<{
+  const fallbackPm = {
+    product_actions: [],
+    feature_ideas: [],
+    go_to_market_steps: [],
+  } as {
+    product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
+    feature_ideas?: string[]
+    go_to_market_steps?: string[]
+  }
+  const parsed = parseAiJson<{
     product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
     feature_ideas?: string[]
     go_to_market_steps?: string[]
@@ -651,7 +676,7 @@ async function runPMActionPlanTask(
     swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
     jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
     next_actions_pm?: Array<{ action?: string; why?: string; how_to_execute?: string; priority?: string; estimated_effort?: string }>
-  }>(typeof text === 'string' ? text : '')
+  }>(typeof text === 'string' ? text : '', fallbackPm, 'execution_layer')
   const toStrArr = (arr: unknown): string[] =>
     Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : []
   const actions = Array.isArray(parsed?.product_actions)
@@ -780,10 +805,17 @@ async function runStrategyEvaluationTask(
   } catch {
     return { market_attractiveness: 5, competition_risk: 5, execution_difficulty: 5, growth_potential: 5 }
   }
-  const parsed = parseJson<StrategyEvaluationResult>(typeof text === 'string' ? text : '')
-  if (!parsed || typeof parsed !== 'object') {
-    return { market_attractiveness: 5, competition_risk: 5, execution_difficulty: 5, growth_potential: 5 }
+  const fallbackEval: StrategyEvaluationResult = {
+    market_attractiveness: 5,
+    competition_risk: 5,
+    execution_difficulty: 5,
+    growth_potential: 5,
   }
+  const parsed = parseAiJson<StrategyEvaluationResult>(
+    typeof text === 'string' ? text : '',
+    fallbackEval,
+    'strategy_evaluation'
+  )
   return {
     market_attractiveness: clampScore(parsed.market_attractiveness),
     competition_risk: clampScore(parsed.competition_risk),
@@ -879,15 +911,13 @@ function validatePass2(data: unknown): ValidationResult<Pass2Result> {
 }
 
 function parsePass1Response(text: string): Pass1Result | null {
-  const parsed = parseJson<unknown>(text)
-  if (!parsed) return null
+  const parsed = parseAiJson<unknown>(text, {}, 'pass1')
   const validation = validatePass1(parsed)
   return validation.success ? validation.data : null
 }
 
 function parsePass2Response(text: string): Pass2Result | null {
-  const parsed = parseJson<unknown>(text)
-  if (!parsed) return null
+  const parsed = parseAiJson<unknown>(text, {}, 'pass2')
   const validation = validatePass2(parsed)
   return validation.success ? validation.data : null
 }
@@ -915,8 +945,9 @@ type StrategicAnalysisResult = {
 }
 
 function parseStrategicResponse(text: string): StrategicAnalysisResult | null {
-  const parsed = parseJson<StrategicAnalysisResult>(text)
-  if (!parsed || typeof parsed !== 'object') return null
+  const fallback = {} as StrategicAnalysisResult
+  const parsed = parseAiJson<StrategicAnalysisResult>(text, fallback, 'strategic')
+  if (typeof parsed !== 'object' || parsed == null) return null
   if (typeof parsed.market_score !== 'number' && typeof parsed.summary !== 'string') return null
   return parsed
 }
@@ -1129,10 +1160,16 @@ function toRecord(value: unknown): Record<string, string> {
  * Yields streaming events for incremental UI updates.
  * Only persists to DB after all analysis succeeds.
  */
+const TIMEOUT_MESSAGE = '요청 시간이 초과되었습니다. 다시 시도해 주세요.'
+
+function checkAborted(signal: AbortSignal | undefined): boolean {
+  return !!signal?.aborted
+}
+
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, signal } = params
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
@@ -1181,6 +1218,11 @@ export async function* runResearch(
     await supabase.from('analysis_tasks').upsert(row, { onConflict: 'analysis_id,step_name' })
   }
 
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'init' }
+    return
+  }
+
   if (cacheRow?.report_id && isCacheValid(cacheRow.updated_at)) {
     logCacheEvent('hit', {
       scope: 'run_research',
@@ -1192,6 +1234,11 @@ export async function* runResearch(
       updatedAt: cacheRow.updated_at,
     })
     yield { type: 'cached', reportId: cacheRow.report_id }
+    return
+  }
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'web_search' }
     return
   }
 
@@ -1264,6 +1311,11 @@ export async function* runResearch(
   }
 
   const newsTitles = news.map((n) => n.title)
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
+    return
+  }
 
   // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + news)
   log('trend_analysis', 'running (parallel)')
@@ -1351,6 +1403,11 @@ export async function* runResearch(
 
   const marketOverview = trendData.summary
 
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'trend_competition' }
+    return
+  }
+
   // Step 3: Insight Extraction
   log('insight_extraction', 'running')
   await upsertAnalysisTask('insight_extraction', 'running', { provider: 'gemini', fallback_used: false })
@@ -1422,6 +1479,11 @@ export async function* runResearch(
     await updateProgress(4, 'failed')
     yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'strategy_generation' }
+    return
+  }
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'strategy_generation' }
     return
   }
 
@@ -1628,6 +1690,11 @@ export async function* runResearch(
   structured.opportunity_score = opportunityScoreData.opportunity_score
   structured.opportunity_score_breakdown = opportunityScoreData.breakdown
   structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'execution_layer' }
+    return
+  }
 
   // Step 4: Creative analysis
   yield { type: 'post_processing', stepId: 'creative' }

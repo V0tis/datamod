@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
 import { ErrorToastProvider } from "@/components/error-toast-provider";
 import { ApiKeyValidationProvider } from "@/components/api-key-validation-provider";
+import { RootErrorBoundary } from "@/components/root-error-boundary";
 
 export const metadata: Metadata = {
   title: "Rin-AI",
@@ -22,9 +23,11 @@ export default function RootLayout({
       <body className="font-sans antialiased text-foreground bg-background transition-colors duration-300">
         <ThemeProvider>
           <AuthProvider>
-            <AppShell>{children}</AppShell>
-            <ErrorToastProvider />
-            <ApiKeyValidationProvider />
+            <RootErrorBoundary>
+              <AppShell>{children}</AppShell>
+              <ErrorToastProvider />
+              <ApiKeyValidationProvider />
+            </RootErrorBoundary>
           </AuthProvider>
         </ThemeProvider>
       </body>

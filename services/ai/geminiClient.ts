@@ -6,10 +6,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL, GEMINI_MODEL } from '@/lib/gemini-config'
 import { withExponentialBackoff } from '@/lib/gemini-retry'
+import { fetchWithTimeout, withTimeout, AI_MAX_RETRIES } from '@/lib/ai/safe-fetch'
 
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
 
-const DEFAULT_BACKOFF = { maxRetries: 5, baseDelayMs: 1000 }
+const GEMINI_TIMEOUT_MS = 90_000
+const DEFAULT_BACKOFF = { maxRetries: AI_MAX_RETRIES, baseDelayMs: 1000 }
 
 /** Build REST generateContent URL for a given model */
 export function buildGenerateContentUrl(apiKey: string, model: string): string {
@@ -125,12 +127,15 @@ export async function generateText(options: GenerateTextOptions): Promise<string
   const geminiModel = genAI.getGenerativeModel(modelConfig)
   const text = await withExponentialBackoff(
     async () => {
-      const result = await geminiModel.generateContent(prompt)
+      const result = await withTimeout(
+        geminiModel.generateContent(prompt),
+        GEMINI_TIMEOUT_MS
+      )
       return result.response.text()
     },
     { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
   )
-  return text
+  return text ?? ''
 }
 
 /** Model name for tab insight (logic/creative/fact) */
@@ -177,10 +182,13 @@ export async function generateResearchWithGrounding(
   })
   const response = await withExponentialBackoff(
     async () => {
-      const r = await geminiModel.generateContent(prompt)
+      const r = await withTimeout(
+        geminiModel.generateContent(prompt),
+        GEMINI_TIMEOUT_MS
+      )
       return r.response
     },
-    { maxRetries: 5, baseDelayMs: 1000, ...(isRetryable ? { isRetryable } : {}) }
+    { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
   )
   const text = response.text()
   type GroundingResp = {

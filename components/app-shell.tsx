@@ -69,7 +69,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <AppSidebar />
+      <ErrorBoundary sectionName="sidebar" compact fallbackTitle="사이드바" fallbackMessage="일시적 오류">
+        <AppSidebar />
+      </ErrorBoundary>
       <div
         className={cn(
           'min-h-screen',
@@ -82,7 +84,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </ErrorBoundary>
         </main>
       </div>
-      <AnalysisJobSync />
+      <ErrorBoundary sectionName="job-sync" compact fallbackTitle="백그라운드 동기화" fallbackMessage="일시적 오류">
+        <AnalysisJobSync />
+      </ErrorBoundary>
     </>
   )
 }

@@ -15,6 +15,7 @@ export const createGroqChatProvider = (): IChatCompletionProvider => ({
     return {
       text: result.text,
       quotaError: result.quotaError,
+      fallbackMessage: result.fallbackMessage,
     }
   },
 })

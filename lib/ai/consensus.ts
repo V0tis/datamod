@@ -2,6 +2,7 @@
  * Consensus types and utilities for PM-oriented analysis synthesis.
  * Migrated from services/ai/consensusService.ts for unified AI layer.
  */
+import { logger } from '@/lib/logger'
 import { CONSENSUS_SYNTHESIS_SYSTEM } from './pm-analysis-prompts'
 import type { PMAnalysisOutput, TrendValue, RecommendedAction } from './pm-analysis-schema'
 
@@ -260,16 +261,23 @@ export function buildConsensusPrompt(geminiAnalysis: string, groqAnalysis: strin
 
 /** Parse raw model text into Consensus; returns FALLBACK_CONSENSUS on failure. Never throws. */
 export function parseConsensusFromRawText(rawText: string): Consensus {
-  const raw = stripJsonCodeBlock(rawText || '')
-  if (!raw) return FALLBACK_CONSENSUS
+  const raw = stripJsonCodeBlock(rawText || '').trim()
+  if (!raw || raw.length > 500_000) return FALLBACK_CONSENSUS
+  const first = raw[0]
+  const last = raw[raw.length - 1]
+  if ((first !== '{' && first !== '[') || (last !== '}' && last !== ']')) {
+    logger.warn('AI consensus: invalid JSON structure', { preview: raw.slice(0, 80) })
+    return FALLBACK_CONSENSUS
+  }
   try {
     const parsed = JSON.parse(raw) as unknown
     const normalized = normalizeConsensus(parsed)
     return normalized ?? FALLBACK_CONSENSUS
   } catch (parseErr) {
-    console.error('[AI Insight Consensus] parseConsensusFromRawText JSON 파싱 실패', {
+    logger.error('AI consensus: JSON parse failed', {
       parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
       rawLength: raw.length,
+      rawPreview: raw.slice(0, 150),
     })
     return FALLBACK_CONSENSUS
   }

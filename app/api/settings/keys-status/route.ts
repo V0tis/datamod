@@ -8,6 +8,7 @@ import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
  * - hasRequiredKeys: Gemini 또는 OpenAI 중 하나라도 설정되어 있으면 true
  */
 export async function GET() {
+  try {
   const supabase = await createClient()
   const {
     data: { user },
@@ -35,4 +36,8 @@ export async function GET() {
   const hasRequiredKeys = hasGemini || hasOpenAI
 
   return NextResponse.json({ hasRequiredKeys })
+  } catch (e) {
+    console.error('[KeysStatus GET]', e)
+    return NextResponse.json({ error: '설정을 확인하지 못했습니다.' }, { status: 500 })
+  }
 }

@@ -45,6 +45,8 @@ export type ChatCompletionInput = {
 export type ChatCompletionOutput = {
   text: string | null
   quotaError?: boolean
+  /** 사용자 표시용 fallback 메시지 (text가 null일 때) */
+  fallbackMessage?: string
 }
 
 // ---- Raw content generation (REST generateContent style) ----
@@ -73,6 +75,8 @@ export type TabAnalysisOutput = {
   geminiText: string | null
   groqQuotaError: boolean
   geminiQuotaExceeded: boolean
+  /** 양쪽 AI 모두 실패 시 사용자 표시용 fallback 메시지 */
+  fallbackMessage?: string
 }
 
 // ---- Consensus synthesis (PM-oriented summary from two analyses) ----

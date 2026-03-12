@@ -112,7 +112,7 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
   const needGemini = provider === 'all' || provider === 'gemini'
   const providers = getDefaultProviders()
 
-  const callGroq = async (): Promise<{ text: string | null; quotaError: boolean }> => {
+  const callGroq = async (): Promise<{ text: string | null; quotaError: boolean; fallbackMessage?: string }> => {
     if (!needGroq || !groqKey) return { text: null, quotaError: false }
     try {
       const result = await providers.chat.completeChat({
@@ -125,15 +125,16 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
       return {
         text: result.text ?? null,
         quotaError: result.quotaError === true,
+        fallbackMessage: result.fallbackMessage,
       }
     } catch (e) {
       const msg = String((e as { message?: string })?.message ?? e)
       const quotaError = /429|quota|rate limit/i.test(msg) || (e as { status?: number })?.status === 429
-      return { text: null, quotaError }
+      return { text: null, quotaError, fallbackMessage: msg || 'AI 응답을 불러오지 못했습니다.' }
     }
   }
 
-  const callGemini = async (): Promise<{ text: string | null; quotaExceeded: boolean }> => {
+  const callGemini = async (): Promise<{ text: string | null; quotaExceeded: boolean; fallbackMessage?: string }> => {
     if (!needGemini || !geminiKey) return { text: null, quotaExceeded: false }
     try {
       const text = await providers.content.generateContent({
@@ -144,13 +145,14 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
       })
       return { text: text || null, quotaExceeded: false }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
       const is429 = (e as { status?: number })?.status === 429
-      return { text: null, quotaExceeded: is429 }
+      return { text: null, quotaExceeded: is429, fallbackMessage: msg || 'AI 응답을 불러오지 못했습니다.' }
     }
   }
 
-  let groqResult: { text: string | null; quotaError: boolean }
-  let geminiResult: { text: string | null; quotaExceeded: boolean }
+  let groqResult: { text: string | null; quotaError: boolean; fallbackMessage?: string }
+  let geminiResult: { text: string | null; quotaExceeded: boolean; fallbackMessage?: string }
 
   if (needGroq && needGemini) {
     const [groqSettled, geminiSettled] = await Promise.all([
@@ -170,11 +172,17 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
     geminiResult = { text: null, quotaExceeded: false }
   }
 
+  const fallbackMessage =
+    (!groqResult.text && !geminiResult.text)
+      ? (groqResult.fallbackMessage || geminiResult.fallbackMessage || 'AI 응답을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')
+      : undefined
+
   return {
     groqText: groqResult.text,
     geminiText: geminiResult.text,
     groqQuotaError: groqResult.quotaError,
     geminiQuotaExceeded: geminiResult.quotaExceeded,
+    fallbackMessage,
   }
 }
 

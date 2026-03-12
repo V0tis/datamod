@@ -4,7 +4,7 @@
  * @deprecated Types are used by lib/ai/runResearch.ts. Parsing logic has been inlined.
  * This file will be removed once all API routes migrate to the new streaming architecture.
  */
-import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
+import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import type { PMAnalysisOutput, RecommendedAction } from '@/lib/ai/pm-analysis-schema'
 import { pmAnalysisToInitialSummary } from '@/lib/ai/pm-analysis-adapter'
 
@@ -208,34 +208,20 @@ function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
 /**
  * Parse AI response text into normalized InitialResearchSummary.
  * Accepts PM analysis schema (preferred) or legacy format.
- * Uses extractJsonFromText; options.repair tries to fix truncated JSON.
+ * Validates and parses JSON safely; never throws.
  */
 export function parseInitialResearchResponse(
   responseText: string,
   options?: { repair?: boolean; articleSummaries?: string[] }
 ): { ok: true; summary: InitialResearchSummary; structured?: StructuredAnalysisFields } | { ok: false; error: string } {
-  const rawJson = extractJsonFromText(responseText)
-  let parsed: unknown
-
-  try {
-    parsed = JSON.parse(rawJson)
-  } catch (parseErr) {
-    if (options?.repair) {
-      const err = parseErr instanceof Error ? parseErr : new Error(String(parseErr))
-      const repaired = tryRepairTruncatedJson(rawJson, err)
-      if (repaired) {
-        try {
-          parsed = JSON.parse(repaired)
-        } catch {
-          return { ok: false, error: '분석 결과 형식이 올바르지 않아요.' }
-        }
-      } else {
-        return { ok: false, error: '분석 결과 형식이 올바르지 않아요.' }
-      }
-    } else {
-      return { ok: false, error: '분석 결과 형식이 올바르지 않아요.' }
-    }
-  }
+  const result = safeParseAiJson<Record<string, unknown>>(responseText, {
+    fallback: {},
+    repair: options?.repair ?? true,
+    logFailures: false,
+    context: 'parseInitialResearchResponse',
+  })
+  if (!result.ok) return { ok: false, error: '분석 결과 형식이 올바르지 않아요.' }
+  const parsed = result.data
 
   if (isPmAnalysisOutput(parsed)) {
     const summary = pmAnalysisToInitialSummary(parsed, options?.articleSummaries ?? [])

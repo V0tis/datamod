@@ -4,7 +4,7 @@
  * @deprecated Logic has been inlined into lib/ai/runResearch.ts.
  * This file will be removed once all API routes migrate to the new streaming architecture.
  */
-import { extractJsonFromText } from '@/lib/extract-json'
+import { parseAiJsonOr } from '@/lib/ai/safe-json-parse'
 import type { InitialResearchSummary, ChartData, StructuredAnalysisFields } from '@/lib/research-parser'
 
 export type Pass1Output = {
@@ -19,17 +19,8 @@ export type Pass2Output = {
   signals?: { pos?: string[]; neu?: string[]; neg?: string[] }
 }
 
-function parseJson<T>(text: string): T | null {
-  const raw = extractJsonFromText(text)
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return null
-  }
-}
-
 export function parsePass1Response(text: string): Pass1Output | null {
-  const p = parseJson<Pass1Output>(text)
+  const p = parseAiJsonOr<Pass1Output | Record<string, never>>(text, {}, 'pass1')
   if (!p || typeof p.summary !== 'string') return null
   const temp = typeof p.temperature === 'number' ? Math.min(100, Math.max(0, p.temperature)) : 50
   const insights = Array.isArray(p.insights) ? p.insights.filter((s): s is string => typeof s === 'string').slice(0, 3) : []
@@ -37,7 +28,7 @@ export function parsePass1Response(text: string): Pass1Output | null {
 }
 
 export function parsePass2Response(text: string): Pass2Output | null {
-  const p = parseJson<Pass2Output>(text)
+  const p = parseAiJsonOr<Pass2Output | Record<string, never>>(text, {}, 'pass2')
   if (!p || typeof p !== 'object') return null
   return p
 }

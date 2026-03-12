@@ -25,12 +25,15 @@ import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
 import { AnalysisProgressBanner } from '@/components/research/AnalysisProgressBanner'
+import { AnalysisLoadingSkeleton } from '@/components/research/AnalysisLoadingSkeleton'
+import { AnalysisFailureBanner } from '@/components/research/AnalysisFailureBanner'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { ResultSectionNav } from '@/components/research/ResultSectionNav'
+import { ResultSectionErrorBoundary } from '@/components/research/ResultSectionErrorBoundary'
 import { ResultShareActions } from '@/components/research/ResultShareActions'
 import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
 import { ResultPageHero } from '@/components/research/ResultPageHero'
@@ -446,6 +449,13 @@ function ResultsContent() {
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   const showPolledError = polledStatus === 'failed'
   const hasFailure = canonicalStatus === 'failed' || showPolledError
+  const hasPartialData =
+    displayResult?.reportId != null ||
+    (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) ||
+    taskData?.signal_layer != null ||
+    taskData?.trend_analysis != null ||
+    taskData?.competition_analysis != null
+  const earlyLoading = loading && !hasPartialData
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
 
   const {
@@ -1211,8 +1221,21 @@ function ResultsContent() {
         {!showInsightSequence && (
           <>
         <div className="space-y-5 mt-4">
-        {/* 분석 결과 요약 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {/* 분석 실패 시 상단 배너 – 재시도 옵션 + 의미 있는 오류 메시지 */}
+        {hasFailure && (
+          <AnalysisFailureBanner
+            error={displayError ?? polledError ?? (streamingState.status === 'error' ? ('retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined) : undefined)}
+            onRetry={() => {
+              setPolledStatus(null)
+              setPolledError(null)
+              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+            }}
+            showSettingsLink
+          />
+        )}
+        {/* 분석 결과 요약 – 초기 로딩 시에는 스켈레톤 표시 */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && !earlyLoading && (
+          <ResultSectionErrorBoundary sectionName="summary">
           <section id="section-summary" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="분석 결과 요약">
             <h2 className="text-sm font-semibold text-foreground mb-3">
               핵심 결론
@@ -1285,10 +1308,12 @@ function ResultsContent() {
               </div>
             )}
           </section>
+          </ResultSectionErrorBoundary>
         )}
 
         {/* Opportunity Score Breakdown - 분석 중에도 default 차트 표시 */}
-        {(displayResult != null || loading) && !needsRunAction && (
+        {(displayResult != null || loading) && !needsRunAction && !earlyLoading && (
+          <ResultSectionErrorBoundary sectionName="opportunity">
           <section id="section-opportunity" className="scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5" aria-label="기회 점수 분해">
             <OpportunityScoreBreakdown
               score={effectiveKeyMetrics?.opportunity_score ?? null}
@@ -1296,10 +1321,12 @@ function ResultsContent() {
               useKoreanLabels
             />
           </section>
+          </ResultSectionErrorBoundary>
         )}
 
         {/* Strategic Decision Layer - Market Opportunity, Competition, PMF, Entry Strategy */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && !earlyLoading && (
+          <ResultSectionErrorBoundary sectionName="strategic-decision">
           <div className="mt-5">
             <StrategicDecisionLayer
               result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
@@ -1313,26 +1340,31 @@ function ResultsContent() {
               />
             </div>
           </div>
+          </ResultSectionErrorBoundary>
         )}
 
-        {/* Progressive loading UX - 4 steps, progress bar, dynamic messages */}
+        {/* Progressive loading UX - 4 steps, progress bar, dynamic messages + loading skeleton */}
         {loading && !(displayResult?.reportId || (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) || (taskData?.signal_layer ?? taskData?.trend_analysis ?? taskData?.competition_analysis)) && (
-          <div className="flex flex-col items-center justify-center py-8 px-4 mb-4 max-w-2xl mx-auto">
-            <AnalysisProgressBanner
-              keyword={currentKeyword ?? ''}
-              streamingState={streamingState}
-              stepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : null}
-              currentStep={streamingState.status === 'running' || streamingState.status === 'streaming' ? ('currentStep' in streamingState ? streamingState.currentStep : 0) : 0}
-              showMicroInsight
-            />
-            <p className="text-xs text-muted-foreground mt-4 text-center">
-              초기 인사이트는 약 10초 내에 표시됩니다. 전체 분석에는 약 1~3분이 소요될 수 있습니다.
-            </p>
+          <div className="space-y-6">
+            <div className="flex flex-col items-center justify-center py-8 px-4 max-w-2xl mx-auto">
+              <AnalysisProgressBanner
+                keyword={currentKeyword ?? ''}
+                streamingState={streamingState}
+                stepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : null}
+                currentStep={streamingState.status === 'running' || streamingState.status === 'streaming' ? ('currentStep' in streamingState ? streamingState.currentStep : 0) : 0}
+                showMicroInsight
+              />
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                초기 인사이트는 약 10초 내에 표시됩니다. 전체 분석에는 약 1~3분이 소요될 수 있습니다.
+              </p>
+            </div>
+            <AnalysisLoadingSkeleton className="mb-4" />
           </div>
         )}
 
         {/* 핵심 시장 인사이트 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && !earlyLoading && (
+          <ResultSectionErrorBoundary sectionName="key-insights">
           <div id="section-insights" className="scroll-mt-24">
             <KeyMarketInsightsCard
               result={effectiveResultForCards ?? effectiveDisplayResult}
@@ -1344,10 +1376,11 @@ function ResultsContent() {
               keyword={currentKeyword ?? ''}
             />
           </div>
+          </ResultSectionErrorBoundary>
         )}
 
-        {/* No cache + not analyzing: show Run Analysis CTA. Analysis only runs on explicit user click. */}
-        {needsRunAction ? (
+        {/* No cache + not analyzing: show Run Analysis CTA. earlyLoading 시에는 스켈레톤만 표시. */}
+        {earlyLoading ? null : needsRunAction ? (
           <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4">
             <p className="text-muted-foreground text-sm mb-4">
               &quot;{currentKeyword}&quot;에 대한 분석이 없습니다. 분석 깊이를 선택한 뒤 실행하세요.
@@ -1379,8 +1412,8 @@ function ResultsContent() {
           </div>
         ) : (
           <div role="region" aria-label="AI 리포트" className="space-y-6">
-            {/* 3~6. 시장 성장 / 경쟁 / 전략 / 리스크 및 기회 (리포트 구조) */}
-            <PMDecisionDashboard
+            <ResultSectionErrorBoundary sectionName="pm-dashboard">
+              <PMDecisionDashboard
               keyword={currentKeyword ?? ''}
               result={effectiveResultForCards ?? displayResult}
               loading={loading}
@@ -1409,6 +1442,7 @@ function ResultsContent() {
               globalErrorMessage={displayError ?? polledError ?? undefined}
               hideTimeline
             />
+            </ResultSectionErrorBoundary>
             {/* AI 분석 엔진 (토글) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
               <div className="mt-5 border border-border/60 rounded-lg overflow-hidden">
@@ -1555,16 +1589,19 @@ function ResultsContent() {
 
         {/* Next Actions for PM – 5 actionable steps at bottom */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <ResultSectionErrorBoundary sectionName="next-actions">
           <div className="mt-8 mb-6">
             <NextActionsForPM
               result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
               loading={loading}
             />
           </div>
+          </ResultSectionErrorBoundary>
         )}
 
         {/* 다음 탐색: 같은 키워드로 추가 질문 + 관련 시장 아이디어 + 다른 시장 분석하기 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && currentKeyword && (
+          <ResultSectionErrorBoundary sectionName="next-exploration">
           <NextExplorationSection
             followUp={displayResult ? {
               value: followUpQuestion,
@@ -1584,6 +1621,7 @@ function ResultsContent() {
             }}
             disabled={loading}
           />
+          </ResultSectionErrorBoundary>
         )}
 
           </div>

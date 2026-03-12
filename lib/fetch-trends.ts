@@ -15,6 +15,7 @@ export async function fetchTrendsForCountry(
   country: string,
   options?: { refresh?: boolean }
 ): Promise<FetchTrendsResult> {
+  try {
   const url = `/api/trends?country=${country}${options?.refresh ? '&refresh=1' : ''}`
   const res = await fetch(url)
   const data = await parseJsonResponse<
@@ -30,5 +31,13 @@ export async function fetchTrendsForCountry(
     updatedAt: data.updatedAt ?? null,
     refreshed: data.refreshed,
     refreshFailed: data.refreshFailed,
+  }
+  } catch (e) {
+    console.warn('[fetchTrendsForCountry]', e)
+    return {
+      items: [],
+      updatedAt: null,
+      refreshFailed: true,
+    }
   }
 }

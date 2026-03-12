@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
  * DB의 키는 서버에서만 사용하며, 클라이언트에 키를 노출하지 않음.
  */
 export async function POST() {
+  try {
   const supabase = await createClient()
   const {
     data: { user },
@@ -52,4 +53,8 @@ export async function POST() {
     )
 
   return NextResponse.json({ success: true, verified })
+  } catch (e) {
+    console.error('[sync-profile]', e)
+    return NextResponse.json({ error: '프로필 동기화에 실패했습니다.' }, { status: 500 })
+  }
 }

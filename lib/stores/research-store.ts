@@ -396,12 +396,18 @@ export type LoadHistoryResult = 'cached' | 'empty' | 'none' | 'error'
 
 type TabId = 'logic' | 'creative' | 'fact'
 
-/** DB/API sometimes returns JSON as string; normalize to object for store. */
+/** DB/API sometimes returns JSON as string; normalize to object for store. Never throws. */
 function parseJsonField<T>(value: unknown): T | undefined {
   if (value == null) return undefined
   if (typeof value === 'string') {
+    const s = value.trim()
+    if (!s || s.length > 500_000) return undefined
+    const first = s[0]
+    const last = s[s.length - 1]
+    if ((first !== '{' && first !== '[') || (last !== '}' && last !== ']')) return undefined
     try {
-      return JSON.parse(value) as T
+      const parsed = JSON.parse(s) as unknown
+      return parsed as T
     } catch {
       return undefined
     }
@@ -903,6 +909,9 @@ export const useResearchStore = create<ResearchStore>()(
               const trimmed = line.trim()
               if (!trimmed) continue
               try {
+                if (trimmed.length > 100_000) throw new Error('Event too long')
+                const first = trimmed[0]
+                if (first !== '{' && first !== '[') throw new Error('Invalid event format')
                 const event = JSON.parse(trimmed) as {
                   type: string
                   items?: Array<{ title: string; url: string; publisher?: string }>
@@ -929,7 +938,8 @@ export const useResearchStore = create<ResearchStore>()(
                   sourceLinks?: Array<{ title: string; url: string; publisher?: string }>
                   message?: string
                 }
-                const type = event.type
+                if (!event || typeof event !== 'object' || Array.isArray(event)) throw new Error('Invalid event')
+                const type = typeof event.type === 'string' ? event.type : ''
 
                 if (type === 'analysis_started') {
                   const ev = event as { analysisId?: string }
@@ -1055,8 +1065,12 @@ export const useResearchStore = create<ResearchStore>()(
 
           if (buffer.trim() && !signal.aborted) {
             try {
-              const event = JSON.parse(buffer.trim()) as { type: string; reportId?: string; message?: string; sourceLinks?: Array<{ title?: string; url?: string; publisher?: string }> }
-              if (event.type === 'done') {
+              const buf = buffer.trim()
+              if (buf.length > 100_000) throw new Error('Event too long')
+              if (buf[0] !== '{' && buf[0] !== '[') throw new Error('Invalid event format')
+              const event = JSON.parse(buf) as { type?: string; reportId?: string; message?: string; sourceLinks?: Array<{ title?: string; url?: string; publisher?: string }> }
+              if (!event || typeof event !== 'object') throw new Error('Invalid event')
+              if (event?.type === 'done') {
                 const newsList = (event.sourceLinks ?? []).map((l) => ({
                   title: l.title ?? '',
                   url: l.url ?? '',
@@ -1064,7 +1078,7 @@ export const useResearchStore = create<ResearchStore>()(
                 }))
                 applyUpdate({ reportId: event.reportId ?? null, newsList: newsList.length ? newsList : undefined })
                 set({ streamingState: createCompletedState(event.reportId ?? null) })
-              } else if (event.type === 'error') {
+              } else if (event?.type === 'error') {
                 set({ streamingState: createErrorState(event.message ?? '분석 중 오류가 발생했습니다.', lastSuccessfulStep) })
                 applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
               }

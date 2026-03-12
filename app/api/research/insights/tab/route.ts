@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import {
   RESEARCH_CACHE_TTL_MS,
   isCacheValid,
@@ -28,6 +28,9 @@ import {
   FALLBACK_CONSENSUS,
   runTabAnalysis,
 } from '@/lib/ai'
+import { logger } from '@/lib/logger'
+
+export const maxDuration = 60
 
 // Re-export types for API consumers (e.g. frontend)
 export type { Consensus, ConsensusImpactItem, ConsensusSentiment, ConsensusStrategicSummary, ConsensusMetadata }
@@ -93,9 +96,14 @@ export async function POST(req: Request) {
     isReanalyze?: boolean
     countryCode?: string
   }
+  const startMs = Date.now()
   try {
     body = await req.json()
-  } catch {
+  } catch (parseErr) {
+    logger.error('API: tab insights request body parse failed', {
+      route: '/api/research/insights/tab',
+      error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+    })
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   const keyword = (body?.keyword ?? '').trim()
@@ -123,7 +131,8 @@ export async function POST(req: Request) {
 
   // Log request metadata for cost attribution and debugging duplicate AI calls (no PII).
   if (tab === 'creative' || isReanalyze) {
-    console.log('[AI Insight Consensus] API call – request data', {
+    logger.info('AI tab analysis request', {
+      route: '/api/research/insights/tab',
       keyword,
       tab,
       provider,
@@ -329,13 +338,31 @@ export async function POST(req: Request) {
     detail: aiCallDetail,
   })
 
-  const analysisResult = await runTabAnalysis({
+  let analysisResult: Awaited<ReturnType<typeof runTabAnalysis>>
+  try {
+  analysisResult = await runTabAnalysis({
     groqKey: groqKey || null,
     geminiKey: geminiKey || null,
     provider,
     systemPrompt: UNIFIED_SYSTEM_PROMPT,
     userPrompt,
   })
+  } catch (e) {
+    logger.error('API: tab analysis failed', {
+      route: '/api/research/insights/tab',
+      keyword,
+      tab,
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return NextResponse.json(
+      {
+        error: 'AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+        groq: null,
+        gemini: null,
+      },
+      { status: 500 }
+    )
+  }
 
   const groqText = needGroq ? analysisResult.groqText : mergedGroq
   const geminiText = needGemini ? analysisResult.geminiText : mergedGemini
@@ -418,7 +445,7 @@ export async function POST(req: Request) {
       }
 
       if (tab === 'creative' && isReanalyze && consensusToSave != null) {
-        console.log('[AI Insight Consensus] research_history upsert (analysis_results 저장)', { keyword, countryCode })
+        logger.info('AI tab analysis: cache write', { keyword, countryCode })
       }
 
       logCacheEvent('write', {
@@ -432,7 +459,12 @@ export async function POST(req: Request) {
         onConflict: 'user_id,keyword,country_code',
       })
     } catch (e) {
-      console.warn('[Research Tab] DB save', e)
+      logger.warn('AI tab analysis: DB upsert failed', {
+        route: '/api/research/insights/tab',
+        keyword,
+        tab,
+        error: e instanceof Error ? e.message : String(e),
+      })
     }
   }
 
@@ -440,16 +472,21 @@ export async function POST(req: Request) {
     (groqResult != null && groqResult.length > 0) ||
     (geminiResult != null && geminiResult.length > 0)
   const finalConsensus = consensus ?? existingConsensus ?? (tab === 'creative' ? FALLBACK_CONSENSUS : null)
-  if (tab === 'creative' && isReanalyze) {
-    console.log('[AI Insight Consensus] 응답 반환', { keyword, hasConsensus: !!finalConsensus })
-  }
+  logger.info('AI tab analysis completed', {
+    route: '/api/research/insights/tab',
+    keyword,
+    tab,
+    hasConsensus: !!finalConsensus,
+    durationMs: Date.now() - startMs,
+  })
   // Frontend: groqError / geminiQuotaExceeded + geminiError show in cards; error when both failed so user can retry.
+  const errorMessage = !hasAny ? (analysisResult.fallbackMessage ?? RATE_LIMIT_GRACEFUL_MESSAGE) : undefined
   return NextResponse.json({
     groq: groqResult != null && groqResult.length > 0 ? { text: groqResult } : null,
     gemini: geminiResult != null && geminiResult.length > 0 ? { text: geminiResult } : null,
     ...(finalConsensus ? { consensus: finalConsensus } : {}),
     ...(groqQuotaError ? { groqError: GROQ_QUOTA_MESSAGE } : {}),
-    ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true, geminiError: RATE_LIMIT_USER_MESSAGE } : {}),
-    ...(!hasAny ? { error: RATE_LIMIT_USER_MESSAGE } : {}),
+    ...(geminiQuotaExceeded ? { status: 'quota_exceeded', geminiQuotaExceeded: true, geminiError: RATE_LIMIT_GRACEFUL_MESSAGE } : {}),
+    ...(errorMessage ? { error: errorMessage } : {}),
   })
 }

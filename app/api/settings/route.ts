@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 
 /** GET: 현재 사용자 설정 조회. 사용자별 user_settings의 API 키를 반환 (해당 사용자만 조회). */
 export async function GET() {
+  try {
   const supabase = await createClient()
   const {
     data: { user },
@@ -80,10 +81,15 @@ export async function GET() {
   })
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
   return res
+  } catch (e) {
+    console.error('[Settings GET]', e)
+    return NextResponse.json({ error: '설정을 불러오지 못했습니다.' }, { status: 500 })
+  }
 }
 
 /** POST: 설정 저장 (upsert) */
 export async function POST(req: Request) {
+  try {
   const supabase = await createClient()
   const {
     data: { user },
@@ -153,4 +159,8 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ success: true })
+  } catch (e) {
+    console.error('[Settings POST]', e)
+    return NextResponse.json({ error: '설정 저장에 실패했습니다.' }, { status: 500 })
+  }
 }

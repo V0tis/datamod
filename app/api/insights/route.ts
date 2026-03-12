@@ -4,6 +4,7 @@ import type { InsightSnapshot } from '@/lib/insights-types'
 
 /** GET /api/insights — list saved insights for current user. ?q= filters by name/keyword. */
 export async function GET(req: Request) {
+  try {
   const auth = await requireAuth()
   if ('response' in auth) return auth.response
   const { user, supabase } = auth
@@ -42,10 +43,15 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({ list })
+  } catch (e) {
+    console.error('[Insights GET]', e)
+    return NextResponse.json({ list: [], error: '인사이트 목록을 불러오지 못했습니다.' }, { status: 500 })
+  }
 }
 
 /** POST /api/insights — save new insight. Body: { name, note?, snapshot }. */
 export async function POST(req: Request) {
+  try {
   const auth = await requireAuth()
   if ('response' in auth) return auth.response
   const { user, supabase } = auth
@@ -100,4 +106,8 @@ export async function POST(req: Request) {
     snapshot: row.snapshot,
     created_at: row.created_at,
   })
+  } catch (e) {
+    console.error('[Insights POST]', e)
+    return NextResponse.json({ error: '인사이트 저장에 실패했습니다.' }, { status: 500 })
+  }
 }

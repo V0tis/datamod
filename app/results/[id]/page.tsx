@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -101,11 +102,13 @@ export default function ResultDetailPage() {
   }
 
   return (
-    <ResearchReportView
-      keyword={data.keyword}
-      content={content}
-      reportId={null}
-      showLoginCta={false}
-    />
+    <ErrorBoundary sectionName="result-detail" fallbackTitle="리포트를 표시하지 못했습니다">
+      <ResearchReportView
+        keyword={data.keyword}
+        content={content}
+        reportId={null}
+        showLoginCta={false}
+      />
+    </ErrorBoundary>
   )
 }

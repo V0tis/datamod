@@ -8,10 +8,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getGroqKeyForRequest, getAIPrimaryModelForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
+import { logger } from '@/lib/logger'
+
+import { RESEARCH_RUN_DEADLINE_MS } from '@/lib/api/route-timeouts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-/** Vercel: analysis takes 1-3 min; default 10s would timeout. Hobby max 300s. */
 export const maxDuration = 300
 
 export async function POST(req: Request) {
@@ -49,13 +51,24 @@ export async function POST(req: Request) {
       )
     }
 
-    console.log('[Research Run API] POST 요청', { keyword, countryCode, userId: user.id })
+    const startMs = Date.now()
+    logger.info('AI analysis request', {
+      route: '/api/research/run',
+      keyword,
+      countryCode,
+      mode,
+      userId: user.id.slice(0, 8) + '...',
+    })
 
     let adminClient
     try {
       adminClient = createAdminClient()
     } catch (e) {
-      console.error('[Research Run API] createAdminClient failed:', e)
+      logger.error('AI analysis: createAdminClient failed', {
+        route: '/api/research/run',
+        keyword,
+        error: e instanceof Error ? e.message : String(e),
+      })
       return NextResponse.json(
         { error: '서버 설정 오류: Supabase 환경 변수를 확인해 주세요. (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)' },
         { status: 500 }
@@ -80,8 +93,16 @@ export async function POST(req: Request) {
       )
     }
 
-    const abortSignal = req.signal
     const encoder = new TextEncoder()
+    const deadlineController = new AbortController()
+    const deadlineId = setTimeout(() => deadlineController.abort(), RESEARCH_RUN_DEADLINE_MS)
+    const combinedController = new AbortController()
+    const onAbort = () => {
+      combinedController.abort()
+      clearTimeout(deadlineId)
+    }
+    req.signal?.addEventListener('abort', onAbort)
+    deadlineController.signal.addEventListener('abort', onAbort)
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -107,12 +128,10 @@ export async function POST(req: Request) {
           }
         }
 
-        if (abortSignal) {
-          abortSignal.addEventListener('abort', () => {
-            isClosed = true
-            safeClose()
-          })
-        }
+        combinedController.signal.addEventListener('abort', () => {
+          isClosed = true
+          safeClose()
+        })
 
         try {
           const generator = runResearch({
@@ -123,8 +142,10 @@ export async function POST(req: Request) {
             groqKey,
             primaryProvider,
             mode,
+            signal: combinedController.signal,
           })
 
+          try {
           for await (const event of generator) {
             if (isClosed) break
             if (event.type === 'task') {
@@ -138,10 +159,19 @@ export async function POST(req: Request) {
               break
             }
           }
+          } finally {
+            clearTimeout(deadlineId)
+            req.signal?.removeEventListener('abort', onAbort)
+          }
         } catch (err) {
           const message =
             err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.'
-          console.log('[Research Run API] 제너레이터 예외', { keyword, error: message, err })
+          logger.error('AI analysis: generator exception', {
+            keyword,
+            elapsedMs: Date.now() - startMs,
+            error: message,
+            stack: err instanceof Error ? err.stack : undefined,
+          })
           send({ type: 'error', message })
         }
 
@@ -157,7 +187,11 @@ export async function POST(req: Request) {
       },
     })
   } catch (e) {
-    console.log('[Research Run API] POST 예외:', e)
+    logger.error('AI analysis: POST exception', {
+      route: '/api/research/run',
+      error: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : undefined,
+    })
     return NextResponse.json(
       { error: '분석을 시작하지 못했어요. 다시 시도해 주세요.' },
       { status: 500 }

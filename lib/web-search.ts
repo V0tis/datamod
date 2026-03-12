@@ -33,6 +33,7 @@ export async function searchWeb(
   const num = Math.min(Math.max(options.num ?? 10, 1), 20)
   const body = JSON.stringify({ q: query.trim(), num })
 
+  try {
   const res = await fetch(SERPER_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -43,17 +44,17 @@ export async function searchWeb(
   })
 
   if (!res.ok) {
-    const text = await res.text()
+    const text = await res.text().catch(() => '')
     console.warn('[Web Search] Serper API error', { status: res.status, body: text.slice(0, 200) })
     return []
   }
 
-  const data = (await res.json()) as {
+  const data = (await res.json().catch(() => ({}))) as {
     organic?: Array<{ title?: string; link?: string; snippet?: string }>
   }
-  const organic = data.organic ?? []
+  const organic = data?.organic ?? []
   const results: WebSearchResult[] = organic
-    .filter((r) => r.title && r.link)
+    .filter((r) => r?.title && r?.link)
     .slice(0, num)
     .map((r) => ({
       title: String(r.title ?? ''),
@@ -61,6 +62,10 @@ export async function searchWeb(
       snippet: String(r.snippet ?? ''),
     }))
   return results
+  } catch (e) {
+    console.warn('[Web Search]', e)
+    return []
+  }
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   getTabModel,
   getConsensusModel,
 } from '@/services/ai/geminiClient'
+import { AI_FALLBACK_MESSAGES } from '@/lib/ai/safe-fetch'
 import type {
   ITextGenerationProvider,
   IResearchWithGroundingProvider,
@@ -47,16 +48,30 @@ export const createGeminiGroundingProvider = (): IResearchWithGroundingProvider 
 
 export const createGeminiContentProvider = (): IContentGenerationProvider => ({
   async generateContent(input: GenerateContentInput) {
-    const body = {
-      contents: input.contents,
-      generationConfig: { maxOutputTokens: input.maxOutputTokens ?? 2048 },
+    try {
+      const body = {
+        contents: input.contents,
+        generationConfig: { maxOutputTokens: input.maxOutputTokens ?? 2048 },
+      }
+      const res = await requestGenerateContent(input.apiKey, body, input.model)
+      let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+      try {
+        data = (await res.json()) as typeof data
+      } catch {
+        throw new Error(AI_FALLBACK_MESSAGES.GENERIC)
+      }
+      if (!res.ok) {
+        throw new Error(res.status === 429 ? AI_FALLBACK_MESSAGES.QUOTA : AI_FALLBACK_MESSAGES.GENERIC)
+      }
+      const text = parseGenerateContentResponse(data)
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error(AI_FALLBACK_MESSAGES.GENERIC)
+      }
+      return text
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : AI_FALLBACK_MESSAGES.GENERIC
+      throw new Error(msg)
     }
-    const res = await requestGenerateContent(input.apiKey, body, input.model)
-    const data = (await res.json().catch(() => ({}))) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-    }
-    if (!res.ok) throw new Error(`Gemini ${res.status}`)
-    return parseGenerateContentResponse(data)
   },
 })
 

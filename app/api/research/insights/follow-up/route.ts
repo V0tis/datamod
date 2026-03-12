@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+
+export const maxDuration = 30
 import { GEMINI_MODEL } from '@/lib/gemini-config'
-import { RATE_LIMIT_USER_MESSAGE } from '@/lib/gemini-retry'
+import { isRateLimitResponse, getRateLimitGracefulMessage } from '@/lib/api/rate-limit'
 import { getSystemGeminiKey } from '@/lib/license'
 import { generateText } from '@/lib/ai'
 import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
@@ -47,10 +49,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ answer })
   } catch (err) {
     console.error('[Insights Follow-up API] (all retries exhausted)', err)
-    // 503 + user-facing message: client shows toast; user can retry the question.
-    return NextResponse.json(
-      { error: RATE_LIMIT_USER_MESSAGE },
-      { status: 503 }
-    )
+    const message = isRateLimitResponse(err)
+      ? getRateLimitGracefulMessage()
+      : '요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'
+    return NextResponse.json({ error: message }, { status: 503 })
   }
 }

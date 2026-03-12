@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api/require-auth'
 import { isCacheValid, RESEARCH_CACHE_TTL_MS } from '@/lib/research-cache'
+import { logger } from '@/lib/logger'
 
 /** Authoritative analysis status. UI renders ONLY from this; no inference from partial data. */
 export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
@@ -43,7 +44,10 @@ export async function GET(req: Request) {
         .range(offset, offset + limit - 1)
 
       if (error) {
-        console.error('[Research History] list:', error)
+        logger.error('API failure: research history list', {
+          route: '/api/research/history',
+          error: error.message,
+        })
         return NextResponse.json({ list: [], error: error.message }, { status: 500 })
       }
       const list = (rows ?? []).map((r) => {
@@ -162,7 +166,10 @@ export async function GET(req: Request) {
       ai_responses: (report as { ai_responses?: Record<string, string> }).ai_responses ?? {},
     })
   } catch (e) {
-    console.error('[Research History] GET:', e)
+    logger.error('API failure: research history GET', {
+      route: '/api/research/history',
+      error: e instanceof Error ? e.message : String(e),
+    })
     return NextResponse.json({ cached: false }, { status: 500 })
   }
 }
@@ -200,7 +207,10 @@ export async function DELETE(req: Request) {
     }
     return new Response(null, { status: 204 })
   } catch (e) {
-    console.error('[Research History] DELETE:', e)
+    logger.error('API failure: research history DELETE', {
+      route: '/api/research/history',
+      error: e instanceof Error ? e.message : String(e),
+    })
     return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
   }
 }

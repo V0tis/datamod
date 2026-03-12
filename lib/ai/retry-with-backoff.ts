@@ -1,10 +1,7 @@
 /**
  * Retry wrapper for AI API calls.
- * 429 rate limit → wait 2s → retry, max 3 retries.
+ * 429 rate limit → exponential backoff → retry, max 3 total attempts.
  */
-const RETRY_DELAY_MS = 2000
-const MAX_RETRIES = 3
-
 export function is429OrQuotaError(err: unknown): boolean {
   const msg = String((err as { message?: string })?.message ?? err)
   const status = (err as { status?: number })?.status
@@ -54,6 +51,17 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Jitter 80%~120% to avoid thundering herd on retry */
+function delayWithJitter(baseMs: number): number {
+  const jitter = 0.8 + Math.random() * 0.4
+  return Math.round(baseMs * jitter)
+}
+
+/** Exponential backoff delay: baseMs * 2^attempt with jitter. */
+export function getExponentialDelayMs(attempt: number, baseMs = 1000): number {
+  return delayWithJitter(baseMs * Math.pow(2, attempt))
+}
+
 export type RetryableAiCallOptions<T> = {
   /** Provider name for logging */
   provider: 'gemini' | 'groq'
@@ -72,21 +80,23 @@ export type RetryableAiCallOptions<T> = {
 }
 
 /**
- * Execute an AI API call with retry on 429.
- * Waits 2 seconds between retries, max 3 retries.
+ * Execute an AI API call with exponential backoff retry on 429.
+ * Delay: base * 2^attempt with jitter. Max 3 total attempts.
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryableAiCallOptions<T>
 ): Promise<T> {
   const { provider, step, onRetry, onError } = options
+  const maxRetries = 2
+  const baseDelayMs = 1000
   let lastError: unknown
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn()
     } catch (err) {
       lastError = err
-      const canRetry = attempt < MAX_RETRIES && is429OrQuotaError(err)
+      const canRetry = attempt < maxRetries && is429OrQuotaError(err)
       const reason = is429OrQuotaError(err) ? 'quota_exceeded' : 'api_error'
 
       if (onError) {
@@ -103,14 +113,21 @@ export async function withRetry<T>(
           step,
           reason,
           retry_attempt: attempt,
-          max_retries: MAX_RETRIES,
+          max_retries: maxRetries,
         })
       }
 
-      if (!canRetry) throw err
+      if (!canRetry) {
+        if (is429OrQuotaError(err)) {
+          const { RATE_LIMIT_GRACEFUL_MESSAGE } = await import('@/lib/api/rate-limit')
+          throw new Error(RATE_LIMIT_GRACEFUL_MESSAGE)
+        }
+        throw err
+      }
 
+      const delayMs = delayWithJitter(baseDelayMs * Math.pow(2, attempt))
       onRetry?.(attempt + 1)
-      await sleep(RETRY_DELAY_MS)
+      await sleep(delayMs)
     }
   }
   throw lastError

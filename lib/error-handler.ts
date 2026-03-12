@@ -70,6 +70,10 @@ function looksLikeHtml(str: string): boolean {
 /** User-facing message for 429/quota so raw codes are not shown. */
 const RATE_LIMIT_FRIENDLY = '서버가 혼잡하거나 사용 한도에 도달했어요. 잠시 후 다시 시도해 주세요.'
 
+/** Timeout / network messages */
+const TIMEOUT_FRIENDLY = '응답 시간이 초과되었어요. 네트워크를 확인하고 다시 시도해 주세요.'
+const NETWORK_FRIENDLY = '네트워크 연결을 확인해 주세요.'
+
 /** 유저에게 보여줄 한 줄 메시지 (토스트용). 코드 매핑 우선, 없으면 message 또는 기본 문구. 운영 환경에서는 HTML/404 상세 숨김. */
 export function getFriendlyMessage(err: unknown): string {
   const isDev = process.env.NODE_ENV === 'development'
@@ -83,8 +87,14 @@ export function getFriendlyMessage(err: unknown): string {
   }
   const message = payload.message ?? payload.error
   const msgStr = typeof message === 'string' ? message : ''
-  if (msgStr.length > 0 && /429|quota|rate limit|한도|사용량 초과/i.test(msgStr)) {
+  if (msgStr.length > 0 && /429|quota|rate limit|한도|사용량 초과|exhausted|resource exhausted/i.test(msgStr)) {
     return RATE_LIMIT_FRIENDLY
+  }
+  if (msgStr.length > 0 && /timeout|timed ?out|deadline|econnreset|etimedout|504|타임아웃/i.test(msgStr)) {
+    return TIMEOUT_FRIENDLY
+  }
+  if (msgStr.length > 0 && /network|econnrefused|enotfound|fetch failed|load failed/i.test(msgStr)) {
+    return NETWORK_FRIENDLY
   }
   if (msgStr.length > 0 && looksLikeHtml(msgStr)) {
     return isDev ? '트렌드 수집에 실패했습니다. 자세히 보기를 눌러 확인하세요.' : '시스템 경로를 찾을 수 없습니다.'

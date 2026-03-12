@@ -3,9 +3,18 @@
 import React from 'react'
 import { AlertCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { logger } from '@/lib/logger'
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
+  /** Optional section name for logging */
+  sectionName?: string
+  /** Compact fallback for section-level errors (smaller UI) */
+  compact?: boolean
+  /** Custom fallback title */
+  fallbackTitle?: string
+  /** Custom fallback message */
+  fallbackMessage?: string
 }
 
 interface ErrorBoundaryState {
@@ -25,10 +34,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    logger.error('ErrorBoundary caught', {
+      section: this.props.sectionName ?? 'unknown',
+      message: error?.message,
+      stack: error?.stack,
+      componentStack: errorInfo.componentStack,
+    })
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Dev] ErrorBoundary caught:', error, errorInfo)
+      console.error('[ErrorBoundary]', error, errorInfo)
     }
-    console.error('[ErrorBoundary]', error, errorInfo)
   }
 
   handleRetry = () => {
@@ -48,6 +62,29 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       const { error, showDetails } = this.state
       const message = error?.message
       const stack = error?.stack
+      const compact = this.props.compact
+      const title = this.props.fallbackTitle ?? '오류가 발생했습니다'
+      const desc = this.props.fallbackMessage ?? '일시적인 오류가 발생했습니다. 아래 버튼으로 다시 시도하거나 새로고침해 주세요.'
+
+      if (compact) {
+        return (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex flex-col items-center justify-center text-center min-h-[120px]">
+            <AlertCircle className="w-8 h-8 text-destructive/80 mb-2" aria-hidden />
+            <p className="text-sm font-medium text-foreground mb-1">{title}</p>
+            <p className="text-xs text-muted-foreground mb-3">{desc}</p>
+            <Button variant="outline" size="sm" onClick={this.handleRetry} className="gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" />
+              다시 시도
+            </Button>
+            {process.env.NODE_ENV === 'development' && message && (
+              <details className="mt-2 text-left w-full">
+                <summary className="text-xs text-muted-foreground cursor-pointer">오류 내용</summary>
+                <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] overflow-auto max-h-24">{message}</pre>
+              </details>
+            )}
+          </div>
+        )
+      }
 
       return (
         <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 bg-background">
@@ -56,10 +93,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <AlertCircle className="w-10 h-10" aria-hidden />
             </div>
             <h1 className="text-xl font-bold text-foreground mb-2">
-              오류가 발생했습니다
+              {title}
             </h1>
             <p className="text-muted-foreground text-sm mb-6">
-              일시적인 오류가 발생했습니다. 아래 버튼으로 다시 시도하거나 새로고침해 주세요.
+              {desc}
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
               <Button onClick={this.handleRetry} className="gap-2">
