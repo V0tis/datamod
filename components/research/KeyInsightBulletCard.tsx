@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Lightbulb, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { motionConfig } from '@/lib/motion-config'
 
 export interface KeyInsightBulletCardProps {
   /** Insight text */
@@ -25,10 +27,15 @@ export function KeyInsightBulletCard({
   const isLong = title.length > 120
 
   return (
-    <div
+    <motion.div
+      layout={false}
+      whileHover={{
+        y: motionConfig.cardHover.y,
+        transition: motionConfig.cardHover.transition,
+      }}
       className={cn(
         'rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 flex gap-3',
-        'transition-colors hover:border-primary/30',
+        'hover:border-primary/30 hover:shadow-md',
         className
       )}
     >
@@ -66,6 +73,6 @@ export function KeyInsightBulletCard({
         )}
       </div>
       <Lightbulb className="w-4 h-4 shrink-0 text-primary/60 mt-0.5" aria-hidden />
-    </div>
+    </motion.div>
   )
 }

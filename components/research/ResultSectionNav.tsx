@@ -1,16 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspaper, Database, GitBranch, Briefcase, Gauge, CheckSquare2, Loader2, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { motionConfig } from '@/lib/motion-config'
 
-/** Core 5 sections for sticky quick-jump nav */
+/** Core 6 sections for sticky quick-jump nav (matches ResultPageStructuredSections) */
 const CORE_SECTIONS = [
-  { id: 'section-market', label: 'Market Analysis', icon: TrendingUp },
-  { id: 'section-insights', label: 'Insights', icon: Lightbulb },
-  { id: 'section-strategy', label: 'Strategy', icon: Target },
-  { id: 'section-competition', label: 'Competitors', icon: Users },
-  { id: 'section-next-actions-pm', label: 'Action Plan', icon: CheckSquare2 },
+  { id: 'section-market-summary', label: '시장 개요', icon: BarChart3 },
+  { id: 'section-key-insights', label: '핵심 인사이트', icon: Lightbulb },
+  { id: 'section-market-trends', label: '시장 트렌드', icon: TrendingUp },
+  { id: 'section-competitor-landscape', label: '경쟁 환경', icon: Users },
+  { id: 'section-strategic-recommendations', label: '전략 제안', icon: Target },
+  { id: 'section-action-plan', label: '액션 플랜', icon: CheckSquare2 },
 ] as const
 
 const SECTIONS = [
@@ -160,20 +163,40 @@ export function ResultSectionNav({
           const Icon = s.icon
           const isActive = activeId === s.id
           return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => scrollTo(s.id)}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors',
-                isActive
-                  ? 'bg-primary/15 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0 opacity-80" />
-              <span className="truncate">{s.label}</span>
-            </button>
+            <div key={s.id} className="relative">
+              {/* Animated active indicator */}
+              <motion.span
+                aria-hidden
+                initial={false}
+                animate={{ opacity: isActive ? 1 : 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-primary origin-center"
+              />
+              <motion.button
+                type="button"
+                onClick={() => scrollTo(s.id)}
+                layout={false}
+                whileHover={{
+                  x: motionConfig.navHover.x,
+                  transition: motionConfig.navHover.transition,
+                }}
+                className={cn(
+                  'relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm',
+                  'transition-colors duration-200',
+                  isActive
+                    ? 'bg-primary/15 text-primary font-medium'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                )}
+              >
+                <Icon
+                  className={cn(
+                    'h-4 w-4 shrink-0 opacity-80 transition-opacity duration-200',
+                    isActive && 'opacity-100'
+                  )}
+                />
+                <span className="truncate">{s.label}</span>
+              </motion.button>
+            </div>
           )
         })}
       </nav>

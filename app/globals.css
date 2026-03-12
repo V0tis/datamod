@@ -275,6 +275,64 @@ body {
 .reading-text { font-size: var(--reading-text); line-height: var(--reading-leading); }
 .reading-section-gap { margin-top: var(--reading-section-gap); }
 
+/* UI consistency: page layout, cards, typography */
+.rin-page {
+  @apply p-4 md:p-6 max-w-5xl mx-auto min-h-screen bg-background;
+}
+.rin-page-narrow {
+  @apply p-4 md:p-6 max-w-2xl mx-auto min-h-screen bg-background;
+}
+.rin-page-header {
+  @apply mb-6;
+}
+.rin-page-title {
+  @apply text-lg font-semibold text-foreground tracking-tight;
+}
+.rin-page-subtitle {
+  @apply text-muted-foreground text-xs mt-0.5;
+}
+.rin-section {
+  @apply space-y-6;
+}
+.rin-card {
+  @apply rounded-xl border border-border bg-card p-4 sm:p-5 shadow-sm;
+}
+.rin-card-section-title {
+  @apply text-sm font-semibold text-foreground flex items-center gap-2;
+}
+.rin-card-section-desc {
+  @apply text-xs text-muted-foreground mt-0.5;
+}
+.rin-empty-container {
+  @apply rounded-xl border border-dashed border-border/80 bg-muted/5 py-16 px-6 text-center;
+}
+
+/* Progress bar shimmer animation */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Skeleton loading shimmer: gradient sweep for cards, text, charts */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.animate-skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--muted-hover) 50%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
 /* PDF 인쇄: 리포트 영역만 노출 (사이드바 등 숨김) */
 @media print {
   body * {

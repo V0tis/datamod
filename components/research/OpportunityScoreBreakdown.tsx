@@ -41,6 +41,8 @@ const ORDER: readonly string[] = [
 
 export interface OpportunityScoreBreakdownProps {
   score: number | null
+  /** While analysis is running, show "산출 중..." instead of numeric score */
+  loading?: boolean
   breakdown?: {
     market_growth?: number
     trend_momentum?: number
@@ -65,14 +67,15 @@ export interface OpportunityScoreBreakdownProps {
  */
 export function OpportunityScoreBreakdown({
   score,
+  loading = false,
   breakdown,
   useKoreanLabels = false,
   compact = false,
   className,
 }: OpportunityScoreBreakdownProps) {
-  /** 분석 중에도 UI 표시(경쟁 환경 분석 탭처럼): 데이터 없으면 default 사용 */
+  /** 분석 중에도 UI 표시(경쟁 환경 분석 탭처럼): 데이터 없으면 default 사용. 단, loading 중에는 점수 숫자 숨김 */
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
-  const hasScore = score != null && Number.isFinite(score)
+  const hasScore = !loading && score != null && Number.isFinite(score)
   const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : 50
 
   const items = effectiveBreakdown
@@ -154,7 +157,7 @@ export function OpportunityScoreBreakdown({
           <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
             <span>{useKoreanLabels ? '기본 50' : 'Base 50'}</span>
             <span className="tabular-nums font-medium text-foreground">
-              = {normScore} / 100
+              {loading ? (useKoreanLabels ? '산출 중...' : 'Calculating...') : `= ${normScore} / 100`}
             </span>
           </div>
         </div>

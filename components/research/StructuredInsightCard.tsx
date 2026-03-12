@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { motionConfig } from '@/lib/motion-config'
 
 export interface StructuredInsight {
   title: string
@@ -68,9 +70,15 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
   const metrics = insight.keyMetrics ?? extractKeyMetrics(insight.summary + ' ' + (insight.whyItMatters ?? '') + (insight.implicationForProduct ?? ''))
 
   return (
-    <div
+    <motion.div
+      layout={false}
+      whileHover={{
+        y: motionConfig.cardHover.y,
+        transition: motionConfig.cardHover.transition,
+      }}
       className={cn(
-        'rounded-xl border border-border/60 bg-card transition-colors hover:border-primary/30 hover:bg-primary/[0.02]',
+        'rounded-xl border border-border/60 bg-card shadow-sm',
+        'hover:border-primary/30 hover:bg-primary/[0.02] hover:shadow-md',
         className
       )}
     >
@@ -148,6 +156,6 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

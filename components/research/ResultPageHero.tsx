@@ -52,6 +52,8 @@ export interface ResultPageHeroProps {
   analysisStatus?: 'idle' | 'loading' | 'success' | 'fail'
   /** AI 분석 타임라인 – 마지막 업데이트 하단, 핵심 인사이트 위에 배치 */
   timelineSlot?: React.ReactNode
+  /** 분석 진행 중 헤더 내 진행률 표시 (progress bar + step) */
+  progressSlot?: React.ReactNode
   className?: string
 }
 
@@ -70,6 +72,7 @@ export function ResultPageHero({
   actions,
   analysisStatus,
   timelineSlot,
+  progressSlot,
   className,
 }: ResultPageHeroProps) {
   const hasScore = opportunityScore != null && Number.isFinite(opportunityScore)
@@ -105,6 +108,9 @@ export function ResultPageHero({
           )}
           {statusText && (
             <p className="mt-2 text-sm text-muted-foreground">{statusText}</p>
+          )}
+          {loading && progressSlot && (
+            <div className="mt-3 max-w-md">{progressSlot}</div>
           )}
         </div>
         {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -151,23 +157,24 @@ export function ResultPageHero({
                 />
               </svg>
             )}
-            <div
-              className={cn(
-                'flex items-baseline gap-1 mt-2',
-                loading && !hasScore && 'opacity-0'
+            <div className="flex items-baseline gap-1 mt-2">
+              {loading && !hasScore ? (
+                <span className="text-base font-medium text-muted-foreground">산출 중...</span>
+              ) : (
+                <>
+                  <span
+                    className={cn(
+                      'text-3xl sm:text-4xl font-bold tabular-nums',
+                      normScore != null && normScore >= 70 && 'text-emerald-600 dark:text-emerald-400',
+                      normScore != null && normScore >= 50 && normScore < 70 && 'text-amber-600 dark:text-amber-400',
+                      normScore != null && normScore < 50 && 'text-rose-600 dark:text-rose-400'
+                    )}
+                  >
+                    {normScore ?? '—'}
+                  </span>
+                  <span className="text-lg text-muted-foreground font-medium">/100</span>
+                </>
               )}
-            >
-              <span
-                className={cn(
-                  'text-3xl sm:text-4xl font-bold tabular-nums',
-                  normScore != null && normScore >= 70 && 'text-emerald-600 dark:text-emerald-400',
-                  normScore != null && normScore >= 50 && normScore < 70 && 'text-amber-600 dark:text-amber-400',
-                  normScore != null && normScore < 50 && 'text-rose-600 dark:text-rose-400'
-                )}
-              >
-                {normScore ?? '—'}
-              </span>
-              <span className="text-lg text-muted-foreground font-medium">/100</span>
             </div>
             <span className="text-xs font-medium text-muted-foreground mt-0.5">기회 점수</span>
           </div>

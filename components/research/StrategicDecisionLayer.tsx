@@ -78,7 +78,7 @@ export function StrategicDecisionLayer({
       id: 'market-opportunity',
       icon: TrendingUp,
       label: 'Market Opportunity',
-      value: opportunityScore != null ? `${opportunityScore}/100` : '—',
+      value: loading && opportunityScore == null ? '산출 중...' : (opportunityScore != null ? `${opportunityScore}/100` : '—'),
       explanation: marketOpportunityExplanation,
       className: 'border-emerald-500/30 bg-emerald-500/5',
     },

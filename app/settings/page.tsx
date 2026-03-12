@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
@@ -35,6 +35,27 @@ type SettingsData = {
 }
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
+
+const GEMINI_KEY_PREFIX = 'AIza'
+const GROQ_KEY_PREFIX = 'gsk_'
+
+function validateGeminiKey(key: string): { valid: boolean; error?: string } {
+  const k = key.trim()
+  if (!k) return { valid: true }
+  if (k === MASKED_PLACEHOLDER) return { valid: true }
+  if (k.length < 30) return { valid: false, error: 'Gemini API 키 형식이 올바르지 않습니다.' }
+  if (!k.startsWith(GEMINI_KEY_PREFIX)) return { valid: false, error: 'Gemini API 키는 AIza로 시작합니다.' }
+  return { valid: true }
+}
+
+function validateGroqKey(key: string): { valid: boolean; error?: string } {
+  const k = key.trim()
+  if (!k) return { valid: true }
+  if (k === MASKED_PLACEHOLDER) return { valid: true }
+  if (k.length < 20) return { valid: false, error: 'Groq API 키 형식이 올바르지 않습니다.' }
+  if (!k.startsWith(GROQ_KEY_PREFIX)) return { valid: false, error: 'Groq API 키는 gsk_로 시작합니다.' }
+  return { valid: true }
+}
 
 const ANALYSIS_DEPTH_KEY = 'rin_analysis_depth'
 type AnalysisDepth = 'fast' | 'standard' | 'deep'
@@ -78,6 +99,10 @@ function SettingsPageInner() {
   const [editingGroq, setEditingGroq] = useState(false)
   const [savingGemini, setSavingGemini] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
+  const [testingGemini, setTestingGemini] = useState(false)
+  const [testingGroq, setTestingGroq] = useState(false)
+  const [saveSuccessGemini, setSaveSuccessGemini] = useState(false)
+  const [saveSuccessGroq, setSaveSuccessGroq] = useState(false)
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
   const [aiPrimaryModel, setAiPrimaryModel] = useState<'gemini' | 'groq'>('gemini')
 
@@ -189,6 +214,14 @@ function SettingsPageInner() {
   const handleSaveGemini = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
+    const rawKey = geminiApiKey.trim()
+    if (rawKey && rawKey !== MASKED_PLACEHOLDER) {
+      const val = validateGeminiKey(geminiApiKey)
+      if (!val.valid) {
+        toast.error(val.error ?? '유효하지 않은 키입니다.')
+        return
+      }
+    }
     setSavingGemini(true)
     try {
       const res = await fetch('/api/settings', {
@@ -218,6 +251,14 @@ function SettingsPageInner() {
   const handleSaveGroq = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
+    const rawKey = groqApiKey.trim()
+    if (rawKey && rawKey !== MASKED_PLACEHOLDER) {
+      const val = validateGroqKey(groqApiKey)
+      if (!val.valid) {
+        toast.error(val.error ?? '유효하지 않은 키입니다.')
+        return
+      }
+    }
     setSavingGroq(true)
     try {
       const res = await fetch('/api/settings', {
@@ -239,10 +280,45 @@ function SettingsPageInner() {
         setGroqApiKey('')
       }
       toast.success('Groq API 키가 저장되었습니다.')
+      setSaveSuccessGroq(true)
+      setTimeout(() => setSaveSuccessGroq(false), 3000)
     } finally {
       setSavingGroq(false)
     }
   }
+
+  const handleTestConnection = useCallback(async (provider: 'gemini' | 'groq') => {
+    const key = provider === 'gemini' ? geminiApiKey : groqApiKey
+    const val = provider === 'gemini' ? validateGeminiKey(key) : validateGroqKey(key)
+    if (!val.valid) {
+      toast.error(val.error ?? '유효하지 않은 키입니다.')
+      return
+    }
+    if (!key || key === MASKED_PLACEHOLDER) {
+      toast.error('테스트할 API 키를 입력해 주세요.')
+      return
+    }
+    if (provider === 'gemini') setTestingGemini(true)
+    else setTestingGroq(true)
+    try {
+      const res = await fetch('/api/settings/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey: key }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.ok) {
+        toast.success(`${provider === 'gemini' ? 'Gemini' : 'Groq'} 연결에 성공했습니다.`)
+      } else {
+        toast.error(data?.error ?? '연결에 실패했습니다.')
+      }
+    } catch {
+      toast.error('연결 확인 중 오류가 발생했습니다.')
+    } finally {
+      if (provider === 'gemini') setTestingGemini(false)
+      else setTestingGroq(false)
+    }
+  }, [geminiApiKey, groqApiKey])
 
   const getKeyState = (provider: 'gemini' | 'groq') => {
     if (provider === 'gemini') {
@@ -290,14 +366,16 @@ function SettingsPageInner() {
   }
 
   return (
-    <div className="p-4 md:p-6 w-full max-w-5xl mx-auto">
-      <h1 className="text-lg font-semibold text-foreground mb-0.5">설정</h1>
-      <p className="text-muted-foreground text-xs mb-4">
-        내 정보와 분석용 API 키를 관리하세요.
-      </p>
+    <div className="rin-page w-full max-w-5xl">
+      <header className="rin-page-header">
+        <h1 className="rin-page-title">설정</h1>
+        <p className="rin-page-subtitle mb-1">
+          내 정보와 분석용 API 키를 관리하세요.
+        </p>
+      </header>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full max-w-md grid grid-cols-2 h-9 rounded-lg bg-muted/50 p-1 mb-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full rin-section">
+        <TabsList className="w-full max-w-md grid grid-cols-2 h-9 rounded-lg bg-muted/50 p-1">
           <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <User className="h-4 w-4" />
             내 정보
@@ -308,7 +386,7 @@ function SettingsPageInner() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="m-0">
+        <TabsContent value="profile" className="m-0 mt-6">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
@@ -346,9 +424,9 @@ function SettingsPageInner() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="license" className="m-0 space-y-6">
+        <TabsContent value="license" className="m-0 mt-6 rin-section">
           {/* 1. AI Provider Settings */}
-          <Card className="border border-border bg-card shadow-sm">
+          <Card className="border border-border bg-card shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle className="text-lg">AI Provider 설정</CardTitle>
               <CardDescription>시장 분석에 사용되는 AI API 키를 설정합니다.</CardDescription>
@@ -358,9 +436,20 @@ function SettingsPageInner() {
               <div className="space-y-3">
                 <div>
                   <Label className="text-base font-medium">Gemini API Key</Label>
-                  <p className="text-sm text-muted-foreground mt-1">시장 신호 분석 및 리서치에 사용됩니다.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    시장 신호 분석, 뉴스 요약, 인사이트 생성에 사용됩니다. Google AI Studio에서 발급받을 수 있습니다.
+                  </p>
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    Google AI Studio에서 API 키 발급 <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
-                <form onSubmit={handleSaveGemini} className="flex flex-col sm:flex-row gap-3">
+                <form onSubmit={handleSaveGemini} className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <Input
                       type={getKeyState('gemini').show && getKeyState('gemini').canReveal ? 'text' : 'password'}
@@ -382,9 +471,28 @@ function SettingsPageInner() {
                       {showGeminiKey && getKeyState('gemini').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <Button type="submit" disabled={savingGemini} className="shrink-0">
-                    {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={savingGemini} className="shrink-0">
+                      {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      disabled={testingGemini || (!geminiApiKey || geminiApiKey === MASKED_PLACEHOLDER)}
+                      onClick={() => handleTestConnection('gemini')}
+                      title="연결 테스트"
+                    >
+                      {testingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+                      연결 테스트
+                    </Button>
+                    {saveSuccessGemini && (
+                      <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+                        <CheckCircle2 className="h-4 w-4" /> 저장됨
+                      </span>
+                    )}
+                  </div>
+                  </div>
                 </form>
               </div>
 
@@ -392,9 +500,20 @@ function SettingsPageInner() {
               <div className="space-y-3">
                 <div>
                   <Label className="text-base font-medium">Groq API Key</Label>
-                  <p className="text-sm text-muted-foreground mt-1">인사이트·탭별 분석에 사용됩니다.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Logic·Creative·Fact 탭별 AI 인사이트, 합의 요약에 사용됩니다. Groq Console에서 발급받을 수 있습니다.
+                  </p>
+                  <a
+                    href="https://console.groq.com/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    Groq Console에서 API 키 발급 <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
-                <form onSubmit={handleSaveGroq} className="flex flex-col sm:flex-row gap-3">
+                <form onSubmit={handleSaveGroq} className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <Input
                       type={getKeyState('groq').show && getKeyState('groq').canReveal ? 'text' : 'password'}
@@ -416,9 +535,28 @@ function SettingsPageInner() {
                       {showGroqKey && getKeyState('groq').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <Button type="submit" disabled={savingGroq} className="shrink-0">
-                    {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button type="submit" disabled={savingGroq}>
+                      {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      disabled={testingGroq || (!groqApiKey || groqApiKey === MASKED_PLACEHOLDER)}
+                      onClick={() => handleTestConnection('groq')}
+                      title="연결 테스트"
+                    >
+                      {testingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+                      연결 테스트
+                    </Button>
+                    {saveSuccessGroq && (
+                      <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+                        <CheckCircle2 className="h-4 w-4" /> 저장됨
+                      </span>
+                    )}
+                  </div>
+                  </div>
                 </form>
               </div>
             </CardContent>
@@ -433,6 +571,9 @@ function SettingsPageInner() {
             <CardContent className="space-y-6">
               <div>
                 <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  빠른 분석은 결과를 신속히 제공하고, 심층 분석은 더 많은 소스와 상세 인사이트를 생성합니다.
+                </p>
                 <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
                   {ANALYSIS_OPTIONS.map((opt) => (
                     <button
@@ -484,7 +625,7 @@ function SettingsPageInner() {
           </Card>
 
           {/* 3. System Status */}
-          <Card className="border border-border bg-card shadow-sm">
+          <Card className="border border-border bg-card shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle className="text-lg">시스템 상태</CardTitle>
               <CardDescription>API 연결 상태를 확인합니다.</CardDescription>

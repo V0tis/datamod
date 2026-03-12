@@ -1,6 +1,6 @@
 /**
  * Progressive AI activity messages for analysis loading states.
- * Replaces generic spinners with informative step-specific messages.
+ * 5-step progress UX: Collecting market data → Analyzing competitors → Extracting insights → Generating strategy → Building action plan.
  */
 
 const STREAM_TO_INDEX: Record<string, number> = {
@@ -21,23 +21,27 @@ const STREAM_TO_INDEX: Record<string, number> = {
   post_processing_saving: 6,
 }
 
-/** 4-step progress for loading UX: step index 0–3 maps to user-facing stages */
+/** 5-step progress for loading UX - user-facing analysis stages */
 export const PROGRESS_STEPS = [
-  { id: 0, label: 'Collecting market data', labelKo: '시장 데이터 수집', messageKo: '뉴스, 트렌드, 시장 신호를 수집하고 있습니다' },
-  { id: 1, label: 'Analyzing competitors', labelKo: '경쟁사 분석', messageKo: '경쟁 환경과 주요 경쟁사를 분석하고 있습니다' },
-  { id: 2, label: 'Generating strategic insights', labelKo: '전략 인사이트 생성', messageKo: '리스크와 기회를 평가하고 전략 인사이트를 도출합니다' },
-  { id: 3, label: 'Building action plan', labelKo: '액션 플랜 작성', messageKo: '제품 전략과 실행 액션을 도출하고 있습니다' },
+  { id: 0, label: 'Collecting market data', labelKo: '시장 데이터 수집', messageKo: '뉴스, 트렌드, 시장 신호를 수집하고 있습니다', dynamicMessages: ['뉴스 기사 검색 중...', '트렌드 데이터 수집 중...', '시장 신호 수집 중...'] },
+  { id: 1, label: 'Analyzing competitors', labelKo: '경쟁사 분석', messageKo: '경쟁 환경과 주요 경쟁사를 분석하고 있습니다', dynamicMessages: ['경쟁사 목록 식별 중...', '경쟁 지형도 작성 중...', '경쟁 포지셔닝 분석 중...'] },
+  { id: 2, label: 'Extracting insights', labelKo: '인사이트 추출', messageKo: '핵심 인사이트와 시장 신호를 도출하고 있습니다', dynamicMessages: ['핵심 시그널 추출 중...', '리스크·기회 식별 중...', '시장 인사이트 정리 중...'] },
+  { id: 3, label: 'Generating strategy', labelKo: '전략 생성', messageKo: '리스크를 평가하고 전략 방향을 도출하고 있습니다', dynamicMessages: ['리스크 평가 중...', '전략 방향 도출 중...', '차별화 포인트 분석 중...'] },
+  { id: 4, label: 'Building action plan', labelKo: '액션 플랜 작성', messageKo: '제품 전략과 실행 액션을 도출하고 있습니다', dynamicMessages: ['PM 액션 도출 중...', '우선순위 정렬 중...', '실행 플랜 정리 중...'] },
 ] as const
 
-/** Map pipeline step index (0–6) to 4-step progress index (0–3) */
+/** Estimated seconds per step for ETA (step 0-4). Total ~90-120 sec */
+export const STEP_ETA_SECONDS = [25, 22, 20, 18, 15] as const
+
+/** Map pipeline step index (0–6) to 5-step progress index (0–4) */
 export const PIPELINE_TO_PROGRESS_INDEX: Record<number, number> = {
   0: 0, // signal_layer, news
   1: 0, // trend_analysis, pass1
   2: 1, // competition_analysis
-  3: 1, // insight_extraction
-  4: 2, // strategy_generation
-  5: 3, // execution_layer, pass2, creative
-  6: 3, // post_processing
+  3: 2, // insight_extraction
+  4: 3, // strategy_generation
+  5: 4, // execution_layer, pass2, creative
+  6: 4, // post_processing
 }
 
 /** 후처리 단계별 메시지 (파이프라인 5단계 완료 후 → done 전) */
@@ -69,7 +73,7 @@ export const ANALYSIS_ACTIVITY_SHORT: readonly string[] = [
 ]
 
 /**
- * Returns the current progress step index (0–3) for the 4-step loading UX.
+ * Returns the current progress step index (0–4) for the 5-step loading UX.
  */
 export function getProgressStepIndex(stepId?: string | null, pipelineIndex?: number): number {
   const idx = stepId && STREAM_TO_INDEX[stepId] != null
@@ -78,6 +82,37 @@ export function getProgressStepIndex(stepId?: string | null, pipelineIndex?: num
       ? pipelineIndex
       : 0
   return PIPELINE_TO_PROGRESS_INDEX[Math.min(idx, 6)] ?? 0
+}
+
+/**
+ * Returns estimated remaining seconds based on current step index.
+ */
+export function getEstimatedRemainingSeconds(stepIndex: number): number {
+  let remaining = 0
+  for (let i = stepIndex; i < STEP_ETA_SECONDS.length; i++) {
+    remaining += STEP_ETA_SECONDS[i]
+  }
+  return Math.max(0, remaining)
+}
+
+/**
+ * Returns a rotating dynamic message for the current step (for "what AI is doing").
+ * Use stepStartTime to cycle through dynamicMessages every few seconds.
+ */
+export function getDynamicStepMessage(
+  stepIndex: number,
+  stepStartTime?: number
+): string {
+  const step = PROGRESS_STEPS[stepIndex]
+  if (!step || !('dynamicMessages' in step) || !Array.isArray(step.dynamicMessages)) {
+    return step?.messageKo ?? '분석 중...'
+  }
+  const msgs = step.dynamicMessages as readonly string[]
+  if (msgs.length === 0) return step.messageKo
+  const cycleMs = 4000
+  const elapsed = stepStartTime != null ? Date.now() - stepStartTime : 0
+  const idx = Math.min(Math.floor(elapsed / cycleMs), msgs.length - 1)
+  return msgs[idx]
 }
 
 /**

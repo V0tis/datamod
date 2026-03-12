@@ -20,11 +20,19 @@ export async function getGeminiKeyForRequest(
 ): Promise<ResearchKeysResult> {
   let userGemini: string | null = null
   if (userId) {
-    const { data: row } = await supabase
+    const { data: row, error } = await supabase
       .from('user_settings')
       .select('gemini_api_key')
       .eq('user_id', userId)
       .maybeSingle()
+    if (process.env.NODE_ENV === 'production' || process.env.DEBUG_KEYS === '1') {
+      console.log('[getGeminiKeyForRequest]', {
+        userId: userId?.slice(0, 8) + '...',
+        hasRow: !!row,
+        hasGeminiInRow: !!(row?.gemini_api_key && String(row.gemini_api_key).trim()),
+        error: error?.message ?? null,
+      })
+    }
     userGemini = row?.gemini_api_key ?? null
   }
   const effective = getEffectiveLicenseKeys(userGemini)

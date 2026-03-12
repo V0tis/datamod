@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, Check, Circle } from 'lucide-react'
+import { RinAnimation } from '@/components/common/RinAnimation'
 import {
   PROGRESS_STEPS,
   getProgressStepIndex,
@@ -10,17 +11,20 @@ import {
   getDynamicStepMessage,
 } from '@/lib/analysis-activity-messages'
 import { cn } from '@/lib/utils'
-import type { StreamingState } from '@/lib/types/analysis-modes'
 
-export interface AnalysisProgressBannerProps {
-  keyword?: string
-  streamingState: StreamingState
-  /** Step ID from backend (e.g. trend_analysis, competition_analysis) */
+export interface AnalysisProgressOverlayProps {
+  /** Current step ID from streaming (e.g. trend_analysis, competition_analysis) */
   stepId?: string | null
   /** Pipeline step index 0–5 */
   currentStep?: number
-  /** Show micro insight after delay */
-  showMicroInsight?: boolean
+  /** Whether analysis is actively running */
+  isRunning?: boolean
+  /** Keyword being analyzed */
+  keyword?: string
+  /** Variant: overlay = full loading card, inline = compact banner */
+  variant?: 'overlay' | 'inline'
+  /** Show Lottie animation (overlay only) */
+  showAnimation?: boolean
   className?: string
 }
 
@@ -33,28 +37,16 @@ function formatRemainingTime(seconds: number): string {
   return `약 ${m}분 ${s}초 남음`
 }
 
-/**
- * Progressive loading UX – 5 real-time steps: Collecting market data → Analyzing competitors → Extracting insights → Generating strategy → Building action plan.
- * Includes animated progress bar, estimated remaining time, and dynamic step messages.
- */
-export function AnalysisProgressBanner({
-  keyword = '',
-  streamingState,
+export function AnalysisProgressOverlay({
   stepId,
   currentStep = 0,
-  showMicroInsight = true,
+  isRunning = true,
+  keyword = '',
+  variant = 'overlay',
+  showAnimation = true,
   className,
-}: AnalysisProgressBannerProps) {
-  const isRunning =
-    streamingState.status === 'running' || streamingState.status === 'streaming'
-  const pipelineStep =
-    isRunning && 'currentStep' in streamingState
-      ? streamingState.currentStep
-      : currentStep
-  const effectiveStepId = isRunning && 'stepId' in streamingState ? streamingState.stepId : stepId
-  const progressIndex = getProgressStepIndex(effectiveStepId ?? null, pipelineStep)
-  const progressPercent = Math.min(100, ((progressIndex + 1) / PROGRESS_STEPS.length) * 100)
-
+}: AnalysisProgressOverlayProps) {
+  const progressIndex = getProgressStepIndex(stepId, currentStep)
   const [dynamicMessage, setDynamicMessage] = useState(() =>
     getDynamicStepMessage(progressIndex)
   )
@@ -73,13 +65,18 @@ export function AnalysisProgressBanner({
     return () => clearInterval(interval)
   }, [isRunning, progressIndex, stepStartTime])
 
+  const progressPercent = Math.min(
+    100,
+    ((progressIndex + 1) / PROGRESS_STEPS.length) * 100
+  )
   const remainingSeconds = getEstimatedRemainingSeconds(progressIndex)
 
-  return (
+  const content = (
     <div
       className={cn(
         'rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent',
-        'p-4 sm:p-5 flex flex-col gap-4 animate-in fade-in duration-300',
+        'p-4 sm:p-5 flex flex-col gap-4',
+        variant === 'overlay' && 'shadow-lg max-w-md w-full',
         className
       )}
       role="status"
@@ -87,11 +84,19 @@ export function AnalysisProgressBanner({
       aria-label="AI 분석 진행 중"
     >
       <div className="flex items-start gap-3 shrink-0">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 ring-2 ring-primary/20">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
-        </div>
+        {variant === 'overlay' && showAnimation ? (
+          <div className="shrink-0">
+            <RinAnimation variant="loading" size={140} className="block" />
+          </div>
+        ) : (
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 ring-2 ring-primary/20">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-foreground">AI 분석 진행 중</p>
+          <p className="font-semibold text-foreground">
+            {isRunning ? 'AI 분석 진행 중' : '분석 준비 중'}
+          </p>
           <AnimatePresence mode="wait">
             <motion.p
               key={progressIndex}
@@ -101,7 +106,7 @@ export function AnalysisProgressBanner({
               transition={{ duration: 0.25, ease: 'easeOut' }}
               className="text-sm text-muted-foreground mt-0.5"
             >
-              {isRunning ? dynamicMessage : (PROGRESS_STEPS[progressIndex]?.messageKo ?? '분석을 진행하고 있습니다')}
+              {isRunning ? dynamicMessage : '잠시만 기다려 주세요.'}
             </motion.p>
           </AnimatePresence>
         </div>
@@ -220,7 +225,7 @@ export function AnalysisProgressBanner({
         </ul>
       </div>
 
-      {showMicroInsight && keyword && (
+      {keyword && variant === 'overlay' && (
         <div
           className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 animate-in fade-in duration-300"
           role="status"
@@ -229,10 +234,20 @@ export function AnalysisProgressBanner({
             분석 대상
           </p>
           <p className="text-sm text-foreground">
-            &quot;{keyword}&quot; 시장 분석을 수행하고 있습니다. 곧 인사이트가 표시됩니다.
+            &quot;{keyword}&quot; 시장 분석을 수행하고 있습니다.
           </p>
         </div>
       )}
     </div>
   )
+
+  if (variant === 'overlay') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+        {content}
+      </div>
+    )
+  }
+
+  return content
 }

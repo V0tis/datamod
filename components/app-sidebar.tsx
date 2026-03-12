@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { useState, useEffect } from 'react'
@@ -17,12 +18,13 @@ import {
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { cn } from '@/lib/utils'
+import { motionConfig } from '@/lib/motion-config'
 
 const navItems = [
-  { href: '/', label: '대시보드', icon: LayoutDashboard },
-  { href: '/history', label: '분석 기록', icon: BarChart3 },
-  { href: '/insights', label: '저장한 인사이트', icon: Bookmark },
-  { href: '/settings', label: '설정', icon: Settings },
+  { href: '/', label: '대시보드', icon: LayoutDashboard, tooltip: '키워드 검색 및 새 분석 시작' },
+  { href: '/history', label: '분석 기록', icon: BarChart3, tooltip: '과거 리서치 결과 관리 및 조회' },
+  { href: '/insights', label: '저장한 인사이트', icon: Bookmark, tooltip: '북마크한 인사이트 모아보기' },
+  { href: '/settings', label: '설정', icon: Settings, tooltip: 'API 키, 프로필 및 분석 설정' },
 ]
 
 export function AppSidebar() {
@@ -67,61 +69,85 @@ export function AppSidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {navItems.map((item) => {
-          const active = isActive(item)
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.href + item.label}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                'border-l-2 -ml-px pl-[11px]',
-                active
-                  ? 'border-primary bg-accent/50 text-foreground'
-                  : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0 opacity-80" />
-              {item.label}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="메인 메뉴">
+        <ul className="space-y-1" role="list">
+          {navItems.map((item) => {
+            const active = isActive(item)
+            const Icon = item.icon
+            return (
+              <li key={item.href + item.label} className="relative">
+                {/* Animated active indicator */}
+                <motion.span
+                  aria-hidden
+                  initial={false}
+                  animate={{ opacity: active ? 1 : 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-full bg-primary"
+                />
+                <Link href={item.href} title={item.tooltip} className="block">
+                  <motion.span
+                    layout={false}
+                    whileHover={{
+                      x: motionConfig.navHover.x,
+                      transition: motionConfig.navHover.transition,
+                    }}
+                    className={cn(
+                      'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
+                      'border-l-2 -ml-px pl-[11px] transition-colors duration-200',
+                      active
+                        ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                        : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0 transition-colors duration-200',
+                        active ? 'text-primary' : 'opacity-70'
+                      )}
+                    />
+                    {item.label}
+                  </motion.span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       </nav>
 
       {/* Footer: theme + user + sign out */}
-      <div className="shrink-0 border-t border-border/60 px-3 py-3 space-y-2">
-        <div className="flex justify-between items-center px-2">
+      <div className="shrink-0 border-t border-border/60 px-3 py-4 space-y-3">
+        <div className="flex justify-between items-center px-1">
           <span className="text-xs text-muted-foreground">테마</span>
           <ThemeSwitcher />
         </div>
         {user ? (
           <div className="space-y-1">
-            <p className="truncate px-3 py-1 text-xs text-muted-foreground" title={user.email ?? ''}>
+            <p className="truncate px-3 py-1.5 text-xs text-muted-foreground" title={user.email ?? ''}>
               {user.email ?? 'User'}
             </p>
             <button
               type="button"
               onClick={handleSignOut}
+              title="로그아웃"
               className={cn(
-                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               )}
             >
-              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+              <LogOut className="h-4 w-4 shrink-0 opacity-70" />
               로그아웃
             </button>
           </div>
         ) : (
           <Link
             href="/login"
+            title="로그인"
             className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+            <LogOut className="h-4 w-4 shrink-0 opacity-70" />
             로그인
           </Link>
         )}
@@ -136,7 +162,7 @@ export function AppSidebar() {
           <RinLogo size={22} className="shrink-0" />
           <span className="font-semibold text-foreground text-sm tracking-tight">rin-ai</span>
         </Link>
-        <nav className="flex items-center gap-1 shrink-0">
+        <nav className="flex items-center gap-1 shrink-0" aria-label="메인 메뉴">
           {navItems.map((item) => {
             const active = isActive(item)
             const Icon = item.icon
@@ -144,14 +170,16 @@ export function AppSidebar() {
               <Link
                 key={item.href + item.label}
                 href={item.href}
+                title={item.tooltip}
                 className={cn(
-                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-out',
+                  'hover:scale-[1.02]',
                   active
-                    ? 'bg-accent/50 text-foreground'
+                    ? 'bg-primary/10 text-foreground ring-1 ring-primary/20'
                     : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                <Icon className={cn('h-4 w-4 shrink-0 transition-colors duration-200', active ? 'text-primary' : 'opacity-70')} />
                 {item.label}
               </Link>
             )
@@ -168,24 +196,26 @@ export function AppSidebar() {
             <button
               type="button"
               onClick={handleSignOut}
+              title="로그아웃"
               className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
                 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               )}
             >
-              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+              <LogOut className="h-4 w-4 shrink-0 opacity-70" />
               로그아웃
             </button>
           </>
         ) : (
           <Link
             href="/login"
+            title="로그인"
             className={cn(
-              'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+              'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
               'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+            <LogOut className="h-4 w-4 shrink-0 opacity-70" />
             로그인
           </Link>
         )}

@@ -819,7 +819,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
 
         try {
-          const checkRes = await fetch('/api/settings', { signal })
+          const checkRes = await fetch('/api/settings', { credentials: 'same-origin', signal })
           if (checkRes.ok) {
             const checkData = (await checkRes.json()) as { canSearch?: boolean }
             if (checkData.canSearch === false) {
@@ -838,6 +838,7 @@ export const useResearchStore = create<ResearchStore>()(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keyword: k, country_code: countryCode, mode }),
+            credentials: 'same-origin',
             signal,
           })
 

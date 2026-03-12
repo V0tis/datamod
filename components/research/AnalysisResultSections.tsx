@@ -85,6 +85,8 @@ export interface AnalysisResultSectionsProps {
   onSaveToWorkspace?: () => void
   /** PM 분석 도구 레이아웃: 섹션 순서 변경, 리스크 평가 추가 */
   layout?: AnalysisResultLayout
+  /** When set, render only this section's content (for structured collapsible layout) */
+  sectionOnly?: 'market-trends' | 'competition' | 'strategic' | 'action'
 }
 
 export function AnalysisResultSections({
@@ -96,6 +98,7 @@ export function AnalysisResultSections({
   keyword = '',
   onSaveToWorkspace,
   layout = 'default',
+  sectionOnly,
 }: AnalysisResultSectionsProps) {
   /** 분석 중에도 차트/기회점수 표시: key_metrics 없으면 default 사용 */
   const km = result?.key_metrics ?? (loading ? DEFAULT_KEY_METRICS_LOADING : {})
@@ -271,10 +274,304 @@ export function AnalysisResultSections({
   const showProgressiveSections = isPmAnalytics && (loading || (analysisTasks?.length ?? 0) > 0 || result != null)
   if (!hasAnyContent && !loading && !showProgressiveSections) return null
 
+  /** For sectionOnly mode: render only the requested block (content only, no ProductStrategySection) */
+  const renderMarketTrends = () => (
+    <>
+      {(loading && !opportunityScore && keyTrends.length === 0 && Object.keys(breakdown).length === 0) ? (
+        <SectionContentSkeleton variant="grid" />
+      ) : (
+        <div className="space-y-6">
+          <MarketGrowthCharts
+            opportunityScore={opportunityScore ?? undefined}
+            breakdown={breakdown}
+            growthSignalsCount={growthSignals.length}
+            marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
+            chartInsights={km.chart_insights}
+            keyword={keyword}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {(opportunityScore != null || loading) && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">시장 규모</p>
+                <p className="text-xl font-semibold text-foreground tabular-nums">
+                  {loading && opportunityScore == null ? '산출 중...' : opportunityScore != null ? `${opportunityScore}/100` : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">시장 매력도</p>
+              </div>
+            )}
+            {(marketGrowth != null || trendMomentum != null) && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">성장 잠재력</p>
+                <p className="text-xl font-semibold text-foreground tabular-nums">
+                  {(marketGrowth ?? trendMomentum ?? '—')}/100
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
+              </div>
+            )}
+          </div>
+          <AnalysisCharts
+            opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
+            chartInsights={km.chart_insights}
+            className="mb-4"
+          />
+          {keyTrends.length > 0 && (
+            <div>
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
+              <StreamingBulletList items={keyTrends} streaming={loading} skipAnimation={!loading} revealDelayMs={320} />
+            </div>
+          )}
+          {!opportunityScore && keyTrends.length === 0 && !loading && (
+            <p className="text-sm text-muted-foreground">시장 기회 데이터를 분석 중입니다.</p>
+          )}
+        </div>
+      )}
+    </>
+  )
+
+  const renderCompetition = () => (
+    <>
+      {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
+        <SectionContentSkeleton variant="mixed" />
+      ) : (
+        <div className="space-y-4">
+          {competitiveLandscape.length > 0 && (
+            <>
+              <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <CompetitorTierChart competitors={competitiveLandscape} />
+                <CompetitorLandscapeMap competitors={competitiveLandscape} />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
+                <div className="flex flex-wrap gap-2">
+                  {competitiveLandscape.slice(0, 8).map((c, i) => (
+                    <div key={i} className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm">
+                      <span className="font-medium text-foreground">{c.name}</span>
+                      {c.positioning && <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
+            <div>
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>
+              <StreamingBulletList items={competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets} streaming={loading} skipAnimation={!loading} revealDelayMs={280} />
+            </div>
+          )}
+          {competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 && marketStructureBullets.length === 0 && !loading && (
+            <p className="text-sm text-muted-foreground">경쟁 구도 데이터가 없습니다.</p>
+          )}
+        </div>
+      )}
+    </>
+  )
+
+  if (sectionOnly === 'market-trends') return <div className="animate-in fade-in duration-300">{renderMarketTrends()}</div>
+  if (sectionOnly === 'competition') return <div className="animate-in fade-in duration-300">{renderCompetition()}</div>
+
+  /** sectionOnly="strategic": frameworks + risks + strategy only (for Structured layout) */
+  if (sectionOnly === 'strategic') {
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300">
+        {(hasFrameworks || loading) && (
+          <ProductStrategySection
+            title="제품 전략 프레임워크"
+            icon={<LayoutGrid className="h-5 w-5" />}
+            status={getSectionStatus('execution_layer', analysisTasks, loading)}
+            loading={loading}
+            streamingComplete={!loading && !!hasFrameworks}
+          >
+            {loading && !hasFrameworks ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-xl border border-border/60 bg-card p-4">
+                    <div className="h-4 w-24 rounded bg-muted/50 animate-pulse mb-3" />
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((j) => (
+                        <div key={j} className="h-3 rounded bg-muted/30 animate-pulse" />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length) ? (
+                  <div className="rounded-xl border border-border/60 bg-card p-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">SWOT</h3>
+                    <div className="space-y-3 text-sm">
+                      {swot.strengths?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mb-1">강점</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {swot.strengths.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-emerald-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {swot.weaknesses?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">약점</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {swot.weaknesses.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-amber-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {swot.opportunities?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 mb-1">기회</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {swot.opportunities.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-blue-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {swot.threats?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mb-1">위협</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {swot.threats.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-rose-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length) ? (
+                  <div className="rounded-xl border border-border/60 bg-card p-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Jobs-To-Be-Done</h3>
+                    <div className="space-y-3 text-sm">
+                      {jtbd.main_jobs?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-primary mb-1">핵심 작업</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {jtbd.main_jobs.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-primary shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {jtbd.pains?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-muted-foreground mb-1">페인포인트</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {jtbd.pains.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-muted-foreground shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {jtbd.gains?.length ? (
+                        <div>
+                          <p className="text-[11px] font-medium text-muted-foreground mb-1">기대 이득</p>
+                          <ul className="list-none pl-0 space-y-1">
+                            {jtbd.gains.map((s, i) => (
+                              <li key={i} className="flex gap-2"><span className="text-primary/70 shrink-0">•</span><span className="text-foreground">{s}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length) ? (
+                  <div className="rounded-xl border border-border/60 bg-card p-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Porter 5 Forces</h3>
+                    <p className="text-sm text-muted-foreground">경쟁 강도, 공급자/구매자 교섭력, 대체재, 진입 장벽 분석</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </ProductStrategySection>
+        )}
+        <ProductStrategySection
+          title="리스크 평가"
+          icon={<AlertTriangle className="h-5 w-5" />}
+          status={getSectionStatus('strategy_generation', analysisTasks, loading)}
+          loading={loading}
+          streamingComplete={!loading && risks.length > 0}
+        >
+          {loading && risks.length === 0 ? (
+            <SectionContentSkeleton variant="list" />
+          ) : risks.length > 0 ? (
+            <StreamingBulletList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} variant="risk" />
+          ) : (
+            <p className="text-sm text-muted-foreground">리스크 데이터가 없습니다.</p>
+          )}
+        </ProductStrategySection>
+        <ProductStrategySection
+          title="제품 전략 제안"
+          icon={<Target className="h-5 w-5" />}
+          status={getSectionStatus('execution_layer', analysisTasks, loading)}
+          loading={loading}
+          streamingComplete={!loading && (strategyBullets.length > 0 || allActionItems.length > 0 || strategicActions.length > 0)}
+        >
+          <div className="space-y-4">
+            <StartupConceptCard
+              productIdea={productIdea}
+              targetCustomer={targetCustomer}
+              monetization={monetization}
+              goToMarket={goToMarketSteps}
+              fallbackProductIdea={allActionItems[0] ?? opportunities[0] ?? strategyBullets[0]}
+              fallbackTargetHint={keyword ? `${keyword} 관련 시장` : null}
+              keyword={keyword}
+            />
+            {strategyBullets.length > 0 && (
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
+                <StreamingBulletList items={strategyBullets} streaming={loading} skipAnimation={!loading} revealDelayMs={320} />
+              </div>
+            )}
+            {opportunityReason && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
+                <p className="text-sm text-foreground leading-relaxed">{opportunityReason.length > 200 ? opportunityReason.slice(0, 197).trim() + '...' : opportunityReason}</p>
+              </div>
+            )}
+            {(strategicActions.length > 0 || allActionItems.length > 0 || mvpIdeas.length > 0) && (
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">실행 아이디어</p>
+                {strategicActions.length > 0 ? (
+                  <StrategicActionsSection actions={strategicActions} loading={false} onSaveAction={onSaveToWorkspace} />
+                ) : (
+                  <ul className="space-y-2 list-none pl-0">
+                    {allActionItems.slice(0, 5).map((a, i) => (
+                      <li key={i} className="flex gap-2 text-sm rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
+                        <span className="text-primary shrink-0">•</span>
+                        <span>{a}</span>
+                      </li>
+                    ))}
+                    {mvpIdeas.map((m, i) => (
+                      <li key={`mvp-${i}`} className="flex gap-2 text-sm">
+                        <span className="text-primary shrink-0">•</span>
+                        <span>MVP: {m}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {strategyBullets.length === 0 && !opportunityReason && allActionItems.length === 0 && strategicActions.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">전략 제안이 아직 없습니다.</p>
+            )}
+          </div>
+        </ProductStrategySection>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-12 animate-in fade-in duration-300">
       {/* Hero: Key Insight + Quick Actions (default layout only) */}
-      {!isPmAnalytics && (keyInsight || loading) && (
+      {!isPmAnalytics && !sectionOnly && (keyInsight || loading) && (
         <div
           className={cn(
             'rounded-xl border-2 border-primary/40 bg-gradient-to-br from-primary/15 via-primary/8 to-amber-500/10',
@@ -328,10 +625,12 @@ export function AnalysisResultSections({
               keyword={keyword}
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {opportunityScore != null && (
+              {(opportunityScore != null || loading) && (
                 <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">시장 규모</p>
-                  <p className="text-xl font-semibold text-foreground tabular-nums">{opportunityScore}/100</p>
+                  <p className="text-xl font-semibold text-foreground tabular-nums">
+                    {loading && opportunityScore == null ? '산출 중...' : opportunityScore != null ? `${opportunityScore}/100` : '—'}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">시장 매력도</p>
                 </div>
               )}

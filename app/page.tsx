@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TrendingUp, History, ChevronRight, Loader2, X, Target, Bookmark, Sparkles } from 'lucide-react'
 import Link from 'next/link'
-import { RinAnimation, getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
+import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
+import { AnalysisProgressOverlay } from '@/components/research/AnalysisProgressOverlay'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
@@ -18,7 +19,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
-import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { getAnalysisActivityMessage, getProgressStepIndex } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
@@ -281,22 +282,15 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col items-center justify-center min-h-[60vh] p-6"
           >
-            <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-              <RinAnimation variant="loading" size={200} className="mx-auto block" />
-              <p className="text-center font-medium text-foreground mt-4">
-                {streamingState.status === 'running' || streamingState.status === 'streaming'
-                  ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
-                  : loadingMessage}
-              </p>
-              <p className="text-center text-muted-foreground text-sm mt-1">
-                {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
-                typeof streamingState.currentStep === 'number'
-                  ? `단계 ${streamingState.currentStep + 1}/5`
-                  : '잠시만 기다려 주세요.'}
-              </p>
-            </div>
+            <AnalysisProgressOverlay
+              variant="overlay"
+              stepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : undefined}
+              currentStep={'currentStep' in streamingState ? streamingState.currentStep : 0}
+              isRunning={streamingState.status === 'running' || streamingState.status === 'streaming'}
+              keyword={currentAnalysisKeyword || query}
+              showAnimation
+            />
           </motion.div>
         ) : (
           <motion.div
@@ -304,7 +298,7 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-4 md:p-5"
+            className="p-4 md:p-6"
           >
             {error && (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
@@ -324,27 +318,30 @@ function RinAISearchInner() {
             )}
 
             {/* 1. Start New Analysis — primary focus, first visible */}
-            <section className="mb-8 max-w-3xl mx-auto">
-              <div className="rounded-xl border border-border bg-card p-6 md:p-8 shadow-sm">
-                <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-6">어떤 시장을 분석하고 싶나요?</h2>
+            <section id="dashboard-analysis" className="mb-10 max-w-3xl mx-auto scroll-mt-6">
+              <div className="rounded-2xl border-2 border-primary/20 bg-card p-6 md:p-10 shadow-lg">
+                <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">어떤 시장을 분석하고 싶나요?</h2>
+                <p className="text-muted-foreground text-sm md:text-base mb-6">
+                  제품·서비스 아이디어나 시장 키워드를 입력하세요. AI가 경쟁 환경, 기회 점수, 전략을 분석합니다.
+                </p>
                 <form onSubmit={handleSearch} className="space-y-5">
                   <div
                     className={cn(
-                      'relative flex items-center rounded-lg border-2 border-border bg-background h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
+                      'relative flex items-center rounded-xl border-2 border-border bg-background h-16 md:h-[4.5rem] px-5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
                       showAnalysisUI && 'opacity-80'
                     )}
                   >
                     <Input
                       type="search"
                       aria-label="분석할 시장 키워드"
-                      placeholder="예: AI 회의 보조"
+                      placeholder="예: AI 작성 도구, 리모트워크 SaaS, 에듀테크 플랫폼..."
                       value={query}
                       onChange={(e) => {
                         setQuery(e.target.value)
                         setError(null)
                       }}
                       disabled={showAnalysisUI}
-                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base md:text-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
                     />
                     {query.length > 0 && !showAnalysisUI && (
                       <button
@@ -357,6 +354,9 @@ function RinAISearchInner() {
                       </button>
                     )}
                   </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    제품명, 서비스 유형, 시장 분야 등 2~5단어로 입력하면 됩니다.
+                  </p>
                   <div className="flex justify-end pt-1">
                     {(searching || isAnalyzingNow()) ? (
                       <Button type="button" variant="destructive" onClick={handleAbort} className="h-10 px-6 text-sm">
@@ -383,8 +383,8 @@ function RinAISearchInner() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
                           typeof streamingState.currentStep === 'number'
-                            ? `단계 ${streamingState.currentStep + 1}/5`
-                            : '시장 데이터 수집 → 트렌드 분석 → 리스크·전략·액션 도출'}
+                            ? `단계 ${getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1}/5`
+                            : '시장 데이터 수집 → 경쟁사 분석 → 인사이트 추출 → 전략·액션 도출'}
                         </p>
                       </div>
                     </div>
@@ -392,12 +392,12 @@ function RinAISearchInner() {
                       <div className="mt-2">
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>진행률</span>
-                          <span>{Math.round(((streamingState.currentStep + 1) / 5) * 100)}%</span>
+                          <span>{Math.round((((getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1) / 5) * 100))}%</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all duration-500"
-                            style={{ width: `${((streamingState.currentStep + 1) / 5) * 100}%` }}
+                            style={{ width: `${Math.min(100, ((getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1) / 5) * 100)}%` }}
                           />
                         </div>
                       </div>
@@ -408,15 +408,16 @@ function RinAISearchInner() {
             </section>
 
             {/* 예시 프롬프트 & 저장한 인사이트 */}
-            <div className="mx-auto max-w-5xl mb-5">
+            <div className="mx-auto max-w-5xl mb-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                <section className="rin-card">
+                  <h2 className="rin-card-section-title mb-1">
                     <Sparkles className="h-4 w-4 text-primary shrink-0" />
                     예시 프롬프트
                   </h2>
+                  <p className="rin-card-section-desc mb-3">클릭하면 입력란에 자동 입력됩니다</p>
                   <div className="flex flex-wrap gap-2">
-                    {['AI 회의 보조', '푸드테크', '에듀테크', '건강 모니터링', '전동킥보드 공유'].map((k) => (
+                    {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
                       <button
                         key={k}
                         type="button"
@@ -431,12 +432,12 @@ function RinAISearchInner() {
                     ))}
                   </div>
                 </section>
-                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                <section className="rin-card">
+                  <h2 className="rin-card-section-title mb-1">
                     <Bookmark className="h-4 w-4 text-primary shrink-0" />
                     저장한 인사이트
                   </h2>
-                  <p className="text-xs text-muted-foreground mb-3">분석 결과를 저장해 두었다가 나중에 참고할 수 있습니다.</p>
+                  <p className="rin-card-section-desc mb-3">분석 결과를 저장해 두었다가 나중에 참고할 수 있습니다</p>
                   <Link
                     href="/insights"
                     className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
@@ -448,15 +449,15 @@ function RinAISearchInner() {
             </div>
 
             {/* 2. 실시간 검색 트렌드 */}
-            <div className="mx-auto max-w-5xl mb-5">
-              <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
+            <div className="mx-auto max-w-5xl mb-6">
+              <section className="rin-card">
+                <div className="flex items-start justify-between mb-4 gap-2 flex-wrap">
                   <div>
-                    <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <h2 className="rin-card-section-title">
                       <TrendingUp className="h-4 w-4 text-primary shrink-0" />
                       실시간 검색 트렌드
                     </h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">구글 실시간 급상승 검색어 (RSS 기반)</p>
+                    <p className="rin-card-section-desc">급상승 중인 키워드를 클릭하면 바로 분석을 시작합니다</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <CountryChips
@@ -525,10 +526,13 @@ function RinAISearchInner() {
             <div className="mx-auto max-w-5xl">
               <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <History className="h-4 w-4 text-primary shrink-0" />
-                    최근 분석 기록
-                  </h2>
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <History className="h-4 w-4 text-primary shrink-0" />
+                      최근 분석 기록
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">이전에 분석한 시장 결과를 확인할 수 있습니다</p>
+                  </div>
                   <Link href="/history" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
                     전체 보기 <ChevronRight className="h-4 w-4" />
                   </Link>
@@ -610,9 +614,23 @@ function RinAISearchInner() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-sm py-8 text-center">
-                      아직 분석 기록이 없습니다. 위에서 새 시장 분석을 시작해 보세요.
-                    </p>
+                    <div className="flex flex-col items-center justify-center py-14 px-6 rounded-xl border border-dashed border-border/80 bg-muted/5 text-center">
+                      <div className="rounded-full bg-primary/10 p-4 mb-4">
+                        <History className="h-10 w-10 text-primary/80" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-2">아직 분석 기록이 없습니다</h3>
+                      <p className="text-muted-foreground text-sm mb-6 max-w-sm">
+                        시장 키워드를 입력하고 첫 번째 리서치를 실행해 보세요. AI가 경쟁 환경과 기회를 분석합니다.
+                      </p>
+                      <Button
+                        size="lg"
+                        onClick={() => document.getElementById('dashboard-analysis')?.scrollIntoView({ behavior: 'smooth' })}
+                        className="gap-2"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        첫 분석 시작하기
+                      </Button>
+                    </div>
                   )
                 ) : (
                   <p className="text-muted-foreground text-sm py-8 text-center">

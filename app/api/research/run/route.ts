@@ -5,7 +5,6 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { getGeminiKeyForRequest, getGroqKeyForRequest, getAIPrimaryModelForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 import { logger } from '@/lib/logger'
@@ -52,34 +51,34 @@ export async function POST(req: Request) {
     }
 
     const startMs = Date.now()
+    const hasCookies = !!req.headers.get('cookie')
     logger.info('AI analysis request', {
       route: '/api/research/run',
       keyword,
       countryCode,
       mode,
       userId: user.id.slice(0, 8) + '...',
+      hasCookies,
+      runtime: 'nodejs',
     })
 
-    let adminClient
-    try {
-      adminClient = createAdminClient()
-    } catch (e) {
-      logger.error('AI analysis: createAdminClient failed', {
-        route: '/api/research/run',
-        keyword,
-        error: e instanceof Error ? e.message : String(e),
-      })
-      return NextResponse.json(
-        { error: '서버 설정 오류: Supabase 환경 변수를 확인해 주세요. (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)' },
-        { status: 500 }
-      )
-    }
     const [geminiResult, groqKey, primaryProvider] = await Promise.all([
-      getGeminiKeyForRequest(adminClient, user.id),
-      getGroqKeyForRequest(adminClient, user.id),
-      getAIPrimaryModelForRequest(adminClient, user.id),
+      getGeminiKeyForRequest(supabase, user.id),
+      getGroqKeyForRequest(supabase, user.id),
+      getAIPrimaryModelForRequest(supabase, user.id),
     ])
     const { gemini, canSearch } = geminiResult
+
+    if (process.env.NODE_ENV === 'production' || process.env.DEBUG_KEYS === '1') {
+      logger.info('AI analysis: key resolution', {
+        userId: user.id.slice(0, 8) + '...',
+        canSearch,
+        hasGemini: !!gemini && gemini.length > 0,
+        primaryProvider,
+        runtime: 'nodejs',
+      })
+    }
+
     if (!canSearch || !gemini) {
       return NextResponse.json(
         { error: '설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },

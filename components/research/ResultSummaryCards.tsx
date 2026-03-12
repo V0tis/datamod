@@ -80,6 +80,7 @@ export function ResultSummaryCards({
       label: '시장 기회',
       value: opportunityScore != null ? scoreToLabel(opportunityScore) : null,
       icon: Sparkles,
+      showCalculating: loading,
     },
   ]
 
@@ -115,7 +116,9 @@ export function ResultSummaryCards({
               </span>
             </div>
             <p className="text-base font-bold text-foreground leading-snug line-clamp-2">
-              {card.value || '—'}
+              {card.id === 'opportunity' && 'showCalculating' in card && card.showCalculating && !card.value
+                ? '산출 중...'
+                : (card.value || '—')}
             </p>
           </div>
         )
