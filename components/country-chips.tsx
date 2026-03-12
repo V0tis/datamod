@@ -70,17 +70,18 @@ export interface CountryChipsProps {
 export function CountryChips({ value, onChange, updatedAt, rightElement, className }: CountryChipsProps) {
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex gap-2.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:rounded [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20">
         {COUNTRY_CHIP_CODES.map((code) => (
           <button
             key={code}
             type="button"
             onClick={() => onChange(code)}
             className={cn(
-              'rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-colors duration-300 inline-flex items-center gap-2',
+              'shrink-0 rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-all duration-200 ease-out inline-flex items-center gap-2',
+              'hover:scale-[1.03] active:scale-[0.98]',
               value === code
                 ? 'bg-primary text-primary-foreground shadow-sm dark:bg-blue-950/60 dark:text-blue-400 dark:font-semibold dark:border dark:border-blue-500/30'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:bg-[#202226] dark:text-[#9ca3af] dark:border dark:border-[#2d2f34] dark:hover:bg-[#2a2d32] dark:hover:text-[#e1e3e6]'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground hover:ring-2 hover:ring-primary/20 dark:bg-[#202226] dark:text-[#9ca3af] dark:border dark:border-[#2d2f34] dark:hover:bg-[#2a2d32] dark:hover:text-[#e1e3e6] dark:hover:ring-primary/30'
             )}
           >
             <CountryFlagIcon code={code} size="chip" />
