@@ -5,24 +5,28 @@ import { cn } from '@/lib/utils'
 
 export type Competitor = { name?: string; positioning?: string; strength?: string; weakness?: string }
 
-type Tier = 'leader' | 'emerging' | 'early'
+type Tier = 'leader' | 'challenger' | 'niche' | 'emerging'
 
-const TIER_CONFIG: Record<Tier, { label: string; labelEn: string; icon: typeof Crown; color: string }> = {
-  leader: { label: '리더', labelEn: 'Leader', icon: Crown, color: 'border-amber-500/50 bg-amber-500/10' },
-  emerging: { label: '성장기', labelEn: 'Emerging', icon: TrendingUp, color: 'border-primary/50 bg-primary/10' },
-  early: { label: '초기 스타트업', labelEn: 'Early-stage', icon: Zap, color: 'border-emerald-500/50 bg-emerald-500/10' },
+const TIER_CONFIG: Record<Tier, { label: string; labelEn: string; icon: typeof Crown; color: string; dotColor: string }> = {
+  leader: { label: '리더', labelEn: 'Leader', icon: Crown, color: 'border-blue-500/50 bg-blue-500/10', dotColor: 'bg-blue-500' },
+  challenger: { label: '도전자', labelEn: 'Challenger', icon: TrendingUp, color: 'border-emerald-500/50 bg-emerald-500/10', dotColor: 'bg-emerald-500' },
+  niche: { label: '니치', labelEn: 'Niche', icon: Zap, color: 'border-amber-500/50 bg-amber-500/10', dotColor: 'bg-amber-500' },
+  emerging: { label: '신흥', labelEn: 'Emerging', icon: TrendingUp, color: 'border-gray-400/50 bg-gray-400/10', dotColor: 'bg-gray-400' },
 }
 
-/** Infer tier from positioning text or index order */
 function inferTier(c: Competitor, index: number, total: number): Tier {
   const pos = (c.positioning ?? '').toLowerCase()
   if (/리더|선도|1위|시장 지배|대표|최대/.test(pos)) return 'leader'
-  if (/초기|스타트업|신규|신생|초창기/.test(pos)) return 'early'
-  if (/성장|확대|성장기|부상|신흥/.test(pos)) return 'emerging'
-  if (total <= 3) return index === 0 ? 'leader' : 'emerging'
-  if (index < Math.ceil(total / 3)) return 'leader'
-  if (index < Math.ceil((2 * total) / 3)) return 'emerging'
-  return 'early'
+  if (/도전|challenger|2위|3위|추격/.test(pos)) return 'challenger'
+  if (/니치|niche|특화|전문|틈새/.test(pos)) return 'niche'
+  if (/초기|스타트업|신규|신생|초창기|성장|확대|부상|신흥|emerging/.test(pos)) return 'emerging'
+  if (total <= 2) return index === 0 ? 'leader' : 'challenger'
+  if (total <= 3) return index === 0 ? 'leader' : index === 1 ? 'challenger' : 'emerging'
+  const q = Math.ceil(total / 4)
+  if (index < q) return 'leader'
+  if (index < q * 2) return 'challenger'
+  if (index < q * 3) return 'niche'
+  return 'emerging'
 }
 
 /** Infer x (0-100) market maturity and y (0-100) product complexity from positioning */
@@ -58,7 +62,7 @@ export function CompetitorTierChart({ competitors, className }: CompetitorTierCh
     {} as Record<Tier, Array<Competitor & { index: number }>>
   )
 
-  const order: Tier[] = ['leader', 'emerging', 'early']
+  const order: Tier[] = ['leader', 'challenger', 'niche', 'emerging']
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -71,7 +75,7 @@ export function CompetitorTierChart({ competitors, className }: CompetitorTierCh
           {competitors.length}개 경쟁사
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {order.map((tier) => {
           const items = byTier[tier] ?? []
           if (items.length === 0) return null
@@ -173,9 +177,10 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
             {points.map((p, i) => {
               const tier = inferTier(p, i, competitors.length)
               const tierColors: Record<Tier, { fill: string; stroke: string }> = {
-                leader: { fill: '#f59e0b', stroke: '#d97706' },
-                emerging: { fill: '#6366f1', stroke: '#4f46e5' },
-                early: { fill: '#10b981', stroke: '#059669' },
+                leader: { fill: '#3b82f6', stroke: '#2563eb' },
+                challenger: { fill: '#10b981', stroke: '#059669' },
+                niche: { fill: '#f59e0b', stroke: '#d97706' },
+                emerging: { fill: '#9ca3af', stroke: '#6b7280' },
               }
               const { fill, stroke } = tierColors[tier]
               const px = padding + (p.x / 100) * plotW
@@ -196,21 +201,34 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
               )
             })}
           </svg>
-          {/* Legend: competitor names below map (competition density) */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {points.slice(0, 6).map((p, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 text-xs"
-                title={p.positioning ?? undefined}
-              >
-                <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                <span className="font-medium text-foreground truncate max-w-[100px]">{p.name}</span>
-              </span>
-            ))}
-            {points.length > 6 && (
-              <span className="text-xs text-muted-foreground">+{points.length - 6}개</span>
-            )}
+          {/* Legend: tier categories + competitor names below map */}
+          <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              {(['leader', 'challenger', 'niche', 'emerging'] as const).map((t) => (
+                <span key={t} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className={cn('w-2 h-2 rounded-full shrink-0', TIER_CONFIG[t].dotColor)} />
+                  {TIER_CONFIG[t].label}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {points.slice(0, 6).map((p, i) => {
+                const tier = inferTier(p, i, competitors.length)
+                return (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 text-xs"
+                    title={p.positioning ?? undefined}
+                  >
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', TIER_CONFIG[tier].dotColor)} />
+                    <span className="font-medium text-foreground truncate max-w-[100px]">{p.name}</span>
+                  </span>
+                )
+              })}
+              {points.length > 6 && (
+                <span className="text-xs text-muted-foreground">+{points.length - 6}개</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

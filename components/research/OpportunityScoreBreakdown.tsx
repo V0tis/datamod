@@ -29,7 +29,7 @@ const LABELS_KO: Record<string, string> = {
   market_timing: '시장 타이밍',
 }
 
-/** Order: Search Demand, Market Growth, Competition Level, Funding Signals, Risk Factors */
+/** Order: Search Demand → Market Growth → Competition → Funding → Risk */
 const ORDER: readonly string[] = [
   'trend_momentum',
   'market_growth',
@@ -61,9 +61,11 @@ export interface OpportunityScoreBreakdownProps {
   className?: string
 }
 
+const BASE = 50
+
 /**
- * Opportunity Score Breakdown – explains how the score was calculated.
- * Uses stacked bar + segmented progress bars so users understand each component.
+ * Opportunity Score Breakdown – Waterfall visualization.
+ * Shows how the final score is derived: Base 50 → each factor → Final Score.
  */
 export function OpportunityScoreBreakdown({
   score,
@@ -73,10 +75,9 @@ export function OpportunityScoreBreakdown({
   compact = false,
   className,
 }: OpportunityScoreBreakdownProps) {
-  /** 분석 중에도 UI 표시(경쟁 환경 분석 탭처럼): 데이터 없으면 default 사용. 단, loading 중에는 점수 숫자 숨김 */
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const hasScore = !loading && score != null && Number.isFinite(score)
-  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : 50
+  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : null
 
   const items = effectiveBreakdown
     ? ORDER.filter((k) => effectiveBreakdown[k as keyof typeof effectiveBreakdown] != null).map((k) => {
@@ -85,7 +86,7 @@ export function OpportunityScoreBreakdown({
           k === 'competition_density' || k === 'risk_factors'
             ? raw
             : k === 'competition_pressure'
-              ? 50 - raw
+              ? BASE - raw
               : raw
         return {
           key: k,
@@ -95,9 +96,12 @@ export function OpportunityScoreBreakdown({
       })
     : []
 
-  const maxAbs = Math.max(30, ...items.map((i) => Math.abs(i.value)), 1)
-  const base = 50
-  const totalAbs = base + items.reduce((s, i) => s + Math.abs(i.value), 0)
+  /** Max absolute delta for bar scaling (excluding base) */
+  const maxAbs = Math.max(15, ...items.map((i) => Math.abs(i.value)), 1)
+  const scaleMax = maxAbs * 1.2
+
+  const baseLabel = useKoreanLabels ? '기본 점수' : 'Base Score'
+  const finalLabel = useKoreanLabels ? '최종 점수' : 'Final Score'
 
   return (
     <section
@@ -114,103 +118,84 @@ export function OpportunityScoreBreakdown({
           {useKoreanLabels ? '기회 점수 분해' : 'Opportunity Score Breakdown'}
         </h3>
       </div>
-      <p className="text-xs text-muted-foreground mb-4">
+      <p className="text-xs text-muted-foreground mb-5">
         {useKoreanLabels
-          ? '점수는 기본 50점에 다음 요인들이 더해져 계산됩니다.'
-          : 'The score is calculated from a base of 50 plus the factors below.'}
+          ? '기본 50점에서 각 요인을 순차적으로 반영해 최종 점수가 산출됩니다.'
+          : 'The score starts at 50. Each factor is applied sequentially to derive the final score.'}
       </p>
 
-      {/* Stacked bar: Base + each factor as a segment */}
-      {items.length > 0 && totalAbs > 0 && (
-        <div className="mb-6">
-          <div
-            className="h-6 rounded-lg overflow-hidden flex flex-row"
-            role="img"
-            aria-label={
-              useKoreanLabels
-                ? `기본 50, ${items.map((i) => `${i.label} ${i.value >= 0 ? '+' : ''}${i.value}`).join(', ')}`
-                : `Base 50, ${items.map((i) => `${i.label} ${i.value >= 0 ? '+' : ''}${i.value}`).join(', ')}`
-            }
-          >
-            {/* Base segment */}
-            <div
-              className="bg-muted shrink-0 transition-all duration-500"
-              style={{ width: `${(base / totalAbs) * 100}%` }}
-              title={useKoreanLabels ? '기본 50' : 'Base 50'}
-            />
-            {items.map(({ key, label, value }) => {
-              const pct = (Math.abs(value) / totalAbs) * 100
-              const isPositive = value >= 0
-              return (
-                <div
-                  key={key}
-                  className={cn(
-                    'shrink-0 transition-all duration-500',
-                    isPositive ? 'bg-emerald-500/80 dark:bg-emerald-500/70' : 'bg-rose-500/80 dark:bg-rose-500/70'
-                  )}
-                  style={{ width: `${pct}%` }}
-                  title={`${label} ${value >= 0 ? '+' : ''}${value}`}
-                />
-              )
-            })}
+      {/* Waterfall: Base → Factors → Final */}
+      <div className="space-y-3">
+        {/* 1. Base score */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{baseLabel}</span>
+          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-muted/60 flex items-center justify-center min-w-0">
+            <span className="text-sm font-bold tabular-nums text-foreground">{BASE}</span>
           </div>
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
-            <span>{useKoreanLabels ? '기본 50' : 'Base 50'}</span>
-            <span className="tabular-nums font-medium text-foreground">
-              {loading ? (useKoreanLabels ? '산출 중...' : 'Calculating...') : `= ${normScore} / 100`}
-            </span>
-          </div>
+          <span className="text-sm font-bold tabular-nums text-muted-foreground w-10 text-right shrink-0">{BASE}</span>
         </div>
-      )}
 
-      {/* Per-factor segmented progress bars */}
-      {items.length > 0 && (
-        <div className="space-y-4">
-          {items.map(({ key, label, value }) => {
-            const isPositive = value >= 0
-            const displayValue = value > 0 ? `+${value}` : String(value)
-            const barPct = Math.min(100, (Math.abs(value) / maxAbs) * 100)
+        {/* 2. Each factor: waterfall delta bar (green = positive, red = negative) */}
+        {items.map(({ key, label, value }) => {
+          const isPositive = value >= 0
+          const displayValue = value > 0 ? `+${value}` : String(value)
+          const barWidthPct = Math.min(50, (Math.abs(value) / scaleMax) * 50)
 
-            return (
-              <div
-                key={key}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"
-              >
-                <div className="flex items-center justify-between sm:justify-start sm:w-40 shrink-0">
-                  <span className="text-sm font-medium text-foreground">{label}</span>
-                  <span
-                    className={cn(
-                      'text-sm font-bold tabular-nums shrink-0',
-                      isPositive ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'
-                    )}
-                  >
+          return (
+            <div key={key} className="flex items-center gap-3 sm:gap-4">
+              <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{label}</span>
+              <div className="flex-1 h-8 rounded-lg overflow-hidden bg-muted/30 flex items-center relative min-w-0">
+                {/* Center line (zero) */}
+                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border z-0" aria-hidden />
+                {/* Delta bar: positive → right from center, negative → left from center */}
+                <div
+                  className={cn(
+                    'absolute top-0 bottom-0 h-full rounded transition-all duration-500 flex items-center justify-center z-10',
+                    isPositive ? 'bg-emerald-500/90 dark:bg-emerald-600/80' : 'bg-rose-500/90 dark:bg-rose-600/80'
+                  )}
+                  style={{
+                    width: `${barWidthPct}%`,
+                    ...(isPositive ? { left: '50%' } : { right: '50%', left: 'auto' }),
+                  }}
+                >
+                  <span className="text-xs font-bold tabular-nums text-white drop-shadow-sm whitespace-nowrap">
                     {displayValue}
                   </span>
                 </div>
-                <div
-                  className="flex-1 h-3 sm:h-4 rounded-full overflow-hidden bg-muted/40"
-                  role="presentation"
-                >
-                  <div className="flex h-full w-full relative">
-                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border/80 shrink-0" aria-hidden />
-                    {isPositive ? (
-                      <div
-                        className="absolute left-1/2 top-0 bottom-0 rounded-r-full transition-all duration-500 bg-emerald-500/80 dark:bg-emerald-500/70"
-                        style={{ width: `${barPct / 2}%` }}
-                      />
-                    ) : (
-                      <div
-                        className="absolute right-1/2 top-0 bottom-0 rounded-l-full transition-all duration-500 bg-rose-500/80 dark:bg-rose-500/70"
-                        style={{ width: `${barPct / 2}%` }}
-                      />
-                    )}
-                  </div>
-                </div>
               </div>
-            )
-          })}
+              <span
+                className={cn(
+                  'text-sm font-bold tabular-nums w-10 text-right shrink-0',
+                  isPositive ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'
+                )}
+              >
+                {displayValue}
+              </span>
+            </div>
+          )
+        })}
+
+        {/* 3. Final score */}
+        <div className="pt-2 mt-4 border-t border-border/80">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="text-sm font-semibold text-foreground w-28 sm:w-32 shrink-0">{finalLabel}</span>
+            <div className="flex-1 h-10 rounded-lg bg-primary/15 dark:bg-primary/20 border-2 border-primary/40 flex items-center justify-center min-w-0">
+              {loading ? (
+                <span className="text-sm font-medium text-muted-foreground">
+                  {useKoreanLabels ? '산출 중...' : 'Calculating...'}
+                </span>
+              ) : (
+                <span className="text-xl font-bold tabular-nums text-primary">
+                  {normScore != null ? `${normScore} / 100` : '—'}
+                </span>
+              )}
+            </div>
+            {normScore != null && !loading && (
+              <span className="text-lg font-bold tabular-nums text-primary w-14 text-right shrink-0">{normScore}</span>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </section>
   )
 }

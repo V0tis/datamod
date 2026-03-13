@@ -100,12 +100,12 @@ export function OpportunityScoreCard({
             <div className="h-5 w-5 rounded bg-muted animate-pulse" />
             <div className="h-4 w-32 rounded bg-muted/60 animate-pulse" />
           </div>
-          {loadingMessage && (
-            <p className="text-sm font-medium text-foreground mb-3 animate-pulse">
-              {loadingMessage}
+          {(loadingMessage ?? '점수 계산 중...') && (
+            <p className="text-sm font-medium text-muted-foreground mb-3 animate-pulse">
+              {loadingMessage ?? '점수 계산 중...'}
             </p>
           )}
-          <div className="h-14 w-20 rounded-lg bg-muted/40 animate-pulse mb-4" />
+          <div className="h-14 w-20 rounded-lg bg-muted/40 animate-pulse mb-4" aria-hidden />
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-8 rounded bg-muted/30 animate-pulse" />
@@ -172,18 +172,24 @@ export function OpportunityScoreCard({
             </span>
           </div>
           <div
-            className="h-2 rounded-full bg-muted overflow-hidden"
+            className="h-2.5 rounded-full bg-muted/70 dark:bg-muted/50 border border-border/60 overflow-hidden"
             role="progressbar"
             aria-valuenow={normScore ?? 0}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-label="기회 점수 게이지"
           >
             <div
               className={cn(
-                'h-full rounded-full transition-all duration-500',
+                'h-full rounded-full transition-all duration-500 min-w-[6%]',
                 (normScore ?? 0) >= 70 ? 'bg-emerald-500' : (normScore ?? 0) >= 50 ? 'bg-amber-500' : 'bg-rose-500'
               )}
-              style={{ width: `${normScore ?? 0}%` }}
+              style={{
+                width: `${Math.max(
+                  normScore ?? 0,
+                  (normScore ?? 0) > 0 ? 6 : 0
+                )}%`,
+              }}
             />
           </div>
         </div>

@@ -4,6 +4,7 @@ import { TrendingUp, Shield, Target, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 function competitionToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
   if (v === 'low') return 'Low'
@@ -54,12 +55,12 @@ export function StrategicDecisionLayer({
         : undefined)
 
   const marketOpportunityExplanation =
-    sdl?.market_opportunity_explanation ?? km.opportunity_score_reasoning ?? null
-  const competitionExplanation = sdl?.competition_explanation ?? null
+    sanitizeForKoreanDisplay(sdl?.market_opportunity_explanation ?? km.opportunity_score_reasoning) || null
+  const competitionExplanation = sanitizeForKoreanDisplay(sdl?.competition_explanation) || null
   const productMarketFit = sdl?.product_market_fit
-  const productMarketFitExplanation = sdl?.product_market_fit_explanation ?? null
-  const entryStrategy = sdl?.entry_strategy ?? null
-  const entryExplanation = sdl?.entry_explanation ?? null
+  const productMarketFitExplanation = sanitizeForKoreanDisplay(sdl?.product_market_fit_explanation) || null
+  const entryStrategy = sanitizeForKoreanDisplay(sdl?.entry_strategy) || null
+  const entryExplanation = sanitizeForKoreanDisplay(sdl?.entry_explanation) || null
 
   const hasContent =
     opportunityScore != null ||

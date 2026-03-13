@@ -6,6 +6,7 @@
  */
 import { parseAiJsonOr } from '@/lib/ai/safe-json-parse'
 import type { InitialResearchSummary, ChartData, StructuredAnalysisFields } from '@/lib/research-parser'
+import { sanitizeDeep } from '@/lib/text-sanitize'
 
 export type Pass1Output = {
   summary: string
@@ -115,5 +116,5 @@ export function mergePass1Pass2(
     },
   }
 
-  return { summary, structured }
+  return { summary: sanitizeDeep(summary), structured: sanitizeDeep(structured) }
 }

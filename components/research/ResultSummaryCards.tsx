@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { TrendingUp, Shield, Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -21,6 +22,43 @@ export interface ResultSummaryCardsProps {
   }> | null
   loading?: boolean
   className?: string
+}
+
+function SummaryCard({ card }: { card: { id: string; label: string; value: string | null; icon: typeof TrendingUp; showCalculating?: boolean } }) {
+  const [expanded, setExpanded] = useState(false)
+  const Icon = card.icon
+  const displayValue = card.id === 'opportunity' && card.showCalculating && !card.value
+    ? '산출 중...'
+    : (card.value || '—')
+  const isLong = typeof displayValue === 'string' && displayValue.length > 60
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-5 shadow-sm',
+        'transition-colors hover:border-primary/40 hover:from-primary/12'
+      )}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className="h-5 w-5 text-primary shrink-0" aria-hidden />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {card.label}
+        </span>
+      </div>
+      <p className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
+        {displayValue}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="mt-1 text-xs text-primary hover:text-primary/80 font-medium"
+        >
+          {expanded ? '접기' : '더보기'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function ResultSummaryCards({
@@ -49,9 +87,8 @@ export function ResultSummaryCards({
   const summaryInsights = (km.summary_insights ?? '').trim()
   const consensusSummary = consensusData?.strategicSummary?.summary ?? ''
   const strategyText = strategySummary?.trim()
-  const strategyTruncated = strategyText ? (strategyText.length > 80 ? strategyText.slice(0, 77) + '...' : strategyText) : ''
   const recommendedStrategy =
-    topAction || strategyTruncated || summaryInsights?.slice(0, 80) || consensusSummary?.slice(0, 80) || '—'
+    topAction || strategyText || summaryInsights || consensusSummary || '—'
 
   const marketGrowthScore = marketGrowth ?? trendMomentum ?? opportunityScore ?? null
   const competitionScore = competitionDensity ?? competitionPressure ?? null
@@ -99,30 +136,9 @@ export function ResultSummaryCards({
 
   return (
     <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-4', className)}>
-      {cards.map((card) => {
-        const Icon = card.icon
-        return (
-          <div
-            key={card.id}
-            className={cn(
-              'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-5 shadow-sm',
-              'transition-colors hover:border-primary/40 hover:from-primary/12'
-            )}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Icon className="h-5 w-5 text-primary shrink-0" aria-hidden />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                {card.label}
-              </span>
-            </div>
-            <p className="text-base font-bold text-foreground leading-snug line-clamp-2">
-              {card.id === 'opportunity' && 'showCalculating' in card && card.showCalculating && !card.value
-                ? '산출 중...'
-                : (card.value || '—')}
-            </p>
-          </div>
-        )
-      })}
+      {cards.map((card) => (
+        <SummaryCard key={card.id} card={card} />
+      ))}
     </div>
   )
 }

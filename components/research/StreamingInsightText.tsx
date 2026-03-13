@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 /** Blinking cursor shown while streaming */
 function StreamingCursor({ className }: { className?: string }) {
@@ -66,7 +67,7 @@ export function StreamingBulletList({
       {items.slice(0, revealedCount).map((item, i) => (
         <li key={i} className="flex gap-2 text-sm text-foreground animate-in fade-in slide-in-from-bottom-1 duration-150">
           <span className={cn('shrink-0', bulletCls)}>•</span>
-          <span>{item}</span>
+          <span>{sanitizeForKoreanDisplay(item) || item}</span>
         </li>
       ))}
       {showCursor && (

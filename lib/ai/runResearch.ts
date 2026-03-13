@@ -27,6 +27,7 @@ import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep, getExponentialDelayMs } from './retry-with-backoff'
 import { computeOpportunityScore } from './opportunity-score-formula'
+import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 const AI_BASE_DELAY_MS = 1000
 const AI_MAX_RETRIES = 2
@@ -1027,7 +1028,7 @@ function buildStructuredFromStrategic(
     market_phase: typeof s.market_phase === 'string' ? s.market_phase : undefined,
   }
 
-  return { pass1, summary, structured }
+  return { pass1, summary: sanitizeDeep(summary), structured: sanitizeDeep(structured) }
 }
 
 const FALLBACK_PASS1: Pass1Result = {
@@ -1110,7 +1111,7 @@ function buildStructuredFields(
     },
   }
 
-  return { summary, structured }
+  return { summary: sanitizeDeep(summary), structured: sanitizeDeep(structured) }
 }
 
 function buildCreativePrompt(
@@ -1672,6 +1673,10 @@ export async function* runResearch(
         }
       : undefined,
   }
+
+  // Sanitize all text fields before post-processing and yielding
+  sanitizeDeep(structured)
+  sanitizeDeep(fullSummary)
 
   // Post-processing: 기회 점수·차트 산출 (파이프라인 5단계 완료 후, done 전)
   yield { type: 'post_processing', stepId: 'key_metrics' }

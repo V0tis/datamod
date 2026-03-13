@@ -9,6 +9,8 @@ import {
   getProgressStepIndex,
   getEstimatedRemainingSeconds,
   getDynamicStepMessage,
+  getLongStepMessage,
+  LONG_STEP_THRESHOLD_SEC,
 } from '@/lib/analysis-activity-messages'
 import { cn } from '@/lib/utils'
 
@@ -47,10 +49,10 @@ export function AnalysisProgressOverlay({
   className,
 }: AnalysisProgressOverlayProps) {
   const progressIndex = getProgressStepIndex(stepId, currentStep)
+  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
   const [dynamicMessage, setDynamicMessage] = useState(() =>
     getDynamicStepMessage(progressIndex)
   )
-  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
 
   useEffect(() => {
     if (!isRunning) return
@@ -60,7 +62,12 @@ export function AnalysisProgressOverlay({
   useEffect(() => {
     if (!isRunning) return
     const interval = setInterval(() => {
-      setDynamicMessage(getDynamicStepMessage(progressIndex, stepStartTime))
+      const elapsedSec = (Date.now() - stepStartTime) / 1000
+      if (elapsedSec >= LONG_STEP_THRESHOLD_SEC) {
+        setDynamicMessage(getLongStepMessage(progressIndex))
+      } else {
+        setDynamicMessage(getDynamicStepMessage(progressIndex, stepStartTime))
+      }
     }, 1500)
     return () => clearInterval(interval)
   }, [isRunning, progressIndex, stepStartTime])

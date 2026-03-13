@@ -28,7 +28,7 @@ export interface NextActionsForPMProps {
 function fromPmActionPlan(km: NonNullable<ResearchResponse['key_metrics']>): NextActionItem[] {
   const plan = km.pm_action_plan ?? []
   const actions = km.pm_actions?.recommended_actions ?? []
-  if (plan.length >= 5) {
+  if (plan.length > 0) {
     return plan.slice(0, 5).map((a) => ({
       action: a.action_title,
       why: a.expected_outcome,
@@ -67,8 +67,6 @@ export function NextActionsForPM({ result, loading = false }: NextActionsForPMPr
 
   const hasContent = nextActions.length > 0
 
-  if (!hasContent && !loading) return null
-
   return (
     <section
       id="section-next-actions-pm"
@@ -87,12 +85,27 @@ export function NextActionsForPM({ result, loading = false }: NextActionsForPMPr
         <div className="p-4 sm:p-5">
           <SectionContentSkeleton variant="list" />
         </div>
+      ) : !hasContent ? (
+        <div className="p-6 sm:p-8 flex flex-col items-center text-center gap-3">
+          <CheckSquare2 className="h-8 w-8 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            AI가 액션 플랜을 생성하지 못했습니다.
+          </p>
+          <p className="text-xs text-muted-foreground/70">
+            분석을 다시 실행하면 더 나은 결과를 얻을 수 있습니다.
+          </p>
+        </div>
       ) : (
         <div className="divide-y divide-border/60">
           {nextActions.map((item, i) => (
             <div key={i} className="px-4 sm:px-5 py-4 hover:bg-muted/30 transition-colors">
               <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                <h3 className="font-semibold text-foreground">{item.action}</h3>
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                    {i + 1}
+                  </span>
+                  {item.action}
+                </h3>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.priority && (
                     <span
@@ -112,7 +125,7 @@ export function NextActionsForPM({ result, loading = false }: NextActionsForPMPr
                   )}
                 </div>
               </div>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-sm pl-8">
                 {item.why && (
                   <div>
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">

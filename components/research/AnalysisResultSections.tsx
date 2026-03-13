@@ -22,8 +22,10 @@ import { textToBullets } from '@/lib/text-to-bullets'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { StreamingBulletList } from '@/components/research/StreamingInsightText'
 import { cn } from '@/lib/utils'
+import { ExpandableText } from '@/components/ui/expandable-text'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
+import { sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import type { SectionStatus } from '@/components/research/ProductStrategySection'
 
 type TaskOutput = Record<string, unknown>
@@ -115,21 +117,23 @@ export function AnalysisResultSections({
   const growthSignals = Array.isArray(trendOutput?.growth_signals)
     ? (trendOutput.growth_signals as string[]).filter((s) => typeof s === 'string').slice(0, 5)
     : []
-  const keyTrends = [
+  const keyTrends = sanitizeStringArray([
     ...growthSignals,
     ...(km.positive_signals ?? []).slice(0, 3),
-  ].filter(Boolean).slice(0, 5)
+  ]).slice(0, 5)
 
   // Key Insights (Top 3)
-  const valueProposition = (consensusData?.strategicSummary?.opportunity ?? '').trim()
-  const opportunities = Array.isArray(strategyOutput?.opportunities)
-    ? (strategyOutput.opportunities as string[]).filter((s) => typeof s === 'string')
-    : km.positive_signals ?? result?.marketNews ?? []
-  const keyConclusions = result?.keyConclusions ?? (km.keyConclusions as string[] | undefined) ?? []
-  const summaryInsights = (km.summary_insights ?? '').trim()
-  const strategySummary = typeof strategyOutput?.strategy_summary === 'string'
-    ? strategyOutput.strategy_summary
-    : ''
+  const valueProposition = sanitizeForKoreanDisplay(consensusData?.strategicSummary?.opportunity) || ''
+  const opportunities = sanitizeStringArray(
+    Array.isArray(strategyOutput?.opportunities)
+      ? (strategyOutput.opportunities as string[]).filter((s) => typeof s === 'string')
+      : km.positive_signals ?? result?.marketNews ?? []
+  )
+  const keyConclusions = sanitizeStringArray(result?.keyConclusions ?? (km.keyConclusions as string[] | undefined) ?? [])
+  const summaryInsights = sanitizeForKoreanDisplay(km.summary_insights) || ''
+  const strategySummary = sanitizeForKoreanDisplay(
+    typeof strategyOutput?.strategy_summary === 'string' ? strategyOutput.strategy_summary : ''
+  ) || ''
 
   const topInsights = [
     valueProposition,
@@ -199,9 +203,11 @@ export function AnalysisResultSections({
     (porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length))
 
   // Strategic Actions for existing component
-  const risks = Array.isArray(strategyOutput?.risks)
-    ? (strategyOutput.risks as string[]).filter((s): s is string => typeof s === 'string')
-    : (km.negative_risks ?? result?.painPoints ?? [])
+  const risks = sanitizeStringArray(
+    Array.isArray(strategyOutput?.risks)
+      ? (strategyOutput.risks as string[]).filter((s): s is string => typeof s === 'string')
+      : (km.negative_risks ?? result?.painPoints ?? [])
+  )
 
   const strategicActions: StrategicActionItem[] = pmActions
     .map((a, i) => {
@@ -224,7 +230,7 @@ export function AnalysisResultSections({
     .filter((a) => a.title && (a.description || a.opportunity))
 
   const keyInsightRaw = topInsights[0] || ''
-  const keyInsight = keyInsightRaw.length > 120 ? keyInsightRaw.slice(0, 117).trim() + '...' : keyInsightRaw
+  const keyInsight = keyInsightRaw
 
   const getMarkdownContent = () => {
     const lines: string[] = []
@@ -533,7 +539,9 @@ export function AnalysisResultSections({
             {opportunityReason && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
-                <p className="text-sm text-foreground leading-relaxed">{opportunityReason.length > 200 ? opportunityReason.slice(0, 197).trim() + '...' : opportunityReason}</p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  <ExpandableText text={opportunityReason} maxLength={200} />
+                </p>
               </div>
             )}
             {(strategicActions.length > 0 || allActionItems.length > 0 || mvpIdeas.length > 0) && (
@@ -1026,7 +1034,7 @@ export function AnalysisResultSections({
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
                 <p className="text-sm text-foreground leading-relaxed">
-                  {opportunityReason.length > 200 ? opportunityReason.slice(0, 197).trim() + '...' : opportunityReason}
+                  <ExpandableText text={opportunityReason} maxLength={200} />
                 </p>
               </div>
             )}

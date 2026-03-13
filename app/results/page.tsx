@@ -36,7 +36,6 @@ import { ResultShareActions } from '@/components/research/ResultShareActions'
 import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
 import { ResultPageHero } from '@/components/research/ResultPageHero'
 import { NextExplorationSection } from '@/components/research/NextExplorationSection'
-import { NextActionsForPM } from '@/components/research/NextActionsForPM'
 import { OpportunityScoreCard } from '@/components/research/OpportunityScoreCard'
 import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScoreBreakdown'
 import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionLayer'
@@ -60,24 +59,6 @@ const QUOTA_UNIFIED_MESSAGE = 'API 쿼터가 부족하여 분석을 중단했습
 
 type RssNewsItem = { title: string; link: string; pubDate: string; source: string }
 
-/** rssNews 아이템에 매칭되는 AI 인사이트 반환 (newsList ↔ articleSummaries 매칭, 없으면 분석 요약 기반) */
-function getAiInsightForNews(
-  rssItem: RssNewsItem,
-  newsList: NewsItem[] | undefined,
-  articleSummaries: string[] | undefined,
-  fallbackText: string
-): string {
-  if (!newsList?.length || !articleSummaries?.length) return fallbackText
-  const t = (rssItem.title ?? '').trim().toLowerCase()
-  const link = (rssItem.link ?? '').trim()
-  const idx = newsList.findIndex((n) => {
-    const nt = (n.title ?? '').trim().toLowerCase()
-    const nu = (n.url ?? '').trim()
-    return (t && nt && t === nt) || (link && nu && (link === nu || link.startsWith(nu) || nu.startsWith(link)))
-  })
-  if (idx >= 0 && articleSummaries[idx]?.trim()) return articleSummaries[idx].trim()
-  return fallbackText
-}
 
 function NewsDetailModal({
   item,
@@ -1079,6 +1060,7 @@ function ResultsContent() {
                 insightData?.strategicSummary?.summary ?? effectiveKeyMetrics?.summary_insights ?? (effectiveKeyMetrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
               ) || null
             }
+            scoreBreakdown={effectiveKeyMetrics?.opportunity_score_breakdown ?? null}
             statusText={
               (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
                 ? (streamingState.status === 'running' || streamingState.status === 'streaming'
@@ -1391,24 +1373,13 @@ function ResultsContent() {
             ) : rssNews.length > 0 ? (
               (() => {
                 const kw = (currentKeyword ?? '').trim()
-                const fallbackInsight =
-                  insightData?.strategicSummary?.summary?.trim() ||
-                  displayResult?.key_metrics?.summary_insights?.trim() ||
-                  displayResult?.key_metrics?.keyConclusions?.[0]?.trim() ||
-                  (kw ? `이 뉴스는 ${kw} 시장 분석에 참고된 시장 신호입니다.` : '이 뉴스는 시장 동향 분석에 참고된 시장 신호입니다.')
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {rssNews.map((item, i) => {
                       const title = item.title || '제목 없음'
                       const hasKeywordMatch = kw && title.toLowerCase().includes(kw.toLowerCase())
-                      const aiInsight = getAiInsightForNews(
-                        item,
-                        newsList ?? undefined,
-                        displayResult?.articleSummaries,
-                        fallbackInsight
-                      )
                       return (
-                        <article key={i} className="rounded-lg border border-border bg-card p-4 hover:border-primary/20 transition-colors text-left">
+                        <article key={i} className="rounded-lg border border-border bg-card p-4 hover:border-primary/20 transition-colors text-left flex flex-col">
                           <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2 mb-1">
                             {hasKeywordMatch && kw ? (
                               title.split(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')).map((part, j) =>
@@ -1423,11 +1394,12 @@ function ResultsContent() {
                             )}
                           </h4>
                           <p className="text-xs text-muted-foreground mb-2">{item.source || '언론사'}</p>
-                          <div className="rounded-lg bg-primary/5 border border-primary/10 px-2.5 py-2 mb-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/80 mb-0.5">AI 인사이트</p>
-                            <p className="text-xs text-foreground leading-relaxed line-clamp-3">&quot;{aiInsight}&quot;</p>
-                          </div>
-                          <div className="flex items-center justify-end text-xs text-muted-foreground">
+                          {item.pubDate && (
+                            <p className="text-[11px] text-muted-foreground/70 mb-2">
+                              {new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </p>
+                          )}
+                          <div className="mt-auto flex items-center justify-end text-xs text-muted-foreground pt-2">
                             {item.link && (
                               <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
                                 원문 보기 <ExternalLink className="w-3 h-3" />
@@ -1447,17 +1419,6 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Next Actions for PM – 5 actionable steps at bottom */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
-          <ResultSectionErrorBoundary sectionName="next-actions">
-          <div className="mt-8 mb-6">
-            <NextActionsForPM
-              result={effectiveResultForCards ?? effectiveDisplayResult ?? displayResult}
-              loading={loading}
-            />
-          </div>
-          </ResultSectionErrorBoundary>
-        )}
 
         {/* 다음 탐색: 같은 키워드로 추가 질문 + 관련 시장 아이디어 + 다른 시장 분석하기 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && currentKeyword && (

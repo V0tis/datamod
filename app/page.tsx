@@ -19,7 +19,7 @@ import { useResearchStore } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
-import { getAnalysisActivityMessage, getProgressStepIndex } from '@/lib/analysis-activity-messages'
+import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { SavedInsight } from '@/lib/insights-types'
@@ -278,11 +278,27 @@ function RinAISearchInner() {
     setSearching(false)
   }
 
+  const progressStepIndex = getProgressStepIndex(
+    streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : undefined,
+    'currentStep' in streamingState ? streamingState.currentStep : 0
+  )
+  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (showAnalysisUI) setStepStartTime(Date.now())
+  }, [progressStepIndex, showAnalysisUI])
+  useEffect(() => {
+    if (!showAnalysisUI) return
+    const id = setInterval(() => setTick((n) => n + 1), 2000)
+    return () => clearInterval(id)
+  }, [showAnalysisUI])
+  const stepElapsedMs = showAnalysisUI ? Date.now() - stepStartTime : 0
+
   const getButtonLabel = () => {
     if (showAnalysisUI) {
       const state = streamingState
       if (state.status === 'running' || state.status === 'streaming') {
-        return `분석 중... (${state.currentStep + 1}/5)`
+        return `분석 중... (${progressStepIndex + 1}/${PROGRESS_STEPS.length})`
       }
       return '분석 중...'
     }
@@ -333,7 +349,7 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-4 md:p-6 flex flex-col gap-10 max-w-5xl mx-auto"
+            className="p-4 md:p-6 flex flex-col gap-6 max-w-7xl mx-auto"
           >
             {error && (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
@@ -352,21 +368,22 @@ function RinAISearchInner() {
               </div>
             )}
 
-            {/* 1. Hero: Primary Action */}
-            <section id="dashboard-analysis" className="pt-2 scroll-mt-6">
-              <div className="px-0 sm:px-2">
-                <div className="rounded-2xl border-2 border-primary/25 bg-card p-8 md:p-12 shadow-xl shadow-primary/5 space-y-6">
-                  <h2 className="text-2xl md:text-4xl font-bold text-foreground mb-3">어떤 시장을 분석하고 싶나요?</h2>
-                  <p className="text-muted-foreground text-base md:text-lg mb-6 max-w-2xl">
-                  제품·서비스 아이디어나 시장 키워드를 입력하세요. AI가 경쟁 환경, 기회 점수, 전략을 분석합니다.
-                </p>
-                <form onSubmit={handleSearch} className="space-y-5">
-                  <div
-                    className={cn(
-                      'relative flex items-center rounded-xl border-2 border-border bg-background h-16 md:h-[4.5rem] px-5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
-                      showAnalysisUI && 'opacity-80'
-                    )}
-                  >
+            {/* Top: Hero + Trends two-column grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 1. Hero: Market Analysis (left) */}
+              <section id="dashboard-analysis" className="pt-2 scroll-mt-6 flex flex-col min-h-0">
+                <div className="rounded-xl border-2 border-primary/25 bg-card p-5 md:p-6 shadow-lg shadow-primary/5 flex-1 flex flex-col min-h-0">
+                  <h2 className="text-xl md:text-2xl font-bold text-foreground mb-1">어떤 시장을 분석하고 싶나요?</h2>
+                  <p className="text-muted-foreground text-sm mb-3">
+                    제품·서비스 아이디어나 시장 키워드를 입력하세요.
+                  </p>
+                  <form onSubmit={handleSearch} className="flex flex-col gap-3 flex-1 min-h-0">
+                    <div
+                      className={cn(
+                        'relative flex items-center rounded-lg border-2 border-border bg-background h-12 md:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all shrink-0',
+                        showAnalysisUI && 'opacity-80'
+                      )}
+                    >
                     <Input
                       type="search"
                       aria-label="분석할 시장 키워드"
@@ -377,7 +394,7 @@ function RinAISearchInner() {
                         setError(null)
                       }}
                       disabled={showAnalysisUI}
-                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base md:text-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
                     />
                     {query.length > 0 && !showAnalysisUI && (
                       <button
@@ -390,10 +407,7 @@ function RinAISearchInner() {
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    제품명, 서비스 유형, 시장 분야 등 2~5단어로 입력하면 됩니다.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="flex flex-wrap gap-1.5 -mt-0.5">
                     {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
                       <button
                         key={k}
@@ -409,33 +423,33 @@ function RinAISearchInner() {
                       </button>
                     ))}
                   </div>
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end mt-auto pt-2 shrink-0">
                     {(searching || isAnalyzingNow()) ? (
-                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-11 px-6 text-sm">
+                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-10 px-5 text-sm">
                         <X className="h-4 w-4 mr-2" />
                         분석 중단
                       </Button>
                     ) : (
-                      <Button type="submit" disabled={!query.trim()} size="lg" className="h-14 px-12 text-lg font-semibold shadow-md hover:shadow-lg transition-shadow">
+                      <Button type="submit" disabled={!query.trim()} size="lg" className="h-11 px-8 text-base font-semibold shadow-md hover:shadow-lg transition-shadow">
                         {getButtonLabel()}
                       </Button>
                     )}
                   </div>
                 </form>
                 {showAnalysisUI && streamingState.status !== 'idle' && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 mt-3">
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 mt-2 shrink-0">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                            ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
+                            ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
                             : getButtonLabel()}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
                           typeof streamingState.currentStep === 'number'
-                            ? `단계 ${getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1}/5`
+                            ? `단계 ${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
                             : '시장 데이터 수집 → 경쟁사 분석 → 인사이트 추출 → 전략·액션 도출'}
                         </p>
                       </div>
@@ -444,12 +458,12 @@ function RinAISearchInner() {
                       <div className="mt-2">
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>진행률</span>
-                          <span>{Math.round((((getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1) / 5) * 100))}%</span>
+                          <span>{Math.round(((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, ((getProgressStepIndex(streamingState.stepId, streamingState.currentStep) + 1) / 5) * 100)}%` }}
+                            style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }}
                           />
                         </div>
                       </div>
@@ -457,12 +471,11 @@ function RinAISearchInner() {
                   </div>
                 )}
                 </div>
-              </div>
-            </section>
+              </section>
 
-            {/* 2. Real-time Insights: Search Trends */}
-            <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+              {/* 2. Real-time Insights: Search Trends (right) */}
+              <section className="rounded-xl border border-border bg-card p-4 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <div className="flex items-start justify-between gap-2 mb-3 flex-wrap shrink-0">
                   <div>
                     <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary shrink-0" />
@@ -482,18 +495,18 @@ function RinAISearchInner() {
                   </div>
                 </div>
                 {trendsLoading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 py-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 py-2 flex-1 min-h-0">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
-                      <div key={i} className="rounded-lg border border-border bg-muted/20 h-20 animate-pulse" />
+                      <div key={i} className="rounded-lg border border-border bg-muted/20 h-14 animate-pulse" />
                     ))}
                   </div>
                 ) : (sharedTrends[trendCountry] ?? []).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-center rounded-lg border border-dashed border-border">
+                  <div className="flex flex-col items-center justify-center py-6 text-center rounded-lg border border-dashed border-border">
                     <TrendingUp className="h-8 w-8 text-muted-foreground mb-2" />
                     <span className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 min-h-0 overflow-auto">
                     {(sharedTrends[trendCountry] ?? []).slice(0, 10).map((item, i) => {
                       const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
                       const showBoth = trendCountry !== 'KR' && hasTranslation
@@ -516,7 +529,7 @@ function RinAISearchInner() {
                             router.push(`/results?${params.toString()}`)
                             startStreamingResearch(originalKeyword, { country_code: trendCountry })
                           }}
-                          className="group text-left rounded-lg border border-border bg-background p-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                          className="group text-left rounded-lg border border-border bg-background p-2.5 hover:border-primary/40 hover:bg-primary/5 transition-all"
                         >
                           <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
                             {displayName}
@@ -534,11 +547,12 @@ function RinAISearchInner() {
                     })}
                   </div>
                 )}
-                <p className="text-muted-foreground text-xs mt-3">RSS·트렌드 기준 (1시간 캐시)</p>
+                <p className="text-muted-foreground text-xs mt-2 shrink-0">RSS·트렌드 기준 (1시간 캐시)</p>
               </section>
+            </div>
 
-            {/* 3. User Workspace: Recent Analyses & Saved Insights */}
-            <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            {/* 3. User Workspace: Recent Analyses & Saved Insights (below grid) */}
+            <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
                     <History className="h-4 w-4 text-primary shrink-0" />

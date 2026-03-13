@@ -1,7 +1,5 @@
 'use client'
 
-import { Lightbulb } from 'lucide-react'
-import { ProductStrategySection } from '@/components/research/ProductStrategySection'
 import { StructuredInsightCard, type StructuredInsight } from '@/components/research/StructuredInsightCard'
 import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
@@ -59,11 +57,9 @@ function toStructuredInsight(text: string): StructuredInsight {
     }
   }
 
-  // Keep summary to 1–2 sentences (first ~150 chars)
-  const shortSummary = summary.length > 150 ? summary.slice(0, 147).trim() + '…' : summary
   const keyMetrics = extractKeyMetrics(text)
 
-  return { title, summary: shortSummary, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
+  return { title, summary, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
 }
 
 type TaskOutput = Record<string, unknown>
@@ -211,12 +207,10 @@ export function KeyMarketInsightsCard({
   if (!hasContent && !loading) return null
 
   return (
-    <ProductStrategySection
-      title="핵심 시장 인사이트"
-      icon={<Lightbulb className="h-5 w-5 text-primary" />}
-      className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent"
-      streamingComplete={showStreamingComplete}
-    >
+    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 sm:p-5">
+      {showStreamingComplete && (
+        <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-3">분석 완료</p>
+      )}
       {loading && !hasEarlyData ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -248,6 +242,6 @@ export function KeyMarketInsightsCard({
           )}
         </div>
       )}
-    </ProductStrategySection>
+    </div>
   )
 }

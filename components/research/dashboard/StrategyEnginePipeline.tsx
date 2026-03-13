@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Loader2, Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getProviderDisplayName } from '@/lib/ai/provider-display'
@@ -318,6 +318,12 @@ export function StrategyEnginePipeline({
         ? currentStep
         : 0
 
+  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
+  useEffect(() => {
+    setStepStartTime(Date.now())
+  }, [effectiveIndex])
+  const stepElapsedMs = Date.now() - stepStartTime
+
   type StageStatus = 'pending' | 'running' | 'completed' | 'failed'
   function getStatus(i: number): StageStatus {
     const stage = PIPELINE_STAGES[i]
@@ -438,7 +444,7 @@ export function StrategyEnginePipeline({
                   <p className="text-sm font-semibold text-foreground">{currentStage?.label ?? '분석 완료'}</p>
                   {getStatus(currentIdx) === 'running' && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {getAnalysisActivityMessage(currentStage?.id ?? 'done', currentIdx, { short: true })}
+                      {getAnalysisActivityMessage(currentStage?.id ?? 'done', currentIdx, { short: true, elapsedMs: stepElapsedMs })}
                     </p>
                   )}
                   {getStatus(currentIdx) === 'completed' && allCompleted && (
@@ -571,7 +577,7 @@ export function StrategyEnginePipeline({
                           <p className="text-xs text-muted-foreground">
                             {retryMessage && i === effectiveIndex
                               ? retryMessage
-                              : getAnalysisActivityMessage(stage.id, i, { short: true })}
+                              : getAnalysisActivityMessage(stage.id, i, { short: true, elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined })}
                           </p>
                         )}
                       </div>
