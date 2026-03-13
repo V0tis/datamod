@@ -65,7 +65,7 @@ export function ResultPageSection({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t border-border px-4 sm:px-5 py-4 sm:py-5 bg-muted/5">
+          <div className="border-t border-border px-3 sm:px-4 py-3 sm:py-4">
             {children}
           </div>
         </CollapsibleContent>

@@ -263,7 +263,7 @@ function ResultsContent() {
 
   // Default Evidence and Implication expanded on desktop so content is visible without tapping; collapsed on mobile for scannability.
   useEffect(() => {
-    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
+    fetch('/api/settings', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { aiPrimaryModel?: 'gemini' | 'groq' } | null) => {
         if (data?.aiPrimaryModel === 'groq') setAiPrimaryModel('groq')
@@ -369,8 +369,6 @@ function ResultsContent() {
     hydrateFromStatusResult,
   ])
 
-  // 분석 완료 시 결과 데이터 자동 리프레시 (streaming 완료 → DB에 저장된 전체 결과 로드)
-  // DB 쓰기가 비동기이므로 즉시 + 600ms 후 재시도로 렌더 버그 방지
   const prevStreamingCompletedRef = useRef(false)
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
@@ -379,8 +377,7 @@ function ResultsContent() {
       streamingState.status === 'completed' && !prevStreamingCompletedRef.current
     prevStreamingCompletedRef.current = streamingState.status === 'completed'
     if (justCompleted) {
-      loadFromHistory(k, countryFromUrl)
-      const t = setTimeout(() => loadFromHistory(k, countryFromUrl), 600)
+      const t = setTimeout(() => loadFromHistory(k, countryFromUrl), 400)
       return () => clearTimeout(t)
     }
   }, [keyword, storeKeyword, countryFromUrl, streamingState.status, loadFromHistory])
@@ -1021,7 +1018,7 @@ function ResultsContent() {
   const showTabs = hasKeyword
   if (showTabs) {
     return (
-      <div className="px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-3 min-h-screen bg-background rin-doc">
+      <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
         {/* 좌측 섹션 네비 – 스크롤해도 화면에 고정 (fixed), lg 이상에서만 표시 */}
         {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-background/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden">
@@ -1045,14 +1042,16 @@ function ResultsContent() {
             }
             confidenceScore={
               (() => {
+                if (loading && !effectiveDisplayResult) return null
                 const km = effectiveKeyMetrics ?? effectiveDisplayResult?.key_metrics
+                if (typeof km?.confidence_score === 'number' && km.confidence_score !== 75) return km.confidence_score
                 const ar = effectiveDisplayResult?.analysis_results as { confidence?: number } | undefined
-                if (typeof km?.confidence_score === 'number') return km.confidence_score
                 const c = ar?.confidence
                 if (typeof c === 'number') return c <= 1 ? c * 100 : c
                 const mc = insightData?.metadata?.confidence
                 if (mc != null && typeof mc === 'number') return mc <= 1 ? mc * 100 : mc
-                return (effectiveDisplayResult || (loading && !needsRunAction)) ? 75 : null
+                if (typeof km?.confidence_score === 'number') return km.confidence_score
+                return effectiveDisplayResult ? null : null
               })()
             }
             topInsight={

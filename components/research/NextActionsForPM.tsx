@@ -22,6 +22,7 @@ const PRIORITY_COLORS = {
 export interface NextActionsForPMProps {
   result: ResearchResponse | null
   loading?: boolean
+  embedded?: boolean
 }
 
 /** Derive NextActionItem from pm_action_plan for backward compatibility */
@@ -49,7 +50,7 @@ function fromPmActionPlan(km: NonNullable<ResearchResponse['key_metrics']>): Nex
   return []
 }
 
-export function NextActionsForPM({ result, loading = false }: NextActionsForPMProps) {
+export function NextActionsForPM({ result, loading = false, embedded = false }: NextActionsForPMProps) {
   const km = result?.key_metrics ?? {}
   const nextActions: NextActionItem[] =
     Array.isArray(km.next_actions_pm) && km.next_actions_pm.length > 0
@@ -67,20 +68,24 @@ export function NextActionsForPM({ result, loading = false }: NextActionsForPMPr
 
   const hasContent = nextActions.length > 0
 
+  const Wrapper = embedded ? 'div' : 'section'
+
   return (
-    <section
-      id="section-next-actions-pm"
-      className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden"
+    <Wrapper
+      id={embedded ? undefined : 'section-next-actions-pm'}
+      className={embedded ? '' : 'scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden'}
     >
-      <div className="px-4 sm:px-5 py-4 border-b border-border/60">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-          <CheckSquare2 className="h-5 w-5 text-primary" />
-          Next Actions for PM
-        </h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          실행 가능한 5가지 PM 액션 (왜, 어떻게, 우선순위, 예상 공수)
-        </p>
-      </div>
+      {!embedded && (
+        <div className="px-4 sm:px-5 py-4 border-b border-border/60">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <CheckSquare2 className="h-5 w-5 text-primary" />
+            Next Actions for PM
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            실행 가능한 5가지 PM 액션 (왜, 어떻게, 우선순위, 예상 공수)
+          </p>
+        </div>
+      )}
       {loading && !hasContent ? (
         <div className="p-4 sm:p-5">
           <SectionContentSkeleton variant="list" />
@@ -148,6 +153,6 @@ export function NextActionsForPM({ result, loading = false }: NextActionsForPMPr
           ))}
         </div>
       )}
-    </section>
+    </Wrapper>
   )
 }

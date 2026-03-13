@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -123,7 +123,7 @@ export interface ResultPageHeroProps {
  * Result Page Hero – conveys the final AI conclusion in ~3 seconds.
  * Structure: Market Idea Title | Opportunity Gauge | Market Outlook | AI Confidence | Top Insight
  */
-export function ResultPageHero({
+export const ResultPageHero = memo(function ResultPageHero({
   title,
   titleSub,
   opportunityScore,
@@ -335,4 +335,4 @@ export function ResultPageHero({
       )}
     </header>
   )
-}
+})

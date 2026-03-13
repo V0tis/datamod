@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { TrendingUp, Shield, Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -61,7 +61,7 @@ function SummaryCard({ card }: { card: { id: string; label: string; value: strin
   )
 }
 
-export function ResultSummaryCards({
+export const ResultSummaryCards = memo(function ResultSummaryCards({
   result,
   consensusData,
   taskData = {},
@@ -141,4 +141,4 @@ export function ResultSummaryCards({
       ))}
     </div>
   )
-}
+})

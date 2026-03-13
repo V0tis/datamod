@@ -62,7 +62,7 @@ const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const TAB_SYSTEM_PROMPT =
-  'CRITICAL: Output ONLY in Korean (한국어). Do NOT use Chinese (中文). 시장 분석 및 인사이트를 마크다운 형식으로 요약. 반드시 한국어로 작성. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
+  'LANGUAGE RULE (ABSOLUTE - 최우선 규칙): 모든 출력은 반드시 한국어(Korean)로만 작성. 중국어(Chinese/中文)·영어·일본어·기타 외국어 사용 절대 금지. 회사명·제품명은 한글 표기. 시장 분석 및 인사이트를 마크다운 형식으로 요약. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
 
 export type NewsItem = {
   title: string

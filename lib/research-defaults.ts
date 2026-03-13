@@ -31,7 +31,7 @@ export const DEFAULT_KEY_METRICS_LOADING: NonNullable<ResearchResponse['key_metr
   opportunity_score_breakdown: { ...DEFAULT_OPPORTUNITY_BREAKDOWN },
   chartData: DEFAULT_CHART_DATA,
   sentiment: 50,
-  confidence_score: 75,
+  confidence_score: undefined as unknown as number,
   positive_signals: [],
   neutral_signals: [],
   negative_risks: [],

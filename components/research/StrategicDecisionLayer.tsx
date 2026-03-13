@@ -24,11 +24,14 @@ export interface StrategicDecisionLayerProps {
   result: ResearchResponse | null
   loading?: boolean
   keyword?: string
+  /** When true, renders without outer card wrapper (for use inside ResultPageSection) */
+  embedded?: boolean
 }
 
 export function StrategicDecisionLayer({
   result,
   loading = false,
+  embedded = false,
 }: StrategicDecisionLayerProps) {
   const km = result?.key_metrics ?? {}
   const sdl = km.strategic_decision_layer
@@ -113,6 +116,33 @@ export function StrategicDecisionLayer({
       className: 'border-blue-500/30 bg-blue-500/5',
     },
   ]
+
+  if (embedded) {
+    return loading && !hasContent ? (
+      <SectionContentSkeleton variant="grid" />
+    ) : (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div
+              key={card.id}
+              className={cn('rounded-lg border-2 p-3 transition-colors hover:shadow-md', card.className)}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <Icon className="h-4 w-4 text-foreground shrink-0" aria-hidden />
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{card.label}</span>
+              </div>
+              <p className="text-base font-bold text-foreground leading-snug mb-1">{card.value}</p>
+              {card.explanation && (
+                <p className="text-xs text-muted-foreground leading-relaxed">{card.explanation}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <section

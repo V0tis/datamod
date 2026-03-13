@@ -11,7 +11,14 @@
 
 export const PIPELINE_BASE_SYSTEM = `You are a strategic market analyst for Product Managers.
 CRITICAL: Output ONLY valid JSON. No markdown, no commentary, no extra text.
-All content must be in Korean (한국어). Do NOT use Chinese (中文).`
+
+LANGUAGE RULE (ABSOLUTE - 최우선 규칙):
+- 모든 출력은 반드시 한국어(Korean)로만 작성하라.
+- 중국어(Chinese/中文), 일본어(Japanese/日本語), 태국어, 기타 비한국어 언어 사용 절대 금지.
+- 영어(English)는 JSON 키(key)와 한국어에 대응하는 번역이 없는 고유명사·기술 용어에만 허용.
+- 회사명, 제품명, 시장 용어는 한국어로 번역하거나 한글 표기.
+- 입력 키워드가 영어·외국어라도 응답은 전부 한국어로 작성.
+- 이 규칙은 JSON 내 모든 string 값에 적용된다.`
 
 /** Step 3: Insight Extraction - key insights from market + competitor */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
@@ -20,7 +27,7 @@ Format: {
   "opportunity_signals": ["기회 신호1", "기회 신호2", "기회 신호3"],
   "risk_signals": ["리스크1", "리스크2", "리스크3"]
 }
-Extract 3-5 key insights, 2-4 opportunity signals, 2-4 risk signals. Be specific and actionable.`
+Extract 3-5 key insights, 2-4 opportunity signals, 2-4 risk signals. Be specific and actionable. 모든 텍스트는 한국어로만 작성.`
 
 export function buildInsightExtractionPrompt(
   keyword: string,
@@ -33,7 +40,7 @@ Market Overview: ${marketOverview}
 
 Competition: ${competitionSummary}
 
-Extract key insights, opportunity signals, and risk signals. Return ONLY the JSON object. All text in Korean.`
+Extract key insights, opportunity signals, and risk signals. Return ONLY the JSON object. 모든 텍스트를 반드시 한국어로만 작성. 중국어·영어·기타 외국어 사용 금지.`
 }
 
 /** Step 4: Strategic Recommendation - opportunities, risks, strategy summary */
@@ -64,7 +71,7 @@ Market Overview: ${marketOverview}
 
 Competition: ${competitionSummary}${insightsBlock}
 
-Produce strategic recommendations. Return ONLY the JSON object. All text in Korean.`
+Produce strategic recommendations. Return ONLY the JSON object. 모든 텍스트를 반드시 한국어로만 작성. 중국어·영어·기타 외국어 사용 금지.`
 }
 
 /** Step 5: PM Action Plan - actionable product/GTM plan */
@@ -102,7 +109,7 @@ Format: {
   "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
   "jtbd": { "main_jobs": [], "pains": [], "gains": [] }
 }
-Include 2-4 product_actions, 4-8 pm_action_plan items, 3-5 next_actions_pm. All in Korean.`
+Include 2-4 product_actions, 4-8 pm_action_plan items, 3-5 next_actions_pm. 모든 텍스트를 반드시 한국어로만 작성. 중국어·영어·기타 외국어 사용 금지.`
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -118,7 +125,7 @@ Opportunities: ${opportunitiesSummary}
 
 Risks: ${risksSummary}
 
-Generate actionable PM plan. Return ONLY the JSON object. All text in Korean.`
+Generate actionable PM plan. Return ONLY the JSON object. 모든 텍스트를 반드시 한국어로만 작성. 중국어·영어·기타 외국어 사용 금지.`
 }
 
 /** Strategy Evaluation - score each dimension 1-10 */
@@ -153,5 +160,5 @@ Risks: ${risksSummary}
 Competition: ${competitionSummary}
 ${actionsBlock ? `\n${actionsBlock}` : ''}
 
-Evaluate this strategy. Score each dimension 1-10. Return ONLY the JSON object.`
+Evaluate this strategy. Score each dimension 1-10. Return ONLY the JSON object. 모든 텍스트를 반드시 한국어로만 작성.`
 }

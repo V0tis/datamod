@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TrendingUp, History, ChevronRight, Loader2, X, Target, Bookmark, Sparkles } from 'lucide-react'
+import { TrendingUp, Loader2, X, History, ChevronRight, Target, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { AnalysisProgressOverlay } from '@/components/research/AnalysisProgressOverlay'
@@ -21,7 +21,6 @@ import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
 import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { SavedInsight } from '@/lib/insights-types'
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
@@ -185,25 +184,17 @@ function RinAISearchInner() {
 
   useEffect(() => {
     if (!user) return
+    let lastRefresh = Date.now()
     const onVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchSavedInsights()
-      }
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastRefresh < 30_000) return
+      lastRefresh = Date.now()
+      fetchRecentReports()
+      fetchSavedInsights()
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [user, fetchSavedInsights])
-
-  useEffect(() => {
-    if (!user) return
-    const onVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchRecentReports()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [user, fetchRecentReports])
+  }, [user, fetchRecentReports, fetchSavedInsights])
 
   const fetchTrends = (forceRefresh = false) => {
     setTrendsLoading(true)
@@ -316,6 +307,8 @@ function RinAISearchInner() {
     return <LandingPage />
   }
 
+  const trendItems = (sharedTrends[trendCountry] ?? []).slice(0, 10)
+
   return (
     <div className="min-h-screen bg-background relative">
       {navigatingFromTrend && (
@@ -349,353 +342,264 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-4 md:p-6 flex flex-col gap-6 max-w-7xl mx-auto"
+            className="h-[calc(100vh-3.5rem)] flex flex-col px-4 sm:px-6 lg:px-8 py-4 max-w-[1400px] mx-auto overflow-hidden"
           >
+            {/* ── Alerts ── */}
             {error && (
-              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
+              <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-destructive text-sm shrink-0">
                 {error}
               </div>
             )}
-
             {user && canSearch === false && (
-              <div className="mb-4 rounded-lg border border-warning/30 bg-warning/5 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <p className="text-warning text-sm">설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.</p>
+              <div className="mb-2 rounded-lg border border-warning/30 bg-warning/5 p-2 flex items-center justify-between gap-2 shrink-0">
+                <p className="text-warning text-sm">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
                 <Link href="/settings?tab=license" className="shrink-0">
-                  <Button variant="outline" size="sm" className="border-warning text-warning hover:bg-warning/10 h-8">
-                    키 등록하러 가기
-                  </Button>
+                  <Button variant="outline" size="sm" className="border-warning text-warning hover:bg-warning/10 h-7 text-xs">키 등록</Button>
                 </Link>
               </div>
             )}
 
-            {/* Top: Hero + Trends two-column grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 1. Hero: Market Analysis (left) */}
-              <section id="dashboard-analysis" className="pt-2 scroll-mt-6 flex flex-col min-h-0">
-                <div className="rounded-xl border-2 border-primary/25 bg-card p-5 md:p-6 shadow-lg shadow-primary/5 flex-1 flex flex-col min-h-0">
-                  <h2 className="text-xl md:text-2xl font-bold text-foreground mb-1">어떤 시장을 분석하고 싶나요?</h2>
-                  <p className="text-muted-foreground text-sm mb-3">
-                    제품·서비스 아이디어나 시장 키워드를 입력하세요.
-                  </p>
-                  <form onSubmit={handleSearch} className="flex flex-col gap-3 flex-1 min-h-0">
-                    <div
-                      className={cn(
-                        'relative flex items-center rounded-lg border-2 border-border bg-background h-12 md:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all shrink-0',
-                        showAnalysisUI && 'opacity-80'
-                      )}
+            {/* ══════ PRIMARY: Analysis Input (dominant) ══════ */}
+            <section id="dashboard-analysis" className="shrink-0 mb-3 rounded-xl border-2 border-primary/20 bg-card p-4 sm:p-5 shadow-sm">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-0.5">어떤 시장을 분석할까요?</h1>
+              <p className="text-sm text-muted-foreground mb-3">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
+
+              <form onSubmit={handleSearch}>
+                <div
+                  className={cn(
+                    'relative flex items-center rounded-lg border-2 border-border bg-background h-12 sm:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
+                    showAnalysisUI && 'opacity-70'
+                  )}
+                >
+                  <Sparkles className="h-4 w-4 text-primary/40 shrink-0 mr-3" />
+                  <Input
+                    type="search"
+                    aria-label="분석할 시장 키워드"
+                    placeholder="예: AI 작성 도구, 리모트워크 SaaS, 에듀테크 플랫폼..."
+                    value={query}
+                    onChange={(e) => { setQuery(e.target.value); setError(null) }}
+                    disabled={showAnalysisUI}
+                    className="border-0 bg-transparent pl-0 pr-24 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                  />
+                  {query.length > 0 && !showAnalysisUI && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery('')}
+                      className="absolute right-[100px] top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      aria-label="검색어 지우기"
                     >
-                    <Input
-                      type="search"
-                      aria-label="분석할 시장 키워드"
-                      placeholder="예: AI 작성 도구, 리모트워크 SaaS, 에듀테크 플랫폼..."
-                      value={query}
-                      onChange={(e) => {
-                        setQuery(e.target.value)
-                        setError(null)
-                      }}
-                      disabled={showAnalysisUI}
-                      className="border-0 bg-transparent pl-0 pr-10 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
-                    />
-                    {query.length > 0 && !showAnalysisUI && (
-                      <button
-                        type="button"
-                        onClick={() => setQuery('')}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                        aria-label="검색어 지우기"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 -mt-0.5">
-                    {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => {
-                          setQuery(k)
-                          setError(null)
-                        }}
-                        disabled={showAnalysisUI}
-                        className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                      >
-                        {k}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex justify-end mt-auto pt-2 shrink-0">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
                     {(searching || isAnalyzingNow()) ? (
-                      <Button type="button" variant="destructive" onClick={handleAbort} className="h-10 px-5 text-sm">
-                        <X className="h-4 w-4 mr-2" />
-                        분석 중단
+                      <Button type="button" variant="destructive" onClick={handleAbort} size="sm" className="h-8 sm:h-9 px-3 text-xs font-medium">
+                        <X className="h-3.5 w-3.5 mr-1" />중단
                       </Button>
                     ) : (
-                      <Button type="submit" disabled={!query.trim()} size="lg" className="h-11 px-8 text-base font-semibold shadow-md hover:shadow-lg transition-shadow">
-                        {getButtonLabel()}
+                      <Button type="submit" disabled={!query.trim()} size="sm" className="h-8 sm:h-9 px-4 sm:px-5 text-xs sm:text-sm font-semibold">
+                        분석 시작
                       </Button>
                     )}
                   </div>
-                </form>
-                {showAnalysisUI && streamingState.status !== 'idle' && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 mt-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">
-                          {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                            ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
-                            : getButtonLabel()}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
-                          typeof streamingState.currentStep === 'number'
-                            ? `단계 ${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
-                            : '시장 데이터 수집 → 경쟁사 분석 → 인사이트 추출 → 전략·액션 도출'}
-                        </p>
-                      </div>
-                    </div>
-                    {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
-                      <div className="mt-2">
-                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                          <span>진행률</span>
-                          <span>{Math.round(((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%</span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
                 </div>
-              </section>
 
-              {/* 2. Real-time Insights: Search Trends (right) */}
-              <section className="rounded-xl border border-border bg-card p-4 shadow-sm flex flex-col min-h-0 overflow-hidden">
-                <div className="flex items-start justify-between gap-2 mb-3 flex-wrap shrink-0">
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-                      실시간 검색 트렌드
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">급상승 중인 키워드를 클릭하면 바로 분석을 시작합니다</p>
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => { setQuery(k); setError(null) }}
+                      disabled={showAnalysisUI}
+                      className="rounded-md border border-border/50 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground transition-colors disabled:opacity-40"
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </form>
+
+              {showAnalysisUI && streamingState.status !== 'idle' && (
+                <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                    <p className="text-sm font-medium text-foreground flex-1">
+                      {(streamingState.status === 'running' || streamingState.status === 'streaming')
+                        ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
+                        : getButtonLabel()}
+                    </p>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      {(streamingState.status === 'running' || streamingState.status === 'streaming') && typeof streamingState.currentStep === 'number'
+                        ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
+                        : ''}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* ══════ SECONDARY: Data panels (compact 2-col) ══════ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0 max-h-[45vh]">
+
+              {/* Left: Trends */}
+              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                    <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                    급상승 트렌드
+                  </h2>
+                  <div className="flex items-center gap-1.5">
                     <CountryChips
                       value={trendCountry}
                       onChange={setTrendCountry}
-                      updatedAt={sharedTrends.updatedAt}
+                      compact
                     />
-                    <Link href="/trends" className="text-primary text-sm font-medium hover:underline flex items-center gap-0.5 shrink-0">
-                      전체 보기 <ChevronRight className="h-4 w-4" />
+                    <Link href="/trends" className="text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0 ml-1">
+                      전체
                     </Link>
                   </div>
                 </div>
-                {trendsLoading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 py-2 flex-1 min-h-0">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
-                      <div key={i} className="rounded-lg border border-border bg-muted/20 h-14 animate-pulse" />
-                    ))}
-                  </div>
-                ) : (sharedTrends[trendCountry] ?? []).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center rounded-lg border border-dashed border-border">
-                    <TrendingUp className="h-8 w-8 text-muted-foreground mb-2" />
-                    <span className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 min-h-0 overflow-auto">
-                    {(sharedTrends[trendCountry] ?? []).slice(0, 10).map((item, i) => {
-                      const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
-                      const showBoth = trendCountry !== 'KR' && hasTranslation
-                      const displayName = showBoth
-                        ? `${item.keyword} · ${item.title_ko}`
-                        : hasTranslation
-                          ? item.title_ko!
-                          : item.keyword
-                      const subLabel = item.search_volume ?? (item.rank ? `#${item.rank}` : null)
-                      return (
-                        <button
-                          key={`${trendCountry}-${item.keyword}-${i}`}
-                          type="button"
-                          onClick={() => {
-                            const originalKeyword = item.keyword
-                            const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
-                            setNavigatingFromTrend(true)
-                            const params = new URLSearchParams({ keyword: originalKeyword, country: trendCountry })
-                            if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
-                            router.push(`/results?${params.toString()}`)
-                            startStreamingResearch(originalKeyword, { country_code: trendCountry })
-                          }}
-                          className="group text-left rounded-lg border border-border bg-background p-2.5 hover:border-primary/40 hover:bg-primary/5 transition-all"
-                        >
-                          <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                            {displayName}
-                          </p>
-                          <div className="flex items-center justify-between gap-2 mt-0.5">
+                <div className="flex-1 overflow-auto min-h-0">
+                  {trendsLoading ? (
+                    <div className="divide-y divide-border">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2">
+                          <span className="h-3.5 w-4 bg-muted rounded animate-pulse" />
+                          <span className="h-3.5 w-32 bg-muted rounded animate-pulse" />
+                          <span className="ml-auto h-3 w-12 bg-muted rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : trendItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full py-6 text-center">
+                      <TrendingUp className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
+                      <p className="text-xs text-muted-foreground">트렌드 데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {trendItems.map((item, i) => {
+                        const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
+                        const showBoth = trendCountry !== 'KR' && hasTranslation
+                        const displayName = showBoth
+                          ? `${item.keyword} · ${item.title_ko}`
+                          : hasTranslation
+                            ? item.title_ko!
+                            : item.keyword
+                        const subLabel = item.search_volume ?? (item.rank ? `#${item.rank}` : null)
+                        return (
+                          <button
+                            key={`${trendCountry}-${item.keyword}-${i}`}
+                            type="button"
+                            onClick={() => {
+                              const originalKeyword = item.keyword
+                              const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
+                              setNavigatingFromTrend(true)
+                              const params = new URLSearchParams({ keyword: originalKeyword, country: trendCountry })
+                              if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
+                              router.push(`/results?${params.toString()}`)
+                              startStreamingResearch(originalKeyword, { country_code: trendCountry })
+                            }}
+                            className="group flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors w-full text-left"
+                          >
+                            <span className="text-[11px] text-muted-foreground/40 tabular-nums w-4 shrink-0 text-right">{i + 1}</span>
+                            <span className="text-[13px] text-foreground group-hover:text-primary transition-colors truncate flex-1 min-w-0">
+                              {displayName}
+                            </span>
                             {subLabel && (
-                              <span className="text-xs text-muted-foreground tabular-nums">{subLabel}</span>
+                              <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">{subLabel}</span>
                             )}
                             {item.started_at && (
-                              <TimeAgo isoString={item.started_at} className="text-xs text-muted-foreground" />
+                              <span className="text-[10px] text-muted-foreground/40 shrink-0">
+                                <TimeAgo isoString={item.started_at} />
+                              </span>
                             )}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-                <p className="text-muted-foreground text-xs mt-2 shrink-0">RSS·트렌드 기준 (1시간 캐시)</p>
-              </section>
-            </div>
-
-            {/* 3. User Workspace: Recent Analyses & Saved Insights (below grid) */}
-            <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <History className="h-4 w-4 text-primary shrink-0" />
-                    내 작업공간
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <Link href="/history" className="text-primary text-xs font-medium hover:underline flex items-center gap-0.5 shrink-0">
-                      기록 전체
-                    </Link>
-                    <span className="text-muted-foreground/60">|</span>
-                    <Link href="/insights" className="text-primary text-xs font-medium hover:underline flex items-center gap-0.5 shrink-0">
-                      인사이트 전체
-                    </Link>
-                  </div>
+                            <ChevronRight className="h-3 w-3 text-muted-foreground/25 group-hover:text-muted-foreground transition-colors shrink-0" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-                <Tabs defaultValue="recent" className="w-full">
-                  <TabsList className="w-full grid grid-cols-2 mb-4">
-                    <TabsTrigger value="recent" className="flex items-center gap-2">
-                      <History className="h-3.5 w-3.5" />
-                      최근 분석
-                    </TabsTrigger>
-                    <TabsTrigger value="insights" className="flex items-center gap-2">
-                      <Bookmark className="h-3.5 w-3.5" />
-                      저장 인사이트
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="recent" className="mt-0">
-                    {!user ? (
-                      <p className="text-muted-foreground text-sm py-6 text-center">로그인하면 최근 분석 기록이 표시됩니다.</p>
-                    ) : recentReportsLoading ? (
-                      <div className="space-y-2" aria-busy="true" aria-label="최근 분석 불러오는 중">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                            <span className="h-4 w-32 bg-muted rounded animate-pulse" />
-                            <span className="h-3 w-12 bg-muted rounded animate-pulse shrink-0" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : recentReports.length > 0 ? (
-                      <ul className="space-y-2 list-none p-0 m-0">
-                        {recentReports.map((r, i) => (
-                          <li key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}>
-                            <Link
-                              href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                              className="group flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
-                            >
-                              <div className="flex-1 min-w-0 flex items-center gap-2">
-                                <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                  {r.keyword}
-                                </p>
-                                {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
-                                  <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
-                                    <Target className="h-3 w-3 text-primary" />
-                                    {r.opportunity_score}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs text-muted-foreground"><TimeAgo isoString={r.created_at} /></span>
-                                {r.analysis_status === 'analyzing' && (() => {
-                                  const isCurrent = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
-                                  const hasStep = isCurrent && (streamingState.status === 'running' || streamingState.status === 'streaming')
-                                  const stepNum = hasStep ? (streamingState.currentStep ?? 0) + 1 : 1
-                                  return (
-                                    <span className="flex items-center gap-1 text-xs text-amber-600">
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      {stepNum}/5
-                                    </span>
-                                  )
-                                })()}
-                                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-10 px-4 rounded-xl border border-dashed border-border/80 bg-muted/5 text-center">
-                        <History className="h-8 w-8 text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground mb-3">아직 분석 기록이 없습니다</p>
-                        <Button
-                          size="sm"
-                          onClick={() => document.getElementById('dashboard-analysis')?.scrollIntoView({ behavior: 'smooth' })}
-                          className="gap-1.5"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          첫 분석 시작하기
-                        </Button>
-                      </div>
-                    )}
-                  </TabsContent>
-                  <TabsContent value="insights" className="mt-0">
-                    {!user ? (
-                      <p className="text-muted-foreground text-sm py-6 text-center">로그인하면 저장한 인사이트가 표시됩니다.</p>
-                    ) : savedInsightsLoading ? (
-                      <div className="space-y-2" aria-busy="true" aria-label="저장 인사이트 불러오는 중">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                            <span className="h-4 w-40 bg-muted rounded animate-pulse" />
-                            <span className="h-3 w-14 bg-muted rounded animate-pulse shrink-0" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : savedInsights.length > 0 ? (
-                      <ul className="space-y-2 list-none p-0 m-0">
-                        {savedInsights.map((item) => {
-                          const keyword = item.snapshot?.keyword ?? item.name
-                          const country = item.snapshot?.countryCode ?? 'KR'
-                          const href = `/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`
-                          return (
-                            <li key={item.id}>
-                              <Link
-                                href={href}
-                                className="group flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
-                              >
-                                <p className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-primary transition-colors">
-                                  {item.name}
-                                </p>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="text-xs text-muted-foreground"><TimeAgo isoString={item.created_at} /></span>
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                              </Link>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-10 px-4 rounded-xl border border-dashed border-border/80 bg-muted/5 text-center">
-                        <Bookmark className="h-8 w-8 text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground mb-3">저장한 인사이트가 없습니다</p>
-                        <Link href="/results">
-                          <Button size="sm" variant="outline" className="gap-1.5">
-                            <ChevronRight className="h-3.5 w-3.5" />
-                            결과에서 저장하기
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </section>
+                <div className="px-3 py-1 border-t border-border shrink-0">
+                  <p className="text-[10px] text-muted-foreground/40">RSS·트렌드 기준 · 1시간 캐시</p>
+                </div>
+              </div>
 
+              {/* Right: Recent Analysis */}
+              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                    <History className="h-3 w-3 text-muted-foreground" />
+                    최근 분석
+                  </h2>
+                  <Link href="/history" className="text-[11px] text-muted-foreground hover:text-primary transition-colors">
+                    전체 보기
+                  </Link>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0">
+                  {recentReportsLoading ? (
+                    <div className="divide-y divide-border">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2">
+                          <span className="h-3.5 w-28 bg-muted rounded animate-pulse" />
+                          <span className="ml-auto h-3 w-8 bg-muted rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentReports.length > 0 ? (
+                    <div className="divide-y divide-border">
+                      {recentReports.map((r, i) => (
+                        <Link
+                          key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}
+                          href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
+                          className="group flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+                        >
+                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors truncate flex-1 min-w-0">
+                            {r.keyword}
+                          </span>
+                          {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
+                            <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums shrink-0">
+                              <Target className="h-2.5 w-2.5 text-primary/60" />
+                              {r.opportunity_score}
+                            </span>
+                          )}
+                          {r.analysis_status === 'analyzing' && (() => {
+                            const isCurrent = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
+                            const hasStep = isCurrent && (streamingState.status === 'running' || streamingState.status === 'streaming')
+                            const stepNum = hasStep ? (streamingState.currentStep ?? 0) + 1 : 1
+                            return (
+                              <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-600 shrink-0">
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                {stepNum}/{PROGRESS_STEPS.length}
+                              </span>
+                            )
+                          })()}
+                          <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+                            <TimeAgo isoString={r.created_at} />
+                          </span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full py-6 text-center">
+                      <History className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
+                      <p className="text-xs text-muted-foreground">분석 기록이 없습니다</p>
+                      <p className="text-[11px] text-muted-foreground/50 mt-0.5">상단에서 첫 분석을 시작하세요</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -65,9 +65,34 @@ export interface CountryChipsProps {
   updatedAt?: string | null
   rightElement?: React.ReactNode
   className?: string
+  /** Compact mode: flag-only chips, no timestamp, smaller sizing */
+  compact?: boolean
 }
 
-export function CountryChips({ value, onChange, updatedAt, rightElement, className }: CountryChipsProps) {
+export function CountryChips({ value, onChange, updatedAt, rightElement, className, compact }: CountryChipsProps) {
+  if (compact) {
+    return (
+      <div className={cn('flex items-center gap-1', className)}>
+        {COUNTRY_CHIP_CODES.map((code) => (
+          <button
+            key={code}
+            type="button"
+            onClick={() => onChange(code)}
+            title={COUNTRY_LABELS[code] ?? code}
+            className={cn(
+              'shrink-0 rounded-md p-1 transition-all duration-150 inline-flex items-center justify-center',
+              value === code
+                ? 'bg-primary/10 ring-1 ring-primary/40'
+                : 'hover:bg-muted/80'
+            )}
+          >
+            <CountryFlagIcon code={code} size="chip" className={cn(value !== code && 'opacity-50 hover:opacity-80')} />
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       <div className="flex gap-2.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:rounded [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20">

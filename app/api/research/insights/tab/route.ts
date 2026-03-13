@@ -41,7 +41,8 @@ const CACHE_SCOPE: ResearchCacheScope = 'insight_tab'
 /** Gemini·Groq 공통: PM 분석 프레임워크 + 시장 분석 마크다운. 대화형 표현 금지. */
 const UNIFIED_SYSTEM_PROMPT = `${PM_ANALYSIS_PRINCIPLES}
 
-시장 분석 및 인사이트를 마크다운으로 요약. 중요 키워드 **강조**. Facts/Hypotheses/Inferences 구분 사용. 질문·이모지 금지.`
+시장 분석 및 인사이트를 마크다운으로 요약. 중요 키워드 **강조**. Facts/Hypotheses/Inferences 구분 사용. 질문·이모지 금지.
+LANGUAGE RULE: 모든 출력은 반드시 한국어로만 작성. 중국어·영어·일본어·기타 외국어 사용 절대 금지. 회사명도 한글 표기 병행.`
 
 export type TabType = 'logic' | 'creative' | 'fact'
 

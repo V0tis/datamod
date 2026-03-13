@@ -93,7 +93,9 @@ export async function GET(req: Request) {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
 
-      return NextResponse.json({ list, total: count ?? list.length })
+      const resp = NextResponse.json({ list, total: count ?? list.length })
+      resp.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30')
+      return resp
     }
 
     const selectCols = 'report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'

@@ -79,7 +79,7 @@ export async function GET() {
       anthropic: anthropicOrigin ?? (systemAnthropic ? 'SYSTEM' : null),
     },
   })
-  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
   return res
   } catch (e) {
     console.error('[Settings GET]', e)

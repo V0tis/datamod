@@ -121,7 +121,7 @@ function SettingsPageInner() {
       return
     }
     setLoading(true)
-    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
+    fetch('/api/settings', { credentials: 'include' })
       .then((res) => {
         if (res.status === 401) {
           router.replace('/auth/login')
@@ -142,20 +142,6 @@ function SettingsPageInner() {
       .finally(() => setLoading(false))
   }, [user, router])
 
-  // 라이선스 탭 진입 시 설정 재조회 (input에 연동 상태·저장된 키가 확실히 반영되도록)
-  useEffect(() => {
-    if (!user || activeTab !== TAB_LICENSE) return
-    fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json: SettingsData | null) => {
-        if (json) {
-          setData(json)
-          setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
-          setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
-        }
-      })
-      .catch(() => {})
-  }, [user, activeTab])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -356,10 +342,23 @@ function SettingsPageInner() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 flex items-center justify-center min-h-[40vh]">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">설정을 불러오는 중...</p>
+      <div className="rin-page w-full max-w-5xl">
+        <header className="rin-page-header">
+          <div className="h-8 w-24 rounded bg-muted/50 animate-pulse mb-2" />
+          <div className="h-4 w-56 rounded bg-muted/30 animate-pulse" />
+        </header>
+        <div className="w-full max-w-md grid grid-cols-2 gap-1 h-9 rounded-lg bg-muted/30 p-1 mb-6">
+          <div className="rounded-md bg-muted/40 animate-pulse" />
+          <div className="rounded-md bg-muted/40 animate-pulse" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-5">
+              <div className="h-5 w-32 rounded bg-muted/50 animate-pulse mb-3" />
+              <div className="h-10 w-full rounded bg-muted/30 animate-pulse mb-2" />
+              <div className="h-4 w-48 rounded bg-muted/20 animate-pulse" />
+            </div>
+          ))}
         </div>
       </div>
     )

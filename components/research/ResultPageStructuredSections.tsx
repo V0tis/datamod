@@ -88,7 +88,7 @@ export function ResultPageStructuredSections({
 
   return (
     <motion.div
-      className="space-y-4"
+      className="space-y-3"
       role="region"
       aria-label="분석 결과"
       variants={containerVariants}
@@ -121,6 +121,7 @@ export function ResultPageStructuredSections({
             result={effectiveResult}
             loading={loading}
             keyword={keyword}
+            embedded
           />
         </div>
       </ResultPageSection>
@@ -215,7 +216,7 @@ export function ResultPageStructuredSections({
         description="PM이 바로 실행할 수 있는 우선순위 액션 목록입니다."
         icon={<CheckSquare className="h-5 w-5" />}
       >
-        <NextActionsForPM result={effectiveResult} loading={loading} />
+        <NextActionsForPM result={effectiveResult} loading={loading} embedded />
       </ResultPageSection>
       </motion.div>
     </motion.div>

@@ -9,7 +9,8 @@ import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 
 const FOLLOW_UP_SYSTEM = `${PM_ANALYSIS_PRINCIPLES}
 
-시장·대중 반응 분석 전문가. 앞서 제시된 유저 반응 요약·맥락만 근거로 답변. 질문이 모호하면 추론 후 가정은 [Hypothesis]로 표시. 1~3문단. 질문·대화형 표현 금지.`
+시장·대중 반응 분석 전문가. 앞서 제시된 유저 반응 요약·맥락만 근거로 답변. 질문이 모호하면 추론 후 가정은 [Hypothesis]로 표시. 1~3문단. 질문·대화형 표현 금지.
+LANGUAGE RULE: 모든 출력은 반드시 한국어로만 작성. 중국어·영어·일본어·기타 외국어 사용 절대 금지.`
 
 /** Follow-up Q&A on previous insights; uses system Gemini key only. */
 export async function POST(req: Request) {
