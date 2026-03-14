@@ -36,7 +36,6 @@ const CONSENSUS_USER_SUFFIX = '\n\n--- Groq 분석 ---\n'
 const CONSENSUS_SYSTEM = `${CONSENSUS_SYNTHESIS_SYSTEM}
 
 [Gemini 분석]과 [Groq 분석] 텍스트에서 정보 추출. 검색·외부 데이터 사용 금지. 제공된 데이터만 근거로 JSON만 출력.
-LANGUAGE RULE: 모든 출력은 반드시 한국어로만 작성. 중국어·영어·일본어·기타 외국어 사용 절대 금지.
 규칙: facts 3~5개, hypotheses 0~3개, inferences 2~4개. recommended_actions: 2~4개 객체. 각 { title, reasoning, urgency_level: low|medium|high, related_risk? }. meta.confidence_score는 두 AI 의견 일치도 0~100, meta.generated_at은 현재 시각 ISO 8601.`
 
 function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {

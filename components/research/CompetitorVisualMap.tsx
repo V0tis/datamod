@@ -68,7 +68,7 @@ export function CompetitorTierChart({ competitors, className }: CompetitorTierCh
     <div className={cn('space-y-4', className)}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Competitor Tier Chart
+          경쟁사 티어 차트
         </p>
         <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
           <Users className="h-3 w-3" />
@@ -141,10 +141,10 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
     <div className={cn('space-y-3', className)}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Competitor Landscape Map
+          경쟁사 포지셔닝 맵
         </p>
         <span className="text-[10px] text-muted-foreground">
-          X: Market maturity · Y: Product complexity
+          X: 시장 성숙도 · Y: 제품 복잡도
         </span>
       </div>
       <div className="rounded-xl border border-border/60 bg-muted/5 p-4 overflow-hidden">
@@ -168,11 +168,11 @@ export function CompetitorLandscapeMap({ competitors, className }: CompetitorLan
             <line x1={padding + plotW / 2} y1={padding} x2={padding + plotW / 2} y2={h - padding} stroke="currentColor" strokeWidth={0.5} strokeDasharray="4 2" className="text-border/60" />
             <line x1={padding} y1={padding + plotH / 2} x2={w - padding} y2={padding + plotH / 2} stroke="currentColor" strokeWidth={0.5} strokeDasharray="4 2" className="text-border/60" />
             {/* Axis labels */}
-            <text x={w / 2 - 55} y={h - 8} fontSize={10} fill="currentColor" className="text-muted-foreground fill-muted-foreground font-medium">Market maturity →</text>
-            <text x={12} y={h / 2 + 5} fontSize={10} fill="currentColor" className="text-muted-foreground fill-muted-foreground font-medium" transform={`rotate(-90, 12, ${h / 2})`}>Product complexity ↑</text>
+            <text x={w / 2 - 40} y={h - 8} fontSize={10} fill="currentColor" className="text-muted-foreground fill-muted-foreground font-medium">시장 성숙도 →</text>
+            <text x={12} y={h / 2 + 5} fontSize={10} fill="currentColor" className="text-muted-foreground fill-muted-foreground font-medium" transform={`rotate(-90, 12, ${h / 2})`}>제품 복잡도 ↑</text>
             {/* Quadrant labels (subtle) */}
-            <text x={padding + plotW / 4 - 20} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">Early</text>
-            <text x={padding + (3 * plotW) / 4 - 25} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">Mature</text>
+            <text x={padding + plotW / 4 - 20} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">초기</text>
+            <text x={padding + (3 * plotW) / 4 - 25} y={padding + 12} fontSize={8} fill="currentColor" fillOpacity={0.5} className="text-muted-foreground">성숙</text>
             {/* Plot competitors – color by tier (Leader=amber, Emerging=primary, Early-stage=emerald) */}
             {points.map((p, i) => {
               const tier = inferTier(p, i, competitors.length)

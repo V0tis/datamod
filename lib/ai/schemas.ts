@@ -118,6 +118,10 @@ export type SynthesizeConsensusInput = {
   apiKey: string
   geminiAnalysis: string
   groqAnalysis: string
+  /** When set, consensus uses this provider instead of defaulting to Gemini. */
+  preferredProvider?: 'gemini' | 'groq'
+  /** Required when preferredProvider is 'groq'. */
+  groqKey?: string
 }
 
 export type SynthesizeConsensusOutput = Consensus

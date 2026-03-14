@@ -216,7 +216,7 @@ function ConsensusInsightComponent({
       {/* Hypotheses: AI interpretation. Summary first, then score/trend. */}
       <div className={cn(BLOCK_CLASS, 'border-l-2 border-l-border')}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Hypotheses</span>
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">가설</span>
           {partialData && (
             <span
               className="text-xs px-2 py-0.5 rounded-md bg-warning/20 text-warning border border-warning/40"
@@ -272,7 +272,7 @@ function ConsensusInsightComponent({
 
       {/* Facts: evidence blocks. Subtle labels, no heavy icons. */}
       <div className={cn(BLOCK_CLASS)}>
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">Facts — 근거</span>
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">근거</span>
         <div className={cn('rounded-xl border border-border/60 bg-card p-4 sm:p-5')}>
           <h4 className="text-sm font-semibold text-foreground mb-2">페인포인트·리스크</h4>
           {painPoints.length > 0 ? (
@@ -289,7 +289,7 @@ function ConsensusInsightComponent({
           )}
           {threat !== '—' && (
             <>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4 mb-1">Threat</p>
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4 mb-1">위협 요인</p>
               <p className="leading-relaxed">{threat}</p>
             </>
           )}
@@ -308,7 +308,7 @@ function ConsensusInsightComponent({
           >
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Signal
+                시장 신호
               </span>
               <span className="text-sm font-semibold text-foreground truncate">시장·경쟁 신호</span>
             </div>
@@ -371,11 +371,11 @@ function ConsensusInsightComponent({
 
       {/* Inferences: recommendations. Subtle border, no primary color. */}
       <div className={cn(BLOCK_CLASS, 'border-l-2 border-l-muted-foreground/30')}>
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">Inferences — 다음 액션</span>
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-2">추론 — 다음 액션</span>
         <p className="text-[11px] text-muted-foreground mb-3">AI 제안 과제. 우선순위·실행은 팀 판단.</p>
         {opportunity !== '—' && (
           <>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Opportunity</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">기회 요인</p>
             <p className="text-sm leading-relaxed mb-4 text-foreground">{opportunity}</p>
           </>
         )}

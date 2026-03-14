@@ -6,6 +6,7 @@
 import Parser from 'rss-parser'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
+import { BASE_MARKDOWN_PROMPT } from './base-prompt'
 import { generateText, runTabAnalysis, completeChat } from './unified-ai-service'
 import {
   TASK_TRENDS_SYSTEM,
@@ -61,8 +62,9 @@ import type {
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const TAB_SYSTEM_PROMPT =
-  'LANGUAGE RULE (ABSOLUTE - 최우선 규칙): 모든 출력은 반드시 한국어(Korean)로만 작성. 중국어(Chinese/中文)·영어·일본어·기타 외국어 사용 절대 금지. 회사명·제품명은 한글 표기. 시장 분석 및 인사이트를 마크다운 형식으로 요약. 중요 키워드는 **강조**. Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 질문·대화형 표현 금지.'
+const TAB_SYSTEM_PROMPT = `${BASE_MARKDOWN_PROMPT}
+
+Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용.`
 
 export type NewsItem = {
   title: string
@@ -248,7 +250,7 @@ async function runTrendTask(
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_TRENDS_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_TRENDS_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_TRENDS_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -326,7 +328,7 @@ async function runCompetitionTask(
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -425,7 +427,7 @@ async function runInsightExtractionTask(
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: INSIGHT_EXTRACTION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -504,7 +506,7 @@ async function runStrategicRecommendationTask(
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM, maxOutputTokens: 1000, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM, maxOutputTokens: 1000, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGIC_RECOMMENDATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1000 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -608,7 +610,7 @@ async function runPMActionPlanTask(
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1600 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -790,7 +792,7 @@ async function runStrategyEvaluationTask(
   )
   let text!: string
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 300, model: GEMINI_MODEL })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 300, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EVALUATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 300 })
   const primaryIsGemini = primaryProvider === 'gemini'
@@ -1184,9 +1186,11 @@ export async function* runResearch(
     .eq('country_code', cacheKey.countryCode)
     .maybeSingle()
 
+  const pipelineStartMs = Date.now()
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
+  console.log('[AI Pipeline] Start', { keyword, primaryProvider, hasGemini: !!geminiKey, hasGroq: !!groqKey })
   const log = (step: string, detail: string, extra?: Record<string, unknown>) => {
-    console.log('[AI Timeline]', { step, detail, analysisId: analysisId.slice(0, 40) + '...', keyword, ...extra })
+    console.log('[AI Timeline]', { step, detail, provider: primaryProvider, analysisId: analysisId.slice(0, 40) + '...', keyword, elapsedMs: Date.now() - pipelineStartMs, ...extra })
   }
 
   const upsertAnalysisTask = async (
@@ -1448,8 +1452,17 @@ export async function* runResearch(
 
   const stratPrimaryIsGemini = primaryProvider === 'gemini'
 
+  // Rate-limit guard: brief pause before next AI call to avoid 429
+  await sleep(500)
+
   // Step 4: Strategic Recommendation
-  log('strategic_recommendation', 'running')
+  const step4StartMs = Date.now()
+  log('strategic_recommendation', 'running', {
+    elapsedSinceStart: Date.now() - pipelineStartMs,
+    hasGeminiKey: !!geminiKey,
+    hasGroqKey: !!groqKey,
+    primaryProvider,
+  })
   await upsertAnalysisTask('strategy_generation', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
   yield { type: 'task', task: 'strategy_generation', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
   let strategyData: StrategicRecommendationResult
@@ -1471,14 +1484,19 @@ export async function* runResearch(
       fallback_used: stratResult.usedFallback,
       primary_provider_error: stratResult.usedFallback ? stratResult.primaryProviderError ?? null : null,
     })
-    log('strategic_recommendation', 'completed')
+    log('strategic_recommendation', 'completed', { durationMs: Date.now() - step4StartMs, usedFallback: stratResult.usedFallback })
     yield { type: 'task', task: 'strategy_generation', status: 'completed', data: strategyData, provider: stratProvider, fallback_used: stratResult.usedFallback }
   } catch (err) {
     const msg = toUserFriendlyError(err, '전략 추천 생성 중 오류가 발생했습니다.')
-    log('strategy_generation', 'failed', { error: msg, err })
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    log('strategy_generation', 'failed', {
+      error: msg,
+      durationMs: Date.now() - step4StartMs,
+      elapsedSinceStart: Date.now() - pipelineStartMs,
+      stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
+    })
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
     await updateProgress(4, 'failed')
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
     yield { type: 'error', message: msg, step: 'strategy_generation' }
     return
   }
@@ -1487,6 +1505,9 @@ export async function* runResearch(
     yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'strategy_generation' }
     return
   }
+
+  // Rate-limit guard: brief pause before next AI call
+  await sleep(500)
 
   // Step 5: PM Action Plan
   const opportunitiesSummary = strategyData.opportunities.join('. ')
@@ -1598,6 +1619,9 @@ export async function* runResearch(
     keyConclusions: keyConclusions.slice(0, 5),
   }
 
+  // Rate-limit guard before final evaluation call
+  await sleep(500)
+
   let strategyEvaluation: StrategyEvaluationResult | undefined
   try {
     strategyEvaluation = await runStrategyEvaluationTask(
@@ -1701,14 +1725,15 @@ export async function* runResearch(
     return
   }
 
-  // Step 4: Creative analysis
+  // Step 4: Creative analysis — respects user's primaryProvider
   yield { type: 'post_processing', stepId: 'creative' }
   let creativeGroq: string | null = null
   let creativeGemini: string | null = null
   try {
-    const provider =
-      groqKey && geminiKey ? 'all' : geminiKey ? 'gemini' : groqKey ? 'groq' : 'none'
-    if (provider !== 'none') {
+    const creativeProvider: 'groq' | 'gemini' | 'none' =
+      primaryProvider === 'groq' && groqKey ? 'groq' : geminiKey ? 'gemini' : groqKey ? 'groq' : 'none'
+    log('creative_analysis', 'running', { provider: creativeProvider })
+    if (creativeProvider !== 'none') {
       const summaryText = buildSummaryText(fullSummary)
       const newsHeadlines = news.map((n) => n.title).join('\n')
       const userPrompt = buildCreativePrompt(keyword, summaryText, newsHeadlines)
@@ -1716,7 +1741,7 @@ export async function* runResearch(
       const creative = await runTabAnalysis({
         groqKey: groqKey ?? null,
         geminiKey: geminiKey,
-        provider,
+        provider: creativeProvider,
         systemPrompt: TAB_SYSTEM_PROMPT,
         userPrompt,
       })
@@ -1727,7 +1752,6 @@ export async function* runResearch(
       yield { type: 'creative', groqText: creativeGroq, geminiText: creativeGemini }
     }
   } catch (err) {
-    // Creative analysis failure is recoverable
     yield { type: 'creative', groqText: null, geminiText: null }
   }
 

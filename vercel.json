@@ -5,6 +5,15 @@
   "functions": {
     "app/api/research/run/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/research/jobs/run/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/research/insights/tab/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/research/insights/follow-up/route.ts": {
+      "maxDuration": 30
     }
   }
 }

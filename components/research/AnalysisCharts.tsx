@@ -60,7 +60,8 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
           <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
           <Tooltip
             formatter={(v: number) => [`${v}/100`, '점수']}
-            contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+            cursor={false}
           />
           <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
             {data.map((_, i) => (
@@ -74,7 +75,6 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
 }
 
 export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, className }: AnalysisChartsProps) {
-  /** 분석 중에도 시장 점수 분포 표시: breakdown 없으면 default 사용 */
   const breakdown =
     opportunityScoreBreakdown && Object.keys(opportunityScoreBreakdown).length > 0
       ? opportunityScoreBreakdown
@@ -98,7 +98,8 @@ export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, class
             <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
             <Tooltip
               formatter={(v: number) => [`${v}/100`, '점수']}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              cursor={false}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
               {data.map((_, i) => (

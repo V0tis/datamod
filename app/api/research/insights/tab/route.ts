@@ -14,7 +14,7 @@ import {
   buildCacheKeyParts,
   type ResearchCacheScope,
 } from '@/lib/research-cache'
-import { getTabProviderKeysForUser } from '@/lib/research-keys'
+import { getTabProviderKeysForUser, getAIPrimaryModelForRequest } from '@/lib/research-keys'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 import {
@@ -30,6 +30,7 @@ import {
 } from '@/lib/ai'
 import { logger } from '@/lib/logger'
 
+export const runtime = 'nodejs'
 export const maxDuration = 60
 
 // Re-export types for API consumers (e.g. frontend)
@@ -41,8 +42,7 @@ const CACHE_SCOPE: ResearchCacheScope = 'insight_tab'
 /** Gemini·Groq 공통: PM 분석 프레임워크 + 시장 분석 마크다운. 대화형 표현 금지. */
 const UNIFIED_SYSTEM_PROMPT = `${PM_ANALYSIS_PRINCIPLES}
 
-시장 분석 및 인사이트를 마크다운으로 요약. 중요 키워드 **강조**. Facts/Hypotheses/Inferences 구분 사용. 질문·이모지 금지.
-LANGUAGE RULE: 모든 출력은 반드시 한국어로만 작성. 중국어·영어·일본어·기타 외국어 사용 절대 금지. 회사명도 한글 표기 병행.`
+시장 분석 및 인사이트를 마크다운으로 요약. 중요 키워드 **강조**. Facts/Hypotheses/Inferences 구분 사용. 질문·이모지 금지.`
 
 export type TabType = 'logic' | 'creative' | 'fact'
 
@@ -116,12 +116,14 @@ export async function POST(req: Request) {
   const creativeText = typeof body?.creativeText === 'string' ? body.creativeText.trim() : ''
   const isReanalyze = body?.isReanalyze === true
   const countryCode = (typeof body?.countryCode === 'string' ? body.countryCode.trim() : '') || 'KR'
-  const provider =
-    body?.provider === 'groq' || body?.provider === 'gemini'
-      ? body.provider
-      : 'all'
 
-  const tabKeys = await getTabProviderKeysForUser(supabase, user.id)
+  const [tabKeys, primaryModel] = await Promise.all([
+    getTabProviderKeysForUser(supabase, user.id),
+    getAIPrimaryModelForRequest(supabase, user.id),
+  ])
+
+  const provider: 'groq' | 'gemini' | 'all' = primaryModel === 'groq' ? 'groq' : primaryModel === 'gemini' ? 'gemini' : 'all'
+  console.log('[Tab Route] AI provider selection:', { primaryModel, provider, keyword })
 
   if (!tab || !['logic', 'creative', 'fact'].includes(tab)) {
     return NextResponse.json({ error: 'tab must be one of logic, creative, fact' }, { status: 400 })
@@ -204,11 +206,13 @@ export async function POST(req: Request) {
           mergedGemini != null &&
           !cachedConsensus
         ) {
-          if (tabKeys.gemini) {
+          if (tabKeys.gemini || tabKeys.groq) {
             const synthesized = await synthesizeConsensus({
-              apiKey: tabKeys.gemini,
+              apiKey: tabKeys.gemini || '',
               geminiAnalysis: mergedGemini,
               groqAnalysis: mergedGroq,
+              preferredProvider: primaryModel,
+              groqKey: tabKeys.groq || undefined,
             })
             if (synthesized) {
               cachedConsensus = synthesized
@@ -381,15 +385,17 @@ export async function POST(req: Request) {
   const groqOk = groqResult != null && String(groqResult).trim().length > 0
   const geminiOk = geminiResult != null && String(geminiResult).trim().length > 0
   const atLeastOneSuccess = groqOk || geminiOk
-  if (tab === 'creative' && geminiKey && !geminiQuotaExceeded && atLeastOneSuccess) {
-    // 한쪽 AI만 있어도 Consensus 생성 (없는 쪽은 빈 문자열로 전달)
+  const hasConsensusKey = primaryModel === 'groq' ? !!groqKey : !!geminiKey
+  if (tab === 'creative' && hasConsensusKey && atLeastOneSuccess) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
-    console.log('[AI Insight Consensus] generateConsensus input', { geminiInput, groqInput })
+    console.log('[AI Insight Consensus] generateConsensus', { provider: primaryModel, keyword })
     consensus = await synthesizeConsensus({
-      apiKey: geminiKey,
+      apiKey: geminiKey || '',
       geminiAnalysis: geminiInput,
       groqAnalysis: groqInput,
+      preferredProvider: primaryModel,
+      groqKey: groqKey || undefined,
     })
     if (isReanalyze) {
       console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })

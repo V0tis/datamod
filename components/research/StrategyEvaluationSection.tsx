@@ -75,7 +75,7 @@ export function StrategyEvaluationSection({
     >
       <div className="px-4 sm:px-5 py-4 border-b border-border/60">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          Strategy Evaluation
+          전략 평가
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
           AI가 생성된 전략을 평가한 1–10 점수
@@ -101,7 +101,7 @@ export function StrategyEvaluationSection({
                 <div className="flex items-center gap-2 mb-2">
                   <Icon className="h-5 w-5 text-foreground shrink-0" aria-hidden />
                   <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {d.label}
+                    {d.labelKo}
                   </span>
                 </div>
                 <p className="text-2xl font-bold text-foreground leading-snug">

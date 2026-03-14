@@ -9,7 +9,7 @@ export const AI_FALLBACK_MESSAGES = {
   NETWORK: '네트워크 연결을 확인해 주세요.',
 } as const
 
-const DEFAULT_TIMEOUT_MS = 90_000
+const DEFAULT_TIMEOUT_MS = 30_000
 
 /** Max retries for AI calls (initial attempt + 2 retries = 3 total). */
 export const AI_MAX_RETRIES = 2

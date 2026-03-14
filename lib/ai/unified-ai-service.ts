@@ -187,13 +187,13 @@ export async function runTabAnalysis(input: TabAnalysisInput): Promise<TabAnalys
 }
 
 /**
- * Synthesize two analyses (Gemini + Groq) into one Consensus.
- * Uses the default content provider (Gemini consensus model). Never throws.
+ * Synthesize two analyses into one Consensus.
+ * Uses user's preferred provider (Gemini or Groq). Never throws.
  */
 export async function synthesizeConsensus(
   input: SynthesizeConsensusInput
 ): Promise<SynthesizeConsensusOutput> {
-  const { apiKey, geminiAnalysis, groqAnalysis } = input
+  const { apiKey, geminiAnalysis, groqAnalysis, preferredProvider, groqKey } = input
   const g = String(geminiAnalysis ?? '').trim()
   const r = String(groqAnalysis ?? '').trim()
   if (g.length < 20 && r.length < 20) return FALLBACK_CONSENSUS
@@ -201,16 +201,29 @@ export async function synthesizeConsensus(
   const prompt = buildConsensusPrompt(geminiAnalysis, groqAnalysis)
   if (!prompt) return FALLBACK_CONSENSUS
 
+  const useGroq = preferredProvider === 'groq' && !!groqKey
+  console.log('[Unified AI] Consensus provider:', useGroq ? 'groq' : 'gemini')
+
   try {
-    const rawText = await getDefaultProviders().content.generateContent({
-      apiKey,
-      contents: [{ parts: [{ text: prompt }] }],
-      model: getGeminiConsensusModel(),
-      maxOutputTokens: 8192,
-    })
+    let rawText: string
+    if (useGroq) {
+      const result = await getDefaultProviders().chat.completeChat({
+        apiKey: groqKey!,
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 8192,
+      })
+      rawText = result.text ?? ''
+    } else {
+      rawText = await getDefaultProviders().content.generateContent({
+        apiKey,
+        contents: [{ parts: [{ text: prompt }] }],
+        model: getGeminiConsensusModel(),
+        maxOutputTokens: 8192,
+      })
+    }
     return parseConsensusFromRawText(rawText)
   } catch (e) {
-    console.warn('[Unified AI] Consensus synthesis', e)
+    console.warn('[Unified AI] Consensus synthesis failed', { provider: useGroq ? 'groq' : 'gemini', error: e instanceof Error ? e.message : String(e) })
     return FALLBACK_CONSENSUS
   }
 }

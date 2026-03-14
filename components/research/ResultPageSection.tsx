@@ -44,7 +44,7 @@ export function ResultPageSection({
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl [&[data-state=open]]:rounded-b-none"
+            className="flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl [&[data-state=open]]:rounded-b-none"
           >
             <div className="min-w-0 flex-1">
               <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">

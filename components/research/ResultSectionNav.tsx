@@ -32,7 +32,7 @@ const SECTIONS = [
   { id: 'section-risks', label: '리스크 평가', icon: AlertTriangle },
   { id: 'section-news', label: '뉴스 및 데이터', icon: Newspaper },
   { id: 'section-data', label: '데이터 출처', icon: Database },
-  { id: 'section-next-actions-pm', label: 'Next Actions for PM', icon: CheckSquare2 },
+  { id: 'section-next-actions-pm', label: 'PM 다음 액션', icon: CheckSquare2 },
 ] as const
 
 export interface ResultSectionNavProgress {

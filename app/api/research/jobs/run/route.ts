@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { runAnalysisJob } from '@/lib/research-job-runner'
 
+export const runtime = 'nodejs'
+export const maxDuration = 300
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()

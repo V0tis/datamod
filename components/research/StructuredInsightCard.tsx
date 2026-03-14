@@ -129,7 +129,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           {hasLongSummary && !hasExtraSections && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Insight Summary
+                인사이트 요약
               </p>
               <p className="text-sm text-foreground leading-relaxed">{insight.summary}</p>
             </div>
@@ -137,7 +137,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           {insight.whyItMatters && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Why It Matters
+                왜 중요한가
               </p>
               <p className="text-sm text-foreground leading-relaxed">
                 <TextWithHighlights text={insight.whyItMatters} keyMetrics={metrics} />
@@ -147,7 +147,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           {insight.implicationForProduct && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Implication for Product
+                제품에 대한 시사점
               </p>
               <p className="text-sm text-foreground leading-relaxed">
                 <TextWithHighlights text={insight.implicationForProduct} keyMetrics={metrics} />

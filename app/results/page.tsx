@@ -42,8 +42,7 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultPageStructuredSections } from '@/components/research/ResultPageStructuredSections'
-import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
-import { AnalysisProgressInline } from '@/components/research/AnalysisProgressInline'
+import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
@@ -231,6 +230,7 @@ function ResultsContent() {
   /** Consensus 재분석 중일 때는 DB analysis_results로 덮어쓰지 않음 */
   const isReanalyzingConsensusRef = useRef(false)
   const prevReportIdRef = useRef<string | null>(null)
+  const navProgressHighWaterRef = useRef(0)
 
   /** AI Insight Consensus: managed by useResultPageState (insightData), never overwrite success with fail */
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
@@ -305,15 +305,20 @@ function ResultsContent() {
   const [polledProgressStep, setPolledProgressStep] = useState(0)
   const [polledError, setPolledError] = useState<string | null>(null)
 
+  const prevKeywordRef = useRef<string | null>(null)
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     if (!k) {
+      prevKeywordRef.current = null
       setHistoryLoadDone(true)
       setHasCachedResult(null)
       setPolledStatus(null)
       setPolledError(null)
       return
     }
+    const cacheKey = `${k}|${countryFromUrl}`
+    if (prevKeywordRef.current === cacheKey) return
+    prevKeywordRef.current = cacheKey
     setHistoryLoadDone(false)
     setHasCachedResult(null)
     setPolledStatus(null)
@@ -377,10 +382,16 @@ function ResultsContent() {
       streamingState.status === 'completed' && !prevStreamingCompletedRef.current
     prevStreamingCompletedRef.current = streamingState.status === 'completed'
     if (justCompleted) {
-      const t = setTimeout(() => loadFromHistory(k, countryFromUrl), 400)
-      return () => clearTimeout(t)
+      const timers = [
+        setTimeout(() => loadFromHistory(k, countryFromUrl), 400),
+        setTimeout(() => loadFromHistory(k, countryFromUrl), 2000),
+        setTimeout(() => loadFromHistory(k, countryFromUrl), 5000),
+      ]
+      return () => timers.forEach(clearTimeout)
     }
   }, [keyword, storeKeyword, countryFromUrl, streamingState.status, loadFromHistory])
+
+  const loadingStartRef = useRef<number | null>(null)
 
   useEffect(() => {
     fetchTrendsForCountry(countryFromUrl)
@@ -434,6 +445,28 @@ function ResultsContent() {
     taskData?.trend_analysis != null ||
     taskData?.competition_analysis != null
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
+
+  // Fallback: if loading persists >30s with no result, auto-refetch
+  useEffect(() => {
+    const k = (keyword ?? storeKeyword)?.trim()
+    if (!k || !loading) {
+      loadingStartRef.current = null
+      return
+    }
+    if (displayResult?.reportId) {
+      loadingStartRef.current = null
+      return
+    }
+    if (!loadingStartRef.current) loadingStartRef.current = Date.now()
+    const timer = setTimeout(() => {
+      if (loadingStartRef.current && Date.now() - loadingStartRef.current >= 30_000) {
+        toast.info('분석이 완료되었습니다. 결과를 불러옵니다...')
+        loadFromHistory(k, countryFromUrl)
+        loadingStartRef.current = null
+      }
+    }, 30_000)
+    return () => clearTimeout(timer)
+  }, [keyword, storeKeyword, loading, displayResult?.reportId, countryFromUrl, loadFromHistory])
 
   const {
     resultState,
@@ -1000,19 +1033,39 @@ function ResultsContent() {
 
   const navProgress = (() => {
     const isAnalyzing = loading
-    if (displayResult?.reportId && !isAnalyzing) return { loading: false, percent: 100 }
-    if (analysisTasks?.length) {
-      const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer']
-      const done = analysisTasks.filter((t) => MAIN.includes(t.step_name) && t.status === 'completed').length
-      return { loading: isAnalyzing, percent: Math.min(100, (done / MAIN.length) * 100) }
+
+    // New analysis started — reset high-water mark
+    if (isAnalyzing && (streamingState.status === 'running') && navProgressHighWaterRef.current >= 80) {
+      const step = 'currentStep' in streamingState ? streamingState.currentStep : 0
+      if (step <= 1) navProgressHighWaterRef.current = 0
     }
-    const step = (streamingState.status === 'running' || streamingState.status === 'streaming')
-      ? Math.min(5, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
-      : -1
-    if (isAnalyzing && step >= 0) {
-      return { loading: true, percent: Math.round(((step + 1) / 6) * 100) }
+
+    const raw = (() => {
+      if (canonicalStatus === 'completed' || polledStatus === 'completed' || streamingState.status === 'completed') {
+        return { loading: false, percent: 100 }
+      }
+      if (displayResult?.reportId && !isAnalyzing) return { loading: false, percent: 100 }
+      if (analysisTasks?.length) {
+        const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer']
+        const done = analysisTasks.filter((t) => MAIN.includes(t.step_name) && t.status === 'completed').length
+        return { loading: isAnalyzing, percent: Math.min(100, (done / MAIN.length) * 100) }
+      }
+      const step = (streamingState.status === 'running' || streamingState.status === 'streaming')
+        ? Math.min(5, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
+        : -1
+      if (isAnalyzing && step >= 0) {
+        return { loading: true, percent: Math.round(((step + 1) / 6) * 100) }
+      }
+      return { loading: isAnalyzing, percent: isAnalyzing ? 10 : 0 }
+    })()
+
+    // High-water mark prevents progress from regressing during transient state gaps
+    if (raw.percent >= navProgressHighWaterRef.current) {
+      navProgressHighWaterRef.current = raw.percent
+    } else if (navProgressHighWaterRef.current >= 80 && raw.percent < navProgressHighWaterRef.current) {
+      return { loading: raw.loading, percent: navProgressHighWaterRef.current }
     }
-    return { loading: isAnalyzing, percent: isAnalyzing ? 10 : 0 }
+    return raw
   })()
 
   const showTabs = hasKeyword
@@ -1072,27 +1125,7 @@ function ResultsContent() {
                     : undefined
             }
             loading={loading && !displayResult}
-            progressSlot={
-              loading &&
-              (streamingState.status === 'running' || streamingState.status === 'streaming' || polledStatus === 'running')
-                ? (() => {
-                    const stepId = streamingState.status === 'running' || streamingState.status === 'streaming' ? (streamingState as { stepId?: string }).stepId : null
-                    const step = streamingState.status === 'running' || streamingState.status === 'streaming'
-                      ? ('currentStep' in streamingState ? streamingState.currentStep : 0)
-                      : polledStatus === 'running' ? Math.min(5, polledProgressStep ?? 0) : 0
-                    const progressIndex = getProgressStepIndex(stepId ?? null, step)
-                    const progressPercent = Math.min(100, ((progressIndex + 1) / PROGRESS_STEPS.length) * 100)
-                    const stepLabel = PROGRESS_STEPS[progressIndex]?.labelKo ?? '분석 중'
-                    return (
-                      <AnalysisProgressInline
-                        progressIndex={progressIndex}
-                        progressPercent={progressPercent}
-                        stepLabel={stepLabel}
-                      />
-                    )
-                  })()
-                : undefined
-            }
+            progressSlot={undefined}
             analysisStatus={
               loading ? 'loading'
               : canonicalStatus === 'failed' || showPolledError ? 'fail'
@@ -1123,7 +1156,7 @@ function ResultsContent() {
                   onRetryStep={() => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
                   }}
                   maxHeight="280px"
                 />
@@ -1186,7 +1219,7 @@ function ResultsContent() {
                   onClick={() => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
                   }}
                   disabled={loading || streamingState.status === 'running' || streamingState.status === 'streaming'}
                   className="gap-1.5 text-xs"
@@ -1233,7 +1266,7 @@ function ResultsContent() {
             onRetry={() => {
               setPolledStatus(null)
               setPolledError(null)
-              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })
+              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
             }}
             showSettingsLink
             keyword={currentKeyword ?? undefined}
@@ -1256,7 +1289,7 @@ function ResultsContent() {
             </div>
             <Button
               size="lg"
-              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl })}
+              onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })}
               className="gap-2 mb-6"
             >
               <RefreshCw className="h-4 w-4" />
@@ -1265,7 +1298,7 @@ function ResultsContent() {
             <SuggestedAnalyses
               onSelect={(k) => {
                 router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
-                startStreamingResearch(k, { country_code: countryFromUrl })
+                startStreamingResearch(k, { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
               }}
               disabled={loading}
             />
@@ -1433,11 +1466,11 @@ function ResultsContent() {
             } : undefined}
             onSelectKeyword={(k) => {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
-              startStreamingResearch(k, { country_code: countryFromUrl })
+              startStreamingResearch(k, { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
             }}
             onRunAnalysis={(k) => {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
-              startStreamingResearch(k, { country_code: countryFromUrl })
+              startStreamingResearch(k, { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
             }}
             disabled={loading}
           />
@@ -1540,7 +1573,7 @@ function ResultsContent() {
             <SuggestedAnalyses
               onSelect={(k) => {
                 router.replace(`/results?keyword=${encodeURIComponent(k)}&country=KR`)
-                startStreamingResearch(k, { country_code: 'KR' })
+                startStreamingResearch(k, { country_code: 'KR', ai_primary_model: aiPrimaryModel })
               }}
             />
           </div>

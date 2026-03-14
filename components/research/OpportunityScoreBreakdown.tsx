@@ -4,20 +4,7 @@ import { Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
-/** Display labels: English primary (user spec) + Korean */
 const LABELS: Record<string, string> = {
-  trend_momentum: 'Search Demand',
-  market_growth: 'Market Growth',
-  competition_density: 'Competition Level',
-  competition_pressure: 'Competition Level',
-  funding_signals: 'Funding Signals',
-  risk_factors: 'Risk Factors',
-  user_demand: 'Search Demand',
-  product_differentiation: 'Product Differentiation',
-  market_timing: 'Market Timing',
-}
-
-const LABELS_KO: Record<string, string> = {
   trend_momentum: '검색 수요',
   market_growth: '시장 성장',
   competition_density: '경쟁 수준',
@@ -28,6 +15,9 @@ const LABELS_KO: Record<string, string> = {
   product_differentiation: '제품 차별화',
   market_timing: '시장 타이밍',
 }
+
+/** @deprecated Use LABELS directly – now always Korean */
+const LABELS_KO = LABELS
 
 /** Order: Search Demand → Market Growth → Competition → Funding → Risk */
 const ORDER: readonly string[] = [
@@ -90,7 +80,7 @@ export function OpportunityScoreBreakdown({
               : raw
         return {
           key: k,
-          label: (useKoreanLabels ? LABELS_KO : LABELS)[k] ?? k,
+          label: LABELS[k] ?? k,
           value: Math.round(value),
         }
       })
@@ -100,8 +90,8 @@ export function OpportunityScoreBreakdown({
   const maxAbs = Math.max(15, ...items.map((i) => Math.abs(i.value)), 1)
   const scaleMax = maxAbs * 1.2
 
-  const baseLabel = useKoreanLabels ? '기본 점수' : 'Base Score'
-  const finalLabel = useKoreanLabels ? '최종 점수' : 'Final Score'
+  const baseLabel = '기본 점수'
+  const finalLabel = '최종 점수'
 
   return (
     <section
@@ -115,13 +105,11 @@ export function OpportunityScoreBreakdown({
       <div className="flex items-center gap-2 mb-4">
         <Target className="h-5 w-5 text-primary shrink-0" />
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          {useKoreanLabels ? '기회 점수 분해' : 'Opportunity Score Breakdown'}
+          기회 점수 분해
         </h3>
       </div>
       <p className="text-xs text-muted-foreground mb-5">
-        {useKoreanLabels
-          ? '기본 50점에서 각 요인을 순차적으로 반영해 최종 점수가 산출됩니다.'
-          : 'The score starts at 50. Each factor is applied sequentially to derive the final score.'}
+        기본 50점에서 각 요인을 순차적으로 반영해 최종 점수가 산출됩니다.
       </p>
 
       {/* Waterfall: Base → Factors → Final */}
@@ -182,7 +170,7 @@ export function OpportunityScoreBreakdown({
             <div className="flex-1 h-10 rounded-lg bg-primary/15 dark:bg-primary/20 border-2 border-primary/40 flex items-center justify-center min-w-0">
               {loading ? (
                 <span className="text-sm font-medium text-muted-foreground">
-                  {useKoreanLabels ? '산출 중...' : 'Calculating...'}
+                  산출 중...
                 </span>
               ) : (
                 <span className="text-xl font-bold tabular-nums text-primary">

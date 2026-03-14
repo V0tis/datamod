@@ -437,7 +437,7 @@ interface ResearchStore extends ResearchState {
   /** Apply streaming section updates. Composes result from sections. */
   applyStreamingUpdate: (payload: StreamingUpdatePayload) => void
   /** Start analysis via streaming API (replaces job polling). */
-  startStreamingResearch: (keyword: string, options?: { country_code?: string; mode?: AnalysisMode }) => Promise<void>
+  startStreamingResearch: (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq' }) => Promise<void>
   /** Abort current analysis in progress */
   abortAnalysis: () => void
   /** Set analysis mode for next analysis */
@@ -766,7 +766,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
-      startStreamingResearch: async (keyword: string, options?: { country_code?: string; mode?: AnalysisMode }) => {
+      startStreamingResearch: async (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq' }) => {
         const k = keyword?.trim()
         if (!k) {
           toast.error('검색어가 없습니다.')
@@ -837,7 +837,7 @@ export const useResearchStore = create<ResearchStore>()(
           const res = await fetch('/api/research/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keyword: k, country_code: countryCode, mode }),
+            body: JSON.stringify({ keyword: k, country_code: countryCode, mode, ai_primary_model: options?.ai_primary_model }),
             credentials: 'same-origin',
             signal,
           })

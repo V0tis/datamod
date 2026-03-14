@@ -11,7 +11,7 @@
 export const RATE_LIMIT_USER_MESSAGE =
   '서버가 혼잡하여 잠시 후 다시 시도해 주세요.'
 
-const DEFAULT_MAX_RETRIES = 5
+const DEFAULT_MAX_RETRIES = 2
 const DEFAULT_BASE_DELAY_MS = 1000
 
 /** ms 밀리초 대기 */

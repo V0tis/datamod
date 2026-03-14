@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GEMINI_TAB_MODEL } from '@/lib/gemini-config'
 
+export const runtime = 'nodejs'
+export const maxDuration = 15
 export const dynamic = 'force-dynamic'
 
 const GROQ_MODEL = process.env.GROQ_TAB_MODEL ?? 'llama-3.3-70b-versatile'

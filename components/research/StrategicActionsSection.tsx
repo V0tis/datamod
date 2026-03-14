@@ -103,7 +103,7 @@ export function StrategicActionsSection({
             className="gap-1.5 text-xs"
           >
             <FileDown className="h-3.5 w-3.5" />
-            Export
+            내보내기
           </Button>
         </div>
 
@@ -119,13 +119,13 @@ export function StrategicActionsSection({
               <div className="space-y-3 text-sm">
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    Description
+                    설명
                   </p>
                   <p className="text-foreground leading-relaxed">{action.description}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    Opportunity
+                    기회
                   </p>
                   <p className="text-foreground leading-relaxed">{action.opportunity}</p>
                 </div>
@@ -142,7 +142,7 @@ export function StrategicActionsSection({
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
-                  Copy
+                  복사
                 </Button>
                 {onSaveAction && (
                   <Button
@@ -152,7 +152,7 @@ export function StrategicActionsSection({
                     className="gap-1.5 text-xs h-8"
                   >
                     <Bookmark className="h-3.5 w-3.5" />
-                    Save
+                    저장
                   </Button>
                 )}
               </div>

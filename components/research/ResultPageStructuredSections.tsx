@@ -131,7 +131,7 @@ export function ResultPageStructuredSections({
         <ResultPageSection
         id={SECTION_IDS.keyInsights}
         title="핵심 인사이트"
-        description="AI가 도출한 핵심 시장 인사이트와 전략적 결론입니다."
+        description="시장 매력도 해석, 주요 기회, 핵심 리스크, 전략적 시사점을 한눈에 파악하세요."
         icon={<Lightbulb className="h-5 w-5" />}
       >
         <KeyMarketInsightsCard

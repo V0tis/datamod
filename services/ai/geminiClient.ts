@@ -10,7 +10,7 @@ import { fetchWithTimeout, withTimeout, AI_MAX_RETRIES } from '@/lib/ai/safe-fet
 
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
 
-const GEMINI_TIMEOUT_MS = 90_000
+const GEMINI_TIMEOUT_MS = 30_000
 const DEFAULT_BACKOFF = { maxRetries: AI_MAX_RETRIES, baseDelayMs: 1000 }
 
 /** Build REST generateContent URL for a given model */

@@ -3,18 +3,16 @@
 import { Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/** Maps breakdown keys to display labels (user-facing). New signed format. */
 const BREAKDOWN_LABELS: Record<string, string> = {
-  market_growth: 'Market Growth',
-  competition_density: 'Competition Density',
-  trend_momentum: 'Trend Momentum',
-  funding_signals: 'Funding Signals',
-  risk_factors: 'Risk Factors',
-  // Legacy
-  competition_pressure: 'Competition Density',
-  user_demand: 'Funding Signals',
-  product_differentiation: 'Product Differentiation',
-  market_timing: 'Trend Momentum',
+  market_growth: '시장 성장',
+  competition_density: '경쟁 밀도',
+  trend_momentum: '트렌드 모멘텀',
+  funding_signals: '투자 신호',
+  risk_factors: '리스크 요인',
+  competition_pressure: '경쟁 밀도',
+  user_demand: '투자 신호',
+  product_differentiation: '제품 차별화',
+  market_timing: '트렌드 모멘텀',
 }
 
 type NewBreakdownKey = 'market_growth' | 'competition_density' | 'trend_momentum' | 'funding_signals' | 'risk_factors'
@@ -145,14 +143,14 @@ export function OpportunityScoreCard({
         'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
         className
       )}
-      aria-label="Opportunity Score"
+      aria-label="시장 기회 점수"
     >
       <div className="p-4 sm:p-5">
         {/* Header */}
         <div className="flex items-center gap-2 mb-4">
           <Target className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-            Opportunity Score
+            시장 기회 점수
           </h2>
         </div>
 
@@ -198,7 +196,7 @@ export function OpportunityScoreCard({
         {breakdownItems.length > 0 && (
           <div className="mb-4">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-              Score Breakdown
+              점수 상세
             </h3>
             <div className="space-y-2">
               {breakdownItems.map(({ key, label, value }) => {
@@ -232,7 +230,7 @@ export function OpportunityScoreCard({
           <div className="rounded-lg border border-border/60 bg-muted/10 p-4 sm:p-5">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              AI Explanation
+              AI 분석 근거
             </h3>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
               {reasoning.trim()}

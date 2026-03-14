@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       keyword?: string
       country_code?: string
       mode?: string
+      ai_primary_model?: string
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
@@ -62,22 +63,25 @@ export async function POST(req: Request) {
       runtime: 'nodejs',
     })
 
-    const [geminiResult, groqKey, primaryProvider] = await Promise.all([
+    const bodyPrimaryModel = body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini'
+      ? body.ai_primary_model
+      : null
+    const [geminiResult, groqKey, dbPrimaryProvider] = await Promise.all([
       getGeminiKeyForRequest(supabase, user.id),
       getGroqKeyForRequest(supabase, user.id),
       getAIPrimaryModelForRequest(supabase, user.id),
     ])
+    const primaryProvider = bodyPrimaryModel ?? dbPrimaryProvider
     const { gemini, canSearch } = geminiResult
 
-    if (process.env.NODE_ENV === 'production' || process.env.DEBUG_KEYS === '1') {
-      logger.info('AI analysis: key resolution', {
-        userId: user.id.slice(0, 8) + '...',
-        canSearch,
-        hasGemini: !!gemini && gemini.length > 0,
-        primaryProvider,
-        runtime: 'nodejs',
-      })
-    }
+    logger.info('AI analysis: provider selection', {
+      userId: user.id.slice(0, 8) + '...',
+      primaryProvider,
+      canSearch,
+      hasGemini: !!gemini && gemini.length > 0,
+      hasGroq: !!groqKey && groqKey.length > 0,
+      runtime: 'nodejs',
+    })
 
     if (!canSearch || !gemini) {
       return NextResponse.json(

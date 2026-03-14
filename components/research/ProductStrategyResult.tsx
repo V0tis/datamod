@@ -51,7 +51,7 @@ function ActionCard({
                 PRIORITY_COLORS.medium
             )}
           >
-            {action.priority}
+            {action.priority === 'high' ? '높음' : action.priority === 'medium' ? '보통' : action.priority === 'low' ? '낮음' : action.priority}
           </span>
         )}
       </div>
@@ -148,7 +148,7 @@ export function ProductStrategyResult({
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-3">
           <BarChart3 className="h-5 w-5 text-primary" />
-          Market Summary
+          시장 요약
         </h2>
         {loading && !marketSummary ? (
           <SectionContentSkeleton variant="list" />
@@ -163,7 +163,7 @@ export function ProductStrategyResult({
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-3">
           <Lightbulb className="h-5 w-5 text-primary" />
-          Key Strategic Insights
+          핵심 전략 인사이트
         </h2>
         {loading && keyStrategicInsights.length === 0 ? (
           <SectionContentSkeleton variant="list" />
@@ -184,7 +184,7 @@ export function ProductStrategyResult({
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-3">
           <Zap className="h-5 w-5 text-primary" />
-          Opportunity Areas
+          기회 영역
         </h2>
         {loading && opportunityAreas.length === 0 ? (
           <SectionContentSkeleton variant="list" />
@@ -206,7 +206,7 @@ export function ProductStrategyResult({
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-3">
           <Target className="h-5 w-5 text-primary" />
-          Recommended Product Strategy
+          추천 제품 전략
         </h2>
         {loading && !productIdea && !targetCustomer && !monetization && !strategySummary ? (
           <SectionContentSkeleton variant="mixed" />
@@ -251,7 +251,7 @@ export function ProductStrategyResult({
       <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
           <CheckSquare2 className="h-5 w-5 text-primary" />
-          PM Action Plan
+          PM 액션 플랜
         </h2>
         {loading && allActions.length === 0 ? (
           <SectionContentSkeleton variant="list" />

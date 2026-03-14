@@ -42,7 +42,7 @@ export function ChartWithInsight({
           {insight?.trim() && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Insight
+                인사이트
               </p>
               <p className="text-sm text-foreground leading-relaxed">{insight.trim()}</p>
             </div>
@@ -50,7 +50,7 @@ export function ChartWithInsight({
           {takeaway?.trim() && (
             <div className="rounded-md bg-primary/5 border border-primary/10 px-3 py-2">
               <p className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-1">
-                Takeaway
+                핵심 포인트
               </p>
               <p className="text-sm text-foreground leading-relaxed font-medium">{takeaway.trim()}</p>
             </div>

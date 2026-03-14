@@ -140,7 +140,8 @@ export function MarketGrowthCharts({
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
               <Tooltip
                 formatter={(v: number) => [`${v}`, '검색 관심도']}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                cursor={false}
               />
               <Line
                 type="monotone"
@@ -169,7 +170,8 @@ export function MarketGrowthCharts({
               <YAxis domain={[0, 120]} tick={{ fontSize: 10 }} width={28} />
               <Tooltip
                 formatter={(v: number) => [`${v}/100`, '시장 매력도']}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                cursor={false}
               />
               <Bar dataKey="size" fill={CHART_EMERALD} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
@@ -197,7 +199,8 @@ export function MarketGrowthCharts({
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
               <Tooltip
                 formatter={(v: number) => [`${v}%`, '도입률']}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                cursor={false}
               />
               <Area
                 type="monotone"

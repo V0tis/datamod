@@ -79,7 +79,7 @@ export function NextActionsForPM({ result, loading = false, embedded = false }: 
         <div className="px-4 sm:px-5 py-4 border-b border-border/60">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
             <CheckSquare2 className="h-5 w-5 text-primary" />
-            Next Actions for PM
+            PM 다음 액션
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
             실행 가능한 5가지 PM 액션 (왜, 어떻게, 우선순위, 예상 공수)
@@ -119,7 +119,7 @@ export function NextActionsForPM({ result, loading = false, embedded = false }: 
                         PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.medium
                       )}
                     >
-                      {item.priority}
+                      {item.priority === 'high' ? '높음' : item.priority === 'medium' ? '보통' : '낮음'}
                     </span>
                   )}
                   {item.estimated_effort && (
@@ -134,7 +134,7 @@ export function NextActionsForPM({ result, loading = false, embedded = false }: 
                 {item.why && (
                   <div>
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
-                      Why
+                      이유
                     </p>
                     <p className="text-foreground leading-relaxed">{item.why}</p>
                   </div>
@@ -143,7 +143,7 @@ export function NextActionsForPM({ result, loading = false, embedded = false }: 
                   <div>
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-1">
                       <Zap className="h-3 w-3" />
-                      How to execute
+                      실행 방법
                     </p>
                     <p className="text-foreground leading-relaxed">{item.how_to_execute}</p>
                   </div>

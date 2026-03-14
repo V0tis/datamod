@@ -7,17 +7,17 @@ import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 function competitionToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
-  if (v === 'low') return 'Low'
-  if (v === 'medium') return 'Medium'
-  if (v === 'high') return 'High'
-  return '—'
+  if (v === 'low') return '낮음'
+  if (v === 'medium') return '보통'
+  if (v === 'high') return '높음'
+  return '데이터 없음'
 }
 
 function pmfToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
   if (v === 'low') return '낮음'
   if (v === 'medium') return '보통'
   if (v === 'high') return '높음'
-  return '—'
+  return '데이터 없음'
 }
 
 export interface StrategicDecisionLayerProps {
@@ -81,15 +81,15 @@ export function StrategicDecisionLayer({
     {
       id: 'market-opportunity',
       icon: TrendingUp,
-      label: 'Market Opportunity',
-      value: loading && opportunityScore == null ? '산출 중...' : (opportunityScore != null ? `${opportunityScore}/100` : '—'),
+      label: '시장 기회도',
+      value: loading && opportunityScore == null ? '산출 중...' : (opportunityScore != null ? `${opportunityScore}/100` : '데이터 없음'),
       explanation: marketOpportunityExplanation,
       className: 'border-emerald-500/30 bg-emerald-500/5',
     },
     {
       id: 'competition',
       icon: Shield,
-      label: 'Competition Intensity',
+      label: '경쟁 강도',
       value: competitionToLabel(competitionIntensity),
       explanation: competitionExplanation,
       className:
@@ -102,7 +102,7 @@ export function StrategicDecisionLayer({
     {
       id: 'pmf',
       icon: Target,
-      label: 'Product-Market Fit Potential',
+      label: '제품-시장 적합성',
       value: pmfToLabel(productMarketFit),
       explanation: productMarketFitExplanation,
       className: 'border-primary/30 bg-primary/5',
@@ -110,8 +110,8 @@ export function StrategicDecisionLayer({
     {
       id: 'entry',
       icon: Clock,
-      label: 'Entry Strategy',
-      value: entryStrategy ?? '—',
+      label: '진입 전략',
+      value: entryStrategy ?? '데이터 없음',
       explanation: entryExplanation,
       className: 'border-blue-500/30 bg-blue-500/5',
     },
@@ -151,7 +151,7 @@ export function StrategicDecisionLayer({
     >
       <div className="px-4 sm:px-5 py-4 border-b border-border/60">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          Strategic Decision Layer
+          전략적 의사결정 레이어
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
           시장 기회, 경쟁 강도, PMF 잠재력, 진입 전략 요약
