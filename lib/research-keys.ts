@@ -112,6 +112,26 @@ export async function getAIPrimaryModelForRequest(
   return v === 'groq' ? 'groq' : 'gemini'
 }
 
+const STEP_AI_COLUMNS = 'ai_primary_model, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model'
+
+/**
+ * Load all step-level AI settings from user_settings in a single query.
+ * Used by analysis pipeline to resolve per-step AI provider.
+ */
+export async function getStepAISettingsForRequest(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<import('@/lib/ai/step-ai-resolver').StepAISettings> {
+  const { buildStepAISettings } = await import('@/lib/ai/step-ai-resolver')
+  if (!userId) return buildStepAISettings(null)
+  const { data: row } = await supabase
+    .from('user_settings')
+    .select(STEP_AI_COLUMNS)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return buildStepAISettings(row as Record<string, unknown> | null)
+}
+
 /**
  * Resolve Groq key for a request: user key from DB if logged in, else system env.
  */

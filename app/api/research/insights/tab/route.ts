@@ -14,7 +14,8 @@ import {
   buildCacheKeyParts,
   type ResearchCacheScope,
 } from '@/lib/research-cache'
-import { getTabProviderKeysForUser, getAIPrimaryModelForRequest } from '@/lib/research-keys'
+import { getTabProviderKeysForUser, getStepAISettingsForRequest } from '@/lib/research-keys'
+import { resolveAIForStep } from '@/lib/ai/step-ai-resolver'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import { PM_ANALYSIS_PRINCIPLES } from '@/lib/ai/pm-analysis-framework'
 import {
@@ -117,13 +118,15 @@ export async function POST(req: Request) {
   const isReanalyze = body?.isReanalyze === true
   const countryCode = (typeof body?.countryCode === 'string' ? body.countryCode.trim() : '') || 'KR'
 
-  const [tabKeys, primaryModel] = await Promise.all([
+  const [tabKeys, stepAISettings] = await Promise.all([
     getTabProviderKeysForUser(supabase, user.id),
-    getAIPrimaryModelForRequest(supabase, user.id),
+    getStepAISettingsForRequest(supabase, user.id),
   ])
 
-  const provider: 'groq' | 'gemini' | 'all' = primaryModel === 'groq' ? 'groq' : primaryModel === 'gemini' ? 'gemini' : 'all'
-  console.log('[Tab Route] AI provider selection:', { primaryModel, provider, keyword })
+  const primaryModel = stepAISettings.ai_primary_model
+  const creativeModel = resolveAIForStep(stepAISettings, 'creative')
+  const provider: 'groq' | 'gemini' | 'all' = creativeModel === 'groq' ? 'groq' : creativeModel === 'gemini' ? 'gemini' : 'all'
+  console.log('[Tab Route] AI provider selection:', { primaryModel, creativeModel, provider, keyword })
 
   if (!tab || !['logic', 'creative', 'fact'].includes(tab)) {
     return NextResponse.json({ error: 'tab must be one of logic, creative, fact' }, { status: 400 })
@@ -211,7 +214,7 @@ export async function POST(req: Request) {
               apiKey: tabKeys.gemini || '',
               geminiAnalysis: mergedGemini,
               groqAnalysis: mergedGroq,
-              preferredProvider: primaryModel,
+              preferredProvider: resolveAIForStep(stepAISettings, 'consensus'),
               groqKey: tabKeys.groq || undefined,
             })
             if (synthesized) {
@@ -385,16 +388,17 @@ export async function POST(req: Request) {
   const groqOk = groqResult != null && String(groqResult).trim().length > 0
   const geminiOk = geminiResult != null && String(geminiResult).trim().length > 0
   const atLeastOneSuccess = groqOk || geminiOk
-  const hasConsensusKey = primaryModel === 'groq' ? !!groqKey : !!geminiKey
+  const consensusModel = resolveAIForStep(stepAISettings, 'consensus')
+  const hasConsensusKey = consensusModel === 'groq' ? !!groqKey : !!geminiKey
   if (tab === 'creative' && hasConsensusKey && atLeastOneSuccess) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
-    console.log('[AI Insight Consensus] generateConsensus', { provider: primaryModel, keyword })
+    console.log('[AI Insight Consensus] generateConsensus', { provider: consensusModel, keyword })
     consensus = await synthesizeConsensus({
       apiKey: geminiKey || '',
       geminiAnalysis: geminiInput,
       groqAnalysis: groqInput,
-      preferredProvider: primaryModel,
+      preferredProvider: consensusModel,
       groqKey: groqKey || undefined,
     })
     if (isReanalyze) {

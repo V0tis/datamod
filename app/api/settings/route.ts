@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -57,10 +57,21 @@ export async function GET() {
   const geminiApiKey = hasGeminiKey && row?.gemini_api_key ? String(row.gemini_api_key) : ''
   const groqApiKeyValue = hasGroqKey && groqKey ? groqKey : ''
 
+  const stepRow = row as Record<string, unknown> | null
   const res = NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
     aiPrimaryModel: aiPrimaryModel === 'groq' ? 'groq' : 'gemini',
+    stepAIModels: {
+      ai_market_model: (stepRow?.ai_market_model as string) ?? null,
+      ai_competitor_model: (stepRow?.ai_competitor_model as string) ?? null,
+      ai_insight_model: (stepRow?.ai_insight_model as string) ?? null,
+      ai_strategy_model: (stepRow?.ai_strategy_model as string) ?? null,
+      ai_action_model: (stepRow?.ai_action_model as string) ?? null,
+      ai_risk_model: (stepRow?.ai_risk_model as string) ?? null,
+      ai_creative_model: (stepRow?.ai_creative_model as string) ?? null,
+      ai_consensus_model: (stepRow?.ai_consensus_model as string) ?? null,
+    },
     hasGeminiKey,
     hasOpenAIKey,
     hasAnthropicKey,
@@ -98,7 +109,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: { nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string }
+  let body: {
+    nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string
+    ai_market_model?: string | null; ai_competitor_model?: string | null; ai_insight_model?: string | null; ai_strategy_model?: string | null
+    ai_action_model?: string | null; ai_risk_model?: string | null; ai_creative_model?: string | null; ai_consensus_model?: string | null
+  }
   try {
     body = await req.json()
   } catch {
@@ -118,11 +133,29 @@ export async function POST(req: Request) {
   const ai_primary_model =
     body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini' ? body.ai_primary_model : undefined
 
+  const parseStepModel = (v: unknown): string | null | undefined => {
+    if (v === null) return null
+    if (v === 'gemini' || v === 'groq') return v
+    return undefined
+  }
+  const ai_market_model = parseStepModel(body.ai_market_model)
+  const ai_competitor_model = parseStepModel(body.ai_competitor_model)
+  const ai_insight_model = parseStepModel(body.ai_insight_model)
+  const ai_strategy_model = parseStepModel(body.ai_strategy_model)
+  const ai_action_model = parseStepModel(body.ai_action_model)
+  const ai_risk_model = parseStepModel(body.ai_risk_model)
+  const ai_creative_model = parseStepModel(body.ai_creative_model)
+  const ai_consensus_model = parseStepModel(body.ai_consensus_model)
+
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
+
+  const ex = existing as Record<string, unknown> | null
+  const mergeStep = (newVal: string | null | undefined, col: string) =>
+    newVal !== undefined ? newVal : (ex?.[col] as string | null) ?? null
 
   const merged = {
     user_id: user.id,
@@ -132,11 +165,19 @@ export async function POST(req: Request) {
     openai_api_key:
       openai_api_key !== undefined ? openai_api_key : existing?.openai_api_key ?? null,
     anthropic_api_key:
-      anthropic_api_key !== undefined ? anthropic_api_key : (existing as { anthropic_api_key?: string } | null)?.anthropic_api_key ?? null,
+      anthropic_api_key !== undefined ? anthropic_api_key : (ex?.anthropic_api_key as string | null) ?? null,
     groq_api_key:
-      groq_api_key !== undefined ? groq_api_key : (existing as { groq_api_key?: string } | null)?.groq_api_key ?? null,
+      groq_api_key !== undefined ? groq_api_key : (ex?.groq_api_key as string | null) ?? null,
     ai_primary_model:
-      ai_primary_model !== undefined ? ai_primary_model : (existing as { ai_primary_model?: string } | null)?.ai_primary_model ?? null,
+      ai_primary_model !== undefined ? ai_primary_model : (ex?.ai_primary_model as string | null) ?? null,
+    ai_market_model: mergeStep(ai_market_model, 'ai_market_model'),
+    ai_competitor_model: mergeStep(ai_competitor_model, 'ai_competitor_model'),
+    ai_insight_model: mergeStep(ai_insight_model, 'ai_insight_model'),
+    ai_strategy_model: mergeStep(ai_strategy_model, 'ai_strategy_model'),
+    ai_action_model: mergeStep(ai_action_model, 'ai_action_model'),
+    ai_risk_model: mergeStep(ai_risk_model, 'ai_risk_model'),
+    ai_creative_model: mergeStep(ai_creative_model, 'ai_creative_model'),
+    ai_consensus_model: mergeStep(ai_consensus_model, 'ai_consensus_model'),
     updated_at: new Date().toISOString(),
   }
 

@@ -5,7 +5,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGeminiKeyForRequest, getGroqKeyForRequest, getAIPrimaryModelForRequest } from '@/lib/research-keys'
+import { getGeminiKeyForRequest, getGroqKeyForRequest, getStepAISettingsForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 import { logger } from '@/lib/logger'
 
@@ -66,12 +66,13 @@ export async function POST(req: Request) {
     const bodyPrimaryModel = body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini'
       ? body.ai_primary_model
       : null
-    const [geminiResult, groqKey, dbPrimaryProvider] = await Promise.all([
+    const [geminiResult, groqKey, stepAISettings] = await Promise.all([
       getGeminiKeyForRequest(supabase, user.id),
       getGroqKeyForRequest(supabase, user.id),
-      getAIPrimaryModelForRequest(supabase, user.id),
+      getStepAISettingsForRequest(supabase, user.id),
     ])
-    const primaryProvider = bodyPrimaryModel ?? dbPrimaryProvider
+    const primaryProvider = bodyPrimaryModel ?? stepAISettings.ai_primary_model
+    if (bodyPrimaryModel) stepAISettings.ai_primary_model = bodyPrimaryModel
     const { gemini, canSearch } = geminiResult
 
     logger.info('AI analysis: provider selection', {
@@ -144,6 +145,7 @@ export async function POST(req: Request) {
             geminiKey: gemini,
             groqKey,
             primaryProvider,
+            stepAISettings,
             mode,
             signal: combinedController.signal,
           })

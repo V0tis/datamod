@@ -11,15 +11,27 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
+
+type StepAIModels = {
+  ai_market_model: string | null
+  ai_competitor_model: string | null
+  ai_insight_model: string | null
+  ai_strategy_model: string | null
+  ai_action_model: string | null
+  ai_risk_model: string | null
+  ai_creative_model: string | null
+  ai_consensus_model: string | null
+}
 
 type SettingsData = {
   email: string
   nickname: string
   aiPrimaryModel?: 'gemini' | 'groq'
+  stepAIModels?: StepAIModels
   hasGeminiKey: boolean
   hasGroqKey?: boolean
   hasOpenAIKey?: boolean
@@ -29,7 +41,6 @@ type SettingsData = {
   hasServerOpenAI?: boolean
   hasServerAnthropic?: boolean
   licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
-  /** 현재 사용자 user_settings의 API 키 (수정용, 해당 사용자에게만 반환) */
   geminiApiKey?: string
   groqApiKey?: string
 }
@@ -74,12 +85,24 @@ const AI_PRIMARY_OPTIONS: { value: 'gemini' | 'groq'; label: string }[] = [
 const SETTINGS_TAB_PARAM = 'tab'
 const TAB_LICENSE = 'license'
 const TAB_PROFILE = 'profile'
+const TAB_AI_CONFIG = 'ai-config'
+
+const STEP_AI_FIELDS: { key: keyof StepAIModels; label: string; desc: string }[] = [
+  { key: 'ai_market_model', label: '시장 리서치 AI', desc: '트렌드 분석 및 시장 데이터 수집' },
+  { key: 'ai_competitor_model', label: '경쟁 분석 AI', desc: '경쟁사 환경 및 포지셔닝 분석' },
+  { key: 'ai_insight_model', label: '인사이트 AI', desc: '핵심 인사이트 및 시사점 추출' },
+  { key: 'ai_strategy_model', label: '전략 생성 AI', desc: '전략적 추천 및 방향성 생성' },
+  { key: 'ai_action_model', label: 'PM 액션 AI', desc: 'PM 액션 플랜 및 실행 계획 수립' },
+  { key: 'ai_risk_model', label: '리스크 분석 AI', desc: '리스크 평가 및 전략 검증' },
+  { key: 'ai_creative_model', label: 'Creative AI', desc: 'Creative 관점 분석 및 대안 도출' },
+  { key: 'ai_consensus_model', label: 'Consensus AI', desc: '멀티 AI 결과 종합 및 교차 검증' },
+]
 
 function SettingsPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get(SETTINGS_TAB_PARAM)
-  const activeTab = tabFromUrl === TAB_LICENSE ? TAB_LICENSE : TAB_PROFILE
+  const activeTab = tabFromUrl === TAB_LICENSE ? TAB_LICENSE : tabFromUrl === TAB_AI_CONFIG ? TAB_AI_CONFIG : TAB_PROFILE
 
   const setActiveTab = (value: string) => {
     const query = value === TAB_PROFILE ? '' : `?${SETTINGS_TAB_PARAM}=${value}`
@@ -105,6 +128,11 @@ function SettingsPageInner() {
   const [saveSuccessGroq, setSaveSuccessGroq] = useState(false)
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
   const [aiPrimaryModel, setAiPrimaryModel] = useState<'gemini' | 'groq'>('gemini')
+  const [stepAIModels, setStepAIModels] = useState<StepAIModels>({
+    ai_market_model: null, ai_competitor_model: null, ai_insight_model: null, ai_strategy_model: null,
+    ai_action_model: null, ai_risk_model: null, ai_creative_model: null, ai_consensus_model: null,
+  })
+  const [savingStepAI, setSavingStepAI] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -136,6 +164,7 @@ function SettingsPageInner() {
           setAiPrimaryModel(json.aiPrimaryModel === 'groq' ? 'groq' : 'gemini')
           setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
           setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
+          if (json.stepAIModels) setStepAIModels(json.stepAIModels)
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
@@ -172,6 +201,27 @@ function SettingsPageInner() {
       toast.success('AI 우선 분석이 저장되었습니다.')
     } catch {
       toast.error('저장에 실패했습니다.')
+    }
+  }
+
+  const handleStepAIChange = (key: keyof StepAIModels, value: 'gemini' | 'groq' | null) => {
+    setStepAIModels((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSaveStepAI = async () => {
+    setSavingStepAI(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stepAIModels),
+      })
+      if (!res.ok) throw new Error('저장 실패')
+      toast.success('단계별 AI 설정이 저장되었습니다.')
+    } catch {
+      toast.error('저장에 실패했습니다.')
+    } finally {
+      setSavingStepAI(false)
     }
   }
 
@@ -374,7 +424,7 @@ function SettingsPageInner() {
       </header>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full rin-section">
-        <TabsList className="w-full max-w-md grid grid-cols-2 h-9 rounded-lg bg-muted/50 p-1">
+        <TabsList className="w-full max-w-lg grid grid-cols-3 h-9 rounded-lg bg-muted/50 p-1">
           <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <User className="h-4 w-4" />
             내 정보
@@ -382,6 +432,10 @@ function SettingsPageInner() {
           <TabsTrigger value="license" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <KeyRound className="h-4 w-4" />
             라이선스
+          </TabsTrigger>
+          <TabsTrigger value="ai-config" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Cpu className="h-4 w-4" />
+            AI 분석 설정
           </TabsTrigger>
         </TabsList>
 
@@ -561,69 +615,7 @@ function SettingsPageInner() {
             </CardContent>
           </Card>
 
-          {/* 2. Analysis Configuration */}
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">분석 설정</CardTitle>
-              <CardDescription>분석 깊이를 선택하세요. 심층 분석일수록 더 상세한 결과를 제공합니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
-                <p className="text-xs text-muted-foreground mb-3">
-                  빠른 분석은 결과를 신속히 제공하고, 심층 분석은 더 많은 소스와 상세 인사이트를 생성합니다.
-                </p>
-                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
-                  {ANALYSIS_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleAnalysisDepthChange(opt.value)}
-                      className={cn(
-                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                        analysisDepth === opt.value
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-2 block">AI 우선 분석 모델</Label>
-                <p className="text-xs text-muted-foreground mb-3">
-                  선택한 AI 모델이 먼저 분석을 수행합니다. 실패할 경우 다른 AI 모델이 자동으로 대체 실행됩니다.
-                </p>
-                <div className="flex flex-col gap-2">
-                  {AI_PRIMARY_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors',
-                        aiPrimaryModel === opt.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/30 hover:bg-muted/30'
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="ai-primary-model"
-                        value={opt.value}
-                        checked={aiPrimaryModel === opt.value}
-                        onChange={() => handleAiPrimaryChange(opt.value)}
-                        className="h-4 w-4 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm font-medium">{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. System Status */}
+          {/* 2. System Status */}
           <Card className="border border-border bg-card shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle className="text-lg">시스템 상태</CardTitle>
@@ -653,6 +645,119 @@ function SettingsPageInner() {
                     <p className="text-sm text-muted-foreground">{groqConnected ? '연결됨' : '연결되지 않음'}</p>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI 분석 설정 탭 */}
+        <TabsContent value="ai-config" className="m-0 mt-6 space-y-6">
+          {/* 기본 분석 설정 (License에서 이동) */}
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">기본 분석 설정</CardTitle>
+              <CardDescription>분석 깊이와 기본 AI 모델을 선택합니다. 단계별 설정이 없으면 기본 모델이 사용됩니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  빠른 분석은 결과를 신속히 제공하고, 심층 분석은 더 많은 소스와 상세 인사이트를 생성합니다.
+                </p>
+                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                  {ANALYSIS_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleAnalysisDepthChange(opt.value)}
+                      className={cn(
+                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        analysisDepth === opt.value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-2 block">AI 우선 분석 모델 (기본값)</Label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  단계별 설정이 없는 분석 단계에서 사용됩니다. 실패할 경우 다른 AI 모델이 자동으로 대체 실행됩니다.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {AI_PRIMARY_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors',
+                        aiPrimaryModel === opt.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/30 hover:bg-muted/30'
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="ai-primary-model-config"
+                        value={opt.value}
+                        checked={aiPrimaryModel === opt.value}
+                        onChange={() => handleAiPrimaryChange(opt.value)}
+                        className="h-4 w-4 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 단계별 AI 모델 설정 */}
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">단계별 AI 모델 설정</CardTitle>
+              <CardDescription>각 분석 단계마다 사용할 AI 모델을 개별적으로 선택할 수 있습니다. &quot;기본값&quot;을 선택하면 위의 우선 분석 모델이 사용됩니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {STEP_AI_FIELDS.map((field) => {
+                const current = stepAIModels[field.key]
+                return (
+                  <div key={field.key} className="flex items-center justify-between gap-4 py-3 border-b border-border/40 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">{field.label}</p>
+                      <p className="text-xs text-muted-foreground">{field.desc}</p>
+                    </div>
+                    <div className="flex gap-1 p-0.5 rounded-lg bg-muted/50 shrink-0">
+                      {([
+                        { value: null, label: '기본값' },
+                        { value: 'gemini' as const, label: 'Gemini' },
+                        { value: 'groq' as const, label: 'Groq' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() => handleStepAIChange(field.key, opt.value)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                            current === opt.value
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="pt-4">
+                <Button onClick={handleSaveStepAI} disabled={savingStepAI}>
+                  {savingStepAI ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  단계별 설정 저장
+                </Button>
               </div>
             </CardContent>
           </Card>

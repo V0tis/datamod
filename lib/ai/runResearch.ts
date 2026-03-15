@@ -140,6 +140,8 @@ export type RunResearchParams = {
   mode?: 'quick' | 'standard' | 'deep'
   /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
   primaryProvider?: AIPrimaryModel
+  /** Step-level AI settings: per-step Gemini/Groq selection */
+  stepAISettings?: import('@/lib/ai/step-ai-resolver').StepAISettings
   /** AbortSignal for timeout/client disconnect. When aborted, generator yields error and stops. */
   signal?: AbortSignal
 }
@@ -1172,8 +1174,10 @@ function checkAborted(signal: AbortSignal | undefined): boolean {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, signal } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal } = params
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
+  const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
+  const effectiveStepSettings = stepSettings ?? { ai_primary_model: primaryProvider }
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
@@ -1331,8 +1335,8 @@ export async function* runResearch(
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
 
   const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider, webContext),
-    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, primaryProvider, webContext),
+    runTrendTask(geminiKey, groqKey, keyword, newsTitles, resolveAIForStep(effectiveStepSettings, 'market'), webContext),
+    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext),
   ])
 
   if (trendSettled.status === 'rejected') {
@@ -1425,7 +1429,7 @@ export async function* runResearch(
       keyword,
       marketOverview,
       competitionSummary,
-      primaryProvider
+      resolveAIForStep(effectiveStepSettings, 'insight')
     )
     insightData = insightResult.data
     const insightProvider = primaryProvider === 'gemini' ? (insightResult.usedFallback ? 'groq' : 'gemini') : (insightResult.usedFallback ? 'gemini' : 'groq')
@@ -1474,7 +1478,7 @@ export async function* runResearch(
       marketOverview,
       competitionSummary,
       insightData,
-      primaryProvider
+      resolveAIForStep(effectiveStepSettings, 'strategy')
     )
     strategyData = stratResult.data
     const stratProvider = stratPrimaryIsGemini ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
@@ -1543,7 +1547,7 @@ export async function* runResearch(
       strategyData.strategy_summary,
       opportunitiesSummary,
       risksSummary,
-      primaryProvider
+      resolveAIForStep(effectiveStepSettings, 'action')
     )
     executionData = {
       ...pmResult.executionData,
@@ -1631,7 +1635,7 @@ export async function* runResearch(
       strategyData,
       competitionSummary,
       executionData,
-      primaryProvider
+      resolveAIForStep(effectiveStepSettings, 'risk')
     )
   } catch {
     strategyEvaluation = undefined
@@ -1730,8 +1734,9 @@ export async function* runResearch(
   let creativeGroq: string | null = null
   let creativeGemini: string | null = null
   try {
+    const creativeModel = resolveAIForStep(effectiveStepSettings, 'creative')
     const creativeProvider: 'groq' | 'gemini' | 'none' =
-      primaryProvider === 'groq' && groqKey ? 'groq' : geminiKey ? 'gemini' : groqKey ? 'groq' : 'none'
+      creativeModel === 'groq' && groqKey ? 'groq' : geminiKey ? 'gemini' : groqKey ? 'groq' : 'none'
     log('creative_analysis', 'running', { provider: creativeProvider })
     if (creativeProvider !== 'none') {
       const summaryText = buildSummaryText(fullSummary)
