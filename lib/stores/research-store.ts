@@ -951,7 +951,7 @@ export const useResearchStore = create<ResearchStore>()(
 
                 // Handle task events (AI Analysis Console)
                 if (type === 'task') {
-                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string }
+                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; fallbackMessage?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string }
                   const task = ev.task
                   const status = ev.status
                   if (task && task in stepMap) {
@@ -976,7 +976,7 @@ export const useResearchStore = create<ResearchStore>()(
                       })
                     } else if (status === 'failed') {
                       get().mergeStreamingTaskIntoAnalysisTasks(task, 'failed', {
-                        errorMessage: ev.error ?? null,
+                        errorMessage: ev.fallbackMessage ?? ev.error ?? null,
                         provider: ev.provider ?? null,
                         fallback_used: ev.fallback_used ?? false,
                       })

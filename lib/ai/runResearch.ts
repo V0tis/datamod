@@ -121,7 +121,7 @@ export type PostProcessingStepId = 'key_metrics' | 'creative' | 'saving'
 
 export type ResearchStreamEvent =
   | { type: 'analysis_started'; analysisId: string }
-  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string }
+  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; fallbackMessage?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
@@ -1321,7 +1321,7 @@ export async function* runResearch(
     log('signal_layer', 'failed', { error: msg, err })
     await upsertAnalysisTask('signal_layer', 'failed', { errorMessage: msg, provider: null, fallback_used: false })
     await updateProgress(0, 'failed')
-    yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg, provider: null, fallback_used: false }
+    yield { type: 'task', task: 'signal_layer', status: 'failed', error: msg, fallbackMessage: msg, provider: null, fallback_used: false }
     yield { type: 'error', message: msg, step: 'signal_layer' }
     return
   }
@@ -1351,7 +1351,7 @@ export async function* runResearch(
     log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
     await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await updateProgress(2, 'failed')
-    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
   }
@@ -1360,7 +1360,7 @@ export async function* runResearch(
     log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
     await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
     await updateProgress(3, 'failed')
-    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'competition_analysis' }
     return
   }
@@ -1452,7 +1452,7 @@ export async function* runResearch(
     const msg = toUserFriendlyError(err, '인사이트 추출 중 오류가 발생했습니다.')
     log('insight_extraction', 'failed', { error: msg, err })
     await upsertAnalysisTask('insight_extraction', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'insight_extraction' }
     insightData = {
       key_insights: trendData.positive_signals,
@@ -1525,7 +1525,7 @@ export async function* runResearch(
       market_summary: undefined,
       key_strategic_insights: undefined,
     }
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: errorForUi, provider: effectiveStrategyProvider, fallback_used: false }
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: effectiveStrategyProvider, fallback_used: false }
   }
 
   if (checkAborted(signal)) {
@@ -1629,7 +1629,7 @@ export async function* runResearch(
       pm_action_plan: [],
       next_actions_pm: [],
     }
-    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: 'gemini', fallback_used: false }
   }
 
   const pos = trendData.positive_signals
@@ -1689,7 +1689,7 @@ export async function* runResearch(
     strategyEvaluation = undefined
     const errorForUi = cause && cause.length > 0 ? `리스크 및 기회 평가: ${cause}` : '리스크 및 기회 평가 중 오류가 발생했습니다.'
     await upsertAnalysisTask('risk_opportunity', 'failed', { errorMessage: errorForUi })
-    yield { type: 'task', task: 'risk_opportunity', status: 'failed', error: errorForUi }
+    yield { type: 'task', task: 'risk_opportunity', status: 'failed', error: errorForUi, fallbackMessage: errorForUi }
   }
 
   const structured: StructuredAnalysisFields = {

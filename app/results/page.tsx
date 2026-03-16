@@ -437,7 +437,13 @@ function ResultsContent() {
   const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   const showPolledError = polledStatus === 'failed'
-  const hasFailure = canonicalStatus === 'failed' || showPolledError
+  const hasStepFailure = (analysisTasks ?? []).some((t) => t.status === 'failed')
+  const stepFailureMessage = (analysisTasks ?? []).find((t) => t.status === 'failed')?.error_message ?? null
+  const hasFailure = canonicalStatus === 'failed' || showPolledError || hasStepFailure
+  const hasAnalysisStarted =
+    (analysisTasks?.length ?? 0) > 0 ||
+    streamingState.status === 'running' ||
+    streamingState.status === 'streaming'
   const hasPartialData =
     displayResult?.reportId != null ||
     (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) ||
@@ -1273,7 +1279,12 @@ function ResultsContent() {
         {/* 분석 실패 시 상단 배너 – 재시도 옵션 + 의미 있는 오류 메시지 */}
         {hasFailure && (
           <AnalysisFailureBanner
-            error={displayError ?? polledError ?? (streamingState.status === 'error' ? ('retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined) : undefined)}
+            error={
+              displayError ??
+              polledError ??
+              (stepFailureMessage ? `AI 분석 중 오류가 발생했습니다: ${stepFailureMessage}` : undefined) ??
+              (streamingState.status === 'error' ? ('retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined) : undefined)
+            }
             onRetry={() => {
               setPolledStatus(null)
               setPolledError(null)
@@ -1324,7 +1335,7 @@ function ResultsContent() {
                 analysisTasks={analysisTasks ?? undefined}
                 consensusData={insightData}
                 newsList={newsList}
-                loading={loading}
+                loading={loading && !hasAnalysisStarted}
                 keyword={currentKeyword ?? ''}
               />
             </ResultSectionErrorBoundary>
