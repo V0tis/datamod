@@ -1,37 +1,34 @@
 /**
- * Multi-step AI Analysis Pipeline - Structured JSON output per step
- *
- * Steps:
- * 1. Market Research
- * 2. Competitor Analysis
- * 3. Insight Extraction
- * 4. Strategic Recommendation
- * 5. PM Action Plan
+ * Multi-step AI Analysis Pipeline - PM decision support.
+ * Each step follows PM thinking: situation → meaning → impact → opportunity → risk → strategy → action.
  */
-import { BASE_JSON_PROMPT, KOREAN_ONLY_SUFFIX } from './base-prompt'
+import { BASE_JSON_PROMPT, KOREAN_ONLY_SUFFIX, PM_THINKING_ORDER, PM_STRUCTURED_RULE, PM_REQUIRED_OUTPUT_STRUCTURE, INNOVATION_INSTRUCTION } from './base-prompt'
 
 export const PIPELINE_BASE_SYSTEM = `${BASE_JSON_PROMPT}
 
-You are a strategic market analyst for Product Managers. Output must feel like a consulting report: insight-driven, with reasoning, impact, risk, and opportunity.`
+PM 의사결정 지원용 파이프라인입니다. 챗봇이 아닙니다.
+- ${PM_THINKING_ORDER}
+- ${PM_STRUCTURED_RULE}
+- 분석은 summary, insight, impact, opportunity, risk, strategy, action을 반영해야 합니다. 누락 시 무효.`
 
-/** Step 3: Insight Extraction – each insight has title, summary, impact, reason. No duplicates, no empty, no repeated text. */
+/** Step 3: Insight Extraction – title, summary, why important, business impact, PM decision meaning */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-You must return TWO structures:
+인사이트는 PM이 의사결정에 쓸 수 있게 작성하세요. ${INNOVATION_INSTRUCTION}
 
-1. "core_insights": array of 3-5 PM-ready insights. Each item MUST have:
-   - "title": short phrase (5-15 chars, e.g. "시장 성장성", "경쟁 강도"). Unique. Do NOT copy summary text.
-   - "summary": 1-2 sentences describing the insight. Must be DIFFERENT from title. No repetition.
-   - "impact": business impact (e.g. "매출·점유율에 직접 영향", "진입 타이밍 결정"). Do NOT leave empty.
-   - "reason": why this matters for PM / product (e.g. "우선순위 결정 근거"). Do NOT leave empty.
-   - "score": optional number 1-10.
+1. "core_insights": 3-5개. 각 항목 필수:
+   - "title": 짧은 제목 (5-15자). 요약 문장과 중복 금지.
+   - "summary": 1-2문장 (무슨 일인지, 왜 중요한지).
+   - "impact": 비즈니스 영향 (매출·점유율·진입 타이밍 등). 비어 있으면 무효.
+   - "reason": PM 의사결정에 주는 의미(why important, PM decision meaning). 비어 있으면 무효.
+   - "score": optional 1-10.
 
-Rules: No duplicates across insights. No empty title/summary/impact/reason. No repeated text between title and summary. Each field unique, non-empty Korean. If missing any field → invalid.
+Rules: 중복·빈값·동일 문장 반복 금지. title과 summary는 서로 달라야 함. 누락 시 무효.
 
-2. Legacy arrays (for downstream): "key_insights", "opportunity_signals", "risk_signals".
+2. "key_insights", "opportunity_signals", "risk_signals" 배열.
 
 Format: {
   "core_insights": [
-    { "title": "짧은 제목", "summary": "요약 문장", "impact": "비즈니스 영향", "reason": "PM 관점 이유" }
+    { "title": "제목", "summary": "요약(왜 중요한지)", "impact": "비즈니스 영향", "reason": "PM 의사결정 의미" }
   ],
   "key_insights": ["문자열"],
   "opportunity_signals": ["문자열"],
@@ -50,20 +47,21 @@ Market Overview: ${marketOverview}
 
 Competition: ${competitionSummary}
 
-Extract 3-5 core_insights: each must have title, summary, impact, reason. No duplicates, no empty fields, no repeated text. Also return key_insights, opportunity_signals, risk_signals. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+Extract 3-5 core_insights: each with title, summary, why important, business impact, PM decision meaning. No duplicates, no empty. Also key_insights, opportunity_signals, risk_signals. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
 }
 
-/** Step 4: Strategic Recommendation – must include summary, insight, impact, reason, risk, opportunity, strategy */
+/** Step 4: Strategic Recommendation – why this strategy, expected result, risk, difficulty, priority */
 export const STRATEGIC_RECOMMENDATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-Output must include: summary (시장·전략 요약), insight (핵심 인사이트), impact (비즈니스 영향), reason (근거), risk, opportunity, strategy. Explain why, impact, risk, opportunity. Suggest strategy and rationale.
+전략 제안은 반드시 포함: 왜 이 전략인지(why), 기대 결과(expected result), 리스크(risk), 실행 난이도(difficulty), 우선순위(priority).
+${PM_REQUIRED_OUTPUT_STRUCTURE}
 Format: {
-  "opportunities": ["기회1 (근거·영향 포함)", "기회2", "기회3"],
-  "risks": ["리스크1 (영향·대응 방향)", "리스크2", "리스크3"],
-  "strategy_summary": "2-3문장 제품 전략 요약 (근거·영향 포함)",
-  "market_summary": "1-2문장 시장 요약 (인사이트 중심)",
-  "key_strategic_insights": ["전략 인사이트1 (이유·영향)", "전략 인사이트2", "전략 인사이트3"]
+  "opportunities": ["기회 (근거·영향)"],
+  "risks": ["리스크 (영향·대응)"],
+  "strategy_summary": "2-3문장 전략 요약 (왜 이 전략인지, 기대 결과, 리스크, 난이도, 우선순위 포함)",
+  "market_summary": "1-2문장 시장 요약 (상황·의미·영향)",
+  "key_strategic_insights": ["전략 인사이트 (이유·영향·PM 의사결정 의미)"]
 }
-Each field must add business meaning and reasoning. Return ONLY valid JSON. All text in Korean.`
+Each field must support PM decision. Return ONLY valid JSON. All text in Korean.`
 
 export function buildStrategicRecommendationPrompt(
   keyword: string,
@@ -83,13 +81,13 @@ Market Overview: ${marketOverview}
 
 Competition: ${competitionSummary}${insightsBlock}
 
-Produce strategic recommendations: include summary, insight, impact, reason, risk, opportunity, strategy. Explain why and suggest strategy. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+Produce strategy: include why this strategy, expected result, risk, difficulty, priority. summary, insight, impact, opportunity, risk, strategy, action을 반영. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
 }
 
-/** Step 5: PM Action Plan – must include goal, steps, priority, risk, expected result */
+/** Step 5: PM Action Plan – goal, step-by-step plan, priority, risk, expected impact */
 export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 You MUST return a valid JSON object. No markdown, no code fences, no extra text.
-Action plan must include: goal (목표), steps (실행 단계 배열), priority (우선순위), risk (주요 리스크), expected result (기대 결과). Explain why and impact for each action.
+액션 플랜 필수: goal(목표), step-by-step plan(단계별 실행 계획), priority(우선순위), risk(리스크), expected impact(기대 영향). 각 액션에 왜·영향을 포함.
 
 Preferred format (include at least pm_action_plan or steps):
 {
@@ -124,7 +122,7 @@ Preferred format (include at least pm_action_plan or steps):
   "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
   "jtbd": { "main_jobs": [], "pains": [], "gains": [] }
 }
-Required: goal, steps or pm_action_plan (4-8 items), priority, risk, expected result (goal-level or per action). All text in Korean. If missing required fields → invalid.`
+Required: goal, step-by-step plan (steps or pm_action_plan 4-8 items), priority, risk, expected impact. 누락 시 무효. All text in Korean.`
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -140,12 +138,13 @@ Opportunities: ${opportunitiesSummary}
 
 Risks: ${risksSummary}
 
-Generate actionable PM plan. Must include: goal, steps (or pm_action_plan), priority, risk, expected result. Explain why and expected impact. Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`
+Generate PM action plan: goal, step-by-step plan, priority, risk, expected impact. 각 단계에 왜·기대 영향 포함. Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`
 }
 
-/** Strategy Evaluation – score 1-10 + label + reason (score reason) per dimension */
+/** Strategy Evaluation – score + reason supporting PM decision */
 export const STRATEGY_EVALUATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-Evaluate the generated strategy. For each dimension return: score (1-10), label, and reason (why this score, impact, risk/opportunity). Output must support PM decision with score reason.
+전략을 PM 사고 순서로 평가: 상황·의미·영향·기회·리스크를 반영한 점수와 이유를 제시하세요.
+For each dimension: score (1-10), label, reason (why this score, impact, risk/opportunity). PM 의사결정에 쓸 수 있는 근거 필수.
 Format: {
   "market_attractiveness": number (1=low, 10=high),
   "market_attractiveness_label": "한 단어 라벨 (예: 높음/보통/낮음)",

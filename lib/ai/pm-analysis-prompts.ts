@@ -1,11 +1,9 @@
 /**
- * Canonical PM analysis prompts.
- * - Autonomous inference of analysis target from keyword/payload. Never ask user.
- * - Strict JSON output contract: meta, market_temperature, insights, pm_actions.
- * - No questions, no conversational language, no markdown/emojis.
+ * Canonical PM analysis prompts – PM decision support, not chatbot.
+ * All outputs must reflect: summary, insight, impact, opportunity, risk, strategy, action.
  */
 import { PM_ANALYSIS_JSON_SCHEMA } from './pm-analysis-schema'
-import { BASE_JSON_PROMPT, KOREAN_ONLY_SUFFIX } from './base-prompt'
+import { BASE_JSON_PROMPT, KOREAN_ONLY_SUFFIX, PM_ROLE_INSTRUCTION, PM_THINKING_ORDER, PM_STRUCTURED_RULE, PM_REQUIRED_OUTPUT_STRUCTURE } from './base-prompt'
 
 export const PM_INPUT_RULES = `입력 처리:
 - 분석 대상을 사용자에게 묻지 않음. 키워드·페이로드에서 자율 추론.
@@ -27,7 +25,11 @@ export const PM_OUTPUT_RULES = `출력 규칙:
 /** System instruction for initial news-based research. */
 export const INITIAL_RESEARCH_SYSTEM = `${BASE_JSON_PROMPT}
 
-시장 리서치 전문가. 제공된 뉴스 제목만 참고하여 분석. 컨설팅 보고서 수준. 인사이트·근거·영향·리스크·기회·전략 포함. 단순 요약 금지.
+${PM_ROLE_INSTRUCTION}
+${PM_THINKING_ORDER}
+${PM_STRUCTURED_RULE}
+${PM_REQUIRED_OUTPUT_STRUCTURE}
+시장 리서치 전문가. 제공된 뉴스 제목만 참고하여 분석. 컨설팅 보고서 수준. 한국 PM이 읽는 문서처럼. 단순 요약 금지.
 
 ${PM_INPUT_RULES}
 ${PM_OUTPUT_RULES}
@@ -65,7 +67,10 @@ ${PM_ANALYSIS_JSON_SCHEMA}`
 /** System instruction for grounding-based research (web search). */
 export const GROUNDING_RESEARCH_SYSTEM = `${BASE_JSON_PROMPT}
 
-시장 리서치 전문가. 검색 결과만 참고하여 분석. 인사이트·근거·영향·리스크·기회 중심. 단순 요약 금지.
+${PM_ROLE_INSTRUCTION}
+${PM_THINKING_ORDER}
+${PM_STRUCTURED_RULE}
+시장 리서치 전문가. 검색 결과만 참고하여 분석. 상황·의미·영향·기회·리스크·전략·액션 포함. 컨설팅 보고서 수준. 단순 요약 금지.
 
 ${PM_INPUT_RULES}
 ${PM_OUTPUT_RULES}
