@@ -131,7 +131,7 @@ export function ResultPageStructuredSections({
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-muted-foreground rounded-xl border border-dashed border-border bg-muted/20">
-              분석이 완료되면 기회 점수, 핵심 결론, 요약이 여기에 표시됩니다.
+              결과 요약 데이터가 없습니다. 다른 탭에서 진행 중인 분석 결과를 확인하세요.
             </div>
           )}
         </ResultPageSection>
@@ -245,7 +245,7 @@ export function ResultPageStructuredSections({
         description="PM이 바로 실행할 수 있는 우선순위 액션 목록입니다."
         icon={<CheckSquare className="h-5 w-5" />}
       >
-        <NextActionsForPM result={effectiveResult} taskData={taskData} loading={loading} embedded />
+        <NextActionsForPM result={effectiveResult} taskData={taskData} analysisTasks={analysisTasks} loading={loading} embedded />
       </ResultPageSection>
       </motion.div>
     </motion.div>

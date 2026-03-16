@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       country_code?: string
       mode?: string
       ai_primary_model?: string
+      force_reanalyze?: boolean
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     const mode = ['quick', 'standard', 'deep'].includes(body?.mode ?? '')
       ? (body.mode as 'quick' | 'standard' | 'deep')
       : 'standard'
+    const forceReanalyze = body?.force_reanalyze === true
 
     if (!keyword) {
       return NextResponse.json(
@@ -148,6 +150,7 @@ export async function POST(req: Request) {
             stepAISettings,
             mode,
             signal: combinedController.signal,
+            forceReanalyze,
           })
 
           try {

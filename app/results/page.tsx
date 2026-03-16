@@ -331,11 +331,13 @@ function ResultsContent() {
   }, [keyword, storeKeyword, countryFromUrl, loadFromHistory])
 
   // Poll analysis status when we have keyword but no result (detects background analysis on refresh/new tab)
+  // Skip polling while streaming so we don't overwrite with old cached result when user clicked "다시 분석하기"
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
     const countryCode = countryFromUrl
     if (!k || !historyLoadDone || displayResult?.reportId) return
     if (polledStatus === 'completed' || polledStatus === 'failed') return
+    if (streamingState.status === 'running' || streamingState.status === 'streaming') return
 
     const poll = async () => {
       try {
@@ -370,6 +372,7 @@ function ResultsContent() {
     historyLoadDone,
     displayResult?.reportId,
     polledStatus,
+    streamingState.status,
     loadFromHistory,
     hydrateFromStatusResult,
   ])
@@ -538,15 +541,10 @@ function ResultsContent() {
     }
   }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_results, setInsightData])
 
-  /** AI 인사이트 시퀀스: resultState가 loading→success 전환 시에만. 캐시에서 온 결과는 생략. */
+  /** AI 인사이트 시퀀스 비활성화: 탭별로 부분 결과를 바로 보여주기 위해 "AI 인사이트 생성 중" 연출을 표시하지 않음. */
   useEffect(() => {
-    const wasLoading = prevLoadingRef.current ?? false
     prevLoadingRef.current = resultState === 'loading'
-    if (hasCachedResult === true) return
-    if (wasLoading && resultState === 'success' && effectiveDisplayResult && hasKeyword && !needsRunAction) {
-      setShowInsightSequence(true)
-    }
-  }, [resultState, effectiveDisplayResult, hasFailure, hasKeyword, needsRunAction, hasCachedResult])
+  }, [resultState])
 
   /** 키워드 변경 시 시퀀스 리셋 */
   useEffect(() => {
@@ -1090,13 +1088,10 @@ function ResultsContent() {
         )}>
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
-        {/* Cached result notice: show when loading from research_history */}
-        {hasCachedResult === true && (
+        {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
+        {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
             <p className="font-medium">이미 분석된 데이터가 있어 저장된 결과를 불러옵니다.</p>
-            {loading && !displayResult?.reportId && (
-              <p className="mt-1 text-muted-foreground">분석된 데이터를 불러오는 중입니다...</p>
-            )}
           </div>
         )}
         {/* 1. Result Page Hero – single control area (PDF, Save, Retry) */}
@@ -1174,7 +1169,7 @@ function ResultsContent() {
                   onRetryStep={() => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
                   }}
                   maxHeight="280px"
                 />
@@ -1237,7 +1232,7 @@ function ResultsContent() {
                   onClick={() => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
+                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
                   }}
                   disabled={loading || streamingState.status === 'running' || streamingState.status === 'streaming'}
                   className="gap-1.5 text-xs"
@@ -1289,7 +1284,7 @@ function ResultsContent() {
             onRetry={() => {
               setPolledStatus(null)
               setPolledError(null)
-              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
+              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
             }}
             showSettingsLink
             keyword={currentKeyword ?? undefined}
@@ -1325,10 +1320,6 @@ function ResultsContent() {
               }}
               disabled={loading}
             />
-          </div>
-        ) : !displayResult?.reportId ? (
-          <div className="py-6 text-center text-sm text-muted-foreground rounded-xl border border-dashed border-border bg-muted/10 px-4">
-            분석이 완료되면 결과 요약·차트·결론이 표시됩니다. 위 타임라인에서 진행 상황을 확인하세요.
           </div>
         ) : (
           <div role="region" aria-label="AI 리포트" className="space-y-6">

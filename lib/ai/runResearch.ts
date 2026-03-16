@@ -147,6 +147,8 @@ export type RunResearchParams = {
   stepAISettings?: import('@/lib/ai/step-ai-resolver').StepAISettings
   /** AbortSignal for timeout/client disconnect. When aborted, generator yields error and stops. */
   signal?: AbortSignal
+  /** true면 DB 캐시 무시하고 항상 새 분석 실행 (다시 분석하기용) */
+  forceReanalyze?: boolean
 }
 
 type RssItem = {
@@ -412,10 +414,92 @@ async function runCompetitionTask(
   return { competitionData, usedFallback, primaryProviderError }
 }
 
+export type CoreInsightItem = {
+  title: string
+  summary: string
+  impact: string
+  reason: string
+  score?: number
+}
+
 type InsightExtractionResult = {
   key_insights: string[]
   opportunity_signals: string[]
   risk_signals: string[]
+  core_insights: CoreInsightItem[]
+}
+
+function normalizeCoreInsight(raw: Record<string, unknown>): CoreInsightItem | null {
+  const title = typeof raw.title === 'string' ? raw.title.trim() : ''
+  const summary = typeof raw.summary === 'string' ? raw.summary.trim() : ''
+  const impact = typeof raw.impact === 'string' ? raw.impact.trim() : ''
+  const reason = typeof raw.reason === 'string' ? raw.reason.trim() : ''
+  if (!summary) return null
+  return {
+    title: title || summary.slice(0, 15).trim() + (summary.length > 15 ? '…' : ''),
+    summary,
+    impact: impact || '시장·제품 의사결정에 참고할 수 있는 요인입니다.',
+    reason: reason || '분석 데이터를 바탕으로 도출된 인사이트입니다.',
+    score: typeof raw.score === 'number' ? Math.min(10, Math.max(1, Math.round(raw.score))) : undefined,
+  }
+}
+
+/** Post-process: title === summary → shorten title; dedupe by summary */
+function postProcessCoreInsights(items: CoreInsightItem[]): CoreInsightItem[] {
+  const seen = new Set<string>()
+  return items
+    .map((item) => {
+      let { title, summary, impact, reason } = item
+      if (title.trim() === summary.trim() && summary.length > 20) {
+        title = summary.slice(0, 18).trim() + '…'
+      }
+      if (!impact.trim()) impact = '시장·제품 의사결정에 참고할 수 있는 요인입니다.'
+      if (!reason.trim()) reason = '분석 데이터를 바탕으로 도출된 인사이트입니다.'
+      const key = summary.slice(0, 80)
+      if (seen.has(key)) return null
+      seen.add(key)
+      return { ...item, title, summary, impact, reason }
+    })
+    .filter((x): x is CoreInsightItem => x != null)
+    .slice(0, 8)
+}
+
+/** Build fallback core_insights from trend + competition when AI fails or returns empty */
+function buildFallbackCoreInsights(
+  keyword: string,
+  trendSignals: string[],
+  marketScore: number,
+  competitionSummary: string
+): CoreInsightItem[] {
+  const items: CoreInsightItem[] = []
+  if (trendSignals.length > 0) {
+    trendSignals.slice(0, 3).forEach((s) => {
+      const t = s.trim()
+      if (t.length < 3) return
+      items.push({
+        title: t.length > 15 ? t.slice(0, 14).trim() + '…' : t,
+        summary: t,
+        impact: '시장 동향 반영으로 제품·출시 타이밍 결정에 참고할 수 있습니다.',
+        reason: '트렌드 분석 결과를 바탕으로 한 인사이트입니다.',
+      })
+    })
+  }
+  items.push({
+    title: '시장 기회 점수',
+    summary: `현재 시장 매력도는 ${marketScore}/100점으로 산출되었습니다.`,
+    impact: '기회 점수는 진입·투자 우선순위 판단에 활용할 수 있습니다.',
+    reason: '트렌드·경쟁·리스크 요인을 반영한 종합 지표입니다.',
+    score: Math.min(10, Math.max(1, Math.round((marketScore / 100) * 10))),
+  })
+  if (competitionSummary && competitionSummary.length > 10) {
+    items.push({
+      title: '경쟁 환경',
+      summary: competitionSummary.slice(0, 120) + (competitionSummary.length > 120 ? '…' : ''),
+      impact: '경쟁 구도 파악은 차별화 포지셔닝에 필요합니다.',
+      reason: '경쟁사 분석 결과를 요약한 내용입니다.',
+    })
+  }
+  return items.slice(0, 6)
 }
 
 /** Step 3: Insight Extraction - structured JSON from market + competition */
@@ -425,16 +509,17 @@ async function runInsightExtractionTask(
   keyword: string,
   marketOverview: string,
   competitionSummary: string,
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  fallbackContext: { trendSignals: string[]; marketScore: number }
 ): Promise<{ data: InsightExtractionResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL, isRetryable: () => false })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: INSIGHT_EXTRACTION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: INSIGHT_EXTRACTION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
   const primaryIsGemini = primaryProvider === 'gemini'
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
     try {
@@ -472,17 +557,36 @@ async function runInsightExtractionTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const fallbackInsight = { key_insights: [] as string[], opportunity_signals: [] as string[], risk_signals: [] as string[] }
-  const parsed = parseAiJson<{ key_insights?: string[]; opportunity_signals?: string[]; risk_signals?: string[] }>(
-    typeof text === 'string' ? text : '',
-    fallbackInsight,
-    'insight_extraction'
-  )
+  const fallbackInsight = { key_insights: [] as string[], opportunity_signals: [] as string[], risk_signals: [] as string[], core_insights: [] as CoreInsightItem[] }
+  const parsed = parseAiJson<{
+    key_insights?: string[]
+    opportunity_signals?: string[]
+    risk_signals?: string[]
+    core_insights?: Array<Record<string, unknown>>
+  }>(typeof text === 'string' ? text : '', fallbackInsight as Record<string, unknown>, 'insight_extraction')
+
   const key_insights = Array.isArray(parsed?.key_insights) ? parsed.key_insights.filter((s): s is string => typeof s === 'string') : []
   const opportunity_signals = Array.isArray(parsed?.opportunity_signals) ? parsed.opportunity_signals.filter((s): s is string => typeof s === 'string') : []
   const risk_signals = Array.isArray(parsed?.risk_signals) ? parsed.risk_signals.filter((s): s is string => typeof s === 'string') : []
+
+  let core_insights: CoreInsightItem[] = []
+  if (Array.isArray(parsed?.core_insights) && parsed.core_insights.length > 0) {
+    const rawList = parsed.core_insights
+      .map((r) => (r && typeof r === 'object' ? normalizeCoreInsight(r as Record<string, unknown>) : null))
+      .filter((x): x is CoreInsightItem => x != null)
+    core_insights = postProcessCoreInsights(rawList)
+  }
+  if (core_insights.length === 0) {
+    core_insights = buildFallbackCoreInsights(
+      keyword,
+      fallbackContext.trendSignals,
+      fallbackContext.marketScore,
+      competitionSummary
+    )
+  }
+
   return {
-    data: { key_insights, opportunity_signals, risk_signals },
+    data: { key_insights, opportunity_signals, risk_signals, core_insights },
     usedFallback,
     primaryProviderError,
   }
@@ -696,7 +800,12 @@ async function runPMActionPlanTask(
     : []
   const pmPlan: PMActionPlanItem[] = Array.isArray(parsed?.pm_action_plan)
     ? parsed.pm_action_plan
-        .filter((a): a is { action_title: string } => typeof (a as { action_title?: string })?.action_title === 'string')
+        .map((a) => {
+          const raw = a as Record<string, unknown>
+          const title = typeof raw?.action_title === 'string' ? raw.action_title.trim() : typeof raw?.action === 'string' ? raw.action.trim() : ''
+          return title ? { ...raw, action_title: title } : null
+        })
+        .filter((a): a is NonNullable<typeof a> => a != null)
         .map((a): PMActionPlanItem => ({
           action_title: String((a as { action_title: string }).action_title),
           description: typeof (a as Record<string, unknown>).description === 'string' ? String((a as Record<string, unknown>).description) : undefined,
@@ -767,12 +876,20 @@ async function runPMActionPlanTask(
   }
 }
 
-/** Strategy Evaluation - score each dimension 1-10 */
+/** Strategy Evaluation - score + label + reason per dimension */
 type StrategyEvaluationResult = {
   market_attractiveness: number
+  market_attractiveness_label?: string
+  market_attractiveness_reason?: string
   competition_risk: number
+  competition_risk_label?: string
+  competition_risk_reason?: string
   execution_difficulty: number
+  execution_difficulty_label?: string
+  execution_difficulty_reason?: string
   growth_potential: number
+  growth_potential_label?: string
+  growth_potential_reason?: string
 }
 
 function clampScore(n: unknown): number {
@@ -799,9 +916,9 @@ async function runStrategyEvaluationTask(
   )
   let text!: string
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 300, model: GEMINI_MODEL, isRetryable: () => false })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 450, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EVALUATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 300 })
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EVALUATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 450 })
   const primaryIsGemini = primaryProvider === 'gemini'
   try {
     if (primaryIsGemini) {
@@ -826,11 +943,20 @@ async function runStrategyEvaluationTask(
     fallbackEval,
     'strategy_evaluation'
   )
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : undefined)
   return {
     market_attractiveness: clampScore(parsed.market_attractiveness),
+    market_attractiveness_label: str(parsed.market_attractiveness_label),
+    market_attractiveness_reason: str(parsed.market_attractiveness_reason),
     competition_risk: clampScore(parsed.competition_risk),
+    competition_risk_label: str(parsed.competition_risk_label),
+    competition_risk_reason: str(parsed.competition_risk_reason),
     execution_difficulty: clampScore(parsed.execution_difficulty),
+    execution_difficulty_label: str(parsed.execution_difficulty_label),
+    execution_difficulty_reason: str(parsed.execution_difficulty_reason),
     growth_potential: clampScore(parsed.growth_potential),
+    growth_potential_label: str(parsed.growth_potential_label),
+    growth_potential_reason: str(parsed.growth_potential_reason),
   }
 }
 
@@ -1179,7 +1305,7 @@ function checkAborted(signal: AbortSignal | undefined): boolean {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal, forceReanalyze } = params
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
   const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
@@ -1188,18 +1314,22 @@ export async function* runResearch(
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
-  // Check cache first
-  const { data: cacheRow } = await supabase
-    .from('research_history')
-    .select('report_id, updated_at')
-    .eq('user_id', cacheKey.userId)
-    .eq('keyword', cacheKey.keyword)
-    .eq('country_code', cacheKey.countryCode)
-    .maybeSingle()
+  // Check cache first (skip when forceReanalyze = true: 사용자가 "다시 분석하기"를 누른 경우)
+  let cacheRow: { report_id: string; updated_at: string } | null = null
+  if (!forceReanalyze) {
+    const { data } = await supabase
+      .from('research_history')
+      .select('report_id, updated_at')
+      .eq('user_id', cacheKey.userId)
+      .eq('keyword', cacheKey.keyword)
+      .eq('country_code', cacheKey.countryCode)
+      .maybeSingle()
+    cacheRow = data
+  }
 
   const pipelineStartMs = Date.now()
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
-  console.log('[AI Pipeline] Start', { keyword, primaryProvider, hasGemini: !!geminiKey, hasGroq: !!groqKey })
+  console.log('[AI Pipeline] Start', { keyword, primaryProvider, hasGemini: !!geminiKey, hasGroq: !!groqKey, forceReanalyze })
   const log = (step: string, detail: string, extra?: Record<string, unknown>) => {
     console.log('[AI Timeline]', { step, detail, provider: primaryProvider, analysisId: analysisId.slice(0, 40) + '...', keyword, elapsedMs: Date.now() - pipelineStartMs, ...extra })
   }
@@ -1436,7 +1566,11 @@ export async function* runResearch(
       keyword,
       marketOverview,
       competitionSummary,
-      resolveAIForStep(effectiveStepSettings, 'insight')
+      resolveAIForStep(effectiveStepSettings, 'insight'),
+      {
+        trendSignals: trendData.positive_signals,
+        marketScore: trendData.market_score,
+      }
     )
     insightData = insightResult.data
     const insightProvider = primaryProvider === 'gemini' ? (insightResult.usedFallback ? 'groq' : 'gemini') : (insightResult.usedFallback ? 'gemini' : 'groq')
@@ -1458,6 +1592,12 @@ export async function* runResearch(
       key_insights: trendData.positive_signals,
       opportunity_signals: trendData.positive_signals,
       risk_signals: [],
+      core_insights: buildFallbackCoreInsights(
+        keyword,
+        trendData.positive_signals,
+        trendData.market_score,
+        competitionSummary
+      ),
     }
   }
 
@@ -1697,6 +1837,7 @@ export async function* runResearch(
     summary_insights: strategyData.strategy_summary,
     market_summary: strategyData.market_summary,
     key_strategic_insights: strategyData.key_strategic_insights,
+    core_insights: insightData.core_insights?.length ? insightData.core_insights : undefined,
     opportunity_areas: strategyData.opportunities.length > 0 ? strategyData.opportunities : undefined,
     recommended_product_strategy:
       executionData.product_idea || executionData.target_customer || executionData.monetization || strategyData.strategy_summary
@@ -1746,9 +1887,17 @@ export async function* runResearch(
     strategy_evaluation: strategyEvaluation
       ? {
           market_attractiveness: strategyEvaluation.market_attractiveness,
+          market_attractiveness_label: strategyEvaluation.market_attractiveness_label,
+          market_attractiveness_reason: strategyEvaluation.market_attractiveness_reason,
           competition_risk: strategyEvaluation.competition_risk,
+          competition_risk_label: strategyEvaluation.competition_risk_label,
+          competition_risk_reason: strategyEvaluation.competition_risk_reason,
           execution_difficulty: strategyEvaluation.execution_difficulty,
+          execution_difficulty_label: strategyEvaluation.execution_difficulty_label,
+          execution_difficulty_reason: strategyEvaluation.execution_difficulty_reason,
           growth_potential: strategyEvaluation.growth_potential,
+          growth_potential_label: strategyEvaluation.growth_potential_label,
+          growth_potential_reason: strategyEvaluation.growth_potential_reason,
         }
       : undefined,
   }

@@ -89,17 +89,33 @@ export type StructuredAnalysisFields = {
     mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     risk_mitigation?: Array<{ action?: string; priority?: string; risk_addressed?: string }>
   }
-  /** Strategy Evaluation - AI-scored dimensions 1-10 */
+  /** Strategy Evaluation - AI-scored dimensions 1-10 + label/reason per dimension */
   strategy_evaluation?: {
     market_attractiveness?: number
+    market_attractiveness_label?: string
+    market_attractiveness_reason?: string
     competition_risk?: number
+    competition_risk_label?: string
+    competition_risk_reason?: string
     execution_difficulty?: number
+    execution_difficulty_label?: string
+    execution_difficulty_reason?: string
     growth_potential?: number
+    growth_potential_label?: string
+    growth_potential_reason?: string
   }
   /** Product strategy focus: short market summary */
   market_summary?: string
   /** 3–5 key strategic insights */
   key_strategic_insights?: string[]
+  /** Core Insight tab: structured insights with title, summary, impact, reason */
+  core_insights?: Array<{
+    title: string
+    summary: string
+    impact: string
+    reason: string
+    score?: number
+  }>
   /** Opportunity areas (from opportunities) */
   opportunity_areas?: string[]
   /** Recommended product strategy: product idea, target customer, monetization */

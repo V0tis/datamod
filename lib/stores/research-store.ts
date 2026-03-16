@@ -103,6 +103,8 @@ export interface ResearchResponse {
     /** Product strategy focus */
     market_summary?: string
     key_strategic_insights?: string[]
+    /** Core Insight tab: structured insights with title, summary, impact, reason */
+    core_insights?: Array<{ title: string; summary: string; impact: string; reason: string; score?: number }>
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
@@ -437,7 +439,7 @@ interface ResearchStore extends ResearchState {
   /** Apply streaming section updates. Composes result from sections. */
   applyStreamingUpdate: (payload: StreamingUpdatePayload) => void
   /** Start analysis via streaming API (replaces job polling). */
-  startStreamingResearch: (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq' }) => Promise<void>
+  startStreamingResearch: (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq'; force_reanalyze?: boolean }) => Promise<void>
   /** Abort current analysis in progress */
   abortAnalysis: () => void
   /** Set analysis mode for next analysis */
@@ -767,7 +769,7 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
-      startStreamingResearch: async (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq' }) => {
+      startStreamingResearch: async (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq'; force_reanalyze?: boolean }) => {
         const k = keyword?.trim()
         if (!k) {
           toast.error('검색어가 없습니다.')
@@ -838,7 +840,13 @@ export const useResearchStore = create<ResearchStore>()(
           const res = await fetch('/api/research/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keyword: k, country_code: countryCode, mode, ai_primary_model: options?.ai_primary_model }),
+            body: JSON.stringify({
+              keyword: k,
+              country_code: countryCode,
+              mode,
+              ai_primary_model: options?.ai_primary_model,
+              force_reanalyze: options?.force_reanalyze === true,
+            }),
             credentials: 'same-origin',
             signal,
           })

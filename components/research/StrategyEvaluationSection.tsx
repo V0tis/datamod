@@ -7,9 +7,17 @@ import { SectionContentSkeleton } from './SectionContentSkeleton'
 
 type StrategyEval = {
   market_attractiveness?: number
+  market_attractiveness_label?: string
+  market_attractiveness_reason?: string
   competition_risk?: number
+  competition_risk_label?: string
+  competition_risk_reason?: string
   execution_difficulty?: number
+  execution_difficulty_label?: string
+  execution_difficulty_reason?: string
   growth_potential?: number
+  growth_potential_label?: string
+  growth_potential_reason?: string
 }
 
 const DIMENSIONS = [
@@ -86,43 +94,58 @@ export function StrategyEvaluationSection({
           <SectionContentSkeleton variant="grid" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 sm:p-5">
-          {DIMENSIONS.map((d) => {
-            const Icon = d.icon
-            const score = se && typeof se[d.id] === 'number' ? (se[d.id] as number) : null
-            return (
-              <div
-                key={d.id}
-                className={cn(
-                  'rounded-xl border-2 p-4 transition-colors hover:shadow-md',
-                  d.className
-                )}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon className="h-5 w-5 text-foreground shrink-0" aria-hidden />
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {d.labelKo}
-                  </span>
-                </div>
-                <p className="text-2xl font-bold text-foreground leading-snug">
-                  {score != null ? `${score}/10` : '—'}
-                </p>
-                {score != null && (
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all',
-                        d.higherIsBetter
-                          ? 'bg-emerald-500'
-                          : 'bg-amber-500'
-                      )}
-                      style={{ width: `${(score / 10) * 100}%` }}
-                    />
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {DIMENSIONS.map((d) => {
+              const Icon = d.icon
+              const score = se && typeof se[d.id] === 'number' ? (se[d.id] as number) : null
+              const reasonKey = `${d.id}_reason` as keyof StrategyEval
+              const labelKey = `${d.id}_label` as keyof StrategyEval
+              const reason = se && typeof se[reasonKey] === 'string' ? (se[reasonKey] as string) : null
+              const label = se && typeof se[labelKey] === 'string' ? (se[labelKey] as string) : null
+              return (
+                <div
+                  key={d.id}
+                  className={cn(
+                    'rounded-xl border-2 p-4 transition-colors hover:shadow-md flex flex-col',
+                    d.className
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className="h-5 w-5 text-foreground shrink-0" aria-hidden />
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {d.labelKo}
+                    </span>
+                    {label && (
+                      <span className="text-[10px] text-muted-foreground/80 ml-auto">{label}</span>
+                    )}
                   </div>
-                )}
-              </div>
-            )
-          })}
+                  <p className="text-2xl font-bold text-foreground leading-snug">
+                    {score != null ? `${score}/10` : '—'}
+                  </p>
+                  {score != null && (
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          d.higherIsBetter
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500'
+                        )}
+                        style={{ width: `${(score / 10) * 100}%` }}
+                      />
+                    </div>
+                  )}
+                  {reason && (
+                    <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">이유</p>
+                      <p className="text-xs text-foreground leading-relaxed">{reason}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </section>

@@ -5,6 +5,8 @@ import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
+type CoreInsightItem = { title?: string; summary?: string; impact?: string; reason?: string; score?: number }
+
 /** Extract key metrics (numbers, scores) from text */
 function extractKeyMetrics(text: string): string[] {
   const metrics: string[] = []
@@ -17,10 +19,25 @@ function extractKeyMetrics(text: string): string[] {
   return [...new Set(metrics)].slice(0, 4)
 }
 
-/** Derive structured insight from a raw insight string */
+/** Map pipeline core_insights to StructuredInsight (no fallback "—") */
+function coreInsightToStructured(item: CoreInsightItem): StructuredInsight {
+  const title = (item.title ?? '').trim() || (item.summary ?? '').trim().slice(0, 15) + '…'
+  const summary = (item.summary ?? '').trim() || '분석 인사이트'
+  const impact = (item.impact ?? '').trim() || '시장·제품 의사결정에 참고할 수 있는 요인입니다.'
+  const reason = (item.reason ?? '').trim() || '분석 데이터를 바탕으로 도출된 인사이트입니다.'
+  return {
+    title,
+    summary,
+    impact,
+    reason,
+    keyMetrics: extractKeyMetrics(summary + impact + reason).length > 0 ? extractKeyMetrics(summary + impact + reason) : undefined,
+  }
+}
+
+/** Derive structured insight from a raw insight string (fallback when no core_insights) */
 function toStructuredInsight(text: string): StructuredInsight {
   const t = text.trim()
-  if (!t) return { title: '—', summary: '—' }
+  if (!t) return { title: '분석 요약', summary: '데이터 수집 완료. 상세 인사이트는 재분석 후 확인할 수 있습니다.', impact: '추가 분석이 필요합니다.', reason: '트렌드·경쟁 데이터를 반영한 요약입니다.' }
 
   let title = ''
   let summary = t
@@ -59,8 +76,10 @@ function toStructuredInsight(text: string): StructuredInsight {
   }
 
   const keyMetrics = extractKeyMetrics(text)
+  const impact = '시장·제품 전략 수립에 참고할 수 있는 인사이트입니다.'
+  const reason = '트렌드 및 경쟁 분석 결과를 바탕으로 도출되었습니다.'
 
-  return { title, summary, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
+  return { title, summary, impact, reason, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
 }
 
 type TaskOutput = Record<string, unknown>
@@ -176,14 +195,28 @@ export function KeyMarketInsightsCard({
   const skipAnimation = !loading && hasEarlyData
   const showStreamingComplete = !loading && hasEarlyData
 
-  const structuredInsights = bulletInsights.map(toStructuredInsight)
+  // Prefer pipeline core_insights (title/summary/impact/reason) when available
+  const coreInsightsRaw = (km.core_insights ?? getTaskOutput('insight_extraction', taskData, analysisTasks)?.core_insights) as CoreInsightItem[] | undefined
+  const coreInsightsList = Array.isArray(coreInsightsRaw) && coreInsightsRaw.length > 0
+    ? coreInsightsRaw
+        .filter((i): i is CoreInsightItem => {
+          if (!i || typeof i !== 'object') return false
+          const s = (i as CoreInsightItem).summary
+          return typeof s === 'string' && s.trim().length > 0
+        })
+        .slice(0, 8)
+        .map((i) => coreInsightToStructured(i))
+    : []
+
+  const structuredInsights =
+    coreInsightsList.length > 0 ? coreInsightsList : bulletInsights.map(toStructuredInsight)
 
   const [revealedCount, setRevealedCount] = useState(0)
   const prevKey = useRef('')
-  const key = bulletInsights.join('|')
+  const key = structuredInsights.length > 0 ? structuredInsights.map((s) => s.summary).join('|') : bulletInsights.join('|')
 
   useEffect(() => {
-    if (bulletInsights.length === 0) {
+    if (structuredInsights.length === 0) {
       setRevealedCount(0)
       return
     }
@@ -191,19 +224,19 @@ export function KeyMarketInsightsCard({
       prevKey.current = key
       setRevealedCount(0)
     }
-  }, [key, bulletInsights.length])
+  }, [key, structuredInsights.length])
 
   useEffect(() => {
-    if (skipAnimation || !useStreaming || bulletInsights.length === 0) {
-      setRevealedCount(bulletInsights.length)
+    if (skipAnimation || !useStreaming || structuredInsights.length === 0) {
+      setRevealedCount(structuredInsights.length)
       return
     }
-    if (revealedCount >= bulletInsights.length) return
-    const t = setTimeout(() => setRevealedCount((c) => Math.min(c + 1, bulletInsights.length)), 320)
+    if (revealedCount >= structuredInsights.length) return
+    const t = setTimeout(() => setRevealedCount((c) => Math.min(c + 1, structuredInsights.length)), 320)
     return () => clearTimeout(t)
-  }, [revealedCount, bulletInsights.length, useStreaming, skipAnimation])
+  }, [revealedCount, structuredInsights.length, useStreaming, skipAnimation])
 
-  const showCursor = useStreaming && revealedCount > 0 && revealedCount < bulletInsights.length
+  const showCursor = useStreaming && revealedCount > 0 && revealedCount < structuredInsights.length
 
   if (!hasContent && !loading) return null
 
@@ -230,17 +263,7 @@ export function KeyMarketInsightsCard({
               className="animate-in fade-in slide-in-from-bottom-2 duration-200"
             />
           ))}
-          {showCursor && (
-            <div
-              className={cn(
-                'rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 flex items-center gap-2 text-xs text-muted-foreground',
-                'animate-in fade-in duration-200'
-              )}
-            >
-              <span className="inline-block w-0.5 h-4 bg-primary animate-pulse" aria-hidden />
-              AI 인사이트 생성중…
-            </div>
-          )}
+          {/* "AI 인사이트 생성중" 커서 비표시: 탭별 부분 결과를 바로 보여주기 위해 로딩 연출 제거 */}
         </div>
       )}
     </div>

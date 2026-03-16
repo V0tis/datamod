@@ -14,14 +14,33 @@ export const PIPELINE_BASE_SYSTEM = `${BASE_JSON_PROMPT}
 
 You are a strategic market analyst for Product Managers.`
 
-/** Step 3: Insight Extraction - key insights from market + competitor */
+/** Step 3: Insight Extraction - structured core insights + legacy arrays for strategy step */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
+You must return TWO structures:
+
+1. "core_insights": array of 3-5 PM-ready insights. Each item MUST have:
+   - "title": short phrase (5-15 chars, e.g. "시장 성장성", "경쟁 강도"). Do NOT copy summary.
+   - "summary": 1-2 sentences describing the insight. Must be DIFFERENT from title.
+   - "impact": business impact (e.g. "매출·점유율에 직접 영향", "진입 타이밍 결정"). Do NOT leave empty.
+   - "reason": why this matters for PM / product (e.g. "우선순위 결정 근거"). Do NOT leave empty.
+   - "score": optional number 1-10.
+
+Rules: Do NOT repeat the same text in title and summary. Do NOT leave impact or reason empty. Do NOT duplicate insights. Each field must be unique, non-empty Korean text.
+
+2. Legacy arrays (for downstream steps):
+   "key_insights": ["인사이트1", ...],
+   "opportunity_signals": ["기회1", ...],
+   "risk_signals": ["리스크1", ...]
+
 Format: {
-  "key_insights": ["인사이트1", "인사이트2", "인사이트3", "인사이트4", "인사이트5"],
-  "opportunity_signals": ["기회 신호1", "기회 신호2", "기회 신호3"],
-  "risk_signals": ["리스크1", "리스크2", "리스크3"]
+  "core_insights": [
+    { "title": "짧은 제목", "summary": "요약 문장", "impact": "비즈니스 영향", "reason": "PM 관점 이유" }
+  ],
+  "key_insights": ["문자열"],
+  "opportunity_signals": ["문자열"],
+  "risk_signals": ["문자열"]
 }
-Extract 3-5 key insights, 2-4 opportunity signals, 2-4 risk signals. Be specific and actionable.`
+Return ONLY valid JSON. All strings in Korean.`
 
 export function buildInsightExtractionPrompt(
   keyword: string,
@@ -34,7 +53,7 @@ Market Overview: ${marketOverview}
 
 Competition: ${competitionSummary}
 
-Extract key insights, opportunity signals, and risk signals. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+Extract 3-5 core_insights (each with title, summary, impact, reason - all different, no empty). Also return key_insights, opportunity_signals, risk_signals arrays. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
 }
 
 /** Step 4: Strategic Recommendation - opportunities, risks, strategy summary */
@@ -95,18 +114,18 @@ Format: {
     "priority": "high|medium|low"
   }],
   "strategic_decision_layer": {
-    "market_opportunity_explanation": "시장 기회 근거 (한 줄)",
+    "market_opportunity_explanation": "시장 기회도 점수 이유 (한 줄, why_score)",
     "competition_intensity": "low|medium|high",
-    "competition_explanation": "경쟁 강도 이유 (한 줄)",
+    "competition_explanation": "경쟁 강도 이유 (한 줄, reason)",
     "product_market_fit": "low|medium|high",
-    "product_market_fit_explanation": "시장 성장·적합성 이유 (한 줄)",
-    "entry_strategy": "진입 전략",
-    "entry_explanation": "진입 전략 근거 (한 줄)"
+    "product_market_fit_explanation": "제품-시장 적합성 이유 (한 줄, reason)",
+    "entry_strategy": "진입 전략 요약",
+    "entry_explanation": "진입 전략 근거 (한 줄, reason)"
   },
   "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
   "jtbd": { "main_jobs": [], "pains": [], "gains": [] }
 }
-Include 2-4 product_actions, 4-8 pm_action_plan items, 3-5 next_actions_pm.`
+Include 2-4 product_actions, 4-8 pm_action_plan items, 3-5 next_actions_pm. For strategic_decision_layer, always provide each explanation (reason/why_score) in one short sentence.`
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -125,17 +144,25 @@ Risks: ${risksSummary}
 Generate actionable PM plan. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
 }
 
-/** Strategy Evaluation - score each dimension 1-10 */
+/** Strategy Evaluation - score each dimension 1-10 + label and reason per dimension */
 export const STRATEGY_EVALUATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-Evaluate the generated strategy and score each dimension from 1 to 10.
+Evaluate the generated strategy. Return score, label, and reason for EACH dimension.
 
 Format: {
-  "market_attractiveness": number (1=low, 10=high – how attractive is the market?),
-  "competition_risk": number (1=low risk, 10=high risk – how intense is competition?),
-  "execution_difficulty": number (1=easy, 10=very hard – how difficult to execute?),
-  "growth_potential": number (1=low, 10=high – growth opportunity)
+  "market_attractiveness": number (1=low, 10=high),
+  "market_attractiveness_label": "한 단어 라벨 (예: 높음/보통/낮음)",
+  "market_attractiveness_reason": "이 점수 이유 한 줄",
+  "competition_risk": number (1=low risk, 10=high risk),
+  "competition_risk_label": "한 단어 라벨",
+  "competition_risk_reason": "이 점수 이유 한 줄",
+  "execution_difficulty": number (1=easy, 10=very hard),
+  "execution_difficulty_label": "한 단어 라벨",
+  "execution_difficulty_reason": "이 점수 이유 한 줄",
+  "growth_potential": number (1=low, 10=high),
+  "growth_potential_label": "한 단어 라벨",
+  "growth_potential_reason": "이 점수 이유 한 줄"
 }
-All scores must be integers 1-10.`
+All scores must be integers 1-10. All _label and _reason fields must be short Korean.`
 
 export function buildStrategyEvaluationPrompt(
   keyword: string,
@@ -157,5 +184,5 @@ Risks: ${risksSummary}
 Competition: ${competitionSummary}
 ${actionsBlock ? `\n${actionsBlock}` : ''}
 
-Evaluate this strategy. Score each dimension 1-10. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+Evaluate this strategy. For each dimension return score, label, and reason. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
 }

@@ -109,14 +109,14 @@ export function MarketGrowthCharts({
   chartInsights,
   className,
 }: MarketGrowthChartsProps) {
-  /** 분석 중에도 차트 표시: 값 없으면 default 사용 */
+  /** Data source: result.key_metrics (opportunity_score_breakdown, opportunity_score). Safe fallback when missing. */
   const defaultBreakdown = { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : defaultBreakdown
   const marketGrowth = effectiveBreakdown?.market_growth ?? 0
   const trendMomentum = effectiveBreakdown?.trend_momentum ?? 0
-  const score = opportunityScore ?? 0
+  const score = Math.min(100, Math.max(0, opportunityScore ?? 0))
 
-  const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 0)
+  const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 50)
   const sizeData = buildMarketSizeData(score)
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
 

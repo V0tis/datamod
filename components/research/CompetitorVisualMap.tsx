@@ -7,11 +7,11 @@ export type Competitor = { name?: string; positioning?: string; strength?: strin
 
 type Tier = 'leader' | 'challenger' | 'niche' | 'emerging'
 
-const TIER_CONFIG: Record<Tier, { label: string; labelEn: string; icon: typeof Crown; color: string; dotColor: string }> = {
-  leader: { label: '리더', labelEn: 'Leader', icon: Crown, color: 'border-blue-500/50 bg-blue-500/10', dotColor: 'bg-blue-500' },
-  challenger: { label: '도전자', labelEn: 'Challenger', icon: TrendingUp, color: 'border-emerald-500/50 bg-emerald-500/10', dotColor: 'bg-emerald-500' },
-  niche: { label: '니치', labelEn: 'Niche', icon: Zap, color: 'border-amber-500/50 bg-amber-500/10', dotColor: 'bg-amber-500' },
-  emerging: { label: '신흥', labelEn: 'Emerging', icon: TrendingUp, color: 'border-gray-400/50 bg-gray-400/10', dotColor: 'bg-gray-400' },
+const TIER_CONFIG: Record<Tier, { label: string; labelEn: string; description: string; icon: typeof Crown; color: string; dotColor: string }> = {
+  leader: { label: '시장 리더', labelEn: 'Leader', description: '점유율 + 영향력 높음', icon: Crown, color: 'border-blue-500/50 bg-blue-500/10', dotColor: 'bg-blue-500' },
+  challenger: { label: '주요 경쟁자', labelEn: 'Challenger', description: '성장 중', icon: TrendingUp, color: 'border-emerald-500/50 bg-emerald-500/10', dotColor: 'bg-emerald-500' },
+  niche: { label: '특정 시장 집중', labelEn: 'Niche', description: '니치·특화 포지션', icon: Zap, color: 'border-amber-500/50 bg-amber-500/10', dotColor: 'bg-amber-500' },
+  emerging: { label: '신규 / 초기 단계', labelEn: 'Emerging', description: '신규 진입 또는 초기 성장', icon: TrendingUp, color: 'border-gray-400/50 bg-gray-400/10', dotColor: 'bg-gray-400' },
 }
 
 function inferTier(c: Competitor, index: number, total: number): Tier {
@@ -84,16 +84,17 @@ export function CompetitorTierChart({ competitors, className }: CompetitorTierCh
           return (
             <div
               key={tier}
+              title={config.description}
               className={cn(
                 'rounded-xl border-2 p-4',
                 config.color
               )}
             >
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="text-sm font-semibold text-foreground">{config.label}</span>
-                <span className="text-[10px] text-muted-foreground">({config.labelEn})</span>
               </div>
+              <p className="text-[10px] text-muted-foreground mb-3">{config.description}</p>
               <ul className="space-y-2">
                 {items.map((c, i) => (
                   <li key={`${c.name}-${i}`} className="text-sm">

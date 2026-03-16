@@ -11,9 +11,13 @@ export interface StructuredInsight {
   title: string
   /** Short summary (1–2 sentences) */
   summary: string
-  /** Why this insight matters */
+  /** Impact: why this insight matters */
+  impact?: string
+  /** Reason / implication for product or PM action */
+  reason?: string
+  /** Why this insight matters (legacy; maps to impact if impact missing) */
   whyItMatters?: string
-  /** Implication for product / PM action */
+  /** Implication for product / PM action (legacy; maps to reason if reason missing) */
   implicationForProduct?: string
   /** Key metrics to highlight (e.g. "75/100", "시장 매력도 85점") */
   keyMetrics?: string[]
@@ -64,10 +68,19 @@ function TextWithHighlights({ text, keyMetrics }: { text: string; keyMetrics?: s
  */
 export function StructuredInsightCard({ insight, className }: StructuredInsightCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const hasExtraSections = Boolean(insight.whyItMatters || insight.implicationForProduct)
+  const impact = insight.impact ?? insight.whyItMatters ?? ''
+  const reason = insight.reason ?? insight.implicationForProduct ?? ''
+  const hasExtraSections = Boolean(impact || reason || insight.whyItMatters || insight.implicationForProduct)
   const hasLongSummary = insight.summary.length > 120
   const hasDetail = hasExtraSections || hasLongSummary
-  const metrics = insight.keyMetrics ?? extractKeyMetrics(insight.summary + ' ' + (insight.whyItMatters ?? '') + (insight.implicationForProduct ?? ''))
+  const metrics = insight.keyMetrics ?? extractKeyMetrics(insight.summary + ' ' + impact + reason)
+  const titleSameAsContents = insight.title.trim() === insight.summary.trim()
+  const displayTitle = (insight.title || '').trim() || (insight.summary || '').trim().slice(0, 20) + '…'
+  const displaySummary = (insight.summary || '').trim() || '분석 인사이트'
+  const displayImpact = impact.trim()
+  const displayReason = reason.trim()
+  const showImpact = displayImpact.length > 0 && displayImpact !== '—'
+  const showReason = displayReason.length > 0 && displayReason !== '—'
 
   return (
     <motion.div
@@ -82,14 +95,27 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
         className
       )}
     >
-      {/* Preview: Title + Summary (max 3 lines) */}
       <div className="p-4 sm:p-5">
-        <h4 className="text-sm font-semibold text-foreground leading-snug mb-1.5 line-clamp-1">
-          {insight.title}
-        </h4>
-        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3">
-          <TextWithHighlights text={insight.summary} keyMetrics={metrics.length ? metrics : undefined} />
+        {!titleSameAsContents && (
+          <h4 className="text-sm font-semibold text-foreground leading-snug mb-1.5 line-clamp-1">
+            {displayTitle}
+          </h4>
+        )}
+        <p className={cn('text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3', titleSameAsContents && 'text-foreground')}>
+          <TextWithHighlights text={displaySummary} keyMetrics={metrics.length ? metrics : undefined} />
         </p>
+        {showImpact && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">영향</p>
+            <p className="text-xs text-foreground leading-relaxed">{displayImpact}</p>
+          </div>
+        )}
+        {showReason && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">근거 / 시사점</p>
+            <p className="text-xs text-foreground leading-relaxed">{displayReason}</p>
+          </div>
+        )}
         {metrics.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {metrics.map((m, i) => (
@@ -123,35 +149,24 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
         )}
       </div>
 
-      {/* Expanded detail */}
       {expanded && hasDetail && (
         <div className="border-t border-border/60 px-4 sm:px-5 py-3 space-y-3 bg-muted/20">
-          {hasLongSummary && !hasExtraSections && (
+          {hasLongSummary && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                인사이트 요약
-              </p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">인사이트 요약</p>
               <p className="text-sm text-foreground leading-relaxed">{insight.summary}</p>
             </div>
           )}
-          {insight.whyItMatters && (
+          {showImpact && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                왜 중요한가
-              </p>
-              <p className="text-sm text-foreground leading-relaxed">
-                <TextWithHighlights text={insight.whyItMatters} keyMetrics={metrics} />
-              </p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">영향</p>
+              <p className="text-sm text-foreground leading-relaxed"><TextWithHighlights text={impact} keyMetrics={metrics} /></p>
             </div>
           )}
-          {insight.implicationForProduct && (
+          {showReason && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                제품에 대한 시사점
-              </p>
-              <p className="text-sm text-foreground leading-relaxed">
-                <TextWithHighlights text={insight.implicationForProduct} keyMetrics={metrics} />
-              </p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">근거 / 시사점</p>
+              <p className="text-sm text-foreground leading-relaxed"><TextWithHighlights text={reason} keyMetrics={metrics} /></p>
             </div>
           )}
         </div>
