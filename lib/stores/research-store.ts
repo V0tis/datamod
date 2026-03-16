@@ -571,6 +571,7 @@ export const useResearchStore = create<ResearchStore>()(
           'competition_analysis',
           'strategy_generation',
           'execution_layer',
+          'risk_opportunity',
         ] as const
         set((s) => {
           const prev = s.analysisTasks ?? []
@@ -886,10 +887,11 @@ export const useResearchStore = create<ResearchStore>()(
             execution_layer: 5,
             pass2: 5,
             creative: 5,
-            post_processing: 6,
-            post_processing_key_metrics: 6,
-            post_processing_creative: 6,
-            post_processing_saving: 6,
+            risk_opportunity: 6,
+            post_processing: 7,
+            post_processing_key_metrics: 7,
+            post_processing_creative: 7,
+            post_processing_saving: 7,
           }
 
           while (!streamEnded) {
@@ -960,18 +962,16 @@ export const useResearchStore = create<ResearchStore>()(
                       if (ev.data != null) {
                         get().setTaskData(task, ev.data)
                       }
-                      if (ev.fallback_used) {
-                        get().mergeStreamingTaskIntoAnalysisTasks(task, 'completed', {
-                          outputData: ev.data ?? null,
-                          provider: ev.provider ?? null,
-                          fallback_used: true,
-                          primary_provider_error: ev.primaryProviderError ?? null,
-                        })
-                      }
-                    } else if (status === 'running' && ev.fallback_used) {
+                      get().mergeStreamingTaskIntoAnalysisTasks(task, 'completed', {
+                        outputData: ev.data ?? null,
+                        provider: ev.provider ?? null,
+                        fallback_used: ev.fallback_used ?? false,
+                        primary_provider_error: ev.primaryProviderError ?? null,
+                      })
+                    } else if (status === 'running') {
                       get().mergeStreamingTaskIntoAnalysisTasks(task, 'running', {
                         provider: ev.provider ?? null,
-                        fallback_used: true,
+                        fallback_used: ev.fallback_used ?? false,
                         primary_provider_error: ev.primaryProviderError ?? null,
                       })
                     } else if (status === 'failed') {

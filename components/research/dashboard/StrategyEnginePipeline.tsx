@@ -15,7 +15,7 @@ const PIPELINE_STAGES = [
   { id: 'insight_extraction', label: '인사이트 추출', taskId: 'insight_extraction' as const, sectionLabel: '핵심 인사이트' },
   { id: 'strategy_generation', label: '전략 추천', taskId: 'strategy_generation' as const, sectionLabel: '리스크 및 기회' },
   { id: 'execution_layer', label: 'PM 액션 플랜', taskId: 'execution_layer' as const, sectionLabel: '제안 전략' },
-  { id: 'risks_opportunities', label: '리스크 및 기회 평가', taskId: 'strategy_generation' as const, sectionLabel: '리스크 및 기회', isVirtual: true },
+  { id: 'risks_opportunities', label: '리스크 및 기회 평가', taskId: 'risk_opportunity' as const, sectionLabel: '리스크 및 기회', isVirtual: true },
   { id: 'post_processing', label: '기회 점수·차트 산출', taskId: 'post_processing' as const, sectionLabel: '기회 점수·차트', isVirtual: true },
   { id: 'done', label: '분석 완료', taskId: 'done' as const, sectionLabel: '', isVirtual: true },
 ] as const
@@ -31,8 +31,9 @@ const STREAM_TO_INDEX: Record<string, number> = {
   execution_layer: 5,
   pass2: 5,
   creative: 5,
-  risks_opportunities: 5,
-  post_processing: 6,
+  risk_opportunity: 6,
+  risks_opportunities: 6,
+  post_processing: 7,
   post_processing_key_metrics: 7,
   post_processing_creative: 7,
   post_processing_saving: 7,
@@ -329,16 +330,18 @@ export function StrategyEnginePipeline({
     const stage = PIPELINE_STAGES[i]
     const taskId = stage?.taskId
     const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
-    // Virtual steps: 5 = risks_opportunities, 6 = post_processing (기회 점수·차트), 7 = done (allCompleted)
-    if (i === 5) {
-      const stratTask = taskMap['strategy_generation']
-      return stratTask?.status === 'completed' || allCompleted ? 'completed' : stratTask?.status === 'running' ? 'running' : 'pending'
-    }
+    // Stage 5 = execution_layer (PM 액션 플랜), 6 = risk_opportunity (리스크 및 기회 평가), 7 = post_processing, 8 = done
     if (i === 6) {
+      const riskTask = taskMap['risk_opportunity']
+      if (riskTask) return riskTask.status
       const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
-    if (i === 7) return allCompleted ? 'completed' : 'pending'
+    if (i === 7) {
+      const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
+      return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
+    }
+    if (i === 8) return allCompleted ? 'completed' : 'pending'
     // Global error: failed step + completed before + pending after
     if (hasError) {
       const failIdx = Math.min(errorStepIndex, 4)
@@ -352,8 +355,8 @@ export function StrategyEnginePipeline({
     return 'pending'
   }
 
-  const currentIdx = allCompleted ? 7 : Math.min(effectiveIndex, 6)
-  const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[5]
+  const currentIdx = allCompleted ? 8 : Math.min(effectiveIndex, 7)
+  const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[6]
 
   return (
     <div
@@ -465,14 +468,15 @@ export function StrategyEnginePipeline({
         >
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
-            const analysisTask = taskMap[stage.id] ?? null
+            const taskKey = stage.taskId && stage.taskId !== 'done' ? stage.taskId : stage.id
+            const analysisTask = taskMap[taskKey] ?? null
             const insight =
               (status === 'completed' || status === 'running')
                 ? getStageInsight(i, taskData, analysisTask, result, newsList)
                 : null
             const hasInsight = insight && (insight.summary || (insight.signals?.length ?? 0) > 0)
             const showInsightPanel = hasInsight && (status === 'completed' || status === 'running')
-            const task = taskMap[stage.id]
+            const task = taskMap[taskKey] ?? null
 
             return (
               <div key={stage.id} className="relative">

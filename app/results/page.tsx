@@ -1046,15 +1046,15 @@ function ResultsContent() {
       }
       if (displayResult?.reportId && !isAnalyzing) return { loading: false, percent: 100 }
       if (analysisTasks?.length) {
-        const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer']
+        const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer', 'risk_opportunity']
         const done = analysisTasks.filter((t) => MAIN.includes(t.step_name) && t.status === 'completed').length
         return { loading: isAnalyzing, percent: Math.min(100, (done / MAIN.length) * 100) }
       }
       const step = (streamingState.status === 'running' || streamingState.status === 'streaming')
-        ? Math.min(5, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
+        ? Math.min(7, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
         : -1
       if (isAnalyzing && step >= 0) {
-        return { loading: true, percent: Math.round(((step + 1) / 6) * 100) }
+        return { loading: true, percent: Math.round(((step + 1) / 8) * 100) }
       }
       return { loading: isAnalyzing, percent: isAnalyzing ? 10 : 0 }
     })()
@@ -1117,9 +1117,11 @@ function ResultsContent() {
               })()
             }
             topInsight={
-              sanitizeForKoreanDisplay(
-                insightData?.strategicSummary?.summary ?? effectiveKeyMetrics?.summary_insights ?? (effectiveKeyMetrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
-              ) || null
+              (loading && !displayResult?.reportId)
+                ? '-'
+                : (sanitizeForKoreanDisplay(
+                    insightData?.strategicSummary?.summary ?? effectiveKeyMetrics?.summary_insights ?? (effectiveKeyMetrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
+                  ) || '-')
             }
             scoreBreakdown={effectiveKeyMetrics?.opportunity_score_breakdown ?? null}
             statusText={

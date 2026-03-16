@@ -141,30 +141,30 @@ export function KeyMarketInsightsCard({
       ? `시장 매력도 ${opportunityScore}/100점`
       : marketGrowth != null || trendMomentum != null
         ? `성장 잠재력 ${(marketGrowth ?? trendMomentum) ?? ''}/100`
-        : trendSummary?.slice(0, 80) || summaryInsights?.slice(0, 80) || '분석 중'
+        : trendSummary?.slice(0, 80) || summaryInsights?.slice(0, 80) || '-'
 
   const marketTrends =
     keyTrends.length > 0
       ? keyTrends.join(' · ')
       : earlySignals.length > 0
         ? earlySignals.slice(0, 2).join(' · ')
-        : (km.positive_signals ?? [])[0] || '트렌드 분석 중'
+        : (km.positive_signals ?? [])[0] || '-'
 
   const keyOpportunities =
-    valueProposition || opportunities[0] || (km.positive_signals ?? [])[0] || earlySignals[0] || '기회 영역 분석 중'
+    valueProposition || opportunities[0] || (km.positive_signals ?? [])[0] || earlySignals[0] || '-'
 
   const hasEarlyData = signalOutput != null || trendOutput != null || earlySignals.length > 0 || result != null
 
   const hasContent = result || (analysisTasks?.length ?? 0) > 0
 
-  const trendBullets = marketTrends && marketTrends !== '트렌드 분석 중'
+  const trendBullets = marketTrends && marketTrends !== '-'
     ? marketTrends.split(/\s*·\s*/).filter((s) => s.trim().length > 3).map((s) => s.trim())
     : []
   const bulletInsights: string[] = hasEarlyData
     ? [
-        ...(growthPotential && growthPotential !== '분석 중' ? [growthPotential] : []),
+        ...(growthPotential && growthPotential !== '-' ? [growthPotential] : []),
         ...trendBullets,
-        ...(keyOpportunities && keyOpportunities !== '기회 영역 분석 중' && !trendBullets.includes(keyOpportunities) ? [keyOpportunities] : []),
+        ...(keyOpportunities && keyOpportunities !== '-' && !trendBullets.includes(keyOpportunities) ? [keyOpportunities] : []),
         ...(growthSignals?.filter((s) => s && s.length > 5) ?? []),
         ...(Array.isArray(km.positive_signals) ? km.positive_signals.filter((s): s is string => typeof s === 'string' && s.length > 5).slice(0, 3) : []),
         ...(Array.isArray(opportunities) ? opportunities.filter((s) => s && s.length > 5).slice(0, 2) : []),

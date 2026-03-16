@@ -35,7 +35,7 @@ export const DEFAULT_KEY_METRICS_LOADING: NonNullable<ResearchResponse['key_metr
   positive_signals: [],
   neutral_signals: [],
   negative_risks: [],
-  summary_insights: '분석 중입니다.',
+  summary_insights: '-',
   keyConclusions: [],
   opportunity_score_reasoning: '',
 }

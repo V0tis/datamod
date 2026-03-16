@@ -14,11 +14,13 @@ const STREAM_TO_INDEX: Record<string, number> = {
   execution_layer: 5,
   pass2: 5,
   creative: 5,
-  done: 6,
-  post_processing: 6,
-  post_processing_key_metrics: 6,
-  post_processing_creative: 6,
-  post_processing_saving: 6,
+  risk_opportunity: 6,
+  risks_opportunities: 6,
+  done: 7,
+  post_processing: 7,
+  post_processing_key_metrics: 7,
+  post_processing_creative: 7,
+  post_processing_saving: 7,
 }
 
 /** 7-step progress for loading UX - user-facing analysis stages */
@@ -38,7 +40,7 @@ export const STEP_ETA_SECONDS = [20, 18, 20, 18, 22, 25, 20] as const
 /** Seconds after which to show long-step message (e.g. "AI가 전략을 생성하는 중입니다...") */
 export const LONG_STEP_THRESHOLD_SEC = 8
 
-/** Map pipeline step index (0–6) to 7-step progress index (0–6) */
+/** Map pipeline step index (0–7) to 7-step progress index (0–6). Step 6 = risk_opportunity, 7 = post_processing. */
 export const PIPELINE_TO_PROGRESS_INDEX: Record<number, number> = {
   0: 0, // signal_layer, news
   1: 1, // trend_analysis
@@ -46,7 +48,8 @@ export const PIPELINE_TO_PROGRESS_INDEX: Record<number, number> = {
   3: 3, // insight_extraction
   4: 4, // strategy_generation
   5: 5, // execution_layer, creative
-  6: 6, // post_processing
+  6: 6, // risk_opportunity
+  7: 6, // post_processing (same UX message as step 6: 기회 점수·차트)
 }
 
 /** 후처리 단계별 메시지 (리스크·기회 평가 → 기회점수·차트 산출) */

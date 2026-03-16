@@ -93,6 +93,7 @@ export type AnalysisTaskId =
   | 'insight_extraction'   // Step 3: Insight Extraction
   | 'strategy_generation'  // Step 4: Strategic Recommendation
   | 'execution_layer'      // Step 5: PM Action Plan
+  | 'risk_opportunity'     // Step 6: Risk & Opportunity Evaluation
 
 export type TaskCompletedPayload = {
   signal_layer?: { signals: string[]; news_activity?: Array<{ title: string; url?: string; publisher?: string }> }
@@ -101,6 +102,7 @@ export type TaskCompletedPayload = {
   insight_extraction?: { key_insights: string[]; opportunity_signals: string[]; risk_signals: string[] }
   strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string; market_summary?: string; key_strategic_insights?: string[] }
   execution_layer?: { product_actions: Array<{ action: string; priority?: string; reasoning?: string }>; feature_ideas?: string[]; go_to_market_steps?: string[] }
+  risk_opportunity?: StrategyEvaluationResult
 }
 
 const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
@@ -110,6 +112,7 @@ const ANALYSIS_TASK_STEPS: AnalysisTaskId[] = [
   'insight_extraction',
   'strategy_generation',
   'execution_layer',
+  'risk_opportunity',
 ]
 
 export type AnalysisStepProvider = 'gemini' | 'groq'
@@ -622,6 +625,7 @@ async function runPMActionPlanTask(
         text = (await tryGemini()) ?? ''
       } else if (groqKey) {
         const groqRes = await tryGroq()
+        console.log('groqRes@@@@@@@@@@@@@@21', groqRes);
         if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
         text = groqRes.text
       } else throw new Error('Groq key not available')
@@ -634,6 +638,7 @@ async function runPMActionPlanTask(
         try {
           if (primaryIsGemini && groqKey) {
             const groqRes = await tryGroq()
+        console.log('groqRes@@@@@@@@@@@@@@11', groqRes);
             if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
             text = groqRes.text
           } else if (!primaryIsGemini && geminiKey) {
@@ -1497,14 +1502,22 @@ export async function* runResearch(
     yield { type: 'task', task: 'strategy_generation', status: 'completed', data: strategyData, provider: stratProvider, fallback_used: stratResult.usedFallback }
   } catch (err) {
     const msg = toUserFriendlyError(err, '전략 추천 생성 중 오류가 발생했습니다.')
-    console.error('[AI Pipeline] strategy_generation failed (continuing with fallback)', { error: msg, step: 'strategy_generation' })
+    const cause = err instanceof Error ? err.message : String(err)
+    const stackSnippet = err instanceof Error && err.stack ? err.stack.split('\n').slice(0, 4).join(' ') : undefined
+    console.error('[AI Pipeline] strategy_generation failed (continuing with fallback)', {
+      step: 'strategy_generation',
+      error: msg,
+      cause,
+      stack: stackSnippet,
+    })
     log('strategy_generation', 'failed', {
       error: msg,
       durationMs: Date.now() - step4StartMs,
       elapsedSinceStart: Date.now() - pipelineStartMs,
       stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
     })
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: effectiveStrategyProvider, fallback_used: false })
+    const errorForUi = cause && cause !== msg ? `전략 추천: ${cause}` : msg
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: errorForUi, provider: effectiveStrategyProvider, fallback_used: false })
     strategyData = {
       opportunities: insightData.opportunity_signals,
       risks: insightData.risk_signals,
@@ -1512,7 +1525,7 @@ export async function* runResearch(
       market_summary: undefined,
       key_strategic_insights: undefined,
     }
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: effectiveStrategyProvider, fallback_used: false }
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: errorForUi, provider: effectiveStrategyProvider, fallback_used: false }
   }
 
   if (checkAborted(signal)) {
@@ -1549,6 +1562,7 @@ export async function* runResearch(
     porter_5_forces?: { rivalry?: string[]; supplier_power?: string[]; buyer_power?: string[]; substitutes?: string[]; new_entrants?: string[] }
     next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
+  yield { type: 'task', task: 'execution_layer', status: 'running' }
   try {
     const pmResult = await runPMActionPlanTask(
       geminiKey,
@@ -1597,14 +1611,25 @@ export async function* runResearch(
     }
   } catch (err) {
     const msg = toUserFriendlyError(err, 'PM 액션 플랜 생성 중 오류가 발생했습니다.')
+    const cause = err instanceof Error ? err.message : String(err)
+    const stackSnippet = err instanceof Error && err.stack ? err.stack.split('\n').slice(0, 4).join(' ') : undefined
+    console.error('[AI Pipeline] execution_layer (PM action plan) failed (continuing with fallback)', {
+      step: 'execution_layer',
+      error: msg,
+      cause,
+      stack: stackSnippet,
+    })
     log('pm_action_plan', 'failed', { error: msg, err })
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    await updateProgress(4, 'failed')
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
-    yield { type: 'task', task: 'execution_layer', status: 'failed', error: msg, provider: 'gemini', fallback_used: false }
-    yield { type: 'error', message: msg, step: 'execution_layer' }
-    return
+    const errorForUi = cause && cause !== msg ? `PM 액션 플랜: ${cause}` : msg
+    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: errorForUi, provider: 'gemini', fallback_used: false })
+    executionData = {
+      product_actions: [],
+      feature_ideas: [],
+      go_to_market_steps: [],
+      pm_action_plan: [],
+      next_actions_pm: [],
+    }
+    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, provider: 'gemini', fallback_used: false }
   }
 
   const pos = trendData.positive_signals
@@ -1640,6 +1665,7 @@ export async function* runResearch(
   const riskProvider = resolveAIForStep(effectiveStepSettings, 'risk')
   const hasRiskProviderKey = riskProvider === 'groq' ? !!groqKey : !!geminiKey
   const effectiveRiskProvider = hasRiskProviderKey ? riskProvider : (groqKey ? 'groq' : 'gemini')
+  yield { type: 'task', task: 'risk_opportunity', status: 'running' }
   try {
     strategyEvaluation = await runStrategyEvaluationTask(
       geminiKey,
@@ -1650,12 +1676,20 @@ export async function* runResearch(
       executionData,
       effectiveRiskProvider
     )
+    await upsertAnalysisTask('risk_opportunity', 'completed', { outputData: strategyEvaluation })
+    yield { type: 'task', task: 'risk_opportunity', status: 'completed', data: strategyEvaluation }
   } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err)
+    const stackSnippet = err instanceof Error && err.stack ? err.stack.split('\n').slice(0, 4).join(' ') : undefined
     console.error('[AI Pipeline] risk_opportunity (strategy evaluation) failed (continuing without)', {
-      error: err instanceof Error ? err.message : String(err),
       step: 'risk_opportunity',
+      cause,
+      stack: stackSnippet,
     })
     strategyEvaluation = undefined
+    const errorForUi = cause && cause.length > 0 ? `리스크 및 기회 평가: ${cause}` : '리스크 및 기회 평가 중 오류가 발생했습니다.'
+    await upsertAnalysisTask('risk_opportunity', 'failed', { errorMessage: errorForUi })
+    yield { type: 'task', task: 'risk_opportunity', status: 'failed', error: errorForUi }
   }
 
   const structured: StructuredAnalysisFields = {

@@ -7,8 +7,8 @@ import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 const LABELS: Record<string, string> = {
   trend_momentum: '검색 수요',
   market_growth: '시장 성장',
-  competition_density: '경쟁 수준',
-  competition_pressure: '경쟁 수준',
+  competition_density: '경쟁 밀도',
+  competition_pressure: '경쟁 압력',
   funding_signals: '투자 신호',
   risk_factors: '리스크 요인',
   user_demand: '검색 수요',
@@ -76,7 +76,7 @@ export function OpportunityScoreBreakdown({
           k === 'competition_density' || k === 'risk_factors'
             ? raw
             : k === 'competition_pressure'
-              ? BASE - raw
+              ? (raw === 0 || Number.isNaN(raw) ? 0 : BASE - raw)
               : raw
         return {
           key: k,

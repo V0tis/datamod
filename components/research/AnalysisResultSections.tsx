@@ -327,7 +327,7 @@ export function AnalysisResultSections({
             </div>
           )}
           {!opportunityScore && keyTrends.length === 0 && !loading && (
-            <p className="text-sm text-muted-foreground">시장 기회 데이터를 분석 중입니다.</p>
+            <p className="text-sm text-muted-foreground">—</p>
           )}
         </div>
       )}
@@ -669,7 +669,7 @@ export function AnalysisResultSections({
               </div>
             )}
             {!opportunityScore && keyTrends.length === 0 && !loading && (
-              <p className="text-sm text-muted-foreground">시장 기회 데이터를 분석 중입니다.</p>
+              <p className="text-sm text-muted-foreground">—</p>
             )}
           </div>
         )}
