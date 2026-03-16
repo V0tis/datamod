@@ -3,6 +3,7 @@
 import { useState, memo } from 'react'
 import { TrendingUp, Shield, Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
 function scoreToLabel(score: number): string {
@@ -24,13 +25,14 @@ export interface ResultSummaryCardsProps {
   className?: string
 }
 
-function SummaryCard({ card }: { card: { id: string; label: string; value: string | null; icon: typeof TrendingUp; showCalculating?: boolean } }) {
+function SummaryCard({ card }: { card: { id: string; label: string; value: string | null; icon: typeof TrendingUp; showCalculating?: boolean; explanation?: string | null } }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = card.icon
   const displayValue = card.id === 'opportunity' && card.showCalculating && !card.value
     ? '산출 중...'
     : (card.value || '—')
   const isLong = typeof displayValue === 'string' && displayValue.length > 60
+  const showReason = !!card.explanation
 
   return (
     <div
@@ -48,6 +50,11 @@ function SummaryCard({ card }: { card: { id: string; label: string; value: strin
       <p className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
         {displayValue}
       </p>
+      {showReason && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
+          {card.explanation}
+        </p>
+      )}
       {isLong && (
         <button
           type="button"
@@ -93,18 +100,47 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
   const marketGrowthScore = marketGrowth ?? trendMomentum ?? opportunityScore ?? null
   const competitionScore = competitionDensity ?? competitionPressure ?? null
 
+  const marketGrowthLabel = marketGrowthScore != null ? scoreToLabel(marketGrowthScore) : null
+  const competitionLabel = competitionScore != null ? scoreToLabel(competitionScore) : null
+  const opportunityLabel = opportunityScore != null ? scoreToLabel(opportunityScore) : null
+
+  const sdl = km.strategic_decision_layer
+  const marketGrowthExplanation =
+    sanitizeForKoreanDisplay(sdl?.product_market_fit_explanation ?? sdl?.entry_explanation)?.trim() || null
+  const competitionExplanationAi = sanitizeForKoreanDisplay(sdl?.competition_explanation)?.trim() || null
+  const opportunityExplanationAi =
+    sanitizeForKoreanDisplay(sdl?.market_opportunity_explanation ?? km.opportunity_score_reasoning)?.trim() || null
+
   const cards = [
     {
       id: 'market-growth',
       label: '시장 성장성',
-      value: marketGrowthScore != null ? scoreToLabel(marketGrowthScore) : null,
+      value: marketGrowthLabel,
       icon: TrendingUp,
+      explanation:
+        marketGrowthExplanation ||
+        (marketGrowthLabel === '높음'
+          ? '성장률·트렌드 데이터가 양호하기 때문입니다.'
+          : marketGrowthLabel === '중간'
+            ? '성장률이 보통 수준으로 반영되었습니다.'
+            : marketGrowthLabel === '낮음'
+              ? '성장률 데이터가 낮기 때문입니다.'
+              : null),
     },
     {
       id: 'competition',
       label: '경쟁 강도',
-      value: competitionScore != null ? scoreToLabel(competitionScore) : null,
+      value: competitionLabel,
       icon: Shield,
+      explanation:
+        competitionExplanationAi ||
+        (competitionLabel === '높음'
+          ? '경쟁사 수가 많아 경쟁 강도가 높게 반영되었습니다.'
+          : competitionLabel === '중간'
+            ? '경쟁 수준이 보통으로 반영되었습니다.'
+            : competitionLabel === '낮음'
+              ? '경쟁사 수가 적어 경쟁 강도가 낮게 반영되었습니다.'
+              : null),
     },
     {
       id: 'strategy',
@@ -115,9 +151,18 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
     {
       id: 'opportunity',
       label: '시장 기회',
-      value: opportunityScore != null ? scoreToLabel(opportunityScore) : null,
+      value: opportunityLabel,
       icon: Sparkles,
       showCalculating: loading,
+      explanation:
+        opportunityExplanationAi ||
+        (opportunityLabel === '높음'
+          ? '수요·성장·리스크 요인이 유리하게 반영되었습니다.'
+          : opportunityLabel === '중간'
+            ? '시장 기회가 보통 수준으로 산출되었습니다.'
+            : opportunityLabel === '낮음'
+              ? '수요 대비 공급이 많거나 리스크 요인이 반영되었습니다.'
+              : null),
     },
   ]
 

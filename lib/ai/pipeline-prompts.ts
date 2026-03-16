@@ -95,10 +95,13 @@ Format: {
     "priority": "high|medium|low"
   }],
   "strategic_decision_layer": {
-    "market_opportunity_explanation": "시장 기회 근거",
+    "market_opportunity_explanation": "시장 기회 근거 (한 줄)",
     "competition_intensity": "low|medium|high",
+    "competition_explanation": "경쟁 강도 이유 (한 줄)",
     "product_market_fit": "low|medium|high",
-    "entry_strategy": "진입 전략"
+    "product_market_fit_explanation": "시장 성장·적합성 이유 (한 줄)",
+    "entry_strategy": "진입 전략",
+    "entry_explanation": "진입 전략 근거 (한 줄)"
   },
   "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
   "jtbd": { "main_jobs": [], "pains": [], "gains": [] }

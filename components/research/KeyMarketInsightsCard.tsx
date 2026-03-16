@@ -45,12 +45,13 @@ function toStructuredInsight(text: string): StructuredInsight {
       }
       if (!title) {
         if (t.length <= 40) {
-          title = t
+          title = t.length > 20 ? t.slice(0, 20).trim() + '…' : (t.length > 10 ? t.slice(0, 10).trim() + '…' : t)
           summary = t
+          if (title === summary && t.length > 0) title = t.slice(0, Math.min(15, t.length - 1)).trim() + '…'
         } else {
           const firstPhrase = t.slice(0, 45).trim()
           const rest = t.slice(45).trim()
-          title = rest ? firstPhrase + (firstPhrase.endsWith('.') ? '' : '…') : t
+          title = rest ? firstPhrase + (firstPhrase.endsWith('.') ? '' : '…') : t.slice(0, 40).trim() + '…'
           summary = rest || t
         }
       }

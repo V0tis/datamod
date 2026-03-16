@@ -1078,8 +1078,8 @@ function ResultsContent() {
   if (showTabs) {
     return (
       <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
-        {/* 좌측 섹션 네비 – 스크롤해도 화면에 고정 (fixed), lg 이상에서만 표시 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {/* 좌측 섹션 네비 – result ready일 때만 (analyzing 중에는 차트/결론 미표시로 섹션 없음) */}
+        {displayResult?.reportId && !needsRunAction && (
           <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-background/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden">
             <ResultSectionNav variant="sidebar" mode="core" progress={navProgress} />
           </aside>
@@ -1266,8 +1266,8 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* 모바일/태블릿: 스크롤 시 따라오는 섹션 탭 (lg 이상은 좌측 사이드바) */}
-        {!showInsightSequence && (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {/* 모바일/태블릿: 스크롤 시 따라오는 섹션 탭 – only when result ready (no chart/conclusion during analyzing) */}
+        {!showInsightSequence && displayResult?.reportId && !needsRunAction && (
           <div className="lg:hidden mt-3 -mx-2 sm:-mx-3 md:-mx-4">
             <ResultSectionNav variant="tabs" mode="core" className="!top-14" progress={navProgress} />
           </div>
@@ -1295,7 +1295,7 @@ function ResultsContent() {
             keyword={currentKeyword ?? undefined}
           />
         )}
-        {/* Run CTA or structured sections (with per-section skeletons when loading) */}
+        {/* Run CTA, or analyzing placeholder, or structured sections when result ready */}
         {needsRunAction ? (
           <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4">
             <p className="text-muted-foreground text-sm mb-4">
@@ -1325,6 +1325,10 @@ function ResultsContent() {
               }}
               disabled={loading}
             />
+          </div>
+        ) : !displayResult?.reportId ? (
+          <div className="py-6 text-center text-sm text-muted-foreground rounded-xl border border-dashed border-border bg-muted/10 px-4">
+            분석이 완료되면 결과 요약·차트·결론이 표시됩니다. 위 타임라인에서 진행 상황을 확인하세요.
           </div>
         ) : (
           <div role="region" aria-label="AI 리포트" className="space-y-6">
