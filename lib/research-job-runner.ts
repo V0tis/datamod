@@ -23,7 +23,8 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const TAB_SYSTEM_PROMPT = `${BASE_MARKDOWN_PROMPT}
 
-Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용.`
+Output must feel like a consulting report or PM strategy document: insight and reasoning first, not simple summary.
+Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 캐주얼·대화체·뉴스 요약 톤 금지.`
 
 type RssItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; content?: string }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
@@ -31,7 +32,7 @@ const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
 function buildCreativePrompt(keyword: string, summary: string, newsHeadlines: string): string {
   const newsBlock = newsHeadlines ? `\n\n실시간 뉴스 헤드라인 (news_items_ko):\n${newsHeadlines}\n\n` : ''
   const baseSummary = summary ? `리포트 요약:\n${summary}\n\n` : ''
-  return `키워드: "${keyword}"${newsBlock}${baseSummary}위 내용을 바탕으로 향후 전망과 투자/행동 아이디어를 2~4문단 마크다운으로 요약해 주세요.`
+  return `키워드: "${keyword}"${newsBlock}${baseSummary}위 내용을 바탕으로 컨설팅 보고서 수준으로 작성하세요. 단순 요약이 아니라 인사이트·근거·영향·리스크·기회·전략 중심으로, 향후 전망과 투자/행동 아이디어를 2~4문단 마크다운으로 작성하세요.`
 }
 
 function buildSummaryText(summary: {

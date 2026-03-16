@@ -29,6 +29,7 @@ import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep, getExponentialDelayMs } from './retry-with-backoff'
 import { computeOpportunityScore } from './opportunity-score-formula'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
+import { hasNonKoreanContent, ensureKoreanText } from '@/lib/ai/language-validate'
 
 const AI_BASE_DELAY_MS = 1000
 const AI_MAX_RETRIES = 2
@@ -64,7 +65,8 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const TAB_SYSTEM_PROMPT = `${BASE_MARKDOWN_PROMPT}
 
-Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용.`
+Output must feel like a consulting report or PM strategy document: insight and reasoning first, not simple summary.
+Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 캐주얼·대화체·뉴스 요약 톤 금지.`
 
 export type NewsItem = {
   title: string
@@ -101,7 +103,13 @@ export type TaskCompletedPayload = {
   competition_analysis?: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
   insight_extraction?: { key_insights: string[]; opportunity_signals: string[]; risk_signals: string[] }
   strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string; market_summary?: string; key_strategic_insights?: string[] }
-  execution_layer?: { product_actions: Array<{ action: string; priority?: string; reasoning?: string }>; feature_ideas?: string[]; go_to_market_steps?: string[] }
+  execution_layer?: {
+    product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
+    feature_ideas?: string[]
+    go_to_market_steps?: string[]
+    pm_action_plan?: PMActionPlanItem[]
+    next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
+  }
   risk_opportunity?: StrategyEvaluationResult
 }
 
@@ -680,7 +688,7 @@ async function runStrategicRecommendationTask(
   }
 }
 
-/** Step 5: PM Action Plan - structured JSON */
+/** Step 5: PM Action Plan - structured JSON. Validates result; regenerates once if invalid. */
 async function runPMActionPlanTask(
   geminiKey: string,
   groqKey: string | null | undefined,
@@ -715,90 +723,111 @@ async function runPMActionPlanTask(
   primaryProviderError?: string
 }> {
   const prompt = buildPMActionPlanPrompt(keyword, strategySummary, opportunitiesSummary, risksSummary)
-  let text!: string
-  let usedFallback = false
-  let primaryProviderError: string | undefined
   const tryGemini = () =>
     generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
     completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1600 })
   const primaryIsGemini = primaryProvider === 'gemini'
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    try {
-      if (primaryIsGemini) {
-        text = (await tryGemini()) ?? ''
-      } else if (groqKey) {
-        const groqRes = await tryGroq()
-        console.log('groqRes@@@@@@@@@@@@@@21', groqRes);
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-        text = groqRes.text
-      } else throw new Error('Groq key not available')
-      break
-    } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-      } else if (isFallbackTriggerError(err)) {
-        primaryProviderError = getFallbackErrorReason(err)
-        try {
-          if (primaryIsGemini && groqKey) {
-            const groqRes = await tryGroq()
-        console.log('groqRes@@@@@@@@@@@@@@11', groqRes);
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            text = groqRes.text
-          } else if (!primaryIsGemini && geminiKey) {
-            const gemRes = await tryGemini()
-            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-          } else throw err
-          usedFallback = true
-          break
-        } catch {
-          throw err
+  const getText = async (): Promise<string> => {
+    for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+      try {
+        if (primaryIsGemini) return (await tryGemini()) ?? ''
+        if (groqKey) {
+          const groqRes = await tryGroq()
+          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+          return groqRes.text
         }
-      } else {
-        throw err
+        throw new Error('Groq key not available')
+      } catch (err) {
+        if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+          await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
+        } else if (isFallbackTriggerError(err)) {
+          try {
+            if (primaryIsGemini && groqKey) {
+              const groqRes = await tryGroq()
+              if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+              return groqRes.text
+            }
+            if (!primaryIsGemini && geminiKey) return (await tryGemini()) ?? ''
+          } catch {
+            throw err
+          }
+          throw err
+        } else throw err
       }
     }
+    return ''
   }
-  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
-  if (usedGemini) await trackUsage('gemini')
-  const fallbackPm = {
-    product_actions: [],
-    feature_ideas: [],
-    go_to_market_steps: [],
-  } as {
+  let text = await getText()
+  if (hasNonKoreanContent(text)) {
+    try {
+      const retry = await getText()
+      if (!hasNonKoreanContent(retry)) text = retry
+      else text = await ensureKoreanText(text, { regenerate: () => getText() })
+    } catch {
+      text = await ensureKoreanText(text)
+    }
+  }
+  const usedFallback = false
+  const primaryProviderError: string | undefined = undefined
+  if (primaryIsGemini) await trackUsage('gemini')
+  type ParsedShape = {
     product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
     feature_ideas?: string[]
     go_to_market_steps?: string[]
-  }
-  const parsed = parseAiJson<{
-    product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
-    feature_ideas?: string[]
-    go_to_market_steps?: string[]
+    steps?: string[]
+    priority?: string
+    goal?: string
+    risk?: string
     product_idea?: string
     target_customer?: string
     monetization?: string
     pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string; category?: string }>
     strategic_decision_layer?: {
       market_opportunity_explanation?: string
-      competition_intensity?: 'low' | 'medium' | 'high'
+      competition_intensity?: string
       competition_explanation?: string
-      product_market_fit?: 'low' | 'medium' | 'high'
+      product_market_fit?: string
       product_market_fit_explanation?: string
       entry_strategy?: string
       entry_explanation?: string
     }
-    swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
-    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
+    swot_analysis?: { strengths?: unknown[]; weaknesses?: unknown[]; opportunities?: unknown[]; threats?: unknown[] }
+    jtbd?: { main_jobs?: unknown[]; pains?: unknown[]; gains?: unknown[] }
     next_actions_pm?: Array<{ action?: string; why?: string; how_to_execute?: string; priority?: string; estimated_effort?: string }>
-  }>(typeof text === 'string' ? text : '', fallbackPm, 'execution_layer')
+  }
+  const fallbackPm: ParsedShape = {
+    product_actions: [],
+    feature_ideas: [],
+    go_to_market_steps: [],
+    steps: [],
+    priority: '',
+    goal: '',
+    risk: '',
+  }
+  let parsed = parseAiJson<ParsedShape>(typeof text === 'string' ? text : '', fallbackPm, 'execution_layer')
   const toStrArr = (arr: unknown): string[] =>
     Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : []
+  const stepsArr = toStrArr(parsed?.steps)
+  const hasValidPlan =
+    (Array.isArray(parsed?.pm_action_plan) && parsed.pm_action_plan.length > 0) || stepsArr.length > 0
+  if (!hasValidPlan && typeof text === 'string' && text.trim().length > 20) {
+    try {
+      const retryText = await getText()
+      const retryParsed = parseAiJson<ParsedShape>(retryText, fallbackPm, 'execution_layer')
+      const retrySteps = toStrArr(retryParsed?.steps)
+      const retryPlan = Array.isArray(retryParsed?.pm_action_plan) ? retryParsed.pm_action_plan : []
+      if (retryPlan.length > 0 || retrySteps.length > 0) parsed = retryParsed
+    } catch {
+      // keep first parse
+    }
+  }
   const actions = Array.isArray(parsed?.product_actions)
     ? parsed.product_actions
         .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
         .map((a) => ({ action: String((a as { action: string }).action), priority: (a as { priority?: string }).priority, reasoning: (a as { reasoning?: string }).reasoning }))
     : []
-  const pmPlan: PMActionPlanItem[] = Array.isArray(parsed?.pm_action_plan)
+  let pmPlan: PMActionPlanItem[] = Array.isArray(parsed?.pm_action_plan)
     ? parsed.pm_action_plan
         .map((a) => {
           const raw = a as Record<string, unknown>
@@ -818,6 +847,17 @@ async function runPMActionPlanTask(
             : undefined,
         }))
     : []
+  if (pmPlan.length === 0 && stepsArr.length > 0) {
+    const priorityStr = typeof parsed?.priority === 'string' ? parsed.priority : 'medium'
+    const priority = (['high', 'medium', 'low'] as const).includes(priorityStr as 'high' | 'medium' | 'low') ? (priorityStr as 'high' | 'medium' | 'low') : 'medium'
+    pmPlan = stepsArr.map((step) => ({
+      action_title: step,
+      description: typeof parsed?.goal === 'string' ? parsed.goal : undefined,
+      expected_outcome: typeof parsed?.risk === 'string' ? parsed.risk : undefined,
+      priority,
+      category: undefined,
+    }))
+  }
   const napm = Array.isArray(parsed?.next_actions_pm)
     ? parsed.next_actions_pm
         .filter((a): a is { action: string } => typeof (a as { action?: string })?.action === 'string')
@@ -1258,7 +1298,7 @@ function buildCreativePrompt(
     ? `\n\n실시간 뉴스 헤드라인 (news_items_ko):\n${newsHeadlines}\n\n`
     : ''
   const baseSummary = summary ? `리포트 요약:\n${summary}\n\n` : ''
-  return `키워드: "${keyword}"${newsBlock}${baseSummary}위 내용을 바탕으로 향후 전망과 투자/행동 아이디어를 2~4문단 마크다운으로 요약해 주세요.`
+  return `키워드: "${keyword}"${newsBlock}${baseSummary}위 내용을 바탕으로 컨설팅 보고서 수준으로 작성하세요. 단순 요약이 아니라 인사이트·근거·영향·리스크·기회·전략 중심으로, 향후 전망과 투자/행동 아이디어를 2~4문단 마크다운으로 작성하세요.`
 }
 
 function buildSummaryText(summary: {
@@ -1951,8 +1991,10 @@ export async function* runResearch(
         userPrompt,
       })
 
-      creativeGroq = creative.groqText
-      creativeGemini = creative.geminiText
+      creativeGroq = creative.groqText ?? null
+      creativeGemini = creative.geminiText ?? null
+      if (creativeGroq && hasNonKoreanContent(creativeGroq)) creativeGroq = await ensureKoreanText(creativeGroq)
+      if (creativeGemini && hasNonKoreanContent(creativeGemini)) creativeGemini = await ensureKoreanText(creativeGemini)
       await updateProgress(5, 'analyzing')
       yield { type: 'creative', groqText: creativeGroq, geminiText: creativeGemini }
     }

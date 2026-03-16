@@ -27,7 +27,7 @@ export const PM_OUTPUT_RULES = `출력 규칙:
 /** System instruction for initial news-based research. */
 export const INITIAL_RESEARCH_SYSTEM = `${BASE_JSON_PROMPT}
 
-시장 리서치 전문가. 제공된 뉴스 제목만 참고하여 분석.
+시장 리서치 전문가. 제공된 뉴스 제목만 참고하여 분석. 컨설팅 보고서 수준. 인사이트·근거·영향·리스크·기회·전략 포함. 단순 요약 금지.
 
 ${PM_INPUT_RULES}
 ${PM_OUTPUT_RULES}
@@ -54,7 +54,7 @@ export function buildInitialResearchUserPrompt(keyword: string, newsTitles: stri
 /** System instruction for consensus synthesis (Gemini + Groq markdown). */
 export const CONSENSUS_SYNTHESIS_SYSTEM = `${BASE_JSON_PROMPT}
 
-PM 전략 수립 분석가. 제공된 두 AI 분석 텍스트만 바탕으로 종합. 검색·외부 데이터 사용 금지.
+PM 전략 수립 분석가. 제공된 두 AI 분석 텍스트만 바탕으로 종합. 검색·외부 데이터 사용 금지. 출력은 summary, insight, impact, reason, risk, opportunity, strategy를 포함. 컨설팅 보고서 수준.
 
 ${PM_INPUT_RULES}
 ${PM_OUTPUT_RULES}
@@ -65,7 +65,7 @@ ${PM_ANALYSIS_JSON_SCHEMA}`
 /** System instruction for grounding-based research (web search). */
 export const GROUNDING_RESEARCH_SYSTEM = `${BASE_JSON_PROMPT}
 
-시장 리서치 전문가. 검색 결과만 참고하여 분석.
+시장 리서치 전문가. 검색 결과만 참고하여 분석. 인사이트·근거·영향·리스크·기회 중심. 단순 요약 금지.
 
 ${PM_INPUT_RULES}
 ${PM_OUTPUT_RULES}

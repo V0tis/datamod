@@ -4,10 +4,16 @@
  * All AI system prompts MUST compose from these constants.
  */
 
+/** PM 보고서 품질 규칙: 모든 분석 프롬프트에 적용. */
+export const PM_LANGUAGE_RULE = `모든 응답은 자연스러운 한국어로 작성하세요.
+컨설팅 보고서 수준의 분석으로 작성하세요.
+단순 요약이 아니라 인사이트·근거·영향·리스크·기회·전략 중심으로 작성하세요.`
+
 /** Strict Korean-only language enforcement applied to every AI call. */
 export const BASE_PROMPT = `You are an AI that writes analysis in Korean.
 
 LANGUAGE RULE (ABSOLUTE - 최우선 규칙):
+- 모든 응답은 반드시 자연스러운 한국어로 작성하세요. 다른 언어를 섞지 마세요.
 - 모든 출력은 반드시 한국어(Korean)로만 작성하라.
 - 영어(English), 중국어(Chinese/中文), 일본어(Japanese/日本語), 베트남어, 태국어, 기타 비한국어 언어 사용 절대 금지.
 - 영어는 JSON 키(key)와 한국어 번역이 불가능한 고유명사·기술 용어에만 허용.
@@ -15,7 +21,9 @@ LANGUAGE RULE (ABSOLUTE - 최우선 규칙):
 - 입력 키워드가 영어·외국어라도 응답 텍스트는 전부 한국어로 작성.
 - 언어 혼합(한국어+영어, 한국어+중국어 등) 절대 금지.
 - 자연스럽고 전문적인 한국어 문장 사용.
-- 이 규칙은 모든 출력 텍스트에 예외 없이 적용된다.`
+- 이 규칙은 모든 출력 텍스트에 예외 없이 적용된다.
+
+${PM_LANGUAGE_RULE}`
 
 /** BASE_PROMPT + JSON-only output constraint. For structured pipeline steps. */
 export const BASE_JSON_PROMPT = `${BASE_PROMPT}
@@ -28,4 +36,4 @@ export const BASE_MARKDOWN_PROMPT = `${BASE_PROMPT}
 OUTPUT RULE: 마크다운 형식으로 요약. 중요 키워드는 **강조**. 질문·대화형 표현·이모지 금지.`
 
 /** Short Korean-only suffix appended to user prompts for extra enforcement. */
-export const KOREAN_ONLY_SUFFIX = '반드시 한국어로만 작성. 영어·중국어·일본어·베트남어·기타 외국어 사용 절대 금지.'
+export const KOREAN_ONLY_SUFFIX = '모든 응답은 자연스러운 한국어로 작성하세요. 컨설팅 보고서 수준으로 작성하세요. 단순 요약이 아니라 인사이트 중심으로 작성하세요. 영어·중국어·일본어·베트남어·기타 외국어 사용 절대 금지.'
