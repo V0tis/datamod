@@ -58,25 +58,28 @@ export const ALL_AI_STEPS: AIStepName[] = [
 /**
  * Resolve which AI provider to use for a given analysis step.
  * Fallback chain: step-specific column → ai_primary_model → 'gemini'
+ * Always returns a valid value; never undefined.
  */
 export function resolveAIForStep(
   settings: StepAISettings | null | undefined,
   step: AIStepName,
 ): AIPrimaryModel {
   if (!settings) return 'gemini'
+  const primary = settings.ai_primary_model === 'groq' ? 'groq' : 'gemini'
   const col = STEP_COLUMN_MAP[step]
   const stepValue = settings[col]
   const resolved: AIPrimaryModel =
     stepValue === 'gemini' || stepValue === 'groq'
       ? stepValue
-      : settings.ai_primary_model ?? 'gemini'
+      : primary
   console.log('[AI Step]', step, '->', resolved)
   return resolved
 }
 
-/** Build StepAISettings from a flat DB row (used by API routes). */
+/** Build StepAISettings from a flat DB row (used by API routes). Ensures ai_primary_model is always valid. */
 export function buildStepAISettings(row: Record<string, unknown> | null): StepAISettings {
-  const primary = (row?.ai_primary_model as string) === 'groq' ? 'groq' as const : 'gemini' as const
+  const raw = row?.ai_primary_model as string | undefined
+  const primary: AIPrimaryModel = raw === 'groq' ? 'groq' : 'gemini'
   return {
     ai_primary_model: primary,
     ai_market_model: row?.ai_market_model as string | null ?? null,

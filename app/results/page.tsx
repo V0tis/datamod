@@ -1084,6 +1084,15 @@ function ResultsContent() {
         )}>
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
+        {/* Cached result notice: show when loading from research_history */}
+        {hasCachedResult === true && (
+          <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+            <p className="font-medium">이미 분석된 데이터가 있어 저장된 결과를 불러옵니다.</p>
+            {loading && !displayResult?.reportId && (
+              <p className="mt-1 text-muted-foreground">분석된 데이터를 불러오는 중입니다...</p>
+            )}
+          </div>
+        )}
         {/* 1. Result Page Hero – single control area (PDF, Save, Retry) */}
         {(effectiveDisplayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <ResultPageHero

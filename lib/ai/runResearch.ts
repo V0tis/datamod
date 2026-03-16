@@ -1177,7 +1177,9 @@ export async function* runResearch(
   const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal } = params
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
-  const effectiveStepSettings = stepSettings ?? { ai_primary_model: primaryProvider }
+  const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
+    ? { ...stepSettings, ai_primary_model: (stepSettings.ai_primary_model === 'groq' ? 'groq' : 'gemini') }
+    : { ai_primary_model: primaryProvider }
   const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
@@ -1467,8 +1469,11 @@ export async function* runResearch(
     hasGroqKey: !!groqKey,
     primaryProvider,
   })
-  await upsertAnalysisTask('strategy_generation', 'running', { provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
-  yield { type: 'task', task: 'strategy_generation', status: 'running', provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
+  const strategyProvider = resolveAIForStep(effectiveStepSettings, 'strategy')
+  const hasStrategyProviderKey = strategyProvider === 'groq' ? !!groqKey : !!geminiKey
+  const effectiveStrategyProvider = hasStrategyProviderKey ? strategyProvider : (groqKey ? 'groq' : 'gemini')
+  await upsertAnalysisTask('strategy_generation', 'running', { provider: effectiveStrategyProvider, fallback_used: false })
+  yield { type: 'task', task: 'strategy_generation', status: 'running', provider: effectiveStrategyProvider, fallback_used: false }
   let strategyData: StrategicRecommendationResult
   try {
     const stratResult = await runStrategicRecommendationTask(
@@ -1478,10 +1483,10 @@ export async function* runResearch(
       marketOverview,
       competitionSummary,
       insightData,
-      resolveAIForStep(effectiveStepSettings, 'strategy')
+      effectiveStrategyProvider
     )
     strategyData = stratResult.data
-    const stratProvider = stratPrimaryIsGemini ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
+    const stratProvider = effectiveStrategyProvider === 'gemini' ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
     await upsertAnalysisTask('strategy_generation', 'completed', {
       outputData: strategyData,
       provider: stratProvider,
@@ -1492,17 +1497,22 @@ export async function* runResearch(
     yield { type: 'task', task: 'strategy_generation', status: 'completed', data: strategyData, provider: stratProvider, fallback_used: stratResult.usedFallback }
   } catch (err) {
     const msg = toUserFriendlyError(err, '전략 추천 생성 중 오류가 발생했습니다.')
+    console.error('[AI Pipeline] strategy_generation failed (continuing with fallback)', { error: msg, step: 'strategy_generation' })
     log('strategy_generation', 'failed', {
       error: msg,
       durationMs: Date.now() - step4StartMs,
       elapsedSinceStart: Date.now() - pipelineStartMs,
       stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
     })
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false })
-    await updateProgress(4, 'failed')
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: stratPrimaryIsGemini ? 'gemini' : 'groq', fallback_used: false }
-    yield { type: 'error', message: msg, step: 'strategy_generation' }
-    return
+    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: msg, provider: effectiveStrategyProvider, fallback_used: false })
+    strategyData = {
+      opportunities: insightData.opportunity_signals,
+      risks: insightData.risk_signals,
+      strategy_summary: marketOverview,
+      market_summary: undefined,
+      key_strategic_insights: undefined,
+    }
+    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: msg, provider: effectiveStrategyProvider, fallback_used: false }
   }
 
   if (checkAborted(signal)) {
@@ -1627,6 +1637,9 @@ export async function* runResearch(
   await sleep(500)
 
   let strategyEvaluation: StrategyEvaluationResult | undefined
+  const riskProvider = resolveAIForStep(effectiveStepSettings, 'risk')
+  const hasRiskProviderKey = riskProvider === 'groq' ? !!groqKey : !!geminiKey
+  const effectiveRiskProvider = hasRiskProviderKey ? riskProvider : (groqKey ? 'groq' : 'gemini')
   try {
     strategyEvaluation = await runStrategyEvaluationTask(
       geminiKey,
@@ -1635,9 +1648,13 @@ export async function* runResearch(
       strategyData,
       competitionSummary,
       executionData,
-      resolveAIForStep(effectiveStepSettings, 'risk')
+      effectiveRiskProvider
     )
-  } catch {
+  } catch (err) {
+    console.error('[AI Pipeline] risk_opportunity (strategy evaluation) failed (continuing without)', {
+      error: err instanceof Error ? err.message : String(err),
+      step: 'risk_opportunity',
+    })
     strategyEvaluation = undefined
   }
 

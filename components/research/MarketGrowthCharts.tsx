@@ -112,11 +112,11 @@ export function MarketGrowthCharts({
   /** 분석 중에도 차트 표시: 값 없으면 default 사용 */
   const defaultBreakdown = { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : defaultBreakdown
-  const marketGrowth = effectiveBreakdown?.market_growth ?? 50
-  const trendMomentum = effectiveBreakdown?.trend_momentum ?? 50
-  const score = opportunityScore ?? 50
+  const marketGrowth = effectiveBreakdown?.market_growth ?? 0
+  const trendMomentum = effectiveBreakdown?.trend_momentum ?? 0
+  const score = opportunityScore ?? 0
 
-  const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 50)
+  const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 0)
   const sizeData = buildMarketSizeData(score)
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
 
