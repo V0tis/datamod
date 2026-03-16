@@ -21,6 +21,8 @@ const PRIORITY_COLORS = {
 
 export interface NextActionsForPMProps {
   result: ResearchResponse | null
+  /** execution_layer task output (pm_action_plan, next_actions_pm) – used when result.key_metrics is missing them */
+  taskData?: Partial<Record<string, unknown>>
   loading?: boolean
   embedded?: boolean
 }
@@ -50,8 +52,14 @@ function fromPmActionPlan(km: NonNullable<ResearchResponse['key_metrics']>): Nex
   return []
 }
 
-export function NextActionsForPM({ result, loading = false, embedded = false }: NextActionsForPMProps) {
-  const km = result?.key_metrics ?? {}
+export function NextActionsForPM({ result, taskData, loading = false, embedded = false }: NextActionsForPMProps) {
+  const execLayer = taskData?.execution_layer as { pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string }>; next_actions_pm?: NextActionItem[] } | undefined
+  const kmFromResult = result?.key_metrics ?? {}
+  const km =
+    (Array.isArray(kmFromResult.pm_action_plan) && kmFromResult.pm_action_plan.length > 0) ||
+    (Array.isArray(kmFromResult.next_actions_pm) && kmFromResult.next_actions_pm.length > 0)
+      ? kmFromResult
+      : { ...kmFromResult, pm_action_plan: execLayer?.pm_action_plan ?? kmFromResult.pm_action_plan, next_actions_pm: execLayer?.next_actions_pm ?? kmFromResult.next_actions_pm }
   const nextActions: NextActionItem[] =
     Array.isArray(km.next_actions_pm) && km.next_actions_pm.length > 0
       ? km.next_actions_pm
@@ -64,7 +72,7 @@ export function NextActionsForPM({ result, loading = false, embedded = false }: 
             priority: a.priority,
             estimated_effort: a.estimated_effort,
           }))
-      : fromPmActionPlan(km)
+      : fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>)
 
   const hasContent = nextActions.length > 0
 

@@ -1124,10 +1124,10 @@ function ResultsContent() {
             }
             topInsight={
               (loading && !displayResult?.reportId)
-                ? '-'
+                ? null
                 : (sanitizeForKoreanDisplay(
                     insightData?.strategicSummary?.summary ?? effectiveKeyMetrics?.summary_insights ?? (effectiveKeyMetrics?.keyConclusions ?? effectiveDisplayResult?.keyConclusions)?.[0] ?? ''
-                  ) || '-')
+                  ) || null)
             }
             scoreBreakdown={effectiveKeyMetrics?.opportunity_score_breakdown ?? null}
             statusText={
@@ -1143,6 +1143,7 @@ function ResultsContent() {
             }
             loading={loading && !displayResult}
             progressSlot={undefined}
+            showScoreAndConclusion={!!displayResult?.reportId}
             analysisStatus={
               loading ? 'loading'
               : canonicalStatus === 'failed' || showPolledError ? 'fail'

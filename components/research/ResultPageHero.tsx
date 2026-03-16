@@ -116,6 +116,8 @@ export interface ResultPageHeroProps {
   timelineSlot?: React.ReactNode
   /** 분석 진행 중 헤더 내 진행률 표시 (progress bar + step) */
   progressSlot?: React.ReactNode
+  /** When false, hide score gauge, badges, and top insight (only title + timeline + actions). Use when analysis has no result yet. */
+  showScoreAndConclusion?: boolean
   className?: string
 }
 
@@ -136,10 +138,11 @@ export const ResultPageHero = memo(function ResultPageHero({
   analysisStatus,
   timelineSlot,
   progressSlot,
+  showScoreAndConclusion = true,
   className,
 }: ResultPageHeroProps) {
   const [scoreExplainOpen, setScoreExplainOpen] = useState(false)
-  const hasScore = opportunityScore != null && Number.isFinite(opportunityScore)
+  const hasScore = showScoreAndConclusion && opportunityScore != null && Number.isFinite(opportunityScore)
   const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, opportunityScore))) : null
   const outlook = normScore != null ? opportunityToOutlook(normScore) : null
   const confDisplay =
@@ -183,7 +186,8 @@ export const ResultPageHero = memo(function ResultPageHero({
       {/* AI 분석 타임라인 – 마지막 업데이트 하단, 핵심 인사이트 위 */}
       {timelineSlot && <div className="mb-6">{timelineSlot}</div>}
 
-      {/* Row 2: Gauge + Badges + Insight */}
+      {/* Row 2: Gauge + Badges + Insight – hidden when no result yet */}
+      {showScoreAndConclusion && (
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">
         {/* Opportunity Score – large visual gauge */}
         <div className="flex flex-col sm:flex-row items-start gap-6 shrink-0">
@@ -323,11 +327,12 @@ export const ResultPageHero = memo(function ResultPageHero({
             </div>
           ) : (
             <p className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
-              {topInsight || 'AI 분석 결과를 기다리는 중입니다.'}
+              {topInsight || '—'}
             </p>
           )}
         </div>
       </div>
+      )}
 
       {/* Score Explanation Panel */}
       {scoreExplainOpen && normScore != null && scoreBreakdown && (

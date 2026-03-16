@@ -40,6 +40,7 @@ export interface ResultPageStructuredSectionsProps {
 }
 
 const SECTION_IDS = {
+  resultSummary: 'section-result-summary',
   marketSummary: 'section-market-summary',
   keyInsights: 'section-key-insights',
   marketTrends: 'section-market-trends',
@@ -85,6 +86,7 @@ export function ResultPageStructuredSections({
   keyword = '',
 }: ResultPageStructuredSectionsProps) {
   const effectiveResult = displayResult ?? result
+  const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
 
   return (
     <motion.div
@@ -97,26 +99,53 @@ export function ResultPageStructuredSections({
     >
       <motion.div variants={sectionEntranceVariants}>
         <ResultPageSection
+          id={SECTION_IDS.resultSummary}
+          title="결과 요약"
+          description="기회 점수, 핵심 결론, 요약을 한눈에 확인하세요."
+          icon={<BarChart3 className="h-5 w-5" />}
+          defaultOpen
+        >
+          {hasResultData ? (
+            <div className="space-y-6">
+              <OpportunityScoreBreakdown
+                score={effectiveResult?.key_metrics?.opportunity_score ?? null}
+                loading={loading}
+                breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
+                useKoreanLabels
+              />
+              {effectiveResult?.key_metrics?.summary_insights != null && effectiveResult.key_metrics.summary_insights !== '' && (
+                <div className="rounded-xl border border-border/60 bg-card/50 p-4 sm:p-5">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">핵심 결론</h3>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                    {String(effectiveResult.key_metrics.summary_insights)}
+                  </p>
+                </div>
+              )}
+              <ResultSummaryCards
+                result={effectiveResult}
+                consensusData={consensusData}
+                taskData={taskData}
+                analysisTasks={analysisTasks}
+                loading={loading}
+              />
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground rounded-xl border border-dashed border-border bg-muted/20">
+              분석이 완료되면 기회 점수, 핵심 결론, 요약이 여기에 표시됩니다.
+            </div>
+          )}
+        </ResultPageSection>
+      </motion.div>
+
+      <motion.div variants={sectionEntranceVariants}>
+        <ResultPageSection
         id={SECTION_IDS.marketSummary}
         title="시장 개요"
-        description="기회 점수, 시장 규모, 핵심 요약을 한눈에 확인하세요."
+        description="전략적 의사결정과 시장 관점을 확인하세요."
         icon={<BarChart3 className="h-5 w-5" />}
         defaultOpen
       >
         <div className="space-y-6">
-          <OpportunityScoreBreakdown
-            score={effectiveResult?.key_metrics?.opportunity_score ?? null}
-            loading={loading}
-            breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
-            useKoreanLabels
-          />
-          <ResultSummaryCards
-            result={effectiveResult}
-            consensusData={consensusData}
-            taskData={taskData}
-            analysisTasks={analysisTasks}
-            loading={loading}
-          />
           <StrategicDecisionLayer
             result={effectiveResult}
             loading={loading}
@@ -216,7 +245,7 @@ export function ResultPageStructuredSections({
         description="PM이 바로 실행할 수 있는 우선순위 액션 목록입니다."
         icon={<CheckSquare className="h-5 w-5" />}
       >
-        <NextActionsForPM result={effectiveResult} loading={loading} embedded />
+        <NextActionsForPM result={effectiveResult} taskData={taskData} loading={loading} embedded />
       </ResultPageSection>
       </motion.div>
     </motion.div>

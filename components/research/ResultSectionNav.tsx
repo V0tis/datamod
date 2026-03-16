@@ -6,8 +6,9 @@ import { LayoutGrid, Lightbulb, TrendingUp, Users, Target, AlertTriangle, Newspa
 import { cn } from '@/lib/utils'
 import { motionConfig } from '@/lib/motion-config'
 
-/** Core 6 sections for sticky quick-jump nav (matches ResultPageStructuredSections) */
+/** Core 7 sections for sticky quick-jump nav (matches ResultPageStructuredSections) */
 const CORE_SECTIONS = [
+  { id: 'section-result-summary', label: '결과 요약', icon: LayoutGrid },
   { id: 'section-market-summary', label: '시장 개요', icon: BarChart3 },
   { id: 'section-key-insights', label: '핵심 인사이트', icon: Lightbulb },
   { id: 'section-market-trends', label: '시장 트렌드', icon: TrendingUp },

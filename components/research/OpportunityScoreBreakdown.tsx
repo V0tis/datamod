@@ -1,6 +1,7 @@
 'use client'
 
-import { Target } from 'lucide-react'
+import { Target, Info } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 
@@ -89,6 +90,23 @@ export function OpportunityScoreBreakdown({
   /** Max absolute delta for bar scaling (excluding base) */
   const maxAbs = Math.max(15, ...items.map((i) => Math.abs(i.value)), 1)
   const scaleMax = maxAbs * 1.2
+
+  /** Explanation lines for low score: use breakdown to describe why score is low */
+  const explanationLines: string[] = []
+  if (!loading && effectiveBreakdown) {
+    const compD = Number(effectiveBreakdown.competition_density)
+    const compP = Number(effectiveBreakdown.competition_pressure)
+    if (compD > 0 || (typeof effectiveBreakdown.competition_pressure === 'number' && effectiveBreakdown.competition_pressure > 40))
+      explanationLines.push('경쟁 수준이 높아 점수가 낮습니다.')
+    const growth = Number(effectiveBreakdown.market_growth)
+    const trend = Number(effectiveBreakdown.trend_momentum)
+    if (growth < 0 || trend < 0) explanationLines.push('시장 성장률이 낮습니다.')
+    const risk = Number(effectiveBreakdown.risk_factors)
+    if (risk > 0) explanationLines.push('리스크 요인이 점수를 낮춥니다.')
+    const funding = Number(effectiveBreakdown.funding_signals)
+    if (funding < 0) explanationLines.push('투자·펀딩 신호가 부족합니다.')
+  }
+  const hasExplanation = explanationLines.length > 0
 
   const baseLabel = '기본 점수'
   const finalLabel = '최종 점수'
@@ -184,6 +202,24 @@ export function OpportunityScoreBreakdown({
           </div>
         </div>
       </div>
+
+      {hasExplanation && (
+        <Card className="mt-4 border-border/60 bg-muted/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">점수가 낮은 이유</p>
+                <ul className="text-sm text-foreground list-disc list-inside space-y-0.5">
+                  {explanationLines.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </section>
   )
 }
