@@ -4,15 +4,16 @@
 /* 다크 모드: Tailwind dark 전략은 'class'. html에 .dark 클래스 적용 시 다크 모드 (next-themes와 동일) */
 @custom-variant dark (&:is(.dark *));
 
+/* 배민 스타일: 연한 회색 페이지 배경 + 흰색 카드 (전체 페이지 공통) */
 :root {
   --rin-primary: #FFB800;
   --rin-bg: #FFFFFF;
   --rin-foreground: #1A1A1A;
-  --background: #FFFFFF;
-  --background-elevated: #FAFAFA;
+  --background: #f5f5f5;
+  --background-elevated: #FFFFFF;
   --foreground: #1A1A1A;
   --foreground-muted: #6b7280;
-  --card: #FAFAFA;
+  --card: #FFFFFF;
   --card-foreground: #1A1A1A;
   --popover: #FFFFFF;
   --popover-foreground: #1A1A1A;

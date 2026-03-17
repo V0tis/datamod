@@ -143,7 +143,6 @@ export function ResultPageStructuredSections({
         title="시장 개요"
         description="전략적 의사결정과 시장 관점을 확인하세요."
         icon={<BarChart3 className="h-5 w-5" />}
-        defaultOpen
       >
         <div className="space-y-6">
           <StrategicDecisionLayer

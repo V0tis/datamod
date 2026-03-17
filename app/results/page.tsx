@@ -12,7 +12,7 @@ import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/st
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/lib/hooks/use-current-task'
 import { exportAnalysisToPdf } from '@/lib/pdf-export'
-import { FileDown, X, ExternalLink, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark } from 'lucide-react'
+import { FileDown, X, ExternalLink, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark, Cpu, Database } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { fetchTrendsForCountry } from '@/lib/fetch-trends'
@@ -1076,9 +1076,9 @@ function ResultsContent() {
   if (showTabs) {
     return (
       <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
-        {/* 좌측 섹션 네비 – result ready일 때만 (analyzing 중에는 차트/결론 미표시로 섹션 없음) */}
-        {displayResult?.reportId && !needsRunAction && (
-          <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-background/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden">
+        {/* 좌측 섹션 네비 – 분석 중/결과 있을 때 표시 (콘텐츠와 동일 조건) */}
+        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+          <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-card/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden shadow-sm">
             <ResultSectionNav variant="sidebar" mode="core" progress={navProgress} />
           </aside>
         )}
@@ -1335,43 +1335,65 @@ function ResultsContent() {
                 keyword={currentKeyword ?? ''}
               />
             </ResultSectionErrorBoundary>
-            {/* AI 분석 엔진 (토글) */}
+            {/* AI 분석 엔진 (다른 섹션과 동일 카드 스타일) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
-              <div className="mt-5 border border-border/60 rounded-lg overflow-hidden">
+              <section id="section-engine" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
                 <button
                   type="button"
                   onClick={() => setEngineExpanded((e) => !e)}
-                  className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-muted/30 hover:bg-muted/50 transition-colors"
+                  className={cn(
+                    'flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl',
+                    engineExpanded && 'rounded-b-none'
+                  )}
                   aria-expanded={engineExpanded}
                 >
-                  <span className="text-sm font-semibold text-foreground">AI 분석 엔진</span>
-                  {engineExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
+                      <span className="shrink-0 text-primary"><Cpu className="h-5 w-5" /></span>
+                      AI 분석 엔진
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">단계별 분석 파이프라인과 실행 상태</p>
+                  </div>
+                  <span className={cn('shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-transform duration-200', engineExpanded && 'rotate-180')}>
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </span>
                 </button>
                 {engineExpanded && (
-                  <div className="p-0">
+                  <div className="border-t border-border p-0">
                     <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} hideHeader className="border-0 rounded-none" />
                   </div>
                 )}
-              </div>
+              </section>
             )}
 
           </div>
         )}
 
-        {/* 상세 섹션 (접기/펼치기): 데이터 출처 + 뉴스 */}
+        {/* 상세 섹션 (다른 섹션과 동일 카드 스타일): 데이터 출처 + 뉴스 */}
         {currentKeyword && (
-          <div className="mt-8 border border-border/60 rounded-lg overflow-hidden">
+          <section id="section-detail" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
             <button
               type="button"
               onClick={() => setDetailExpanded((e) => !e)}
-              className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-muted/30 hover:bg-muted/50 transition-colors"
+              className={cn(
+                'flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl',
+                detailExpanded && 'rounded-b-none'
+              )}
               aria-expanded={detailExpanded}
             >
-              <span className="text-sm font-semibold text-foreground">상세 (데이터 출처 · 뉴스)</span>
-              {detailExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
+                  <span className="shrink-0 text-primary"><Database className="h-5 w-5" /></span>
+                  상세 (데이터 출처 · 뉴스)
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">데이터 출처와 실시간 뉴스</p>
+              </div>
+              <span className={cn('shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-transform duration-200', detailExpanded && 'rotate-180')}>
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              </span>
             </button>
             {detailExpanded && (
-              <div className="space-y-6 p-4 pt-0">
+              <div className="border-t border-border space-y-6 px-3 sm:px-4 py-3 sm:py-4">
                 <div id="section-data" className="scroll-mt-24">
                   <DataSourcesSection
                     signals={dataSourceSignals}
@@ -1379,10 +1401,10 @@ function ResultsContent() {
                   />
                 </div>
 
-                <section id="section-news" className="reading-section-gap rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5 scroll-mt-24" aria-label="뉴스 및 데이터">
+                <section id="section-news" className="scroll-mt-24 pt-6 border-t border-border first:pt-0 first:border-t-0" aria-label="뉴스 및 데이터">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <Newspaper className="h-3.5 w-3.5 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Newspaper className="h-4 w-4 text-primary" />
                 실시간 뉴스
                 {rssNewsLoading && (
                   <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
@@ -1466,7 +1488,7 @@ function ResultsContent() {
           </section>
               </div>
             )}
-          </div>
+          </section>
         )}
 
 

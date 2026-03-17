@@ -368,158 +368,238 @@ function RinAISearchInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="h-[calc(100vh-3.5rem)] flex flex-col px-4 sm:px-6 lg:px-8 py-4 max-w-[1400px] mx-auto overflow-hidden"
+            className="flex flex-col px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-[1200px] mx-auto overflow-y-auto min-h-[calc(100vh-3.5rem)]"
           >
             {/* ── Alerts ── */}
             {error && (
-              <div className="mb-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-destructive text-sm shrink-0">
+              <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm shrink-0">
                 {error}
               </div>
             )}
             {user && canSearch === false && (
-              <div className="mb-2 rounded-lg border border-warning/30 bg-warning/5 p-2 flex items-center justify-between gap-2 shrink-0">
-                <p className="text-warning text-sm">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
+              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex items-center justify-between gap-2 shrink-0">
+                <p className="text-amber-700 dark:text-amber-400 text-sm">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
                 <Link href="/settings?tab=license" className="shrink-0">
-                  <Button variant="outline" size="sm" className="border-warning text-warning hover:bg-warning/10 h-7 text-xs">키 등록</Button>
+                  <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 h-8 text-xs">키 등록</Button>
                 </Link>
               </div>
             )}
 
-            {/* ══════ PRIMARY: Analysis Input (dominant) ══════ */}
-            <section id="dashboard-analysis" className="shrink-0 mb-3 rounded-xl border-2 border-primary/20 bg-card p-4 sm:p-5 shadow-sm">
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-0.5">어떤 시장을 분석할까요?</h1>
-              <p className="text-sm text-muted-foreground mb-1">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
-              <p className="text-xs text-muted-foreground/80 mb-3">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
+            {/* ══════ 1. HERO ══════ */}
+            <section
+              id="dashboard-analysis"
+              className="relative rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden mb-8"
+            >
+              <div className="relative px-6 sm:px-8 py-8 sm:py-10">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight mb-1">어떤 시장을 분석할까요?</h1>
+                <p className="text-sm sm:text-base text-muted-foreground font-normal mb-6">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
 
-              <form onSubmit={handleSearch}>
-                <div
-                  className={cn(
-                    'relative flex items-center rounded-lg border-2 border-border bg-background h-12 sm:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all',
-                    showAnalysisUI && 'opacity-70'
-                  )}
-                >
-                  <Sparkles className="h-4 w-4 text-primary/40 shrink-0 mr-3" />
-                  <Input
-                    type="search"
-                    aria-label="분석할 시장 키워드"
-                    placeholder="예: AI 작성 도구, 리모트워크 SaaS, 에듀테크 플랫폼..."
-                    value={query}
-                    onChange={(e) => { setQuery(e.target.value); setError(null) }}
-                    disabled={showAnalysisUI}
-                    className="border-0 bg-transparent pl-0 pr-24 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
-                  />
-                  {query.length > 0 && !showAnalysisUI && (
-                    <button
-                      type="button"
-                      onClick={() => setQuery('')}
-                      className="absolute right-[100px] top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      aria-label="검색어 지우기"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    {(searching || isAnalyzingNow()) ? (
-                      <Button type="button" variant="destructive" onClick={handleAbort} size="sm" className="h-8 sm:h-9 px-3 text-xs font-medium">
-                        <X className="h-3.5 w-3.5 mr-1" />중단
-                      </Button>
+                <form onSubmit={handleSearch}>
+                  <div
+                    className={cn(
+                      'relative flex items-center rounded-xl border border-border bg-background/80 shadow-sm h-12 sm:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-md transition-all',
+                      showAnalysisUI && 'opacity-70'
+                    )}
+                  >
+                    <Sparkles className="h-5 w-5 text-primary/50 shrink-0 mr-3" />
+                    <Input
+                      type="search"
+                      aria-label="분석할 시장 키워드"
+                      placeholder="예: AI 작성 도구, 리모트워크 SaaS, 에듀테크 플랫폼..."
+                      value={query}
+                      onChange={(e) => { setQuery(e.target.value); setError(null) }}
+                      disabled={showAnalysisUI}
+                      className="border-0 bg-transparent pl-0 pr-28 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
+                    />
+                    {query.length > 0 && !showAnalysisUI && (
+                      <button type="button" onClick={() => setQuery('')} className="absolute right-24 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors" aria-label="검색어 지우기">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      {(searching || isAnalyzingNow()) ? (
+                        <Button type="button" variant="destructive" onClick={handleAbort} size="sm" className="h-9 px-4 text-sm font-medium rounded-lg">
+                          <X className="h-3.5 w-3.5 mr-1.5" />중단
+                        </Button>
+                      ) : (
+                        <Button type="submit" disabled={!query.trim()} size="sm" className="h-9 px-5 text-sm font-semibold rounded-lg bg-primary hover:bg-primary/90">
+                          분석 시작
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => { setQuery(k); setError(null) }}
+                        disabled={showAnalysisUI}
+                        className="rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground transition-colors disabled:opacity-40"
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </form>
+
+                {showAnalysisUI && streamingState.status !== 'idle' && (
+                  <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                      <p className="text-sm font-medium text-foreground flex-1">
+                        {(streamingState.status === 'running' || streamingState.status === 'streaming')
+                          ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
+                          : getButtonLabel()}
+                      </p>
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {(streamingState.status === 'running' || streamingState.status === 'streaming') && typeof streamingState.currentStep === 'number'
+                          ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
+                          : ''}
+                      </span>
+                    </div>
+                    {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
+                      <div className="h-2 bg-muted/60 rounded-full overflow-hidden mt-2">
+                        <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* ══════ 2. RECOMMENDED MARKETS (배민 스타일: 파스텔 카드 + 아이콘 우상단 + 파란 CTA) ══════ */}
+            <section className="mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* 기회 높은 시장 */}
+                <div className="relative rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden min-h-[200px]">
+                  <div className="absolute top-4 right-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <TrendingUp className="h-7 w-7" strokeWidth={2} />
+                  </div>
+                  <div className="px-5 pt-5 pb-4">
+                    <h2 className="text-base font-bold text-foreground pr-14">기회 높은 시장</h2>
+                    <p className="text-sm text-muted-foreground mt-1">기회 점수가 높은 키워드예요. 실제 분석 기반으로 추천해요.</p>
+                  </div>
+                  <div className="px-5 pb-4 space-y-2">
+                    {dashboardRecsLoading ? (
+                      [...Array(3)].map((_, i) => (
+                        <div key={i} className="rounded-lg bg-white/60 dark:bg-white/5 h-12 animate-pulse" />
+                      ))
+                    ) : dashboardRecs.highOpportunity.length === 0 ? (
+                      <div className="rounded-xl bg-white/60 dark:bg-white/5 border border-border/60 py-8 text-center">
+                        <Target className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">분석 데이터가 쌓이면 여기에 추천이 표시돼요</p>
+                      </div>
                     ) : (
-                      <Button type="submit" disabled={!query.trim()} size="sm" className="h-8 sm:h-9 px-4 sm:px-5 text-xs sm:text-sm font-semibold">
-                        분석 시작
-                      </Button>
+                      <>
+                        {dashboardRecs.highOpportunity.slice(0, 4).map((row, i) => (
+                          <Link
+                            key={`opp-${row.keyword}-${i}`}
+                            href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
+                            className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-white/10 border border-white/80 dark:border-white/10 px-4 py-2.5 hover:bg-white dark:hover:bg-white/20 transition-colors group"
+                          >
+                            <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{row.keyword}</span>
+                            <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 shrink-0">기회 {row.opportunity_score}</span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-emerald-600 shrink-0" />
+                          </Link>
+                        ))}
+                        {dashboardRecs.highOpportunity.length > 0 && (
+                          <Link
+                            href={`/results?keyword=${encodeURIComponent(dashboardRecs.highOpportunity[0].keyword)}`}
+                            className="mt-3 flex justify-center"
+                          >
+                            <span className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+                              기회 시장 분석하기
+                            </span>
+                          </Link>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-2.5">
-                  {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => { setQuery(k); setError(null) }}
-                      disabled={showAnalysisUI}
-                      className="rounded-md border border-border/50 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground transition-colors disabled:opacity-40"
-                    >
-                      {k}
-                    </button>
-                  ))}
-                </div>
-              </form>
-
-              {showAnalysisUI && streamingState.status !== 'idle' && (
-                <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                    <p className="text-sm font-medium text-foreground flex-1">
-                      {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                        ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
-                        : getButtonLabel()}
-                    </p>
-                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                      {(streamingState.status === 'running' || streamingState.status === 'streaming') && typeof streamingState.currentStep === 'number'
-                        ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
-                        : ''}
-                    </span>
+                {/* 리스크 높은 시장 */}
+                <div className="relative rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden min-h-[200px]">
+                  <div className="absolute top-4 right-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
+                    <AlertTriangle className="h-7 w-7" strokeWidth={2} />
                   </div>
-                  {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }}
-                      />
-                    </div>
-                  )}
+                  <div className="px-5 pt-5 pb-4">
+                    <h2 className="text-base font-bold text-foreground pr-14">리스크 높은 시장</h2>
+                    <p className="text-sm text-muted-foreground mt-1">리스크 점수가 높은 키워드예요. 모니터링을 추천해요.</p>
+                  </div>
+                  <div className="px-5 pb-4 space-y-2">
+                    {dashboardRecsLoading ? (
+                      [...Array(3)].map((_, i) => (
+                        <div key={i} className="rounded-lg bg-white/60 dark:bg-white/5 h-12 animate-pulse" />
+                      ))
+                    ) : dashboardRecs.highRisk.length === 0 ? (
+                      <div className="rounded-xl bg-white/60 dark:bg-white/5 border border-border/60 py-8 text-center">
+                        <AlertTriangle className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">분석 데이터가 쌓이면 여기에 추천이 표시돼요</p>
+                      </div>
+                    ) : (
+                      <>
+                        {dashboardRecs.highRisk.slice(0, 4).map((row, i) => (
+                          <Link
+                            key={`risk-${row.keyword}-${i}`}
+                            href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
+                            className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-white/10 border border-white/80 dark:border-white/10 px-4 py-2.5 hover:bg-white dark:hover:bg-white/20 transition-colors group"
+                          >
+                            <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{row.keyword}</span>
+                            <span className="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400 shrink-0">리스크 {row.risk_score}</span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-red-600 shrink-0" />
+                          </Link>
+                        ))}
+                        {dashboardRecs.highRisk.length > 0 && (
+                          <Link
+                            href={`/results?keyword=${encodeURIComponent(dashboardRecs.highRisk[0].keyword)}`}
+                            className="mt-3 flex justify-center"
+                          >
+                            <span className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+                              리스크 시장 분석하기
+                            </span>
+                          </Link>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
             </section>
 
-            {/* ══════ SECONDARY: Data panels (compact 2-col) ══════ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0 max-h-[45vh]">
-
-              {/* Left: Trends */}
-              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
-                    <TrendingUp className="h-3 w-3 text-muted-foreground" />
-                    급상승 트렌드
-                  </h2>
-                  <div className="flex items-center gap-1.5">
-                    <CountryChips
-                      value={trendCountry}
-                      onChange={setTrendCountry}
-                      compact
-                    />
-                    <Link href="/trends" className="text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0 ml-1">
-                      전체
-                    </Link>
+            {/* ══════ 3. TRENDING ══════ */}
+            <section className="mb-8">
+              <div className="rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                  <div>
+                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      급상승 트렌드
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">최근 트렌드 키워드예요</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CountryChips value={trendCountry} onChange={setTrendCountry} compact />
+                    <Link href="/trends" className="text-sm font-medium text-primary hover:underline">전체</Link>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto min-h-0">
+                <div className="max-h-[280px] overflow-auto">
                   {trendsLoading ? (
-                    <div className="divide-y divide-border">
+                    <div className="p-4 space-y-2">
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2">
-                          <span className="h-3.5 w-4 bg-muted rounded animate-pulse" />
-                          <span className="h-3.5 w-32 bg-muted rounded animate-pulse" />
-                          <span className="ml-auto h-3 w-12 bg-muted rounded animate-pulse" />
-                        </div>
+                        <div key={i} className="h-12 bg-muted/40 rounded-xl animate-pulse" />
                       ))}
                     </div>
                   ) : trendItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full py-6 text-center">
-                      <TrendingUp className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
-                      <p className="text-xs text-muted-foreground">트렌드 데이터가 없습니다</p>
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <TrendingUp className="h-8 w-8 text-muted-foreground/20 mb-2" />
+                      <p className="text-sm text-muted-foreground">트렌드 데이터가 없습니다</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-border">
+                    <div className="divide-y divide-border/50">
                       {trendItems.map((item, i) => {
                         const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
                         const showBoth = trendCountry !== 'KR' && hasTranslation
-                        const displayName = showBoth
-                          ? `${item.keyword} · ${item.title_ko}`
-                          : hasTranslation
-                            ? item.title_ko!
-                            : item.keyword
+                        const displayName = showBoth ? `${item.keyword} · ${item.title_ko}` : hasTranslation ? item.title_ko! : item.keyword
                         const subLabel = item.search_volume ?? (item.rank ? `#${item.rank}` : null)
                         return (
                           <button
@@ -534,195 +614,83 @@ function RinAISearchInner() {
                               router.push(`/results?${params.toString()}`)
                               startStreamingResearch(originalKeyword, { country_code: trendCountry })
                             }}
-                            className="group flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors w-full text-left"
+                            className="group flex items-center gap-3 w-full px-5 py-3 text-left hover:bg-blue-500/5 transition-colors"
                           >
-                            <span className="text-[11px] text-muted-foreground/40 tabular-nums w-4 shrink-0 text-right">{i + 1}</span>
-                            <span className="text-[13px] text-foreground group-hover:text-primary transition-colors truncate flex-1 min-w-0">
-                              {displayName}
-                            </span>
-                            {subLabel && (
-                              <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">{subLabel}</span>
-                            )}
-                            {item.started_at && (
-                              <span className="text-[10px] text-muted-foreground/40 shrink-0">
-                                <TimeAgo isoString={item.started_at} />
-                              </span>
-                            )}
-                            <ChevronRight className="h-3 w-3 text-muted-foreground/25 group-hover:text-muted-foreground transition-colors shrink-0" />
+                            <span className="text-xs font-medium text-muted-foreground tabular-nums w-6 shrink-0">{i + 1}</span>
+                            <span className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{displayName}</span>
+                            {subLabel && <span className="text-xs text-muted-foreground/70 tabular-nums shrink-0">{subLabel}</span>}
+                            {item.started_at && <span className="text-xs text-muted-foreground/50 shrink-0"><TimeAgo isoString={item.started_at} /></span>}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-blue-500 transition-colors shrink-0" />
                           </button>
                         )
                       })}
                     </div>
                   )}
                 </div>
-                <div className="px-3 py-1 border-t border-border shrink-0">
-                  <p className="text-[10px] text-muted-foreground/40">RSS·트렌드 기준 · 1시간 캐시</p>
+                <div className="px-5 py-2 border-t border-border bg-muted/30 dark:bg-muted/20">
+                  <p className="text-xs text-muted-foreground">RSS·트렌드 기준 · 1시간 캐시</p>
                 </div>
               </div>
+            </section>
 
-              {/* Right: Recent Analysis */}
-              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
-                    <History className="h-3 w-3 text-muted-foreground" />
-                    최근 분석
-                  </h2>
-                  <Link href="/history" className="text-[11px] text-muted-foreground hover:text-primary transition-colors">
-                    전체 보기
-                  </Link>
+            {/* ══════ 4. RECENT ANALYSIS ══════ */}
+            <section>
+              <div className="rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                  <div>
+                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <History className="h-4 w-4 text-primary" />
+                      최근 분석
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">방금 분석한 키워드예요</p>
+                  </div>
+                  <Link href="/history" className="text-sm font-medium text-primary hover:underline">전체 보기</Link>
                 </div>
-                <div className="flex-1 overflow-auto min-h-0">
+                <div className="max-h-[260px] overflow-auto">
                   {recentReportsLoading ? (
-                    <div className="divide-y divide-border">
+                    <div className="p-4 space-y-2">
                       {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2">
-                          <span className="h-3.5 w-28 bg-muted rounded animate-pulse" />
-                          <span className="ml-auto h-3 w-8 bg-muted rounded animate-pulse" />
-                        </div>
+                        <div key={i} className="h-14 bg-muted/40 rounded-xl animate-pulse" />
                       ))}
                     </div>
                   ) : recentReports.length > 0 ? (
-                    <div className="divide-y divide-border">
+                    <div className="divide-y divide-border/50">
                       {recentReports.map((r, i) => (
                         <Link
                           key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}
                           href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                          className="group flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+                          className="group flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors"
                         >
-                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors truncate flex-1 min-w-0">
-                            {r.keyword}
-                          </span>
+                          <span className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-primary transition-colors">{r.keyword}</span>
                           {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
-                            <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums shrink-0">
-                              <Target className="h-2.5 w-2.5 text-primary/60" />
-                              {r.opportunity_score}
-                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{r.opportunity_score}</span>
                           )}
                           {r.analysis_status === 'analyzing' && (() => {
                             const isCurrent = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
                             const hasStep = isCurrent && (streamingState.status === 'running' || streamingState.status === 'streaming')
                             const stepNum = hasStep ? (streamingState.currentStep ?? 0) + 1 : 1
                             return (
-                              <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-600 shrink-0">
-                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 shrink-0">
+                                <Loader2 className="h-3 w-3 animate-spin" />
                                 {stepNum}/{PROGRESS_STEPS.length}
                               </span>
                             )
                           })()}
-                          <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
-                            <TimeAgo isoString={r.created_at} />
-                          </span>
-                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
+                          <span className="text-xs text-muted-foreground/70 tabular-nums shrink-0"><TimeAgo isoString={r.created_at} /></span>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0" />
                         </Link>
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-6 text-center">
-                      <History className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
-                      <p className="text-xs text-muted-foreground">분석 기록이 없습니다</p>
-                      <p className="text-[11px] text-muted-foreground/50 mt-0.5">상단에서 첫 분석을 시작하세요</p>
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <History className="h-8 w-8 text-muted-foreground/20 mb-2" />
+                      <p className="text-sm text-muted-foreground">분석 기록이 없습니다</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">상단에서 첫 분석을 시작하세요</p>
                     </div>
                   )}
                 </div>
               </div>
-
-            </div>
-
-            {/* ══════ Dashboard recommendations (global analysis data) ══════ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 shrink-0">
-              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
-                <div className="px-3 py-2 border-b border-border shrink-0">
-                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
-                    <TrendingUp className="h-3 w-3 text-primary/70" />
-                    📈 기회 높은 시장 (실제 분석 기반)
-                  </h2>
-                  <p className="text-[10px] text-muted-foreground/80 mt-0.5">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
-                </div>
-                <div className="flex-1 overflow-auto min-h-0 min-h-[120px]">
-                  {dashboardRecsLoading ? (
-                    <div className="divide-y divide-border">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2">
-                          <span className="h-3.5 w-24 bg-muted rounded animate-pulse" />
-                          <span className="ml-auto h-3 w-16 bg-muted rounded animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : dashboardRecs.highOpportunity.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-6 text-center">
-                      <Target className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
-                      <p className="text-xs text-muted-foreground">분석 데이터가 쌓이면 추천됩니다</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {dashboardRecs.highOpportunity.map((row, i) => (
-                        <Link
-                          key={`opp-${row.keyword}-${i}`}
-                          href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
-                          className="group flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors text-left relative pr-8"
-                        >
-                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors font-medium truncate">
-                            {row.keyword}
-                          </span>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>기회 점수 {row.opportunity_score}</span>
-                            <span>리스크 {row.risk_score}</span>
-                            <span className="ml-auto">총 {row.analysis_count}회 분석됨</span>
-                          </div>
-                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
-                <div className="px-3 py-2 border-b border-border shrink-0">
-                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
-                    <AlertTriangle className="h-3 w-3 text-amber-500/80" />
-                    ⚠ 리스크 높은 시장 (실제 분석 기반)
-                  </h2>
-                  <p className="text-[10px] text-muted-foreground/80 mt-0.5">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
-                </div>
-                <div className="flex-1 overflow-auto min-h-0 min-h-[120px]">
-                  {dashboardRecsLoading ? (
-                    <div className="divide-y divide-border">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2">
-                          <span className="h-3.5 w-24 bg-muted rounded animate-pulse" />
-                          <span className="ml-auto h-3 w-16 bg-muted rounded animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : dashboardRecs.highRisk.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-6 text-center">
-                      <AlertTriangle className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
-                      <p className="text-xs text-muted-foreground">분석 데이터가 쌓이면 추천됩니다</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {dashboardRecs.highRisk.map((row, i) => (
-                        <Link
-                          key={`risk-${row.keyword}-${i}`}
-                          href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
-                          className="group flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors text-left relative pr-8"
-                        >
-                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors font-medium truncate">
-                            {row.keyword}
-                          </span>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>기회 점수 {row.opportunity_score}</span>
-                            <span>리스크 {row.risk_score}</span>
-                            <span className="ml-auto">총 {row.analysis_count}회 분석됨</span>
-                          </div>
-                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            </section>
           </motion.div>
         )}
       </AnimatePresence>
