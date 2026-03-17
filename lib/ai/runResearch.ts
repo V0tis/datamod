@@ -136,7 +136,7 @@ export type ResearchStreamEvent =
   | { type: 'pass2'; structured: StructuredAnalysisFields }
   | { type: 'post_processing'; stepId: PostProcessingStepId }
   | { type: 'creative'; groqText: string | null; geminiText: string | null }
-  | { type: 'done'; reportId: string; sourceLinks: NewsItem[] }
+  | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep' }
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
 
@@ -169,7 +169,14 @@ type RssItem = {
 }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
 
-async function fetchNewsTitles(keyword: string, countryCode: string): Promise<NewsItem[]> {
+/** Max news items by depth: quick=fast/small, standard=normal, deep=more. */
+const NEWS_LIMIT_BY_DEPTH: Record<'quick' | 'standard' | 'deep', number> = {
+  quick: 5,
+  standard: 15,
+  deep: 25,
+}
+
+async function fetchNewsTitles(keyword: string, countryCode: string, maxItems: number = 15): Promise<NewsItem[]> {
   const { getNewsLocale } = await import('@/lib/news-rss-locale')
   const { gl, hl, ceid } = getNewsLocale(countryCode)
   const url = `${RSS_BASE}?q=${encodeURIComponent(keyword)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`
@@ -183,7 +190,7 @@ async function fetchNewsTitles(keyword: string, countryCode: string): Promise<Ne
   try {
     const xml = await res.text()
     const feed = await rssParser.parseString(xml)
-    const items = (feed.items ?? []).slice(0, 15).map((it) => {
+    const items = (feed.items ?? []).slice(0, maxItems).map((it) => {
       const title = (it.title ?? '').trim().slice(0, 300)
       const link = typeof it.link === 'string' ? it.link : ''
       let publisher = ''
@@ -1441,6 +1448,7 @@ export async function* runResearch(
     console.warn('[AI Timeline] web search failed (continuing without)', { keyword, err })
   }
 
+  const depthForDb = depthMode === 'quick' ? 'fast' : depthMode
   const updateProgress = async (step: number, status: 'analyzing' | 'completed' | 'failed') => {
     await supabase
       .from('research_history')
@@ -1451,6 +1459,7 @@ export async function* runResearch(
           country_code: cacheKey.countryCode,
           analysis_status: status,
           progress_step: status === 'completed' ? null : step,
+          analysis_depth: depthForDb,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,keyword,country_code' }
@@ -1462,13 +1471,14 @@ export async function* runResearch(
   console.log('[AI Analysis] 시작', { keyword: cacheKey.keyword, countryCode: cacheKey.countryCode, analysisId: analysisId.slice(0, 50) + '...' })
   yield { type: 'analysis_started', analysisId }
 
-  // Layer 1: Signal Layer - collect market signals (no AI)
-  log('signal_layer', 'running')
+  // Layer 1: Signal Layer - collect market signals (no AI); depth affects news count
+  const newsLimit = NEWS_LIMIT_BY_DEPTH[depthMode]
+  log('signal_layer', 'running', { depthMode, newsLimit })
   await upsertAnalysisTask('signal_layer', 'running', { provider: null, fallback_used: false })
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   let news: NewsItem[]
   try {
-    news = await fetchNewsTitles(keyword, cacheKey.countryCode)
+    news = await fetchNewsTitles(keyword, cacheKey.countryCode, newsLimit)
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
     const signalData = {
@@ -2045,6 +2055,7 @@ export async function* runResearch(
         key_metrics: keyMetrics,
         analysis_status: 'completed',
         progress_step: null,
+        analysis_depth: depthForDb,
         updated_at: new Date().toISOString(),
       }
       if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
@@ -2142,5 +2153,5 @@ export async function* runResearch(
   }
 
   console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured })
-  yield { type: 'done', reportId, sourceLinks: news }
+  yield { type: 'done', reportId, sourceLinks: news, analysis_depth: depthForDb }
 }

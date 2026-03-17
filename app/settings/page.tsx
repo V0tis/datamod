@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 
 type LicenseOrigin = 'USER' | 'SYSTEM'
 
@@ -31,6 +32,7 @@ type SettingsData = {
   email: string
   nickname: string
   aiPrimaryModel?: 'gemini' | 'groq'
+  analysisDepth?: 'fast' | 'standard' | 'deep'
   stepAIModels?: StepAIModels
   hasGeminiKey: boolean
   hasGroqKey?: boolean
@@ -162,6 +164,10 @@ function SettingsPageInner() {
           setData(json)
           setNickname(json.nickname ?? '')
           setAiPrimaryModel(json.aiPrimaryModel === 'groq' ? 'groq' : 'gemini')
+          if (json.analysisDepth === 'fast' || json.analysisDepth === 'standard' || json.analysisDepth === 'deep') {
+            setAnalysisDepth(json.analysisDepth)
+            try { window.localStorage.setItem(ANALYSIS_DEPTH_KEY, json.analysisDepth) } catch { /* ignore */ }
+          }
           setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
           setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
           if (json.stepAIModels) setStepAIModels(json.stepAIModels)
@@ -180,11 +186,22 @@ function SettingsPageInner() {
     }
   }, [])
 
-  const handleAnalysisDepthChange = (value: AnalysisDepth) => {
+  const handleAnalysisDepthChange = async (value: AnalysisDepth) => {
     setAnalysisDepth(value)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ANALYSIS_DEPTH_KEY, value)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis_depth: value }),
+      })
+      if (!res.ok) throw new Error('저장 실패')
+      setData((prev) => (prev ? { ...prev, analysisDepth: value } : null))
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(ANALYSIS_DEPTH_KEY, value)
+      }
       toast.success('분석 깊이가 저장되었습니다.')
+    } catch {
+      toast.error('저장에 실패했습니다.')
     }
   }
 
@@ -681,6 +698,14 @@ function SettingsPageInner() {
                     </button>
                   ))}
                 </div>
+                {(() => {
+                  const est = getDepthEstimates(analysisDepth)
+                  return (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      예상 시간 {formatEstimatedTime(est.estimatedTimeSec)} · 예상 토큰 약 {(est.estimatedTokens / 1000).toFixed(0)}K
+                    </p>
+                  )
+                })()}
               </div>
               <div>
                 <Label className="text-sm font-medium mb-2 block">AI 우선 분석 모델 (기본값)</Label>

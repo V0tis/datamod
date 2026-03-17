@@ -11,6 +11,31 @@ import { logger } from '@/lib/logger'
 
 import { RESEARCH_RUN_DEADLINE_MS } from '@/lib/api/route-timeouts'
 
+/** Mark research_history as failed so "Recent analysis" does not show analyzing forever. */
+async function markResearchFailed(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  keyword: string,
+  countryCode: string,
+  errorMessage: string
+) {
+  try {
+    await supabase
+      .from('research_history')
+      .update({
+        analysis_status: 'failed',
+        error_message: errorMessage.slice(0, 500),
+        progress_step: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('keyword', keyword)
+      .eq('country_code', countryCode)
+  } catch (e) {
+    logger.error('markResearchFailed', { userId: userId.slice(0, 8), keyword, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -41,8 +66,18 @@ export async function POST(req: Request) {
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
       typeof body?.country_code === 'string' ? body.country_code.trim() || 'KR' : 'KR'
-    const mode = ['quick', 'standard', 'deep'].includes(body?.mode ?? '')
-      ? (body.mode as 'quick' | 'standard' | 'deep')
+    let modeRaw = body?.mode
+    if (modeRaw === undefined || modeRaw === null || modeRaw === '') {
+      const { data: settingsRow } = await supabase
+        .from('user_settings')
+        .select('analysis_depth')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const saved = (settingsRow as { analysis_depth?: string } | null)?.analysis_depth
+      modeRaw = saved === 'fast' || saved === 'deep' ? saved : 'standard'
+    }
+    const mode = modeRaw === 'fast' ? 'quick' : ['quick', 'standard', 'deep'].includes(String(modeRaw))
+      ? (modeRaw as 'quick' | 'standard' | 'deep')
       : 'standard'
     const forceReanalyze = body?.force_reanalyze === true
 
@@ -163,7 +198,12 @@ export async function POST(req: Request) {
             }
             send(event)
 
-            if (event.type === 'error' || event.type === 'done' || event.type === 'cached') {
+            if (event.type === 'error') {
+              const msg = 'message' in event ? String(event.message) : '분석 중 오류가 발생했습니다.'
+              await markResearchFailed(supabase, user.id, keyword, countryCode, msg)
+              break
+            }
+            if (event.type === 'done' || event.type === 'cached') {
               break
             }
           }
@@ -180,6 +220,7 @@ export async function POST(req: Request) {
             error: message,
             stack: err instanceof Error ? err.stack : undefined,
           })
+          await markResearchFailed(supabase, user.id, keyword, countryCode, message)
           send({ type: 'error', message })
         }
 

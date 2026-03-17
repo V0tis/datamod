@@ -23,7 +23,10 @@ import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from
 import { LandingPage } from '@/components/landing/landing-page'
 import type { SavedInsight } from '@/lib/insights-types'
 import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
+
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
+const ANALYSIS_DEPTH_KEY = 'rin_analysis_depth'
 
 function RinAISearchInner() {
   const router = useRouter()
@@ -98,6 +101,9 @@ function RinAISearchInner() {
     }
   }
   const [canSearch, setCanSearch] = useState<boolean | null>(null)
+  const [analysisDepth, setAnalysisDepth] = useState<DepthMode>('standard')
+  /* 분석 깊이는 설정 API에서 로드함 (useEffect below). 로그인 전에는 기본값 'standard' */
+  const depthEstimates = getDepthEstimates(analysisDepth)
   /** When true, we're navigating from trend click - keep main UI static, show overlay only */
   const [navigatingFromTrend, setNavigatingFromTrend] = useState(false)
   const jobs = useResearchStore((s) => s.jobs)
@@ -125,9 +131,17 @@ function RinAISearchInner() {
     }
     fetch('/api/settings')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { licenseOrigin?: { gemini: string }; canSearch?: boolean } | null) => {
+      .then((data: { licenseOrigin?: { gemini: string }; canSearch?: boolean; analysisDepth?: string } | null) => {
         if (!data) return
         setCanSearch(typeof data.canSearch === 'boolean' ? data.canSearch : null)
+        if (data.analysisDepth === 'fast' || data.analysisDepth === 'standard' || data.analysisDepth === 'deep') {
+          setAnalysisDepth(data.analysisDepth)
+          try {
+            window.localStorage.setItem(ANALYSIS_DEPTH_KEY, data.analysisDepth)
+          } catch {
+            /* ignore */
+          }
+        }
       })
       .catch((err) => {
         showErrorToast(err, { fallbackMessage: '설정 정보를 불러오지 못했습니다.' })
@@ -255,7 +269,7 @@ function RinAISearchInner() {
     }
     setError(null)
     setSearching(true)
-    startStreamingResearch(k, { country_code: trendCountry })
+    startStreamingResearch(k, { country_code: trendCountry, mode: depthToApiMode(analysisDepth) })
     if (user) {
       try {
         const reportRes = await fetch('/api/reports', {
@@ -428,6 +442,39 @@ function RinAISearchInner() {
                       )}
                     </div>
                   </div>
+                  <div className="flex flex-wrap items-center gap-3 mt-4">
+                    <span className="text-xs font-medium text-muted-foreground">분석 깊이</span>
+                    {(['fast', 'standard', 'deep'] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          setAnalysisDepth(d)
+                          try { window.localStorage.setItem(ANALYSIS_DEPTH_KEY, d) } catch { /* ignore */ }
+                          fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ analysis_depth: d }),
+                          }).catch(() => { /* 설정 저장 실패 시 무시 */ })
+                        }}
+                        disabled={showAnalysisUI}
+                        className={cn(
+                          'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
+                          analysisDepth === d
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground'
+                        )}
+                      >
+                        {DEPTH_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+                  {!showAnalysisUI && (
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>예상 시간 {formatEstimatedTime(depthEstimates.estimatedTimeSec)}</span>
+                      <span>예상 토큰 약 {(depthEstimates.estimatedTokens / 1000).toFixed(0)}K</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2 mt-4">
                     {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유'].map((k) => (
                       <button

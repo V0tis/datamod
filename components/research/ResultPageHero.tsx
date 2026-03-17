@@ -118,6 +118,14 @@ export interface ResultPageHeroProps {
   progressSlot?: React.ReactNode
   /** When false, hide score gauge, badges, and top insight (only title + timeline + actions). Use when analysis has no result yet. */
   showScoreAndConclusion?: boolean
+  /** Analysis meta badges: depth, cost, time, token, model (shown when result is available) */
+  analysisMeta?: {
+    depth?: string
+    cost?: string
+    time?: string
+    token?: string
+    model?: string
+  } | null
   className?: string
 }
 
@@ -139,6 +147,7 @@ export const ResultPageHero = memo(function ResultPageHero({
   timelineSlot,
   progressSlot,
   showScoreAndConclusion = true,
+  analysisMeta,
   className,
 }: ResultPageHeroProps) {
   const [scoreExplainOpen, setScoreExplainOpen] = useState(false)
@@ -175,6 +184,25 @@ export const ResultPageHero = memo(function ResultPageHero({
           )}
           {statusText && (
             <p className="mt-2 text-sm text-muted-foreground">{statusText}</p>
+          )}
+          {analysisMeta && (analysisMeta.depth ?? analysisMeta.time ?? analysisMeta.token) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {analysisMeta.depth && (
+                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  깊이: {analysisMeta.depth}
+                </span>
+              )}
+              {analysisMeta.time && (
+                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  예상 시간: {analysisMeta.time}
+                </span>
+              )}
+              {analysisMeta.token && (
+                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  토큰: {analysisMeta.token}
+                </span>
+              )}
+            </div>
           )}
           {loading && progressSlot && (
             <div className="mt-3 max-w-md">{progressSlot}</div>

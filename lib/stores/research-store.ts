@@ -52,6 +52,8 @@ export interface ResearchResponse {
   chartData?: ChartData
   articleSummaries?: string[]
   reportId?: string | null
+  /** Depth used for this run: fast | standard | deep (for result page badges) */
+  analysis_depth?: 'fast' | 'standard' | 'deep' | null
   error?: string
   /** 핵심 결론 3가지 (하단 Badge용) */
   keyConclusions?: string[]
@@ -429,6 +431,7 @@ export type StreamingUpdatePayload = {
   appendAction?: { title: string; reasoning: string; urgency: 'low' | 'medium' | 'high' }
   reportId?: string | null
   newsList?: NewsItem[]
+  analysis_depth?: 'fast' | 'standard' | 'deep' | null
   error?: string
 }
 
@@ -750,12 +753,19 @@ export const useResearchStore = create<ResearchStore>()(
                 }
               : prevActions
 
-        const result = composeResultFromSections(
+        let result = composeResultFromSections(
           summarySection,
           marketTemperatureSection,
           recommendedActionsSection,
           insightsSection
         )
+        if (result && (payload.reportId != null || payload.analysis_depth != null)) {
+          result = {
+            ...result,
+            reportId: payload.reportId ?? result.reportId,
+            analysis_depth: payload.analysis_depth ?? result.analysis_depth,
+          }
+        }
 
         set({
           summarySection,
@@ -791,7 +801,14 @@ export const useResearchStore = create<ResearchStore>()(
         const signal = currentAbortController.signal
 
         const countryCode = options?.country_code ?? 'KR'
-        const mode = options?.mode ?? get().analysisMode
+        const modeFromStorage =
+          typeof window !== 'undefined'
+            ? (() => {
+                const s = window.localStorage.getItem('rin_analysis_depth')
+                return s === 'fast' ? 'quick' : s === 'deep' ? 'deep' : 'standard'
+              })()
+            : 'standard'
+        const mode = options?.mode ?? modeFromStorage ?? get().analysisMode
         const steps = ANALYSIS_MODE_STEPS[mode]
 
         // Preserve last successful report for recovery
@@ -1043,7 +1060,12 @@ export const useResearchStore = create<ResearchStore>()(
                     url: l.url ?? '',
                     publisher: l.publisher,
                   }))
-                  applyUpdate({ reportId: event.reportId ?? null, newsList: newsList.length ? newsList : undefined })
+                  const depth = (event as { analysis_depth?: 'fast' | 'standard' | 'deep' }).analysis_depth
+                  applyUpdate({
+                    reportId: event.reportId ?? null,
+                    newsList: newsList.length ? newsList : undefined,
+                    analysis_depth: depth ?? undefined,
+                  })
                   set({ streamingState: createCompletedState(event.reportId ?? null) })
                   streamEnded = true
                   break
@@ -1085,7 +1107,12 @@ export const useResearchStore = create<ResearchStore>()(
                   url: l.url ?? '',
                   publisher: l.publisher,
                 }))
-                applyUpdate({ reportId: event.reportId ?? null, newsList: newsList.length ? newsList : undefined })
+                const depth = (event as { analysis_depth?: 'fast' | 'standard' | 'deep' }).analysis_depth
+                applyUpdate({
+                  reportId: event.reportId ?? null,
+                  newsList: newsList.length ? newsList : undefined,
+                  analysis_depth: depth ?? undefined,
+                })
                 set({ streamingState: createCompletedState(event.reportId ?? null) })
               } else if (event?.type === 'error') {
                 set({ streamingState: createErrorState(event.message ?? '분석 중 오류가 발생했습니다.', lastSuccessfulStep) })
@@ -1124,6 +1151,7 @@ export const useResearchStore = create<ResearchStore>()(
             emptyAnalysis?: boolean
             reportId?: string
             keyword?: string
+            analysis_depth?: 'fast' | 'standard' | 'deep' | null
             content?: Record<string, unknown>
             source_links?: Array<{ title?: string; url?: string }>
             ai_responses?: Record<string, string>
@@ -1189,6 +1217,7 @@ export const useResearchStore = create<ResearchStore>()(
             const fullResult: ResearchResponse = {
               ...(data.content ?? {}),
               reportId: data.reportId,
+              analysis_depth: data.analysis_depth ?? undefined,
               ai_responses: data.ai_responses ?? {},
               source_links: data.source_links ?? [],
               updated_at: data.updated_at,

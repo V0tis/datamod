@@ -43,6 +43,7 @@ import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluat
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultPageStructuredSections } from '@/components/research/ResultPageStructuredSections'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
@@ -1098,6 +1099,20 @@ function ResultsContent() {
         {(effectiveDisplayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
           <ResultPageHero
             title={heroTitle}
+            analysisMeta={
+              displayResult?.reportId
+                ? (() => {
+                    const depthRaw = displayResult.analysis_depth ?? 'standard'
+                    const depth: DepthMode = depthRaw === 'fast' || depthRaw === 'deep' ? depthRaw : 'standard'
+                    const est = getDepthEstimates(depth)
+                    return {
+                      depth: DEPTH_LABELS[depth],
+                      time: formatEstimatedTime(est.estimatedTimeSec),
+                      token: `약 ${(est.estimatedTokens / 1000).toFixed(0)}K`,
+                    }
+                  })()
+                : undefined
+            }
             opportunityScore={
               loading && !needsRunAction
                 ? null

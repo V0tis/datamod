@@ -9,6 +9,7 @@ export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
 type HistoryRow = {
   report_id: string | null
   analysis_status?: string | null
+  analysis_depth?: string | null
   analysis_target?: string | null
   confidence_score?: number | null
   market_temperature_score?: number | null
@@ -36,9 +37,23 @@ export async function GET(req: Request) {
       const limit = Math.min(500, Math.max(10, parseInt(searchParams.get('limit') ?? '50', 10) || 50))
       const offset = Math.max(0, parseInt(searchParams.get('offset') ?? '0', 10) || 0)
 
+      // Mark stale "analyzing" (> 5 min) as failed so UI does not show analyzing forever
+      const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      await supabase
+        .from('research_history')
+        .update({
+          analysis_status: 'failed',
+          error_message: '분석 시간 초과 (5분)',
+          progress_step: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+        .eq('analysis_status', 'analyzing')
+        .lt('updated_at', staleThreshold)
+
       const { data: rows, error } = await supabase
         .from('research_history')
-        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, updated_at')
+        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, updated_at, error_message, analysis_depth')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .range(offset, offset + limit - 1)
@@ -75,6 +90,8 @@ export async function GET(req: Request) {
           country_code: r.country_code ?? 'KR',
           report_id: r.report_id ?? null,
           analysis_status: analysisStatus,
+          error_message: (r as { error_message?: string }).error_message ?? null,
+          analysis_depth: (r as { analysis_depth?: string }).analysis_depth ?? null,
           analysis_target: (r as { analysis_target?: string }).analysis_target ?? null,
           confidence_score: confidenceScore,
           market_temperature_score: typeof (r as { market_temperature_score?: number }).market_temperature_score === 'number'
@@ -98,7 +115,7 @@ export async function GET(req: Request) {
       return resp
     }
 
-    const selectCols = 'report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
+    const selectCols = 'report_id, analysis_status, analysis_depth, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, analysis_groq, analysis_gemini, analysis_results, updated_at'
     const baseQuery = () =>
       supabase
         .from('research_history')
@@ -140,6 +157,7 @@ export async function GET(req: Request) {
       reportId: row.report_id ?? report?.id,
       keyword,
       analysis_status: ensureAnalysisStatus(row.analysis_status),
+      analysis_depth: row.analysis_depth ?? undefined,
       analysis_target: row.analysis_target ?? undefined,
       confidence_score: typeof row.confidence_score === 'number' ? row.confidence_score : undefined,
       market_temperature_score: typeof row.market_temperature_score === 'number' ? row.market_temperature_score : undefined,

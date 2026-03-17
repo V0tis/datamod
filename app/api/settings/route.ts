@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -58,10 +58,14 @@ export async function GET() {
   const groqApiKeyValue = hasGroqKey && groqKey ? groqKey : ''
 
   const stepRow = row as Record<string, unknown> | null
+  const analysisDepth = (stepRow?.analysis_depth as string) === 'fast' || (stepRow?.analysis_depth as string) === 'deep'
+    ? (stepRow?.analysis_depth as 'fast' | 'deep')
+    : 'standard'
   const res = NextResponse.json({
     email: user.email ?? '',
     nickname: row?.nickname ?? '',
     aiPrimaryModel: aiPrimaryModel === 'groq' ? 'groq' : 'gemini',
+    analysisDepth,
     stepAIModels: {
       ai_market_model: (stepRow?.ai_market_model as string) ?? null,
       ai_competitor_model: (stepRow?.ai_competitor_model as string) ?? null,
@@ -111,6 +115,7 @@ export async function POST(req: Request) {
 
   let body: {
     nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string
+    analysis_depth?: string
     ai_market_model?: string | null; ai_competitor_model?: string | null; ai_insight_model?: string | null; ai_strategy_model?: string | null
     ai_action_model?: string | null; ai_risk_model?: string | null; ai_creative_model?: string | null; ai_consensus_model?: string | null
   }
@@ -132,6 +137,8 @@ export async function POST(req: Request) {
     typeof body.groq_api_key === 'string' ? body.groq_api_key.trim() || null : undefined
   const ai_primary_model =
     body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini' ? body.ai_primary_model : undefined
+  const analysis_depth =
+    body.analysis_depth === 'fast' || body.analysis_depth === 'deep' ? body.analysis_depth : body.analysis_depth === 'standard' ? 'standard' : undefined
 
   const parseStepModel = (v: unknown): string | null | undefined => {
     if (v === null) return null
@@ -149,7 +156,7 @@ export async function POST(req: Request) {
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -170,6 +177,8 @@ export async function POST(req: Request) {
       groq_api_key !== undefined ? groq_api_key : (ex?.groq_api_key as string | null) ?? null,
     ai_primary_model:
       ai_primary_model !== undefined ? ai_primary_model : (ex?.ai_primary_model as string | null) ?? null,
+    analysis_depth:
+      analysis_depth !== undefined ? analysis_depth : (ex?.analysis_depth as string | null) ?? 'standard',
     ai_market_model: mergeStep(ai_market_model, 'ai_market_model'),
     ai_competitor_model: mergeStep(ai_competitor_model, 'ai_competitor_model'),
     ai_insight_model: mergeStep(ai_insight_model, 'ai_insight_model'),
