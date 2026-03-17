@@ -30,7 +30,6 @@ type StepAIModels = {
 
 type SettingsData = {
   email: string
-  nickname: string
   aiPrimaryModel?: 'gemini' | 'groq'
   analysisDepth?: 'fast' | 'standard' | 'deep'
   stepAIModels?: StepAIModels
@@ -113,9 +112,7 @@ function SettingsPageInner() {
 
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [data, setData] = useState<SettingsData | null>(null)
-  const [nickname, setNickname] = useState('')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
@@ -162,7 +159,6 @@ function SettingsPageInner() {
       .then((json: SettingsData | null) => {
         if (json) {
           setData(json)
-          setNickname(json.nickname ?? '')
           setAiPrimaryModel(json.aiPrimaryModel === 'groq' ? 'groq' : 'gemini')
           if (json.analysisDepth === 'fast' || json.analysisDepth === 'standard' || json.analysisDepth === 'deep') {
             setAnalysisDepth(json.analysisDepth)
@@ -239,28 +235,6 @@ function SettingsPageInner() {
       toast.error('저장에 실패했습니다.')
     } finally {
       setSavingStepAI(false)
-    }
-  }
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    setSaving(true)
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname: nickname.trim() }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
-        return
-      }
-      setData((prev) => (prev ? { ...prev, nickname: nickname.trim() } : null))
-      toast.success('저장되었습니다.')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -460,36 +434,15 @@ function SettingsPageInner() {
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
-              <CardDescription>이메일은 읽기 전용이며, 닉네임만 수정할 수 있습니다.</CardDescription>
+              <CardDescription>로그인에 사용한 이메일입니다.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSaveProfile} className="space-y-4 max-w-md">
+              <div className="space-y-4 max-w-md">
                 <div className="space-y-2">
                   <Label htmlFor="email">이메일</Label>
                   <Input id="email" type="email" value={data?.email ?? ''} readOnly className="bg-muted/50 cursor-not-allowed" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nickname">닉네임</Label>
-                  <Input
-                    id="nickname"
-                    type="text"
-                    placeholder="닉네임을 입력하세요"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-                <Button type="submit" disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      저장 중...
-                    </>
-                  ) : (
-                    '저장'
-                  )}
-                </Button>
-              </form>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

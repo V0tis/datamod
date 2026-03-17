@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 /**
- * 인증 콜백 후 호출: user_metadata.nickname을 user_settings에 저장.
+ * 인증 콜백 후 호출: user_settings에 기존 설정 유지, profiles에 이메일 동기화.
  * DB의 키는 서버에서만 사용하며, 클라이언트에 키를 노출하지 않음.
  */
 export async function POST() {
@@ -17,23 +17,15 @@ export async function POST() {
 
   const verified = Boolean(user?.email_confirmed_at)
 
-  const nickname =
-    typeof user.user_metadata?.nickname === 'string'
-      ? user.user_metadata.nickname.trim() || null
-      : null
-
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key')
+    .select('gemini_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
-
-  const finalNickname = nickname ?? existing?.nickname ?? null
 
   const { error } = await supabase.from('user_settings').upsert(
     {
       user_id: user.id,
-      nickname: finalNickname,
       gemini_api_key: existing?.gemini_api_key ?? null,
       updated_at: new Date().toISOString(),
     },
@@ -48,7 +40,7 @@ export async function POST() {
   await supabase
     .from('profiles')
     .upsert(
-      { id: user.id, email: user.email ?? '', nickname: finalNickname },
+      { id: user.id, email: user.email ?? '' },
       { onConflict: 'id' }
     )
 

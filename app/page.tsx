@@ -406,7 +406,7 @@ function RinAISearchInner() {
             >
               <div className="relative px-6 sm:px-8 py-8 sm:py-10">
                 <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight mb-1">어떤 시장을 분석할까요?</h1>
-                <p className="text-sm sm:text-base text-muted-foreground font-normal mb-6">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
+                <p className="text-base text-muted-foreground font-normal mb-6">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
 
                 <form onSubmit={handleSearch}>
                   <div
@@ -524,7 +524,7 @@ function RinAISearchInner() {
                     <TrendingUp className="h-7 w-7" strokeWidth={2} />
                   </div>
                   <div className="px-5 pt-5 pb-4">
-                    <h2 className="text-base font-bold text-foreground pr-14">기회 높은 시장</h2>
+                    <h2 className="text-lg font-bold text-foreground pr-14">기회 높은 시장</h2>
                     <p className="text-sm text-muted-foreground mt-1">기회 점수가 높은 키워드예요. 실제 분석 기반으로 추천해요.</p>
                   </div>
                   <div className="px-5 pb-4 space-y-2">
@@ -570,7 +570,7 @@ function RinAISearchInner() {
                     <AlertTriangle className="h-7 w-7" strokeWidth={2} />
                   </div>
                   <div className="px-5 pt-5 pb-4">
-                    <h2 className="text-base font-bold text-foreground pr-14">리스크 높은 시장</h2>
+                    <h2 className="text-lg font-bold text-foreground pr-14">리스크 높은 시장</h2>
                     <p className="text-sm text-muted-foreground mt-1">리스크 점수가 높은 키워드예요. 모니터링을 추천해요.</p>
                   </div>
                   <div className="px-5 pb-4 space-y-2">
@@ -618,7 +618,7 @@ function RinAISearchInner() {
               <div className="rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                   <div>
-                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary" />
                       급상승 트렌드
                     </h2>
@@ -685,7 +685,7 @@ function RinAISearchInner() {
               <div className="rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                   <div>
-                    <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                       <History className="h-4 w-4 text-primary" />
                       최근 분석
                     </h2>

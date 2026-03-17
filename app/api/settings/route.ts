@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -63,7 +63,6 @@ export async function GET() {
     : 'standard'
   const res = NextResponse.json({
     email: user.email ?? '',
-    nickname: row?.nickname ?? '',
     aiPrimaryModel: aiPrimaryModel === 'groq' ? 'groq' : 'gemini',
     analysisDepth,
     stepAIModels: {
@@ -114,7 +113,7 @@ export async function POST(req: Request) {
   }
 
   let body: {
-    nickname?: string; gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string
+    gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string
     analysis_depth?: string
     ai_market_model?: string | null; ai_competitor_model?: string | null; ai_insight_model?: string | null; ai_strategy_model?: string | null
     ai_action_model?: string | null; ai_risk_model?: string | null; ai_creative_model?: string | null; ai_consensus_model?: string | null
@@ -125,8 +124,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const nickname =
-    typeof body.nickname === 'string' ? body.nickname.trim() || null : undefined
   const gemini_api_key =
     typeof body.gemini_api_key === 'string' ? body.gemini_api_key.trim() || null : undefined
   const openai_api_key =
@@ -156,7 +153,7 @@ export async function POST(req: Request) {
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('nickname, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -166,7 +163,6 @@ export async function POST(req: Request) {
 
   const merged = {
     user_id: user.id,
-    nickname: nickname !== undefined ? nickname : existing?.nickname ?? null,
     gemini_api_key:
       gemini_api_key !== undefined ? gemini_api_key : existing?.gemini_api_key ?? null,
     openai_api_key:
@@ -197,15 +193,6 @@ export async function POST(req: Request) {
   if (error) {
     console.error('[Settings POST]', error)
     return NextResponse.json({ error: '설정 저장에 실패했습니다.' }, { status: 500 })
-  }
-
-  if (nickname !== undefined && user.email) {
-    await supabase
-      .from('profiles')
-      .upsert(
-        { id: user.id, email: user.email, nickname: merged.nickname },
-        { onConflict: 'id' }
-      )
   }
 
   return NextResponse.json({ success: true })

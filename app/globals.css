@@ -57,49 +57,49 @@
   --sidebar-ring: #2563EB;
 }
 
-/* Dark theme (default): #0F1115 background, strong contrast, no pure black. */
+/* Dark theme: 부드러운 다크 그레이, 명확한 계층·대비, 순수 검정 배제 */
 .dark {
-  --background: #0F1115;
-  --background-elevated: #151821;
-  --foreground: #E6E8EC;
-  --foreground-muted: #9CA3AF;
-  --card: #171923;
-  --card-foreground: #E6E8EC;
-  --popover: #171923;
-  --popover-foreground: #E6E8EC;
-  --primary: #60a5fa;
-  --primary-foreground: #0F1115;
-  --secondary: #1a1d26;
-  --secondary-foreground: #E6E8EC;
-  --muted: #1a1d26;
-  --muted-hover: #23262e;
-  --muted-foreground: #9CA3AF;
-  --accent: #1a1d26;
-  --accent-foreground: #E6E8EC;
-  --destructive: oklch(0.65 0.18 25);
-  --destructive-foreground: #E6E8EC;
-  --success: #34d399;
-  --success-foreground: #0F1115;
-  --warning: #fbbf24;
-  --warning-foreground: #0F1115;
-  --error: #f87171;
-  --error-foreground: #0F1115;
-  --border: #2d323e;
-  --input: #23262e;
-  --ring: #60a5fa;
-  --chart-1: #60a5fa;
-  --chart-2: #34d399;
-  --chart-3: #fbbf24;
-  --chart-4: #a78bfa;
-  --chart-5: #f87171;
-  --sidebar: #0F1115;
-  --sidebar-foreground: #E6E8EC;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0F1115;
-  --sidebar-accent: #1a1d26;
-  --sidebar-accent-foreground: #E6E8EC;
-  --sidebar-border: #2d323e;
-  --sidebar-ring: #60a5fa;
+  --background: #0f1216;
+  --background-elevated: #161b22;
+  --foreground: #e8eaed;
+  --foreground-muted: #8b92a0;
+  --card: #1a1f29;
+  --card-foreground: #e8eaed;
+  --popover: #1c2129;
+  --popover-foreground: #e8eaed;
+  --primary: #58a6ff;
+  --primary-foreground: #0f1216;
+  --secondary: #1c2129;
+  --secondary-foreground: #e8eaed;
+  --muted: #1c2129;
+  --muted-hover: #252b36;
+  --muted-foreground: #8b92a0;
+  --accent: #21262d;
+  --accent-foreground: #e8eaed;
+  --destructive: #f85149;
+  --destructive-foreground: #e8eaed;
+  --success: #3fb950;
+  --success-foreground: #0f1216;
+  --warning: #d29922;
+  --warning-foreground: #0f1216;
+  --error: #f85149;
+  --error-foreground: #e8eaed;
+  --border: #30363d;
+  --input: #21262d;
+  --ring: #58a6ff;
+  --chart-1: #58a6ff;
+  --chart-2: #3fb950;
+  --chart-3: #d29922;
+  --chart-4: #a371f7;
+  --chart-5: #f85149;
+  --sidebar: #0f1216;
+  --sidebar-foreground: #e8eaed;
+  --sidebar-primary: #58a6ff;
+  --sidebar-primary-foreground: #0f1216;
+  --sidebar-accent: #21262d;
+  --sidebar-accent-foreground: #e8eaed;
+  --sidebar-border: #30363d;
+  --sidebar-ring: #58a6ff;
 }
 
 @theme inline {
@@ -189,24 +189,27 @@
   --warning-text: hsl(38 80% 80%);
 }
 
+/* 배민 스타일 타이포 계층: 큰 폰트(핵심 수치·메인 타이틀) / 중간(섹션·위젯 제목) / 작은(보조·캡션) */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   html {
-    font-size: 14px;
+    font-size: 15px;
   }
   body {
-    @apply bg-background text-foreground text-[14px];
+    @apply bg-background text-foreground;
+    font-size: 1rem;
+    line-height: 1.5;
   }
   h1 {
-    @apply text-lg sm:text-xl font-bold tracking-tight text-foreground;
+    @apply text-xl sm:text-2xl font-bold tracking-tight text-foreground;
   }
   h2 {
-    @apply text-base sm:text-lg font-semibold text-foreground;
+    @apply text-lg sm:text-xl font-semibold text-foreground;
   }
   h3 {
-    @apply text-[15px] sm:text-base font-semibold text-foreground;
+    @apply text-base sm:text-lg font-semibold text-foreground;
   }
 }
 
@@ -299,7 +302,7 @@ body {
   @apply rounded-xl border border-border bg-card p-4 sm:p-5 shadow-sm;
 }
 .rin-card-section-title {
-  @apply text-sm font-semibold text-foreground flex items-center gap-2;
+  @apply text-base font-semibold text-foreground flex items-center gap-2;
 }
 .rin-card-section-desc {
   @apply text-xs text-muted-foreground mt-0.5;

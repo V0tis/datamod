@@ -58,7 +58,7 @@ export function LandingPage() {
           <h2 className="text-center text-2xl font-bold text-foreground sm:text-3xl">
             How It Works
           </h2>
-          <p className="mt-2 text-center text-muted-foreground">
+          <p className="mt-2 text-center text-base text-muted-foreground">
             세 단계로 전략 리포트를 받아보세요.
           </p>
           <div className="mt-14 grid gap-10 sm:grid-cols-3">
@@ -110,7 +110,7 @@ export function LandingPage() {
           <h2 className="text-center text-2xl font-bold text-foreground sm:text-3xl">
             Features
           </h2>
-          <p className="mt-2 text-center text-muted-foreground">
+          <p className="mt-2 text-center text-base text-muted-foreground">
             PM이 필요한 핵심 결과만 구조화해서 제공합니다.
           </p>
           <div className="mt-14 grid gap-8 sm:grid-cols-3">
