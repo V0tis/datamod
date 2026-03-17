@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TrendingUp, Loader2, X, History, ChevronRight, Target, Sparkles } from 'lucide-react'
+import { TrendingUp, Loader2, X, History, ChevronRight, Target, Sparkles, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { AnalysisProgressOverlay } from '@/components/research/AnalysisProgressOverlay'
@@ -22,6 +22,7 @@ import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/compon
 import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
 import type { SavedInsight } from '@/lib/insights-types'
+import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 
 function RinAISearchInner() {
@@ -36,6 +37,8 @@ function RinAISearchInner() {
   }, [])
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
+  const [dashboardRecs, setDashboardRecs] = useState<{ highOpportunity: DashboardKeywordRow[]; highRisk: DashboardKeywordRow[] }>({ highOpportunity: [], highRisk: [] })
+  const [dashboardRecsLoading, setDashboardRecsLoading] = useState(false)
   const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([])
   const [savedInsightsLoading, setSavedInsightsLoading] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
@@ -158,9 +161,32 @@ function RinAISearchInner() {
       .finally(() => setRecentReportsLoading(false))
   }, [user])
 
+  const fetchDashboardRecommendations = useCallback(() => {
+    if (!user) {
+      setDashboardRecs({ highOpportunity: [], highRisk: [] })
+      setDashboardRecsLoading(false)
+      return
+    }
+    setDashboardRecsLoading(true)
+    fetch('/api/research/dashboard-recommendations')
+      .then((res) => res.json())
+      .then((data: { highOpportunity?: DashboardKeywordRow[]; highRisk?: DashboardKeywordRow[] }) => {
+        setDashboardRecs({
+          highOpportunity: Array.isArray(data?.highOpportunity) ? data.highOpportunity : [],
+          highRisk: Array.isArray(data?.highRisk) ? data.highRisk : [],
+        })
+      })
+      .catch(() => setDashboardRecs({ highOpportunity: [], highRisk: [] }))
+      .finally(() => setDashboardRecsLoading(false))
+  }, [user])
+
   useEffect(() => {
     fetchRecentReports()
   }, [fetchRecentReports])
+
+  useEffect(() => {
+    fetchDashboardRecommendations()
+  }, [fetchDashboardRecommendations])
 
   const fetchSavedInsights = useCallback(() => {
     if (!user) {
@@ -194,7 +220,7 @@ function RinAISearchInner() {
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [user, fetchRecentReports, fetchSavedInsights])
+  }, [user, fetchRecentReports, fetchSavedInsights, fetchDashboardRecommendations])
 
   const fetchTrends = (forceRefresh = false) => {
     setTrendsLoading(true)
@@ -362,7 +388,8 @@ function RinAISearchInner() {
             {/* ══════ PRIMARY: Analysis Input (dominant) ══════ */}
             <section id="dashboard-analysis" className="shrink-0 mb-3 rounded-xl border-2 border-primary/20 bg-card p-4 sm:p-5 shadow-sm">
               <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-0.5">어떤 시장을 분석할까요?</h1>
-              <p className="text-sm text-muted-foreground mb-3">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
+              <p className="text-sm text-muted-foreground mb-1">키워드를 입력하면 AI가 시장 기회, 경쟁 환경, 전략을 분석합니다</p>
+              <p className="text-xs text-muted-foreground/80 mb-3">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
 
               <form onSubmit={handleSearch}>
                 <div
@@ -599,6 +626,102 @@ function RinAISearchInner() {
                 </div>
               </div>
 
+            </div>
+
+            {/* ══════ Dashboard recommendations (global analysis data) ══════ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 shrink-0">
+              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
+                <div className="px-3 py-2 border-b border-border shrink-0">
+                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                    <TrendingUp className="h-3 w-3 text-primary/70" />
+                    📈 기회 높은 시장 (실제 분석 기반)
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0 min-h-[120px]">
+                  {dashboardRecsLoading ? (
+                    <div className="divide-y divide-border">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2">
+                          <span className="h-3.5 w-24 bg-muted rounded animate-pulse" />
+                          <span className="ml-auto h-3 w-16 bg-muted rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : dashboardRecs.highOpportunity.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <Target className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
+                      <p className="text-xs text-muted-foreground">분석 데이터가 쌓이면 추천됩니다</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {dashboardRecs.highOpportunity.map((row, i) => (
+                        <Link
+                          key={`opp-${row.keyword}-${i}`}
+                          href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
+                          className="group flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors text-left relative pr-8"
+                        >
+                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors font-medium truncate">
+                            {row.keyword}
+                          </span>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span>기회 점수 {row.opportunity_score}</span>
+                            <span>리스크 {row.risk_score}</span>
+                            <span className="ml-auto">총 {row.analysis_count}회 분석됨</span>
+                          </div>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-card flex flex-col min-h-0">
+                <div className="px-3 py-2 border-b border-border shrink-0">
+                  <h2 className="text-xs font-semibold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                    <AlertTriangle className="h-3 w-3 text-amber-500/80" />
+                    ⚠ 리스크 높은 시장 (실제 분석 기반)
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5">실제 사용자 분석 데이터를 기반으로 추천됩니다</p>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0 min-h-[120px]">
+                  {dashboardRecsLoading ? (
+                    <div className="divide-y divide-border">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2">
+                          <span className="h-3.5 w-24 bg-muted rounded animate-pulse" />
+                          <span className="ml-auto h-3 w-16 bg-muted rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : dashboardRecs.highRisk.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <AlertTriangle className="h-6 w-6 text-muted-foreground/20 mb-1.5" />
+                      <p className="text-xs text-muted-foreground">분석 데이터가 쌓이면 추천됩니다</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {dashboardRecs.highRisk.map((row, i) => (
+                        <Link
+                          key={`risk-${row.keyword}-${i}`}
+                          href={`/results?keyword=${encodeURIComponent(row.keyword)}`}
+                          className="group flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors text-left relative pr-8"
+                        >
+                          <span className="text-[13px] text-foreground group-hover:text-primary transition-colors font-medium truncate">
+                            {row.keyword}
+                          </span>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span>기회 점수 {row.opportunity_score}</span>
+                            <span>리스크 {row.risk_score}</span>
+                            <span className="ml-auto">총 {row.analysis_count}회 분석됨</span>
+                          </div>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/30 absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
