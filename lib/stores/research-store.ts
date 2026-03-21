@@ -450,7 +450,7 @@ interface ResearchStore extends ResearchState {
   /** Update streaming state (internal use) */
   setStreamingState: (state: StreamingState) => void
   /** Update step progress (internal use) */
-  setStepProgress: (currentStep: number, stepId: string, retryMessage?: string) => void
+  setStepProgress: (currentStep: number, stepId: string, retryMessage?: string, currentArticleTitle?: string) => void
   /** Set task data (internal use) */
   setTaskData: (taskId: string, data: unknown) => void
   /** Set analysis ID for polling */
@@ -542,11 +542,11 @@ export const useResearchStore = create<ResearchStore>()(
         set({ streamingState: state })
       },
 
-      setStepProgress: (currentStep: number, stepId: string, retryMessage?: string) => {
+      setStepProgress: (currentStep: number, stepId: string, retryMessage?: string, currentArticleTitle?: string) => {
         const mode = get().analysisMode
         set({
           currentStep,
-          streamingState: createStreamingState(mode, currentStep, stepId, retryMessage),
+          streamingState: createStreamingState(mode, currentStep, stepId, retryMessage, currentArticleTitle),
         })
       },
 
@@ -904,6 +904,8 @@ export const useResearchStore = create<ResearchStore>()(
           const stepMap: Record<string, number> = {
             signal_layer: 0,
             news: 0,
+            article_extraction: 0,
+            article_summary: 0,
             trend_analysis: 1,
             pass1: 1,
             competition_analysis: 2,
@@ -976,12 +978,12 @@ export const useResearchStore = create<ResearchStore>()(
 
                 // Handle task events (AI Analysis Console)
                 if (type === 'task') {
-                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; fallbackMessage?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string }
+                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; fallbackMessage?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string; currentArticleTitle?: string }
                   const task = ev.task
                   const status = ev.status
                   if (task && task in stepMap) {
                     const stepIdx = stepMap[task]
-                    setStepProgress(stepIdx, task, ev.retryMessage)
+                    setStepProgress(stepIdx, task, ev.retryMessage, ev.currentArticleTitle)
                     if (status === 'completed') {
                       lastSuccessfulStep = stepIdx
                       if (ev.data != null) {

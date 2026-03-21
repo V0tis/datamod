@@ -496,7 +496,10 @@ function RinAISearchInner() {
                       <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                       <p className="text-sm font-medium text-foreground flex-1">
                         {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                          ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, { elapsedMs: stepElapsedMs })
+                          ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, {
+                          elapsedMs: stepElapsedMs,
+                          currentArticleTitle: (streamingState as { currentArticleTitle?: string }).currentArticleTitle,
+                        })
                           : getButtonLabel()}
                       </p>
                       <span className="text-xs text-muted-foreground tabular-nums shrink-0">

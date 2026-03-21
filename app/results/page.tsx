@@ -42,7 +42,6 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultPageStructuredSections } from '@/components/research/ResultPageStructuredSections'
-import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
@@ -1142,9 +1141,7 @@ function ResultsContent() {
             scoreBreakdown={effectiveKeyMetrics?.opportunity_score_breakdown ?? null}
             statusText={
               (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
-                ? (streamingState.status === 'running' || streamingState.status === 'streaming'
-                    ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep)
-                    : (currentTask?.progress ?? 'AI가 단계별로 분석하고 있습니다'))
+                ? undefined
                 : canonicalStatus === 'completed' && displayResult?.updated_at
                   ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
                   : canonicalStatus === 'failed'

@@ -80,6 +80,7 @@ export function ResultTimelineSection({
           currentStep={timelineStep}
           allCompleted={displayResult != null && !loading && !hasError}
           streamingStepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState.stepId : undefined}
+          currentArticleTitle={(streamingState as { currentArticleTitle?: string }).currentArticleTitle}
           retryMessage={'retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined}
           taskData={taskData}
           analysisTasks={analysisTasks}

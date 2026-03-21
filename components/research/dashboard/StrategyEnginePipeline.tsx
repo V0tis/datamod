@@ -23,6 +23,8 @@ const PIPELINE_STAGES = [
 const STREAM_TO_INDEX: Record<string, number> = {
   signal_layer: 0,
   news: 0,
+  article_extraction: 0,
+  article_summary: 0,
   trend_analysis: 1,
   pass1: 1,
   competition_analysis: 2,
@@ -56,6 +58,8 @@ export interface StrategyEnginePipelineProps {
   /** When true, all stages show as completed */
   allCompleted?: boolean
   streamingStepId?: string
+  /** Current article title during article_extraction/article_summary (e.g. "기사 읽는 중: OpenAI...") */
+  currentArticleTitle?: string
   /** Shown when retrying after 429 (e.g. "재시도 중...") */
   retryMessage?: string
   taskData?: Partial<Record<string, unknown>>
@@ -292,6 +296,7 @@ export function StrategyEnginePipeline({
   currentStep,
   allCompleted = false,
   streamingStepId,
+  currentArticleTitle,
   retryMessage,
   taskData = {},
   analysisTasks = null,
@@ -330,6 +335,10 @@ export function StrategyEnginePipeline({
     const stage = PIPELINE_STAGES[i]
     const taskId = stage?.taskId
     const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
+    // Stage 0: 데이터 수집 – article_extraction/article_summary는 signal_layer 완료 후에도 진행 중
+    if (i === 0 && (streamingStepId === 'article_extraction' || streamingStepId === 'article_summary')) {
+      return 'running'
+    }
     // Stage 5 = execution_layer (PM 액션 플랜), 6 = risk_opportunity (리스크 및 기회 평가), 7 = post_processing, 8 = done
     if (i === 6) {
       const riskTask = taskMap['risk_opportunity']
@@ -447,7 +456,7 @@ export function StrategyEnginePipeline({
                   <p className="text-sm font-semibold text-foreground">{currentStage?.label ?? '분석 완료'}</p>
                   {getStatus(currentIdx) === 'running' && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {getAnalysisActivityMessage(currentStage?.id ?? 'done', currentIdx, { short: true, elapsedMs: stepElapsedMs })}
+                      {getAnalysisActivityMessage(streamingStepId ?? currentStage?.id ?? 'done', currentIdx, { short: true, elapsedMs: stepElapsedMs, currentArticleTitle })}
                     </p>
                   )}
                   {getStatus(currentIdx) === 'completed' && allCompleted && (
@@ -581,7 +590,7 @@ export function StrategyEnginePipeline({
                           <p className="text-xs text-muted-foreground">
                             {retryMessage && i === effectiveIndex
                               ? retryMessage
-                              : getAnalysisActivityMessage(stage.id, i, { short: true, elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined })}
+                              : getAnalysisActivityMessage(i === effectiveIndex ? (streamingStepId ?? stage.id) : stage.id, i, { short: true, elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined, currentArticleTitle: i === effectiveIndex ? currentArticleTitle : undefined })}
                           </p>
                         )}
                       </div>

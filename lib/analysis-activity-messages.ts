@@ -6,6 +6,8 @@
 const STREAM_TO_INDEX: Record<string, number> = {
   signal_layer: 0,
   news: 0,
+  article_extraction: 0,
+  article_summary: 0,
   trend_analysis: 1,
   pass1: 1,
   competition_analysis: 2,
@@ -140,11 +142,12 @@ export function getDynamicStepMessage(
  * Returns the current activity message based on step ID or step index.
  * 후처리 단계(post_processing_*)는 별도 메시지 사용.
  * When elapsedMs >= LONG_STEP_THRESHOLD_SEC * 1000, returns long-step message for reassurance.
+ * article_extraction/article_summary with currentArticleTitle shows inline title.
  */
 export function getAnalysisActivityMessage(
   stepId?: string | null,
   currentStep?: number,
-  options?: { short?: boolean; elapsedMs?: number }
+  options?: { short?: boolean; elapsedMs?: number; currentArticleTitle?: string }
 ): string {
   const stepIdx =
     stepId && STREAM_TO_INDEX[stepId] != null
@@ -153,6 +156,22 @@ export function getAnalysisActivityMessage(
         ? currentStep
         : 0
   const progressIndex = PIPELINE_TO_PROGRESS_INDEX[Math.min(stepIdx, 6)] ?? Math.min(stepIdx, PROGRESS_STEPS.length - 1)
+
+  if (stepId === 'article_extraction') {
+    const base = '기사 읽는 중'
+    return options?.currentArticleTitle ? `${base}: ${options.currentArticleTitle}` : base
+  }
+  if (stepId === 'article_summary') {
+    const base = '기사 요약중'
+    return options?.currentArticleTitle ? `${base}: ${options.currentArticleTitle}` : base
+  }
+  if (stepId === 'signal_layer' || stepId === 'news') {
+    return '뉴스 수집중'
+  }
+  if (stepId === 'trend_analysis' || stepId === 'competition_analysis') {
+    return '시장 분석중'
+  }
+
   if (options?.elapsedMs != null && options.elapsedMs >= LONG_STEP_THRESHOLD_SEC * 1000) {
     return getLongStepMessage(progressIndex)
   }

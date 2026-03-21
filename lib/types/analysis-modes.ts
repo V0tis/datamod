@@ -146,8 +146,8 @@ export function getStepIndex(mode: AnalysisMode, stepId: string): number {
  */
 export type StreamingState =
   | { status: 'idle' }
-  | { status: 'running'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string }
-  | { status: 'streaming'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string }
+  | { status: 'running'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string; currentArticleTitle?: string }
+  | { status: 'streaming'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string; currentArticleTitle?: string }
   | { status: 'completed'; reportId: string | null }
   | { status: 'error'; message: string; lastSuccessfulStep: number | null }
 
@@ -174,7 +174,8 @@ export function createStreamingState(
   mode: AnalysisMode,
   currentStep: number,
   stepId: string,
-  retryMessage?: string
+  retryMessage?: string,
+  currentArticleTitle?: string
 ): StreamingState {
   return {
     status: 'streaming',
@@ -182,6 +183,7 @@ export function createStreamingState(
     totalSteps: getStepCount(mode),
     stepId,
     ...(retryMessage ? { retryMessage } : {}),
+    ...(currentArticleTitle ? { currentArticleTitle } : {}),
   }
 }
 

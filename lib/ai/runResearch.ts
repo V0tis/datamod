@@ -13,7 +13,9 @@ import {
   buildTaskTrendsPrompt,
   TASK_COMPETITION_SYSTEM,
   buildTaskCompetitionPromptFromNews,
+  type ArticleForAnalysis,
 } from './pm-strategic-prompt'
+import { extractArticleContent, type ArticleWithContent } from './article-extract'
 import {
   INSIGHT_EXTRACTION_SYSTEM,
   buildInsightExtractionPrompt,
@@ -130,7 +132,7 @@ export type PostProcessingStepId = 'key_metrics' | 'creative' | 'saving'
 
 export type ResearchStreamEvent =
   | { type: 'analysis_started'; analysisId: string }
-  | { type: 'task'; task: AnalysisTaskId; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; fallbackMessage?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string }
+  | { type: 'task'; task: AnalysisTaskId | 'article_extraction' | 'article_summary'; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; fallbackMessage?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string; currentArticleTitle?: string }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
@@ -169,11 +171,11 @@ type RssItem = {
 }
 const rssParser = new Parser<RssItem>({ customFields: { item: [] } })
 
-/** Max news items by depth: quick=fast/small, standard=normal, deep=more. */
-const NEWS_LIMIT_BY_DEPTH: Record<'quick' | 'standard' | 'deep', number> = {
-  quick: 5,
-  standard: 15,
-  deep: 25,
+/** Article count for extraction by depth: quick=3, standard=5, deep=8. */
+const ARTICLE_COUNT_BY_DEPTH: Record<'quick' | 'standard' | 'deep', number> = {
+  quick: 3,
+  standard: 5,
+  deep: 8,
 }
 
 async function fetchNewsTitles(keyword: string, countryCode: string, maxItems: number = 15): Promise<NewsItem[]> {
@@ -264,11 +266,11 @@ async function runTrendTask(
   geminiKey: string,
   groqKey: string | null | undefined,
   keyword: string,
-  newsTitles: string[],
+  articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
   webContext?: string
 ): Promise<TrendTaskResult> {
-  const prompt = buildTaskTrendsPrompt(keyword, newsTitles, webContext)
+  const prompt = buildTaskTrendsPrompt(keyword, articles, webContext)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -337,16 +339,61 @@ async function runTrendTask(
   return { trendData, trendPayload, usedFallback, primaryProviderError }
 }
 
-/** Run competition analysis from news (no yield; for parallel execution with trend). */
+const ARTICLE_SUMMARY_SYSTEM = `You summarize news articles for market research. For each article, output a 2-3 sentence summary in Korean focusing on key facts, implications, and market relevance.
+Return ONLY a JSON object: { "summaries": ["summary1", "summary2", ...] } in the same order as input. No other text.`
+
+/** Summarize articles with AI (batch). Fallback: use title or content slice. */
+async function summarizeArticlesWithAI(
+  articles: ArticleWithContent[],
+  geminiKey: string
+): Promise<ArticleForAnalysis[]> {
+  if (articles.length === 0) return []
+  const prompt = `Summarize each article in 2-3 sentences (Korean). Focus on facts and market relevance.
+
+${articles
+  .map(
+    (a, i) =>
+      `[${i + 1}] title: ${a.title}\ncontent: ${a.content.slice(0, 1500)}${a.content.length > 1500 ? '...' : ''}`
+  )
+  .join('\n\n')}
+
+Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
+
+  try {
+    const text = await generateText({
+      apiKey: geminiKey,
+      prompt,
+      systemInstruction: ARTICLE_SUMMARY_SYSTEM,
+      maxOutputTokens: 1500,
+      model: GEMINI_MODEL,
+      isRetryable: () => false,
+    })
+    const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
+    const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
+    return articles.map((a, i) => ({
+      title: a.title,
+      summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
+      publisher: a.publisher,
+    }))
+  } catch {
+    return articles.map((a) => ({
+      title: a.title,
+      summary: a.content.slice(0, 300) || a.title,
+      publisher: a.publisher,
+    }))
+  }
+}
+
+/** Run competition analysis from articles (no yield; for parallel execution with trend). */
 async function runCompetitionTask(
   geminiKey: string,
   groqKey: string | null | undefined,
   keyword: string,
-  newsTitles: string[],
+  articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
   webContext?: string
 ): Promise<CompetitionTaskResult> {
-  const prompt = buildTaskCompetitionPromptFromNews(keyword, newsTitles, webContext)
+  const prompt = buildTaskCompetitionPromptFromNews(keyword, articles, webContext)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -1471,14 +1518,14 @@ export async function* runResearch(
   console.log('[AI Analysis] 시작', { keyword: cacheKey.keyword, countryCode: cacheKey.countryCode, analysisId: analysisId.slice(0, 50) + '...' })
   yield { type: 'analysis_started', analysisId }
 
-  // Layer 1: Signal Layer - collect market signals (no AI); depth affects news count
-  const newsLimit = NEWS_LIMIT_BY_DEPTH[depthMode]
-  log('signal_layer', 'running', { depthMode, newsLimit })
+  // Layer 1: Signal Layer - collect news, extract article content, summarize
+  const articleCount = ARTICLE_COUNT_BY_DEPTH[depthMode]
+  log('signal_layer', 'running', { depthMode, articleCount })
   await upsertAnalysisTask('signal_layer', 'running', { provider: null, fallback_used: false })
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   let news: NewsItem[]
   try {
-    news = await fetchNewsTitles(keyword, cacheKey.countryCode, newsLimit)
+    news = await fetchNewsTitles(keyword, cacheKey.countryCode, Math.max(articleCount, 15))
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
     const signalData = {
@@ -1487,7 +1534,6 @@ export async function* runResearch(
     }
     await upsertAnalysisTask('signal_layer', 'completed', { outputData: signalData, provider: null, fallback_used: false })
     log('signal_layer', 'completed', { newsCount: news.length })
-    await updateProgress(1, 'analyzing')
     yield {
       type: 'task',
       task: 'signal_layer',
@@ -1507,14 +1553,77 @@ export async function* runResearch(
     return
   }
 
-  const newsTitles = news.map((n) => n.title)
+  const articlesToExtract = news.slice(0, articleCount)
 
   if (checkAborted(signal)) {
     yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
     return
   }
 
-  // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + news)
+  // Article content extraction (Readability) - yield before each to show progress
+  const ARTICLE_REQUEST_DELAY_MS = 500
+  const results: ArticleWithContent[] = []
+  for (let i = 0; i < articlesToExtract.length; i++) {
+    if (checkAborted(signal)) {
+      yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
+      return
+    }
+    if (i > 0) await new Promise((r) => setTimeout(r, ARTICLE_REQUEST_DELAY_MS))
+    yield {
+      type: 'task',
+      task: 'article_extraction',
+      status: 'running',
+      provider: null,
+      fallback_used: false,
+      currentArticleTitle: articlesToExtract[i].title.slice(0, 60),
+    }
+    try {
+      const extracted = await extractArticleContent(articlesToExtract[i])
+      results.push(extracted)
+    } catch {
+      results.push({ ...articlesToExtract[i], content: articlesToExtract[i].title })
+    }
+  }
+  const articlesWithContent = results
+  console.log('[article-extract] done:', articlesWithContent.length, '| items:', articlesWithContent.map((a) => ({ title: a.title.slice(0, 40), contentLen: a.content.length })))
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
+    return
+  }
+
+  // Article summarization (AI)
+  let articlesForAnalysis: ArticleForAnalysis[]
+  try {
+    if (articlesWithContent.length > 0) {
+      yield {
+        type: 'task',
+        task: 'article_summary',
+        status: 'running',
+        provider: 'gemini',
+        fallback_used: false,
+        currentArticleTitle: articlesWithContent[0].title.slice(0, 60),
+      }
+    }
+    articlesForAnalysis = await summarizeArticlesWithAI(articlesWithContent, geminiKey)
+    console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
+  } catch (err) {
+    console.warn('[article_summary] fallback to content', err)
+    articlesForAnalysis = articlesWithContent.map((a) => ({
+      title: a.title,
+      summary: a.content.slice(0, 300) || a.title,
+      publisher: a.publisher,
+    }))
+  }
+
+  await updateProgress(1, 'analyzing')
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
+    return
+  }
+
+  // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + articles)
   log('trend_analysis', 'running (parallel)')
   log('competition_analysis', 'running (parallel)')
   await upsertAnalysisTask('trend_analysis', 'running', { provider: 'gemini', fallback_used: false })
@@ -1523,8 +1632,8 @@ export async function* runResearch(
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
 
   const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, newsTitles, resolveAIForStep(effectiveStepSettings, 'market'), webContext),
-    runCompetitionTask(geminiKey, groqKey, keyword, newsTitles, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext),
+    runTrendTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'market'), webContext),
+    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext),
   ])
 
   if (trendSettled.status === 'rejected') {
