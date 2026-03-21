@@ -20,7 +20,7 @@ export const COUNTRY_LABELS: Record<string, string> = {
 const FLAG_CDN_BASE = 'https://flagcdn.com'
 
 /** 고해상도 로드 후 작게 표시해 레티나에서 선명하게 (w80→20px, w160→32px) */
-export function getCountryFlagUrl(countryCode: string, size: 'w80' | 'w160' = 'w80'): string {
+function getCountryFlagUrl(countryCode: string, size: 'w80' | 'w160' = 'w80'): string {
   const code = countryCode.toLowerCase()
   return `${FLAG_CDN_BASE}/${size}/${code}.png`
 }

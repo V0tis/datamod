@@ -113,11 +113,11 @@ export function ResultPageStructuredSections({
                 breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
                 useKoreanLabels
               />
-              {effectiveResult?.key_metrics?.summary_insights != null && effectiveResult.key_metrics.summary_insights !== '' && (
+              {effectiveResult?.key_metrics?.summary_insights != null && (effectiveResult?.key_metrics?.summary_insights ?? '') !== '' && (
                 <div className="rounded-xl border border-border/60 bg-card/50 p-4 sm:p-5">
                   <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">핵심 결론</h3>
                   <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
-                    {String(effectiveResult.key_metrics.summary_insights)}
+                    {String(effectiveResult?.key_metrics?.summary_insights ?? '')}
                   </p>
                 </div>
               )}

@@ -83,30 +83,3 @@ export function StreamingBulletList({
   )
 }
 
-/** Status badge for section: streaming vs complete */
-export function StreamingSectionStatus({
-  streaming,
-  complete,
-  className,
-}: {
-  streaming?: boolean
-  complete?: boolean
-  className?: string
-}) {
-  if (complete) {
-    return (
-      <span className={cn('flex items-center gap-1.5 text-xs font-medium text-primary', className)}>
-        <span aria-hidden>✓</span> 생성 완료
-      </span>
-    )
-  }
-  if (streaming) {
-    return (
-      <span className={cn('flex items-center gap-1.5 text-xs font-medium text-muted-foreground', className)}>
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-        생성중...
-      </span>
-    )
-  }
-  return null
-}

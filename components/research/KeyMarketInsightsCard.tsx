@@ -151,7 +151,7 @@ export function KeyMarketInsightsCard({
 
   const opportunities = Array.isArray(strategyOutput?.opportunities)
     ? (strategyOutput.opportunities as string[]).filter((s) => typeof s === 'string').slice(0, 3)
-    : (km.positive_signals ?? result?.marketNews ?? []).slice(0, 3)
+    : (Array.isArray(km.positive_signals) ? km.positive_signals : Array.isArray(result?.marketNews) ? result.marketNews : []).slice(0, 3)
   const valueProposition = (consensusData?.strategicSummary?.opportunity ?? '').trim()
   const summaryInsights = (km.summary_insights ?? '').trim()
   const trendSummary = typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary : ''

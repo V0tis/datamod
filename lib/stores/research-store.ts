@@ -1173,7 +1173,8 @@ export const useResearchStore = create<ResearchStore>()(
         if (!k) return 'none'
         try {
           const res = await fetch(`/api/research/history?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryCode)}`)
-          const data = (await res.json()) as {
+          const raw = await res.json().catch(() => ({}))
+          const data = typeof raw === 'object' && raw != null ? (raw as {
             cached?: boolean
             emptyAnalysis?: boolean
             reportId?: string
@@ -1187,7 +1188,7 @@ export const useResearchStore = create<ResearchStore>()(
             analysis_groq?: { summary: string; modelName: string }
             analysis_gemini?: Record<string, string>
             analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
-          }
+          }) : {}
           if (!res.ok) {
             if (res.status === 401) return 'none'
             return 'error'
@@ -1204,7 +1205,10 @@ export const useResearchStore = create<ResearchStore>()(
               : analysisStatus === 'failed' ? 'error' as const
               : analysisStatus === 'analyzing' || analysisStatus === 'queued' ? 'loading' as const
               : 'done' as const
-            const content = (data.content ?? {}) as Record<string, unknown>
+            const rawContent = data.content
+            const content = (typeof rawContent === 'object' && rawContent != null && !Array.isArray(rawContent))
+              ? (rawContent as Record<string, unknown>)
+              : {}
             const trend = (ar?.sentiment != null && ar.sentiment > 0) ? 'rising' as const : (ar?.sentiment != null && ar.sentiment < 0) ? 'declining' as const : 'stable' as const
             const summarySection: SummarySection = {
               summaryText: (km?.summary_insights ?? (Array.isArray(km?.keyConclusions) ? km.keyConclusions[0] : '') ?? '') as string,
@@ -1214,9 +1218,9 @@ export const useResearchStore = create<ResearchStore>()(
               updated_at: data.updated_at ?? null,
               reportId: data.reportId,
               keyConclusions: (km?.keyConclusions ?? []) as string[],
-              marketNews: (content.marketNews ?? []) as string[],
-              painPoints: (content.painPoints ?? []) as string[],
-              competitorTrends: (content.competitorTrends ?? '') as string,
+              marketNews: Array.isArray(content.marketNews) ? (content.marketNews as string[]) : [],
+              painPoints: Array.isArray(content.painPoints) ? (content.painPoints as string[]) : [],
+              competitorTrends: typeof content.competitorTrends === 'string' ? content.competitorTrends : '',
               sentiment: (km?.sentiment ?? content.sentiment) as number | null,
               chartData: (km?.chartData ?? content.chartData) as ChartData | null,
               source_links: data.source_links ?? [],
@@ -1242,14 +1246,17 @@ export const useResearchStore = create<ResearchStore>()(
               inferences: (km?.inferences ?? []) as string[],
             }
             const fullResult: ResearchResponse = {
-              ...(data.content ?? {}),
+              ...content,
+              marketNews: Array.isArray(content.marketNews) ? content.marketNews : (summarySection.marketNews ?? []),
+              painPoints: Array.isArray(content.painPoints) ? content.painPoints : (summarySection.painPoints ?? []),
+              competitorTrends: typeof content.competitorTrends === 'string' ? content.competitorTrends : (summarySection.competitorTrends ?? ''),
               reportId: data.reportId,
               analysis_depth: data.analysis_depth ?? undefined,
-              ai_responses: data.ai_responses ?? {},
-              source_links: data.source_links ?? [],
-              updated_at: data.updated_at,
-              analysis_groq: data.analysis_groq,
-              analysis_gemini: data.analysis_gemini,
+              ai_responses: (data.ai_responses && typeof data.ai_responses === 'object') ? data.ai_responses : {},
+              source_links: Array.isArray(data.source_links) ? data.source_links : [],
+              updated_at: data.updated_at ?? undefined,
+              analysis_groq: (data.analysis_groq && typeof data.analysis_groq === 'object') ? data.analysis_groq : undefined,
+              analysis_gemini: (data.analysis_gemini && typeof data.analysis_gemini === 'object') ? data.analysis_gemini : undefined,
               analysis_results: ar,
               key_metrics: km,
             } as ResearchResponse
@@ -1276,13 +1283,19 @@ export const useResearchStore = create<ResearchStore>()(
       hydrateFromStatusResult: (keyword, countryCode, pollResult) => {
         const k = keyword?.trim()
         if (!k || !pollResult.reportId) return
-        const content = (pollResult.content ?? {}) as Record<string, unknown>
+        const rawContent = pollResult.content
+        const content = (typeof rawContent === 'object' && rawContent != null && !Array.isArray(rawContent)
+          ? rawContent
+          : {}) as Record<string, unknown>
         const km = parseJsonField(pollResult.key_metrics) as ResearchResponse['key_metrics']
         const fullResult: ResearchResponse = {
           ...content,
+          marketNews: Array.isArray(content.marketNews) ? (content.marketNews as string[]) : [],
+          painPoints: Array.isArray(content.painPoints) ? (content.painPoints as string[]) : [],
+          competitorTrends: typeof content.competitorTrends === 'string' ? content.competitorTrends : '',
           reportId: pollResult.reportId,
-          source_links: (pollResult.source_links ?? []) as Array<{ title?: string; url?: string }>,
-          updated_at: pollResult.updated_at,
+          source_links: Array.isArray(pollResult.source_links) ? (pollResult.source_links as Array<{ title?: string; url?: string }>) : [],
+          updated_at: pollResult.updated_at ?? undefined,
           key_metrics: km,
         } as ResearchResponse
         set({
@@ -1446,23 +1459,26 @@ export const useResearchStore = create<ResearchStore>()(
       setActiveJobByKeyword: async (keyword: string) => {
         const k = keyword.trim()
         if (!k) return
-        const { jobOrder, jobs } = get()
+        const state = get()
+        const { jobOrder, jobs } = state
         const foundId = jobOrder.find((id) => jobs[id]?.keyword === k) ?? null
         if (foundId) {
           await get().setActiveJob(foundId)
           return
         }
+        const storeK = (state.keyword ?? '').trim()
+        const isSameKeyword = storeK === k
         set({
           keyword: k,
-          status: 'idle',
-          analysisStatus: 'queued',
+          status: isSameKeyword ? state.status : 'idle',
+          analysisStatus: isSameKeyword ? state.analysisStatus : 'queued',
           error: null,
-          result: null,
-          summarySection: null,
-          marketTemperatureSection: null,
-          recommendedActionsSection: null,
-          insightsSection: null,
-          newsList: [],
+          result: isSameKeyword ? state.result : null,
+          summarySection: isSameKeyword ? state.summarySection : null,
+          marketTemperatureSection: isSameKeyword ? state.marketTemperatureSection : null,
+          recommendedActionsSection: isSameKeyword ? state.recommendedActionsSection : null,
+          insightsSection: isSameKeyword ? state.insightsSection : null,
+          newsList: isSameKeyword ? state.newsList : [],
         })
       },
 

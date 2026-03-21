@@ -38,7 +38,14 @@ export default function ResultDetailPage() {
     const fetchReport = async () => {
       try {
         const res = await fetch(`/api/reports/${id}`)
-        const result: ReportApiResponse & { error?: string } = await res.json()
+        const text = await res.text()
+        let result: ReportApiResponse & { error?: string }
+        try {
+          result = JSON.parse(text) as ReportApiResponse & { error?: string }
+        } catch {
+          setError('리포트를 불러오는 중 오류가 발생했습니다.')
+          return
+        }
 
         if (!res.ok) {
           setError(result?.error ?? '리포트를 불러오지 못했습니다.')
@@ -46,11 +53,11 @@ export default function ResultDetailPage() {
         }
 
         setData({
-          keyword: result.keyword,
-          marketNews: result.marketNews ?? [],
-          painPoints: result.painPoints ?? [],
-          competitorTrends: result.competitorTrends ?? '',
-          sentiment: result.sentiment ?? 0,
+          keyword: result.keyword ?? '',
+          marketNews: Array.isArray(result.marketNews) ? result.marketNews : [],
+          painPoints: Array.isArray(result.painPoints) ? result.painPoints : [],
+          competitorTrends: typeof result.competitorTrends === 'string' ? result.competitorTrends : '',
+          sentiment: typeof result.sentiment === 'number' ? result.sentiment : 0,
         })
       } catch (err) {
         console.error('리포트 로드 실패:', err)

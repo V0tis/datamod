@@ -368,11 +368,16 @@ export function StrategyEnginePipeline({
         ? currentStep
         : 0
 
-  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
+  const [stepStartTime, setStepStartTime] = useState(0)
+  const [tickTime, setTickTime] = useState(0)
   useEffect(() => {
     setStepStartTime(Date.now())
   }, [effectiveIndex])
-  const stepElapsedMs = Date.now() - stepStartTime
+  useEffect(() => {
+    const id = setInterval(() => setTickTime(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const stepElapsedMs = tickTime - stepStartTime
 
   type StageStatus = 'pending' | 'running' | 'completed' | 'failed'
   function getStatus(i: number): StageStatus {

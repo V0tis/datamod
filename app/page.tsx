@@ -314,16 +314,16 @@ function RinAISearchInner() {
     'currentStep' in streamingState ? streamingState.currentStep : 0
   )
   const [stepStartTime, setStepStartTime] = useState(() => Date.now())
-  const [, setTick] = useState(0)
+  const [tickTime, setTickTime] = useState(() => Date.now())
   useEffect(() => {
     if (showAnalysisUI) setStepStartTime(Date.now())
   }, [progressStepIndex, showAnalysisUI])
   useEffect(() => {
     if (!showAnalysisUI) return
-    const id = setInterval(() => setTick((n) => n + 1), 2000)
+    const id = setInterval(() => setTickTime(Date.now()), 2000)
     return () => clearInterval(id)
   }, [showAnalysisUI])
-  const stepElapsedMs = showAnalysisUI ? Date.now() - stepStartTime : 0
+  const stepElapsedMs = showAnalysisUI ? tickTime - stepStartTime : 0
 
   const getButtonLabel = () => {
     if (showAnalysisUI) {

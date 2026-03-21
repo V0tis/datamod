@@ -512,7 +512,8 @@ function postProcessCoreInsights(items: CoreInsightItem[]): CoreInsightItem[] {
   const seen = new Set<string>()
   return items
     .map((item) => {
-      let { title, summary, impact, reason } = item
+      const { summary } = item
+      let { title, impact, reason } = item
       if (title.trim() === summary.trim() && summary.length > 20) {
         title = summary.slice(0, 18).trim() + '…'
       }

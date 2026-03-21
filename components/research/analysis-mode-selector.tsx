@@ -145,7 +145,7 @@ export function AnalysisPreview({ mode, className }: AnalysisPreviewProps) {
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-foreground">예상 결과물</span>
         <span className="text-xs text-muted-foreground">
-          What You'll Get
+          What You&apos;ll Get
         </span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

@@ -7,12 +7,12 @@ import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RinAnimation, getRandomRinMessage } from '@/components/common/RinAnimation'
+import { RinAnimation } from '@/components/common/RinAnimation'
 import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
-import { useCurrentTask } from '@/lib/hooks/use-current-task'
+import { useCurrentTask } from '@/hooks/use-current-task'
 import { exportAnalysisToPdf } from '@/lib/pdf-export'
-import { FileDown, X, ExternalLink, Lightbulb, CheckSquare, Newspaper, Loader2, RefreshCw, ChevronDown, ChevronUp, Bookmark, Cpu, Database } from 'lucide-react'
+import { X, ExternalLink, Newspaper, Loader2, RefreshCw, ChevronDown, Bookmark, Cpu, Database } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { fetchTrendsForCountry } from '@/lib/fetch-trends'
@@ -22,7 +22,6 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
-import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
@@ -45,7 +44,7 @@ import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } 
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import { type ConsensusData, normalizeConsensusData } from '@/components/research/ConsensusInsight'
-import { useResultPageState } from '@/lib/hooks/use-result-page-state'
+import { useResultPageState } from '@/hooks/use-result-page-state'
 import type { TabAnalysisRecord } from '@/lib/research-types'
 import type { InsightSnapshot, InsightQualityScore } from '@/lib/insights-types'
 
@@ -253,9 +252,9 @@ function ResultsContent() {
 
   const currentKeyword = keyword ?? storeKeyword
   const urlKeyword = keyword?.trim() ?? null
-  const storeKeywordTrim = (storeKeyword ?? '').trim()
-  /** URL 키워드와 스토어 활성 작업이 같을 때만 result/status/error 표시 → 다른 분석 데이터 깜빡임 방지 */
-  const isViewingActiveJob = urlKeyword === null || storeKeywordTrim === urlKeyword
+  const effectiveKeywordTrim = ((keyword ?? storeKeyword) ?? '').trim()
+  /** URL 키워드와 현재 선택 키워드가 같을 때만 result 표시. URL에 keyword 있으면 해당 결과 뷰로 간주. */
+  const isViewingActiveJob = urlKeyword === null || effectiveKeywordTrim === urlKeyword
   const displayResult = isViewingActiveJob ? result : null
   const displayStatus = isViewingActiveJob ? status : (urlKeyword ? 'loading' : status)
   const displayError = isViewingActiveJob ? error : null
@@ -535,10 +534,14 @@ function ResultsContent() {
     if (!isViewingActiveJob || isReanalyzingConsensusRef.current) return
     const ar = displayResult?.analysis_results
     if (!ar || typeof ar !== 'object') return
-    const normalized = normalizeConsensusData(ar)
-    if (normalized) {
-      setInsightData(normalized)
-      setInsightStatus('success')
+    try {
+      const normalized = normalizeConsensusData(ar)
+      if (normalized) {
+        setInsightData(normalized)
+        setInsightStatus('success')
+      }
+    } catch {
+      // Ignore malformed analysis_results
     }
   }, [isViewingActiveJob, displayResult?.reportId, displayResult?.analysis_results, setInsightData])
 
@@ -577,9 +580,9 @@ function ResultsContent() {
 
   const reportSummary = displayResult
     ? [
-        displayResult.marketNews?.length ? `시장 뉴스 요약: ${displayResult.marketNews.join(' ')}` : '',
-        displayResult.painPoints?.length ? `유저 페인포인트: ${displayResult.painPoints.join(' ')}` : '',
-        displayResult.competitorTrends ? `경쟁사 동향: ${displayResult.competitorTrends}` : '',
+        Array.isArray(displayResult?.marketNews) && (displayResult?.marketNews?.length ?? 0) > 0 ? `시장 뉴스 요약: ${(displayResult?.marketNews ?? []).join(' ')}` : '',
+        Array.isArray(displayResult?.painPoints) && (displayResult?.painPoints?.length ?? 0) > 0 ? `유저 페인포인트: ${(displayResult?.painPoints ?? []).join(' ')}` : '',
+        displayResult?.competitorTrends ? `경쟁사 동향: ${displayResult?.competitorTrends}` : '',
       ]
         .filter(Boolean)
         .join('\n\n')
@@ -589,8 +592,8 @@ function ResultsContent() {
   // DB 캐시(result.analysis_groq / analysis_gemini) → 탭 캐시 동기화. DB에 있으면 탭 API 호출 방지용 ref 세팅. 현재 URL 키워드와 일치할 때만 적용.
   useEffect(() => {
     if (!isViewingActiveJob || !displayResult?.reportId) return
-    const groq = displayResult.analysis_groq as TabAnalysisRecord | undefined
-    const gemini = displayResult.analysis_gemini as TabAnalysisRecord | undefined
+    const groq = displayResult?.analysis_groq as TabAnalysisRecord | undefined
+    const gemini = displayResult?.analysis_gemini as TabAnalysisRecord | undefined
     if (groq && typeof groq === 'object' && ('creative' in groq || 'fact' in groq)) {
       setTabCacheGroq((prev) => ({
         ...prev,
@@ -829,7 +832,8 @@ function ResultsContent() {
   useEffect(() => {
     if (displayStatus !== 'done' || !displayResult?.reportId || quotaExceeded || geminiQuotaExceeded) return
     // DB may store consensus in analysis_results.consensus (new) or analysis_results.summary/sentiment (legacy).
-    const hasDbConsensus = displayResult?.analysis_results != null && typeof displayResult.analysis_results === 'object' && (typeof (displayResult.analysis_results as Record<string, unknown>).summary === 'string' || typeof (displayResult.analysis_results as Record<string, unknown>).sentiment === 'number')
+    const ar = displayResult?.analysis_results
+    const hasDbConsensus = ar != null && typeof ar === 'object' && (typeof (ar as Record<string, unknown>).summary === 'string' || typeof (ar as Record<string, unknown>).sentiment === 'number')
     if (hasDbConsensus) {
       isConsensusStartedRef.current = true
       return
@@ -844,8 +848,8 @@ function ResultsContent() {
     const needGemini = !tabCacheGemini.creative && !geminiFromResult
     const haveBoth = (tabCacheGroq.creative != null || groqFromResult) && (tabCacheGemini.creative != null || geminiFromResult)
     if (needGroq || needGemini) {
-      if (creativeFetchedForConsensusRef.current === displayResult.reportId) return
-      creativeFetchedForConsensusRef.current = displayResult.reportId
+      if (creativeFetchedForConsensusRef.current === displayResult?.reportId) return
+      creativeFetchedForConsensusRef.current = displayResult?.reportId ?? null
       isConsensusStartedRef.current = true
       fetchTabAnalysis('creative', 'all')
       return
@@ -889,8 +893,8 @@ function ResultsContent() {
         const cachedResult = useResearchStore.getState().result
         if (cachedResult?.reportId) {
           const cachedSummary = [
-            cachedResult.marketNews?.length ? `시장 뉴스 요약: ${cachedResult.marketNews.join(' ')}` : '',
-            cachedResult.painPoints?.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
+            Array.isArray(cachedResult.marketNews) && cachedResult.marketNews.length ? `시장 뉴스 요약: ${cachedResult.marketNews.join(' ')}` : '',
+            Array.isArray(cachedResult.painPoints) && cachedResult.painPoints.length ? `유저 페인포인트: ${cachedResult.painPoints.join(' ')}` : '',
             cachedResult.competitorTrends ? `경쟁사 동향: ${cachedResult.competitorTrends}` : '',
           ].filter(Boolean).join('\n\n')
           setInsightData(null, { force: true })
@@ -1102,7 +1106,7 @@ function ResultsContent() {
             analysisMeta={
               displayResult?.reportId
                 ? (() => {
-                    const depthRaw = displayResult.analysis_depth ?? 'standard'
+                    const depthRaw = displayResult?.analysis_depth ?? 'standard'
                     const depth: DepthMode = depthRaw === 'fast' || depthRaw === 'deep' ? depthRaw : 'standard'
                     const est = getDepthEstimates(depth)
                     return {
@@ -1144,7 +1148,7 @@ function ResultsContent() {
               (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
                 ? undefined
                 : canonicalStatus === 'completed' && displayResult?.updated_at
-                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult.updated_at} /></>
+                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult?.updated_at ?? ''} /></>
                   : canonicalStatus === 'failed'
                     ? '분석 실패'
                     : undefined
@@ -1226,8 +1230,8 @@ function ResultsContent() {
                     currentKeyword ? `# ${currentKeyword} 시장 분석 요약` : '',
                     insightData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '',
                     reportSummary,
-                    displayResult?.key_metrics?.opportunity_score != null
-                      ? `\n기회 점수: ${displayResult.key_metrics.opportunity_score}/100`
+                    (displayResult?.key_metrics?.opportunity_score ?? null) != null
+                      ? `\n기회 점수: ${displayResult?.key_metrics?.opportunity_score ?? 0}/100`
                       : '',
                   ].filter(Boolean).join('\n\n')}
                   onDownloadPdf={() =>
@@ -1401,13 +1405,16 @@ function ResultsContent() {
             </button>
             {detailExpanded && (
               <div className="border-t border-border space-y-6 px-3 sm:px-4 py-3 sm:py-4">
-                <div id="section-data" className="scroll-mt-24">
-                  <DataSourcesSection
-                    signals={dataSourceSignals}
-                    loading={loading && !displayResult}
-                  />
-                </div>
+                <ResultSectionErrorBoundary sectionName="data-sources" fallbackTitle="데이터 출처를 불러오지 못했습니다">
+                  <div id="section-data" className="scroll-mt-24">
+                    <DataSourcesSection
+                      signals={dataSourceSignals}
+                      loading={loading && !displayResult}
+                    />
+                  </div>
+                </ResultSectionErrorBoundary>
 
+                <ResultSectionErrorBoundary sectionName="news-section" fallbackTitle="뉴스 섹션을 불러오지 못했습니다">
                 <section id="section-news" className="scroll-mt-24 pt-6 border-t border-border first:pt-0 first:border-t-0" aria-label="뉴스 및 데이터">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -1493,6 +1500,7 @@ function ResultsContent() {
               })()
             ) : null}
           </section>
+                </ResultSectionErrorBoundary>
               </div>
             )}
           </section>
@@ -1544,7 +1552,7 @@ function ResultsContent() {
             item={selectedNews}
             preSummary={
               selectedNewsIndex != null && displayResult?.articleSummaries?.[selectedNewsIndex]
-                ? displayResult.articleSummaries[selectedNewsIndex]
+                ? displayResult?.articleSummaries?.[selectedNewsIndex]
                 : null
             }
             onClose={() => {

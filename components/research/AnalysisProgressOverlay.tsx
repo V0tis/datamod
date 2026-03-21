@@ -49,7 +49,7 @@ export function AnalysisProgressOverlay({
   className,
 }: AnalysisProgressOverlayProps) {
   const progressIndex = getProgressStepIndex(stepId, currentStep)
-  const [stepStartTime, setStepStartTime] = useState(() => Date.now())
+  const [stepStartTime, setStepStartTime] = useState(0)
   const [dynamicMessage, setDynamicMessage] = useState(() =>
     getDynamicStepMessage(progressIndex)
   )

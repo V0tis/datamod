@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useAnalysisTasksPoll } from '@/lib/hooks/use-analysis-tasks-poll'
+import { useAnalysisTasksPoll } from '@/hooks/use-analysis-tasks-poll'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { AnalysisResultSections } from './AnalysisResultSections'
 import { ProductStrategyResult } from './ProductStrategyResult'

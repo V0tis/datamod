@@ -54,6 +54,7 @@ export interface UseResultPageStateResult {
 export function useResultPageState(params: UseResultPageStateParams): UseResultPageStateResult {
   const {
     keyword,
+    countryFromUrl,
     displayResult,
     displayStatus,
     canonicalStatus,
@@ -69,20 +70,29 @@ export function useResultPageState(params: UseResultPageStateParams): UseResultP
   const [resultState, setResultState] = useState<ResultState>('idle')
   const [insightData, setInsightDataState] = useState<ConsensusData | null>(null)
   const [insightStatus, setInsightStatus] = useState<InsightStatus>('idle')
-  const analysisDataRef = useRef<ResearchResponse | null>(null)
+  const [cachedAnalysisData, setCachedAnalysisData] = useState<ResearchResponse | null>(null)
   const cachedKeywordRef = useRef<string | null>(null)
   const prevResultStateRef = useRef<ResultState>('idle')
+  const prevTaskKeyRef = useRef<string | null>(null)
 
   const hasKeyword = Boolean((keyword ?? '').trim())
+  const taskKey = `${keyword ?? ''}|${countryFromUrl ?? ''}`
 
-  /** Never overwrite success analysis data with null/fail. Only use ref fallback when viewing active job. */
-  const analysisData = isViewingActiveJob ? (displayResult ?? analysisDataRef.current) : displayResult
+  useEffect(() => {
+    if (prevTaskKeyRef.current !== null && prevTaskKeyRef.current !== taskKey) {
+      setCachedAnalysisData(null)
+    }
+    prevTaskKeyRef.current = taskKey
 
-  if (displayResult && hasKeyword && isViewingActiveJob) {
-    analysisDataRef.current = displayResult
-    if (hasCachedResult) cachedKeywordRef.current = keyword?.trim() ?? null
-  }
-  if (!isViewingActiveJob) analysisDataRef.current = null
+    if (displayResult && hasKeyword && isViewingActiveJob) {
+      setCachedAnalysisData(displayResult)
+      if (hasCachedResult) cachedKeywordRef.current = keyword?.trim() ?? null
+    }
+    if (!isViewingActiveJob) setCachedAnalysisData(null)
+  }, [displayResult, hasKeyword, isViewingActiveJob, hasCachedResult, keyword, countryFromUrl, taskKey])
+
+  /** Never overwrite success analysis data with null/fail. Only use cached fallback when viewing active job. */
+  const analysisData = isViewingActiveJob ? (displayResult ?? cachedAnalysisData) : displayResult
 
   /** Never overwrite success insight with fail/fallback */
   const setInsightData = useCallback((data: ConsensusData | null, options?: { force?: boolean }) => {
@@ -141,12 +151,14 @@ export function useResultPageState(params: UseResultPageStateParams): UseResultP
 
   const isAnalysisLoading = resultState === 'loading'
 
-  if (typeof window !== 'undefined' && resultState !== prevResultStateRef.current) {
-    prevResultStateRef.current = resultState
-    console.log('Result state:', resultState)
-    console.log('Cache found:', params.hasCachedResult)
-    console.log('Insight status:', insightStatus)
-  }
+  useEffect(() => {
+    if (typeof window !== 'undefined' && resultState !== prevResultStateRef.current) {
+      prevResultStateRef.current = resultState
+      console.log('Result state:', resultState)
+      console.log('Cache found:', params.hasCachedResult)
+      console.log('Insight status:', insightStatus)
+    }
+  }, [resultState, params.hasCachedResult, insightStatus])
 
   return {
     resultState,
