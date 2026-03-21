@@ -1640,7 +1640,7 @@ export async function* runResearch(
     const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
     log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
     await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    await updateProgress(2, 'failed')
+    await updateProgress(1, 'failed')
     yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
@@ -1649,7 +1649,7 @@ export async function* runResearch(
     const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
     log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
     await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    await updateProgress(3, 'failed')
+    await updateProgress(2, 'failed')
     yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
     yield { type: 'error', message: msg, step: 'competition_analysis' }
     return

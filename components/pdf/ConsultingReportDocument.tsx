@@ -9,16 +9,16 @@ import {
   Font,
 } from '@react-pdf/renderer'
 
-// 한글 지원: Nanum Gothic (TTF - @react-pdf는 TTF/WOFF만 지원)
+// 한글 지원: Noto Sans KR (WOFF - 한글 깨짐 방지)
 Font.register({
-  family: 'NanumGothic',
+  family: 'NotoSansKR',
   fonts: [
     {
-      src: 'https://fonts.gstatic.com/ea/nanumgothic/v5/NanumGothic-Regular.ttf',
+      src: 'https://fonts.gstatic.com/s/notosanskr/v27/PbykFmXiEBPT4ITbgNA5Cgm20HTs4JMMuA.woff',
       fontWeight: 400,
     },
     {
-      src: 'https://fonts.gstatic.com/ea/nanumgothic/v5/NanumGothic-Bold.ttf',
+      src: 'https://fonts.gstatic.com/s/notosanskr/v27/PbykFmXiEBPT4ITbgNA5Cgm20HTs4JMMuA.woff',
       fontWeight: 700,
     },
   ],
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     padding: 40,
-    fontFamily: 'NanumGothic',
+    fontFamily: 'NotoSansKR',
     fontSize: 10,
     lineHeight: 1.5,
   },

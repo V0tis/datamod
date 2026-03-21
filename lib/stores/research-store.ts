@@ -485,6 +485,8 @@ interface ResearchStore extends ResearchState {
   setGeminiQuota: (quota: GeminiQuota | null) => void
   fetchGeminiQuota: () => Promise<void>
   reset: () => void
+  /** Reset error/streaming when route (keyword|country) changes. Prevents showing stale failed state. */
+  resetForRouteChange: (keyword: string) => void
 }
 
 const initialState: ResearchState = {
@@ -530,6 +532,29 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
       reset: () => set({ ...initialState, analysisStatus: 'queued' }),
+
+      resetForRouteChange: (keyword: string) => {
+        const k = (keyword ?? '').trim()
+        const storeK = (get().keyword ?? '').trim()
+        const isNewSelection = k !== storeK
+        set({
+          error: null,
+          streamingState: createIdleState(),
+          ...(isNewSelection
+            ? {
+                result: null,
+                analysisTasks: null,
+                taskData: {},
+                status: 'idle' as const,
+                analysisStatus: 'queued' as CanonicalAnalysisStatus,
+                summarySection: null,
+                marketTemperatureSection: null,
+                recommendedActionsSection: null,
+                insightsSection: null,
+              }
+            : {}),
+        })
+      },
 
       setAnalysisMode: (mode: AnalysisMode) => {
         set({

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, Loader2, Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import Link from 'next/link'
+import { Check, Loader2, Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle, AlertTriangle, RefreshCw, Home } from 'lucide-react'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
-import { getProviderDisplayName } from '@/lib/ai/provider-display'
+import { getAnalysisErrorMessage } from '@/lib/analysis-error-messages'
+import { getProviderDisplayName, getProviderStatusKo } from '@/lib/ai/provider-display'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +51,8 @@ export interface PipelineStageInsight {
   summary?: string
   /** Bullet points (signals, competitors, risks, actions) */
   signals?: string[]
+  /** 수집된 시그널: 제목 + URL (클릭 시 원문 이동) */
+  signalItems?: Array<{ title: string; url?: string }>
 }
 
 export interface StrategyEnginePipelineProps {
@@ -83,6 +87,10 @@ export interface StrategyEnginePipelineProps {
   globalErrorMessage?: string
   /** Hero 내장 시 카드/박스 중첩 제거, 기회 점수 그리드와 시각적 통일 */
   embedded?: boolean
+  /** AI 우선 모델 (run/setting) - task.provider 없을 때 fallback. priority: step > run > setting */
+  aiPrimaryModel?: 'gemini' | 'groq'
+  /** reportId - 변경 시 타임라인 상태 초기화 (stale error 방지) */
+  resultId?: string | null
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -118,7 +126,7 @@ function getStageInsight(
       ? (obj.signals as string[]).filter((s) => typeof s === 'string')
       : undefined
     const news_activity = Array.isArray(obj.news_activity)
-      ? (obj.news_activity as Array<{ title?: string; publisher?: string }>)
+      ? (obj.news_activity as Array<{ title?: string; url?: string; publisher?: string }>)
       : []
     const trend_summary =
       typeof obj.trend_summary === 'string'
@@ -167,23 +175,36 @@ function getStageInsight(
       : []
 
     switch (stageIndex) {
-      case 0:
-        // 시장 신호 수집: Show real signals - headlines + sources
-        const headlineSignals = news_activity
+      case 0: {
+        // 시장 신호 수집: headlines + URL (클릭 시 원문 이동)
+        const itemsWithUrl = news_activity
           .slice(0, 5)
-          .map((n) => (n.title ?? '').trim().slice(0, 80))
-          .filter(Boolean)
+          .map((n) => {
+            const title = (n.title ?? '').trim().slice(0, 80)
+            if (!title) return null
+            const url = n.url ?? newsList.find((nl) => (nl.title ?? '').trim() === title)?.url
+            return { title, url }
+          })
+          .filter((x): x is { title: string; url: string | undefined } => !!x)
+        if (itemsWithUrl.length > 0) {
+          return {
+            sectionLabel: '수집된 시그널',
+            summary: news_activity.length > 0
+              ? `${news_activity.length}건 뉴스·시장 데이터 수집 완료`
+              : undefined,
+            signalItems: itemsWithUrl,
+            signals: itemsWithUrl.map((x) => x.title),
+          }
+        }
         const sourceSignals = signals?.length ? signals : ['Google News', 'RSS 피드']
-        const allSignals = headlineSignals.length > 0
-          ? headlineSignals
-          : sourceSignals
         return {
           sectionLabel: '수집된 시그널',
           summary: news_activity.length > 0
             ? `${news_activity.length}건 뉴스·시장 데이터 수집 완료`
             : undefined,
-          signals: allSignals.slice(0, 5),
+          signals: sourceSignals.slice(0, 5),
         }
+      }
       case 1:
         return {
           sectionLabel: 'AI 인사이트',
@@ -239,12 +260,27 @@ function getStageInsight(
   switch (stageIndex) {
     case 0:
       if (newsList.length > 0) {
-        const headlines = newsList.slice(0, 5).map((n) => (n.title ?? '').trim().slice(0, 80)).filter(Boolean)
+        const signalItems = newsList
+          .slice(0, 5)
+          .map((n) => {
+            const title = (n.title ?? '').trim().slice(0, 80)
+            if (!title) return null
+            return { title, url: n.url }
+          })
+          .filter((x): x is { title: string; url: string | undefined } => !!x)
+        if (signalItems.length > 0) {
+          return {
+            sectionLabel: '수집된 시그널',
+            summary: `${newsList.length}건 시장 데이터 수집`,
+            signalItems,
+            signals: signalItems.map((x) => x.title),
+          }
+        }
         const publishers = [...new Set(newsList.map((n) => n.publisher).filter(Boolean))].slice(0, 5) as string[]
         return {
           sectionLabel: '수집된 시그널',
           summary: `${newsList.length}건 시장 데이터 수집`,
-          signals: headlines.length > 0 ? headlines : (publishers.length ? publishers : ['Google News', 'RSS 피드']),
+          signals: publishers.length ? publishers : ['Google News', 'RSS 피드'],
         }
       }
       return null
@@ -307,9 +343,17 @@ export function StrategyEnginePipeline({
   globalErrorMessage,
   result,
   embedded = false,
+  aiPrimaryModel = 'gemini',
+  resultId,
   className,
 }: StrategyEnginePipelineProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(!allCompleted)
+  useEffect(() => {
+    if (allCompleted) setExpanded(false)
+  }, [allCompleted])
+  useEffect(() => {
+    if (resultId != null) setExpanded(!allCompleted)
+  }, [resultId])
   type TaskItem = NonNullable<typeof analysisTasks> extends (infer U)[] ? U : never
   const taskMap = (analysisTasks ?? []).reduce(
     (acc, t) => { acc[t.step_name] = t; return acc },
@@ -335,11 +379,20 @@ export function StrategyEnginePipeline({
     const stage = PIPELINE_STAGES[i]
     const taskId = stage?.taskId
     const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
-    // Stage 0: 데이터 수집 – article_extraction/article_summary는 signal_layer 완료 후에도 진행 중
+    const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
+    // Global error: failed step always shows failed (do not render error+running)
+    if (hasError && failIdx >= 0 && i === failIdx) return 'failed'
+    // Real task status - do not infer when we have it
+    if (task && task.status) {
+      if (task.status === 'failed') return 'failed'
+      if (task.status === 'completed') return 'completed'
+      if (task.status === 'running') return 'running'
+      return 'pending'
+    }
+    // Stage 0: article_extraction/article_summary 진행 중
     if (i === 0 && (streamingStepId === 'article_extraction' || streamingStepId === 'article_summary')) {
       return 'running'
     }
-    // Stage 5 = execution_layer (PM 액션 플랜), 6 = risk_opportunity (리스크 및 기회 평가), 7 = post_processing, 8 = done
     if (i === 6) {
       const riskTask = taskMap['risk_opportunity']
       if (riskTask) return riskTask.status
@@ -351,20 +404,21 @@ export function StrategyEnginePipeline({
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
     if (i === 8) return allCompleted ? 'completed' : 'pending'
-    // Global error: failed step + completed before + pending after
-    if (hasError) {
-      const failIdx = Math.min(errorStepIndex, 4)
+    // Global error when no task: failed step + completed before + pending after
+    if (hasError && failIdx >= 0) {
       if (i === failIdx) return 'failed'
       if (i < failIdx) return 'completed'
       return 'pending'
     }
-    if (task) return task.status
     if (i < effectiveIndex) return 'completed'
     if (i === effectiveIndex && !allCompleted) return 'running'
     return 'pending'
   }
 
-  const currentIdx = allCompleted ? 8 : Math.min(effectiveIndex, 7)
+  const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
+  const currentIdx = hasError && failIdx >= 0
+    ? failIdx
+    : allCompleted ? 8 : Math.min(effectiveIndex, 7)
   const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[6]
 
   return (
@@ -431,11 +485,12 @@ export function StrategyEnginePipeline({
             <div
               className={cn(
                 embedded ? 'rounded-md px-3 py-2 bg-muted/30' : 'rounded-xl border-2 px-5 py-4 min-h-[92px]',
+                embedded && getStatus(currentIdx) === 'failed' && 'border-destructive/40 bg-destructive/10',
                 !embedded && getStatus(currentIdx) === 'completed' && allCompleted && 'px-6 py-5 min-h-[100px] border-primary/50 bg-primary/5',
                 !embedded && getStatus(currentIdx) === 'completed' && !allCompleted && 'border-primary/50 bg-primary/5',
                 !embedded && getStatus(currentIdx) === 'running' && 'border-primary bg-primary/10 ring-2 ring-primary/20',
                 !embedded && getStatus(currentIdx) === 'pending' && 'border-border/60 bg-muted/20',
-                !embedded && getStatus(currentIdx) === 'failed' && 'border-destructive/50 bg-destructive/5',
+                !embedded && getStatus(currentIdx) === 'failed' && 'border-destructive ring-2 ring-destructive/20 bg-destructive/10',
               )}
             >
               <div className={cn('flex items-center gap-4', getStatus(currentIdx) === 'completed' && allCompleted && !embedded && 'gap-5')}>
@@ -474,19 +529,30 @@ export function StrategyEnginePipeline({
                       모든 분석이 완료되었습니다
                     </p>
                   )}
+                  {getStatus(currentIdx) === 'failed' && (() => {
+                    const st = PIPELINE_STAGES[currentIdx]
+                    const tk = st?.taskId && st.taskId !== 'done' ? st.taskId : st?.id ?? ''
+                    const rawError = (taskMap[tk] as { error_message?: string } | null)?.error_message ?? globalErrorMessage ?? '오류 발생'
+                    const { description } = getAnalysisErrorMessage(rawError)
+                    return (
+                      <div className="mt-1 flex items-center gap-2 flex-wrap" role="alert">
+                        <span className="text-xs text-destructive truncate">{description}</span>
+                        {onRetryStep && (
+                          <button type="button" onClick={onRetryStep} className="text-xs text-primary hover:underline shrink-0">
+                            다시 분석
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Expanded: full timeline with max-height scroll */}
-        <div
-          className={cn(
-            'relative',
-            expanded ? 'max-h-[420px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20' : 'hidden',
-          )}
-        >
+        {/* Expanded: full timeline (no scroll) */}
+        <div className={cn('relative', expanded ? 'block' : 'hidden')}>
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
             const taskKey = stage.taskId && stage.taskId !== 'done' ? stage.taskId : stage.id
@@ -512,7 +578,7 @@ export function StrategyEnginePipeline({
                     status === 'pending' &&
                       'border-border/60 bg-muted/20 opacity-60',
                     status === 'failed' &&
-                      'border-destructive/50 bg-destructive/5',
+                      'border-destructive ring-2 ring-destructive/20 bg-destructive/10',
                   )}
                 >
                   <div
@@ -563,18 +629,16 @@ export function StrategyEnginePipeline({
                     </h3>
                     {status !== 'pending' && (
                       <p className="text-[11px] font-medium text-muted-foreground mt-0.5 uppercase tracking-wider whitespace-pre-line">
-                        모델 상태: {task
-                          ? (() => {
-                              const t = task as { provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
-                              if (t.fallback_used && t.primary_provider_error) {
-                                const errKo = t.primary_provider_error === 'quota exceeded' ? '쿼터 초과' : t.primary_provider_error === 'timeout' ? '타임아웃' : t.primary_provider_error === 'network error' ? '네트워크 오류' : t.primary_provider_error.replace(/_/g, ' ')
-                                const primary = t.provider === 'groq' ? 'Gemini' : 'Groq'
-                                const fallback = t.provider === 'groq' ? 'Groq' : 'Gemini'
-                                return `${primary} → 실패 (${errKo})\n${fallback} → ${status === 'completed' ? '성공' : '실행 중'}`
-                              }
-                              return getProviderDisplayName(t.provider ?? null, t.fallback_used) || '—'
-                            })()
-                          : '—'}
+                        모델 상태: {(() => {
+                          const t = task as { provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null } | null
+                          const provider = t?.provider ?? aiPrimaryModel
+                          if (t?.fallback_used && t?.primary_provider_error) {
+                            const primary = provider === 'groq' ? 'Gemini' : 'Groq'
+                            const fallback = provider === 'groq' ? 'Groq' : 'Gemini'
+                            return getProviderStatusKo(primary, fallback, true, t.primary_provider_error, status === 'completed' ? 'completed' : 'running')
+                          }
+                          return getProviderDisplayName(provider, t?.fallback_used, t?.primary_provider_error) || (provider ? (provider === 'groq' ? 'Groq' : 'Gemini') : '—')
+                        })()}
                         {' · '}
                         분석 상태: {status === 'completed' ? '완료' : status === 'running' ? '실행 중' : status === 'failed' ? '실패' : '대기'}
                       </p>
@@ -587,7 +651,7 @@ export function StrategyEnginePipeline({
                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
                               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                               <span className="text-xs font-medium">
-                                {((task as { provider?: string }).provider) === 'groq' ? 'Gemini' : 'Groq'} {(() => {
+                                {((task as { provider?: string }).provider ?? aiPrimaryModel) === 'groq' ? 'Gemini' : 'Groq'} {(() => {
                                   const err = (task as { primary_provider_error?: string }).primary_provider_error
                                   return err === 'quota exceeded' ? '쿼터 초과' : err === 'timeout' ? '타임아웃' : err === 'network error' ? '네트워크 오류' : err?.replace(/_/g, ' ') ?? ''
                                 })()}
@@ -595,7 +659,7 @@ export function StrategyEnginePipeline({
                             </div>
                             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                               <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                              {((task as { provider?: string }).provider) === 'groq' ? 'Groq' : 'Gemini'}로 재시도 중...
+                              {((task as { provider?: string }).provider ?? aiPrimaryModel) === 'groq' ? 'Groq' : 'Gemini'}로 재시도 중...
                             </p>
                           </>
                         ) : (
@@ -607,22 +671,46 @@ export function StrategyEnginePipeline({
                         )}
                       </div>
                     )}
-                    {status === 'failed' && (
-                      <div className="mt-1 space-y-2">
-                        <p className="text-xs text-destructive font-medium">
-                          오류: {task?.error_message ?? globalErrorMessage ?? '오류 발생'}
-                        </p>
-                        {(task?.error_message ?? globalErrorMessage) && /quota|429|rate limit|한도|초과|혼잡/i.test((task?.error_message ?? globalErrorMessage) ?? '') && (
-                          <p className="text-xs text-muted-foreground">재시도가 필요할 수 있습니다.</p>
-                        )}
-                        {onRetryStep && (
-                          <Button variant="outline" size="sm" onClick={onRetryStep} className="gap-1.5 h-8 text-xs">
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            단계 재시도
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                    {status === 'failed' && (() => {
+                      const rawError = (task as { error_message?: string } | null)?.error_message ?? globalErrorMessage ?? '오류 발생'
+                      const { description, recoveryHint, possibleCauses, variant: errVariant } = getAnalysisErrorMessage(rawError)
+                      const isQuota = errVariant === 'quota'
+                      return (
+                        <div className="mt-2 space-y-2" role="alert">
+                          <p className="text-sm text-muted-foreground">{description}</p>
+                          {recoveryHint && <p className="text-xs text-muted-foreground">{recoveryHint}</p>}
+                          {possibleCauses && possibleCauses.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">가능한 원인</p>
+                              <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                                {possibleCauses.map((cause, j) => (
+                                  <li key={j}>{cause}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {onRetryStep && (
+                              <Button variant="outline" size="sm" onClick={onRetryStep} className="gap-1.5 h-8 text-xs">
+                                <RefreshCw className="h-3.5 w-3.5" />
+                                다시 분석
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 text-xs">
+                              <Link href="/">
+                                <Home className="h-3.5 w-3.5" />
+                                대시보드로
+                              </Link>
+                            </Button>
+                            {isQuota && (
+                              <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 text-xs">
+                                <Link href="/settings">설정으로 이동</Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {status !== 'failed' && hasInsight && (status === 'completed' || status === 'running') && insight?.summary && (
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                         {insight.summary}
@@ -645,7 +733,30 @@ export function StrategyEnginePipeline({
                           {insight.summary}
                         </p>
                       )}
-                      {insight.signals && insight.signals.length > 0 && (
+                      {(insight.signalItems?.length ?? 0) > 0 ? (
+                        <ul className="space-y-1">
+                          {insight.signalItems!.map((item, j) => (
+                            <li
+                              key={j}
+                              className="flex items-start gap-2 text-sm text-foreground"
+                            >
+                              <span className="text-primary shrink-0 mt-0.5">•</span>
+                              {item.url ? (
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline truncate max-w-full"
+                                >
+                                  {item.title}
+                                </a>
+                              ) : (
+                                <span>{item.title}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : insight.signals && insight.signals.length > 0 ? (
                         <ul className="space-y-1">
                           {insight.signals.map((s, j) => (
                             <li
@@ -657,7 +768,7 @@ export function StrategyEnginePipeline({
                             </li>
                           ))}
                         </ul>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 )}

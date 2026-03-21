@@ -24,7 +24,6 @@ import { ErrorState } from '@/components/ui/error-state'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
 import { PMDecisionDashboard } from '@/components/research/PMDecisionDashboard'
 import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
-import { AnalysisFailureBanner } from '@/components/research/AnalysisFailureBanner'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
@@ -191,6 +190,7 @@ function ResultsContent() {
     loadFromHistory,
     hydrateFromStatusResult,
     mergeResultAnalysis,
+    resetForRouteChange,
   } = useResearchStore()
 
   const [activeTab, setActiveTab] = useState<AiTabId>('logic')
@@ -319,6 +319,7 @@ function ResultsContent() {
     const cacheKey = `${k}|${countryFromUrl}`
     if (prevKeywordRef.current === cacheKey) return
     prevKeywordRef.current = cacheKey
+    resetForRouteChange(k)
     setHistoryLoadDone(false)
     setHasCachedResult(null)
     setPolledStatus(null)
@@ -328,7 +329,7 @@ function ResultsContent() {
       setHistoryLoadDone(true)
       setHasCachedResult(status === 'cached')
     })
-  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory])
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, resetForRouteChange])
 
   // Poll analysis status when we have keyword but no result (detects background analysis on refresh/new tab)
   // Skip polling while streaming so we don't overwrite with old cached result when user clicked "다시 분석하기"
@@ -1161,6 +1162,8 @@ function ResultsContent() {
               <div id="section-timeline" className="scroll-mt-24">
                 <ResultTimelineSection
                   embedded
+                  aiPrimaryModel={aiPrimaryModel}
+                  resultId={displayResult?.reportId ?? null}
                   keyword={currentKeyword ?? ''}
                   streamingState={streamingState}
                   polledProgressStep={polledStatus === 'running' ? Math.min(6, Math.max(0, polledProgressStep)) : undefined}
@@ -1171,11 +1174,21 @@ function ResultsContent() {
                   result={displayResult}
                   displayResult={displayResult}
                   hasError={canonicalStatus === 'failed' || !!showPolledError}
-                  errorStepIndex={
-                    streamingState.status === 'error' && streamingState.lastSuccessfulStep != null
-                      ? streamingState.lastSuccessfulStep + 1
-                      : polledProgressStep ?? 0
-                  }
+                  errorStepIndex={(() => {
+                    const STEP_ORDER: Record<string, number> = {
+                      signal_layer: 0, trend_analysis: 1, competition_analysis: 2,
+                      insight_extraction: 3, strategy_generation: 4, execution_layer: 5,
+                      risk_opportunity: 6, post_processing: 7,
+                    }
+                    const failedTask = (analysisTasks ?? []).find((t) => t.status === 'failed')
+                    if (failedTask && STEP_ORDER[failedTask.step_name] != null) {
+                      return STEP_ORDER[failedTask.step_name]
+                    }
+                    if (streamingState.status === 'error' && streamingState.lastSuccessfulStep != null) {
+                      return streamingState.lastSuccessfulStep + 1
+                    }
+                    return polledProgressStep ?? 0
+                  })()}
                   globalErrorMessage={displayError ?? polledError ?? undefined}
                   loading={loading}
                   onRetryStep={() => {
@@ -1183,7 +1196,6 @@ function ResultsContent() {
                     setPolledError(null)
                     startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
                   }}
-                  maxHeight="280px"
                 />
               </div>
             }
@@ -1284,24 +1296,7 @@ function ResultsContent() {
         {!showInsightSequence && (
           <>
         <div className="space-y-5 mt-4">
-        {/* 분석 실패 시 상단 배너 – 재시도 옵션 + 의미 있는 오류 메시지 */}
-        {hasFailure && (
-          <AnalysisFailureBanner
-            error={
-              displayError ??
-              polledError ??
-              (stepFailureMessage ? `AI 분석 중 오류가 발생했습니다: ${stepFailureMessage}` : undefined) ??
-              (streamingState.status === 'error' ? ('retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined) : undefined)
-            }
-            onRetry={() => {
-              setPolledStatus(null)
-              setPolledError(null)
-              startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
-            }}
-            showSettingsLink
-            keyword={currentKeyword ?? undefined}
-          />
-        )}
+        {/* 분석 실패 시 에러는 타임라인 UI에서 실패한 단계로 표시 (별도 배너 없음) */}
         {/* Run CTA, or analyzing placeholder, or structured sections when result ready */}
         {needsRunAction ? (
           <div className="py-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4">

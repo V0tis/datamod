@@ -120,23 +120,32 @@ export async function GET(req: Request) {
       supabase
         .from('research_history')
         .select(selectCols)
+        .eq('user_id', user.id)
         .eq('keyword', keyword)
         .eq('country_code', country)
         .order('updated_at', { ascending: false })
 
-    // report_id가 있는 행만 사용. 분석 데이터 있는 행 우선, 없으면 최신 행.
-    const { data: historyWithAnalysis } = await baseQuery()
-      .not('analysis_groq', 'is', null)
+    // Prefer completed analysis (avoid showing failed state when older completed result exists)
+    const { data: historyCompleted } = await baseQuery()
+      .eq('analysis_status', 'completed')
       .not('report_id', 'is', null)
       .limit(1)
       .maybeSingle()
+
+    const { data: historyWithAnalysis } = historyCompleted
+      ? { data: historyCompleted }
+      : await baseQuery()
+          .not('analysis_groq', 'is', null)
+          .not('report_id', 'is', null)
+          .limit(1)
+          .maybeSingle()
 
     const { data: historyFallback, error: historyError } = await baseQuery()
       .not('report_id', 'is', null)
       .limit(1)
       .maybeSingle()
 
-    const history = (historyWithAnalysis ?? historyFallback) as HistoryRow | null
+    const history = (historyCompleted ?? historyWithAnalysis ?? historyFallback) as HistoryRow | null
 
     if (historyError || !history?.report_id) {
       return NextResponse.json({ cached: false })
