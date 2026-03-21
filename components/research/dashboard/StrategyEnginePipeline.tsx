@@ -374,7 +374,7 @@ export function StrategyEnginePipeline({
         className
       )}
     >
-      <div className={embedded ? 'py-2' : 'p-4 sm:p-5'}>
+      <div className={embedded ? 'py-2' : 'p-5 sm:p-6'}>
         <div className={cn('flex items-center justify-between gap-2', embedded ? 'mb-2' : 'mb-3')}>
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="h-4 w-4 text-primary shrink-0" />
@@ -405,7 +405,7 @@ export function StrategyEnginePipeline({
 
         {/* Collapsed: compact step list + current step detail */}
         {!expanded && (
-          <div className={cn('space-y-3', embedded ? 'mb-0' : 'mb-3')}>
+          <div className={cn('space-y-4', embedded ? 'mb-0' : 'mb-3')}>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {PIPELINE_STAGES.slice(0, 7).map((s, i) => {
                 const st = getStatus(i)
@@ -430,37 +430,49 @@ export function StrategyEnginePipeline({
             </div>
             <div
               className={cn(
-                embedded ? 'rounded-md px-3 py-2 bg-muted/30' : 'rounded-lg border-2 px-4 py-3',
-                !embedded && getStatus(currentIdx) === 'completed' && 'border-primary/50 bg-primary/5',
+                embedded ? 'rounded-md px-3 py-2 bg-muted/30' : 'rounded-xl border-2 px-5 py-4 min-h-[92px]',
+                !embedded && getStatus(currentIdx) === 'completed' && allCompleted && 'px-6 py-5 min-h-[100px] border-primary/50 bg-primary/5',
+                !embedded && getStatus(currentIdx) === 'completed' && !allCompleted && 'border-primary/50 bg-primary/5',
                 !embedded && getStatus(currentIdx) === 'running' && 'border-primary bg-primary/10 ring-2 ring-primary/20',
                 !embedded && getStatus(currentIdx) === 'pending' && 'border-border/60 bg-muted/20',
                 !embedded && getStatus(currentIdx) === 'failed' && 'border-destructive/50 bg-destructive/5',
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className={cn('flex items-center gap-4', getStatus(currentIdx) === 'completed' && allCompleted && !embedded && 'gap-5')}>
                 <div
                   className={cn(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                    'flex shrink-0 items-center justify-center rounded-full',
+                    embedded ? 'h-8 w-8' : (getStatus(currentIdx) === 'running' || getStatus(currentIdx) === 'failed' ? 'h-12 w-12' : getStatus(currentIdx) === 'completed' && allCompleted ? 'h-14 w-14' : 'h-8 w-8'),
                     getStatus(currentIdx) === 'completed' && 'bg-primary text-primary-foreground',
                     getStatus(currentIdx) === 'running' && 'bg-primary/20 text-primary',
                     getStatus(currentIdx) === 'pending' && 'bg-muted text-muted-foreground',
                     getStatus(currentIdx) === 'failed' && 'bg-destructive/20 text-destructive',
                   )}
                 >
-                  {getStatus(currentIdx) === 'completed' && <Check className="h-4 w-4" strokeWidth={2.5} />}
-                  {getStatus(currentIdx) === 'running' && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />}
+                  {getStatus(currentIdx) === 'completed' && <Check className={getStatus(currentIdx) === 'completed' && allCompleted && !embedded ? 'h-7 w-7' : 'h-4 w-4'} strokeWidth={2.5} />}
+                  {getStatus(currentIdx) === 'running' && <Loader2 className={embedded ? 'h-4 w-4' : 'h-6 w-6'} strokeWidth={2} />}
                   {getStatus(currentIdx) === 'pending' && <Circle className="h-3.5 w-3.5" strokeWidth={2} />}
-                  {getStatus(currentIdx) === 'failed' && <AlertCircle className="h-4 w-4" strokeWidth={2} />}
+                  {getStatus(currentIdx) === 'failed' && <AlertCircle className={embedded ? 'h-4 w-4' : 'h-6 w-6'} strokeWidth={2} />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground">{currentStage?.label ?? '분석 완료'}</p>
+                  <p className={cn(
+                    'font-semibold text-foreground',
+                    embedded ? 'text-sm' : (getStatus(currentIdx) === 'completed' && allCompleted ? 'text-xl' : (getStatus(currentIdx) === 'running' || getStatus(currentIdx) === 'failed' ? 'text-base' : 'text-sm')),
+                  )}>
+                    {currentStage?.label ?? '분석 완료'}
+                  </p>
                   {getStatus(currentIdx) === 'running' && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className={cn('text-muted-foreground mt-1', !embedded ? 'text-sm' : 'text-xs')}>
                       {getAnalysisActivityMessage(streamingStepId ?? currentStage?.id ?? 'done', currentIdx, { short: true, elapsedMs: stepElapsedMs, currentArticleTitle })}
                     </p>
                   )}
                   {getStatus(currentIdx) === 'completed' && allCompleted && (
-                    <p className="text-xs text-muted-foreground mt-0.5">모든 분석이 완료되었습니다</p>
+                    <p className={cn(
+                      'text-muted-foreground mt-1',
+                      !embedded ? 'text-base' : 'text-xs',
+                    )}>
+                      모든 분석이 완료되었습니다
+                    </p>
                   )}
                 </div>
               </div>
