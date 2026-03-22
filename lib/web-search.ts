@@ -13,19 +13,22 @@ export type WebSearchResult = {
 export type WebSearchOptions = {
   /** Max number of results to return (default 10) */
   num?: number
+  /** Serper API key. If not provided, uses process.env.SERPER_API_KEY */
+  apiKey?: string
 }
 
 const SERPER_ENDPOINT = 'https://google.serper.dev/search'
 
 /**
  * Run web search for the given query and return top sources.
- * Returns empty array if SERPER_API_KEY is not set (graceful fallback).
+ * apiKey: user key from settings, or process.env.SERPER_API_KEY as fallback.
+ * Returns empty array if no key is available (graceful fallback).
  */
 export async function searchWeb(
   query: string,
   options: WebSearchOptions = {}
 ): Promise<WebSearchResult[]> {
-  const apiKey = (process.env.SERPER_API_KEY ?? '').trim()
+  const apiKey = (options.apiKey ?? process.env.SERPER_API_KEY ?? '').trim()
   if (!apiKey) {
     return []
   }

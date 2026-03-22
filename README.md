@@ -71,7 +71,7 @@ yarn start
 프로젝트 루트에 `.env.local` (또는 `.env`)을 만들고 아래 값을 채우세요.
 
 ```bash
-# Supabase (Dashboard → Project Settings → API)
+# Supabase (Dashboard → Project Settings → API) — 필수
 NEXT_PUBLIC_SUPABASE_URL=your_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
@@ -79,33 +79,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 RESEND_API_KEY=your_resend_key
 EMAIL_FROM="Rin-AI <onboarding@resend.dev>"
 
-# 리서치 — Gemini (아래 중 하나만 설정해도 동작)
-GEMINI_API_KEY=your_gemini_api_key
-# 또는
-GOOGLE_GENAI_API_KEY=your_gemini_api_key
-# 또는
-GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
-
-# 리서치 — Groq (탭 분석용)
-GROQ_API_KEY=your_groq_api_key
-
-# 리서치 — 웹 검색 그라운딩 (선택, Serper API)
-# 설정 시 분석 전 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달합니다.
+# 웹 검색 그라운딩 (Serper API) — 실제 사용됨
+# 설정 시: 트렌드 분석·경쟁사 검색 시 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달.
+# 미설정 시: 웹 검색 비활성화 → 경쟁사/포지셔닝이 거의 나오지 않을 수 있음.
 SERPER_API_KEY=your_serper_api_key
 
 # 선택 (기본값 사용 시 생략 가능)
 GEMINI_MODEL=gemini-2.5-flash
 GEMINI_TAB_MODEL=gemini-2.5-flash
 GROQ_TAB_MODEL=llama-3.3-70b-versatile
-
-# OpenAI — 인사이트 Fallback (선택)
-OPENAI_API_KEY=your_openai_api_key
 ```
 
-**Vercel 배포 시:** 위와 동일한 변수들을 Vercel 대시보드에서 반드시 설정하세요.  
-**Project → Settings → Environment Variables** 에서 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 는 필수이며, 나머지는 기능별로 필요 시 추가하세요. 저장 후 **Redeploy** 한 번 해주면 적용됩니다.
+**Gemini / Groq API 키:**  
+설정 → API KEY에서 사용자별로 등록합니다. `.env`의 `GEMINI_API_KEY`, `GROQ_API_KEY`는 **비로그인/시스템 fallback**용이며, 로그인 사용자는 설정 화면 값이 우선합니다.
 
-대시보드의 **API 연결 상태**는 `GEMINI_API_KEY`, `GOOGLE_GENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `NEXT_PUBLIC_GEMINI_API_KEY` 중 하나라도 설정되면 Gemini를 "연결됨"으로 표시합니다.
+**Vercel 배포 시:** 위 변수들을 Vercel 대시보드 → **Project → Settings → Environment Variables**에 설정하세요.  
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`는 필수입니다. 저장 후 **Redeploy** 한 번 해주면 적용됩니다.
 
 ---
 
@@ -134,7 +123,7 @@ app/
   results/page.tsx         # 분석 결과 (시장 분석·인사이트·종합 리포트, Gemini·Groq 2열)
   results/[id]/page.tsx    # 공유 리포트 (token)
   history/page.tsx         # 내 리서치 기록
-  settings/page.tsx        # 설정 (닉네임, Gemini·OpenAI·Anthropic API 키)
+  settings/page.tsx        # 설정 (닉네임, Gemini·Groq·Serper API 키)
   auth/                    # 로그인·회원가입·OTP 검증
   api/
     health/                # API 연결 상태 (Gemini, Supabase)
@@ -149,7 +138,7 @@ components/
   research-report-view.tsx # 리포트·뉴스 뷰
 lib/
   stores/research-store.ts # 검색·결과·쿼터 상태
-  license.ts               # API 키 결정 (Gemini, OpenAI, Anthropic), getSystemGeminiKey()
+  license.ts               # API 키 결정 (Gemini), getSystemGeminiKey()
   usage.ts                 # 사용량 기록 (trackUsage)
   trends-cache.ts          # 구글 트렌드 RSS 수집 (국가별 키워드·뉴스)
 ```

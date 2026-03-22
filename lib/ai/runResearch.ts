@@ -139,7 +139,7 @@ export type ResearchStreamEvent =
   | { type: 'pass2'; structured: StructuredAnalysisFields }
   | { type: 'post_processing'; stepId: PostProcessingStepId }
   | { type: 'creative'; groqText: string | null; geminiText: string | null }
-  | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep' }
+  | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
 
@@ -151,6 +151,8 @@ export type RunResearchParams = {
   userId: string
   geminiKey: string
   groqKey?: string | null
+  /** Serper API key for web search (user settings or env fallback) */
+  serperKey?: string | null
   /** 분석 깊이: quick(빠른 인사이트), standard(전체 리포트), deep(심층 리서치). 기본 standard */
   mode?: 'quick' | 'standard' | 'deep'
   /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
@@ -476,11 +478,11 @@ async function runCompetitionTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const fallbackCompetition = {
-    competitive_landscape: [] as Array<{ name?: string; positioning?: string }>,
-    market_structure: undefined as { summary?: string } | undefined,
+  const fallbackCompetition: CompetitionTaskResult['competitionData'] = {
+    competitive_landscape: [],
+    market_structure: undefined,
   }
-  const compParseResult = safeParseAiJson<{
+  type CompParsedSchema = {
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
@@ -492,13 +494,19 @@ async function runCompetitionTask(
       weakness?: string
     }>
     market_structure?: { summary?: string }
-  }>(typeof text === 'string' ? text : '', {
-    fallback: fallbackCompetition,
+  }
+  const compParseResult = safeParseAiJson<CompParsedSchema>(typeof text === 'string' ? text : '', {
+    fallback: { competitive_landscape: [], market_structure: undefined } as CompParsedSchema,
     logFailures: true,
     context: 'competition_analysis',
   })
   if (!compParseResult.ok) {
-    throw new Error('경쟁사 분석 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
+    console.warn('[runCompetitionTask] 파싱 실패, fallback 사용', { keyword, preview: (typeof text === 'string' ? text : '').slice(0, 100) })
+    return {
+      competitionData: fallbackCompetition,
+      usedFallback: true,
+      primaryProviderError: '경쟁사 분석 결과 파싱 실패. 빈 결과로 진행합니다.',
+    }
   }
   const parsed = compParseResult.data
   const landscape = Array.isArray(parsed?.competitive_landscape)
@@ -1450,7 +1458,9 @@ function checkAborted(signal: AbortSignal | undefined): boolean {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal, forceReanalyze } = params
+  const { keyword, countryCode, userId, geminiKey, groqKey, serperKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal, forceReanalyze } = params
+  const webSearchOptions = (serperKey ?? '').trim() ? { apiKey: (serperKey ?? '').trim() } : {}
+  const serperUsed = !!(serperKey && serperKey.trim())
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
   const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
@@ -1536,7 +1546,7 @@ export async function* runResearch(
   // Web search grounding: user input → web search → top sources → feed to LLM
   let webContext = ''
   try {
-    const webResults = await searchWeb(keyword, { num: 10 })
+    const webResults = await searchWeb(keyword, { num: 10, ...webSearchOptions })
     webContext = formatWebContext(webResults, 10)
     if (webResults.length > 0) {
       log('web_grounding', 'completed', { sourcesCount: webResults.length })
@@ -1678,7 +1688,7 @@ export async function* runResearch(
   try {
     const compQueries = [`${keyword} competitors`, `${keyword} market leaders`, `${keyword} platforms`]
     const compResults = await Promise.all(
-      compQueries.slice(0, 2).map((q) => searchWeb(q, { num: 5 }))
+      compQueries.slice(0, 2).map((q) => searchWeb(q, { num: 5, ...webSearchOptions }))
     )
     const merged = compResults.flat().slice(0, 12)
     if (merged.length > 0) {
@@ -1689,34 +1699,42 @@ export async function* runResearch(
     console.warn('[AI Timeline] competitor web search failed (continuing without)', { keyword, err })
   }
 
-  // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + articles)
-  log('trend_analysis', 'running (parallel)')
-  log('competition_analysis', 'running (parallel)')
-  await upsertAnalysisTask('trend_analysis', 'running', { provider: 'gemini', fallback_used: false })
-  await upsertAnalysisTask('competition_analysis', 'running', { provider: 'gemini', fallback_used: false })
-  yield { type: 'task', task: 'trend_analysis', status: 'running', provider: 'gemini', fallback_used: false }
-  yield { type: 'task', task: 'competition_analysis', status: 'running', provider: 'gemini', fallback_used: false }
+  // Layer 2: 시장 리서치 (trend) 완료 후 → Layer 3: 경쟁사 분석 (competition) 순차 실행
+  const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
+  const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
 
-  const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'market'), webContext),
-    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext, competitorWebContext || undefined),
-  ])
+  log('trend_analysis', 'running')
+  await upsertAnalysisTask('trend_analysis', 'running', { provider: marketProvider, fallback_used: false })
+  yield { type: 'task', task: 'trend_analysis', status: 'running', provider: marketProvider, fallback_used: false }
+
+  const trendSettled = await Promise.allSettled([
+    runTrendTask(geminiKey, groqKey, keyword, articlesForAnalysis, marketProvider, webContext),
+  ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>)
 
   if (trendSettled.status === 'rejected') {
     const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
     log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
-    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: marketProvider, fallback_used: false })
     await updateProgress(1, 'failed')
-    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: marketProvider, fallback_used: false }
     yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
   }
+
+  log('competition_analysis', 'running')
+  await upsertAnalysisTask('competition_analysis', 'running', { provider: competitorProvider, fallback_used: false })
+  yield { type: 'task', task: 'competition_analysis', status: 'running', provider: competitorProvider, fallback_used: false }
+
+  const compSettled = await Promise.allSettled([
+    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, competitorProvider, webContext, competitorWebContext || undefined),
+  ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>)
+
   if (compSettled.status === 'rejected') {
     const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
     log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
-    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
+    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: competitorProvider, fallback_used: false })
     await updateProgress(2, 'failed')
-    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: competitorProvider, fallback_used: false }
     yield { type: 'error', message: msg, step: 'competition_analysis' }
     return
   }
@@ -1726,8 +1744,8 @@ export async function* runResearch(
   const trendData = trendResult.trendData
   const competitionData = compResult.competitionData
 
-  const trendProvider = primaryProvider === 'gemini' ? (trendResult.usedFallback ? 'groq' : 'gemini') : (trendResult.usedFallback ? 'gemini' : 'groq')
-  const compProvider = primaryProvider === 'gemini' ? (compResult.usedFallback ? 'groq' : 'gemini') : (compResult.usedFallback ? 'gemini' : 'groq')
+  const trendProvider = marketProvider === 'gemini' ? (trendResult.usedFallback ? 'groq' : 'gemini') : (trendResult.usedFallback ? 'gemini' : 'groq')
+  const compProvider = competitorProvider === 'gemini' ? (compResult.usedFallback ? 'groq' : 'gemini') : (compResult.usedFallback ? 'gemini' : 'groq')
   await upsertAnalysisTask('trend_analysis', 'completed', {
     outputData: trendResult.trendPayload,
     provider: trendProvider,
@@ -1781,9 +1799,10 @@ export async function* runResearch(
   }
 
   // Step 3: Insight Extraction
+  const insightProviderResolved = resolveAIForStep(effectiveStepSettings, 'insight')
   log('insight_extraction', 'running')
-  await upsertAnalysisTask('insight_extraction', 'running', { provider: 'gemini', fallback_used: false })
-  yield { type: 'task', task: 'insight_extraction', status: 'running', provider: 'gemini', fallback_used: false }
+  await upsertAnalysisTask('insight_extraction', 'running', { provider: insightProviderResolved, fallback_used: false })
+  yield { type: 'task', task: 'insight_extraction', status: 'running', provider: insightProviderResolved, fallback_used: false }
   let insightData: InsightExtractionResult
   try {
     const insightResult = await runInsightExtractionTask(
@@ -1792,7 +1811,7 @@ export async function* runResearch(
       keyword,
       marketOverview,
       competitionSummary,
-      resolveAIForStep(effectiveStepSettings, 'insight'),
+      insightProviderResolved,
       {
         trendSignals: trendData.positive_signals,
         marketScore: trendData.market_score,
@@ -1811,8 +1830,8 @@ export async function* runResearch(
   } catch (err) {
     const msg = toUserFriendlyError(err, '인사이트 추출 중 오류가 발생했습니다.')
     log('insight_extraction', 'failed', { error: msg, err })
-    await upsertAnalysisTask('insight_extraction', 'failed', { errorMessage: msg, provider: 'gemini', fallback_used: false })
-    yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, fallbackMessage: msg, provider: 'gemini', fallback_used: false }
+    await upsertAnalysisTask('insight_extraction', 'failed', { errorMessage: msg, provider: insightProviderResolved, fallback_used: false })
+    yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, fallbackMessage: msg, provider: insightProviderResolved, fallback_used: false }
     yield { type: 'error', message: msg, step: 'insight_extraction' }
     insightData = {
       key_insights: trendData.positive_signals,
@@ -1928,7 +1947,9 @@ export async function* runResearch(
     porter_5_forces?: { rivalry?: string[]; supplier_power?: string[]; buyer_power?: string[]; substitutes?: string[]; new_entrants?: string[] }
     next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
-  yield { type: 'task', task: 'execution_layer', status: 'running' }
+  const actionProviderResolved = resolveAIForStep(effectiveStepSettings, 'action')
+  await upsertAnalysisTask('execution_layer', 'running', { provider: actionProviderResolved, fallback_used: false })
+  yield { type: 'task', task: 'execution_layer', status: 'running', provider: actionProviderResolved, fallback_used: false }
   try {
     const pmResult = await runPMActionPlanTask(
       geminiKey,
@@ -1937,7 +1958,7 @@ export async function* runResearch(
       strategyData.strategy_summary,
       opportunitiesSummary,
       risksSummary,
-      resolveAIForStep(effectiveStepSettings, 'action')
+      actionProviderResolved
     )
     executionData = {
       ...pmResult.executionData,
@@ -1956,10 +1977,10 @@ export async function* runResearch(
       } | undefined,
     }
 
-    const stratProvider = stratPrimaryIsGemini ? (pmResult.usedFallback ? 'groq' : 'gemini') : (pmResult.usedFallback ? 'gemini' : 'groq')
+    const executionProvider = actionProviderResolved === 'gemini' ? (pmResult.usedFallback ? 'groq' : 'gemini') : (pmResult.usedFallback ? 'gemini' : 'groq')
     await upsertAnalysisTask('execution_layer', 'completed', {
       outputData: executionData,
-      provider: stratProvider,
+      provider: executionProvider,
       fallback_used: pmResult.usedFallback,
       primary_provider_error: pmResult.usedFallback ? pmResult.primaryProviderError ?? null : null,
     })
@@ -1971,7 +1992,7 @@ export async function* runResearch(
       task: 'execution_layer',
       status: 'completed',
       data: executionData,
-      provider: stratProvider,
+      provider: executionProvider,
       fallback_used: pmResult.usedFallback,
       primaryProviderError: pmResult.usedFallback ? pmResult.primaryProviderError : undefined,
     }
@@ -1987,7 +2008,7 @@ export async function* runResearch(
     })
     log('pm_action_plan', 'failed', { error: msg, err })
     const errorForUi = cause && cause !== msg ? `PM 액션 플랜: ${cause}` : msg
-    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: errorForUi, provider: 'gemini', fallback_used: false })
+    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: errorForUi, provider: actionProviderResolved, fallback_used: false })
     executionData = {
       product_actions: [],
       feature_ideas: [],
@@ -1995,7 +2016,7 @@ export async function* runResearch(
       pm_action_plan: [],
       next_actions_pm: [],
     }
-    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: 'gemini', fallback_used: false }
+    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: actionProviderResolved, fallback_used: false }
   }
 
   const pos = trendData.positive_signals
@@ -2237,6 +2258,7 @@ export async function* runResearch(
         analysis_status: 'completed',
         progress_step: null,
         analysis_depth: depthForDb,
+        serper_used: serperUsed,
         updated_at: new Date().toISOString(),
       }
       if (structured?.analysis_target) upsertPayload.analysis_target = structured.analysis_target
@@ -2333,6 +2355,6 @@ export async function* runResearch(
     return
   }
 
-  console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured })
-  yield { type: 'done', reportId, sourceLinks: news, analysis_depth: depthForDb }
+  console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured, serperUsed })
+  yield { type: 'done', reportId, sourceLinks: news, analysis_depth: depthForDb, serper_used: serperUsed }
 }

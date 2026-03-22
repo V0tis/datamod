@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
+import { getEffectiveLicenseKeys } from '@/lib/license'
 
 /**
  * GET: 현재 사용자의 API 키 설정 여부 (AI 분석 가능 여부)
  * - 로그인 안 되어 있으면 401
- * - hasRequiredKeys: Gemini 또는 OpenAI 중 하나라도 설정되어 있으면 true
+ * - hasRequiredKeys: Gemini(또는 서버 GEMINI)가 있으면 true
  */
 export async function GET() {
   try {
@@ -20,7 +20,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('gemini_api_key, openai_api_key')
+    .select('gemini_api_key')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -30,10 +30,7 @@ export async function GET() {
   }
 
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
-  const hasGemini = effective.canSearch && !!effective.gemini
-  const openaiKey = getEffectiveOpenAIKey(row?.openai_api_key)
-  const hasOpenAI = !!(openaiKey && openaiKey.length > 0)
-  const hasRequiredKeys = hasGemini || hasOpenAI
+  const hasRequiredKeys = effective.canSearch && !!effective.gemini
 
   return NextResponse.json({ hasRequiredKeys })
   } catch (e) {

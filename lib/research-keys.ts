@@ -3,7 +3,7 @@
  * Used by research, stream, and insights routes so key logic is not duplicated.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey } from '@/lib/license'
+import { getEffectiveLicenseKeys } from '@/lib/license'
 
 export type ResearchKeysResult = {
   gemini: string
@@ -39,59 +39,6 @@ export async function getGeminiKeyForRequest(
   return {
     gemini: effective.gemini,
     canSearch: effective.canSearch,
-  }
-}
-
-/**
- * Resolve OpenAI key for a request: user key from DB if logged in, else system env.
- * Used for research fallback when Gemini is unavailable.
- */
-export async function getOpenAIKeyForRequest(
-  supabase: SupabaseClient,
-  userId: string | undefined
-): Promise<string> {
-  let userOpenAI: string | null = null
-  if (userId) {
-    const { data: row } = await supabase
-      .from('user_settings')
-      .select('openai_api_key')
-      .eq('user_id', userId)
-      .maybeSingle()
-    userOpenAI = (row as { openai_api_key?: string })?.openai_api_key ?? null
-  }
-  return getEffectiveOpenAIKey(userOpenAI)
-}
-
-export type ResearchKeysForInitialAnalysis = {
-  gemini: string
-  canSearch: boolean
-  openai: string
-}
-
-/**
- * One DB query to resolve both Gemini and OpenAI keys for initial research/stream flows.
- * Single responsibility: key resolution only.
- */
-export async function getResearchKeysForInitialAnalysis(
-  supabase: SupabaseClient,
-  userId: string | undefined
-): Promise<ResearchKeysForInitialAnalysis> {
-  let userGemini: string | null = null
-  let userOpenAI: string | null = null
-  if (userId) {
-    const { data: row } = await supabase
-      .from('user_settings')
-      .select('gemini_api_key, openai_api_key')
-      .eq('user_id', userId)
-      .maybeSingle()
-    userGemini = row?.gemini_api_key ?? null
-    userOpenAI = (row as { openai_api_key?: string })?.openai_api_key ?? null
-  }
-  const effective = getEffectiveLicenseKeys(userGemini)
-  return {
-    gemini: effective.gemini,
-    canSearch: effective.canSearch,
-    openai: getEffectiveOpenAIKey(userOpenAI),
   }
 }
 
@@ -151,6 +98,27 @@ export async function getGroqKeyForRequest(
   const systemGroq = (process.env.GROQ_API_KEY ?? '').trim()
   const hasUser = !!(userGroq && userGroq.trim())
   return hasUser ? userGroq!.trim() : systemGroq
+}
+
+/**
+ * Resolve Serper key for web search: user key from DB if logged in, else system env.
+ */
+export async function getSerperKeyForRequest(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<string> {
+  let userSerper: string | null = null
+  if (userId) {
+    const { data: row } = await supabase
+      .from('user_settings')
+      .select('serper_api_key')
+      .eq('user_id', userId)
+      .maybeSingle()
+    userSerper = (row as { serper_api_key?: string } | null)?.serper_api_key ?? null
+  }
+  const systemSerper = (process.env.SERPER_API_KEY ?? '').trim()
+  const hasUser = !!(userSerper && userSerper.trim())
+  return hasUser ? userSerper!.trim() : systemSerper
 }
 
 /**

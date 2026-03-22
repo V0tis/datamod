@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getEffectiveLicenseKeys, getEffectiveOpenAIKey, getSystemGeminiKey } from '@/lib/license'
+import { getEffectiveLicenseKeys, getSystemGeminiKey } from '@/lib/license'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data: row, error } = await supabase
     .from('user_settings')
-    .select('gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('gemini_api_key, groq_api_key, serper_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -35,23 +35,16 @@ export async function GET() {
 
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)
   const hasGeminiKey = !!(row?.gemini_api_key && row.gemini_api_key.trim().length > 0)
-  const hasOpenAIKey = !!(row?.openai_api_key && row.openai_api_key.trim().length > 0)
   const groqKey = (row as { groq_api_key?: string } | undefined)?.groq_api_key?.trim()
   const hasGroqKey = !!(groqKey && groqKey.length > 0)
-  const anthKey = (row as { anthropic_api_key?: string } | undefined)?.anthropic_api_key?.trim()
-  const hasAnthropicKey = !!(anthKey && anthKey.length > 0)
-  const effectiveOpenAI = getEffectiveOpenAIKey(row?.openai_api_key)
+  const serperKey = (row as { serper_api_key?: string } | undefined)?.serper_api_key?.trim()
+  const hasSerperKey = !!(serperKey && serperKey.length > 0)
   const groqOrigin = hasGroqKey ? 'USER' : (process.env.GROQ_API_KEY?.trim() ? 'SYSTEM' : null)
-  const openaiOrigin =
-    hasOpenAIKey ? 'USER' : (process.env.OPENAI_API_KEY?.trim() ? 'SYSTEM' : null)
-  const anthropicOrigin =
-    hasAnthropicKey ? 'USER' : (process.env.ANTHROPIC_API_KEY?.trim() ? 'SYSTEM' : null)
 
   const systemGemini = getSystemGeminiKey().length > 0
-  const systemOpenAI = !!(process.env.OPENAI_API_KEY ?? '').trim()
-  const systemAnthropic = !!(process.env.ANTHROPIC_API_KEY ?? '').trim()
 
   const systemGroq = !!(process.env.GROQ_API_KEY ?? '').trim()
+  const systemSerper = !!(process.env.SERPER_API_KEY ?? '').trim()
 
   const aiPrimaryModel = (row as { ai_primary_model?: string } | null)?.ai_primary_model
   const geminiApiKey = hasGeminiKey && row?.gemini_api_key ? String(row.gemini_api_key) : ''
@@ -76,21 +69,18 @@ export async function GET() {
       ai_consensus_model: (stepRow?.ai_consensus_model as string) ?? null,
     },
     hasGeminiKey,
-    hasOpenAIKey,
-    hasAnthropicKey,
     hasGroqKey,
+    hasSerperKey,
     geminiApiKey,
     groqApiKey: groqApiKeyValue,
+    serperApiKey: hasSerperKey && serperKey ? serperKey : '',
     hasServerGemini: systemGemini,
-    hasServerOpenAI: systemOpenAI,
-    hasServerAnthropic: systemAnthropic,
     hasServerGroq: systemGroq,
+    hasServerSerper: systemSerper,
     canSearch: effective.canSearch,
     licenseOrigin: {
       gemini: effective.geminiOrigin,
       groq: groqOrigin ?? (systemGroq ? 'SYSTEM' : null),
-      openai: openaiOrigin ?? (effectiveOpenAI ? 'SYSTEM' : null),
-      anthropic: anthropicOrigin ?? (systemAnthropic ? 'SYSTEM' : null),
     },
   })
   res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
@@ -113,7 +103,7 @@ export async function POST(req: Request) {
   }
 
   let body: {
-    gemini_api_key?: string; openai_api_key?: string; anthropic_api_key?: string; groq_api_key?: string; ai_primary_model?: string
+    gemini_api_key?: string; groq_api_key?: string; serper_api_key?: string; ai_primary_model?: string
     analysis_depth?: string
     ai_market_model?: string | null; ai_competitor_model?: string | null; ai_insight_model?: string | null; ai_strategy_model?: string | null
     ai_action_model?: string | null; ai_risk_model?: string | null; ai_creative_model?: string | null; ai_consensus_model?: string | null
@@ -126,12 +116,10 @@ export async function POST(req: Request) {
 
   const gemini_api_key =
     typeof body.gemini_api_key === 'string' ? body.gemini_api_key.trim() || null : undefined
-  const openai_api_key =
-    typeof body.openai_api_key === 'string' ? body.openai_api_key.trim() || null : undefined
-  const anthropic_api_key =
-    typeof body.anthropic_api_key === 'string' ? body.anthropic_api_key.trim() || null : undefined
   const groq_api_key =
     typeof body.groq_api_key === 'string' ? body.groq_api_key.trim() || null : undefined
+  const serper_api_key =
+    typeof body.serper_api_key === 'string' ? body.serper_api_key.trim() || null : undefined
   const ai_primary_model =
     body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini' ? body.ai_primary_model : undefined
   const analysis_depth =
@@ -153,7 +141,7 @@ export async function POST(req: Request) {
 
   const { data: existing } = await supabase
     .from('user_settings')
-    .select('gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
+    .select('gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, serper_api_key, ai_primary_model, analysis_depth, ai_market_model, ai_competitor_model, ai_insight_model, ai_strategy_model, ai_action_model, ai_risk_model, ai_creative_model, ai_consensus_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -165,12 +153,13 @@ export async function POST(req: Request) {
     user_id: user.id,
     gemini_api_key:
       gemini_api_key !== undefined ? gemini_api_key : existing?.gemini_api_key ?? null,
-    openai_api_key:
-      openai_api_key !== undefined ? openai_api_key : existing?.openai_api_key ?? null,
-    anthropic_api_key:
-      anthropic_api_key !== undefined ? anthropic_api_key : (ex?.anthropic_api_key as string | null) ?? null,
+    /** 레거시 컬럼 유지 (API로 더 이상 변경하지 않음) */
+    openai_api_key: (ex?.openai_api_key as string | null) ?? null,
+    anthropic_api_key: (ex?.anthropic_api_key as string | null) ?? null,
     groq_api_key:
       groq_api_key !== undefined ? groq_api_key : (ex?.groq_api_key as string | null) ?? null,
+    serper_api_key:
+      serper_api_key !== undefined ? serper_api_key : (ex?.serper_api_key as string | null) ?? null,
     ai_primary_model:
       ai_primary_model !== undefined ? ai_primary_model : (ex?.ai_primary_model as string | null) ?? null,
     analysis_depth:

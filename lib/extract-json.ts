@@ -38,6 +38,14 @@ export function tryRepairTruncatedJson(rawJson: string, parseError: Error): stri
     truncated += '"'
   }
 
+  // Trailing key without value (e.g. "positioning" cut off): add : null
+  const trimmedEnd = truncated.trimEnd()
+  if (/[,\{]\s*"[^"]*"$/.test(trimmedEnd)) {
+    truncated += ': null'
+  } else if (/:\s*"([^"\\]|\\.)*$/.test(trimmedEnd)) {
+    truncated += '"'  // Unterminated string value
+  }
+
   let openBraces = 0
   let openBrackets = 0
   let inString = false

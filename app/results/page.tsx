@@ -1029,8 +1029,9 @@ function ResultsContent() {
     const hasTrendMatch = kw && allTrends.some((t) => (t.keyword ?? '').trim().toLowerCase() === kw.toLowerCase())
     const fundingScore = displayResult?.key_metrics?.opportunity_score_breakdown?.funding_signals
     const fundingNum = typeof fundingScore === 'number' ? fundingScore : null
+    const serperUsed = displayResult?.serper_used === true
 
-    return [
+    const signals: DataSourceSignal[] = [
       {
         id: 'google-trends',
         source: '구글 트렌드',
@@ -1052,6 +1053,16 @@ function ResultsContent() {
         usedInAnalysis: fundingNum != null,
       },
     ]
+    if (serperUsed) {
+      signals.push({
+        id: 'serper-web-search',
+        source: 'Serper 웹 검색',
+        summary: '트렌드·경쟁사 분석에 웹 검색 결과가 반영되었습니다. Serper API로 실시간 웹 소스를 수집해 분석에 활용했습니다.',
+        confidence: 'high',
+        usedInAnalysis: true,
+      })
+    }
+    return signals
   })()
 
   const navProgress = (() => {
@@ -1127,6 +1138,7 @@ function ResultsContent() {
                       depth: DEPTH_LABELS[depth],
                       time: formatEstimatedTime(est.estimatedTimeSec),
                       token: `약 ${(est.estimatedTokens / 1000).toFixed(0)}K`,
+                      serperUsed: displayResult?.serper_used === true,
                     }
                   })()
                 : undefined

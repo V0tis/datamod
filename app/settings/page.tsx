@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 
@@ -35,15 +35,14 @@ type SettingsData = {
   stepAIModels?: StepAIModels
   hasGeminiKey: boolean
   hasGroqKey?: boolean
-  hasOpenAIKey?: boolean
-  hasAnthropicKey?: boolean
+  hasSerperKey?: boolean
   hasServerGemini?: boolean
   hasServerGroq?: boolean
-  hasServerOpenAI?: boolean
-  hasServerAnthropic?: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin; openai?: LicenseOrigin | null; anthropic?: LicenseOrigin | null }
+  hasServerSerper?: boolean
+  licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin }
   geminiApiKey?: string
   groqApiKey?: string
+  serperApiKey?: string
 }
 
 const MASKED_PLACEHOLDER = '••••••••••••••••'
@@ -119,6 +118,11 @@ function SettingsPageInner() {
   const [showGroqKey, setShowGroqKey] = useState(false)
   const [editingGemini, setEditingGemini] = useState(false)
   const [editingGroq, setEditingGroq] = useState(false)
+  const [serperApiKey, setSerperApiKey] = useState('')
+  const [showSerperKey, setShowSerperKey] = useState(false)
+  const [editingSerper, setEditingSerper] = useState(false)
+  const [savingSerper, setSavingSerper] = useState(false)
+  const [saveSuccessSerper, setSaveSuccessSerper] = useState(false)
   const [savingGemini, setSavingGemini] = useState(false)
   const [savingGroq, setSavingGroq] = useState(false)
   const [testingGemini, setTestingGemini] = useState(false)
@@ -166,6 +170,7 @@ function SettingsPageInner() {
           }
           setGeminiApiKey(typeof json.geminiApiKey === 'string' ? json.geminiApiKey : '')
           setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
+          setSerperApiKey(typeof json.serperApiKey === 'string' ? json.serperApiKey : '')
           if (json.stepAIModels) setStepAIModels(json.stepAIModels)
         }
       })
@@ -314,6 +319,42 @@ function SettingsPageInner() {
     }
   }
 
+  const handleSaveSerper = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    const rawKey = serperApiKey.trim()
+    if (rawKey && rawKey !== MASKED_PLACEHOLDER && rawKey.length < 20) {
+      toast.error('Serper API 키 형식이 올바르지 않습니다.')
+      return
+    }
+    setSavingSerper(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serper_api_key: serperApiKey || undefined }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
+        return
+      }
+      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
+      if (nextRes.ok) {
+        const nextJson = (await nextRes.json()) as SettingsData
+        setData(nextJson)
+        setSerperApiKey(typeof nextJson.serperApiKey === 'string' ? nextJson.serperApiKey : '')
+      } else {
+        setSerperApiKey('')
+      }
+      toast.success('Serper API 키가 저장되었습니다.')
+      setSaveSuccessSerper(true)
+      setTimeout(() => setSaveSuccessSerper(false), 3000)
+    } finally {
+      setSavingSerper(false)
+    }
+  }
+
   const handleTestConnection = useCallback(async (provider: 'gemini' | 'groq') => {
     const key = provider === 'gemini' ? geminiApiKey : groqApiKey
     const val = provider === 'gemini' ? validateGeminiKey(key) : validateGroqKey(key)
@@ -366,8 +407,19 @@ function SettingsPageInner() {
     return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showGroqKey, setShow: setShowGroqKey, setValue: setGroqApiKey, setEditing: setEditingGroq }
   }
 
+  const getSerperKeyState = () => {
+    const hasUser = !!data?.hasSerperKey
+    const hasServer = !!data?.hasServerSerper
+    const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
+    const canReveal = serperApiKey.length > 0
+    const showMask = hasUser && !serperApiKey && !editingSerper
+    const displayValue = serperApiKey || (showMask ? MASKED_PLACEHOLDER : '')
+    return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showSerperKey, setShow: setShowSerperKey, setValue: setSerperApiKey, setEditing: setEditingSerper }
+  }
+
   const geminiConnected = !!(data?.hasGeminiKey || data?.hasServerGemini)
   const groqConnected = !!(data?.hasGroqKey || data?.hasServerGroq)
+  const serperConnected = !!(data?.hasSerperKey || data?.hasServerSerper)
 
   if (!user) {
     return (
@@ -582,6 +634,59 @@ function SettingsPageInner() {
                   </div>
                 </form>
               </div>
+
+              {/* Serper API Key */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-base font-medium">Serper API Key (웹 검색)</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    트렌드 분석·경쟁사 검색 시 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달합니다. 미설정 시 경쟁사·포지셔닝이 나오지 않을 수 있습니다.
+                  </p>
+                  <a
+                    href="https://serper.dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    Serper에서 API 키 발급 <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <form onSubmit={handleSaveSerper} className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <Input
+                        type={getSerperKeyState().show && getSerperKeyState().canReveal ? 'text' : 'password'}
+                        placeholder={getSerperKeyState().placeholder}
+                        value={getSerperKeyState().value}
+                        onChange={(e) => setSerperApiKey(e.target.value)}
+                        onFocus={() => getSerperKeyState().hasUser && !serperApiKey && setEditingSerper(true)}
+                        onBlur={() => setEditingSerper(false)}
+                        className="pr-10 bg-muted/50 focus:bg-background"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => getSerperKeyState().canReveal && setShowSerperKey(!showSerperKey)}
+                        title={getSerperKeyState().canReveal ? (showSerperKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                        className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getSerperKeyState().canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                        aria-label={showSerperKey ? '숨기기' : '보기'}
+                      >
+                        {showSerperKey && getSerperKeyState().canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <Button type="submit" disabled={savingSerper}>
+                        {savingSerper ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                      </Button>
+                      {saveSuccessSerper && (
+                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+                          <CheckCircle2 className="h-4 w-4" /> 저장됨
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </form>
+              </div>
             </CardContent>
           </Card>
 
@@ -613,6 +718,17 @@ function SettingsPageInner() {
                   <div>
                     <p className="font-medium">Groq API</p>
                     <p className="text-sm text-muted-foreground">{groqConnected ? '연결됨' : '연결되지 않음'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
+                  {serperConnected ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
+                  ) : (
+                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="font-medium">Serper API (웹 검색)</p>
+                    <p className="text-sm text-muted-foreground">{serperConnected ? '연결됨' : '연결되지 않음'}</p>
                   </div>
                 </div>
               </div>

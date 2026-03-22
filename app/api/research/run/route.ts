@@ -5,7 +5,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGeminiKeyForRequest, getGroqKeyForRequest, getStepAISettingsForRequest } from '@/lib/research-keys'
+import { getGeminiKeyForRequest, getGroqKeyForRequest, getSerperKeyForRequest, getStepAISettingsForRequest } from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
 import { logger } from '@/lib/logger'
 
@@ -103,9 +103,10 @@ export async function POST(req: Request) {
     const bodyPrimaryModel = body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini'
       ? body.ai_primary_model
       : null
-    const [geminiResult, groqKey, stepAISettings] = await Promise.all([
+    const [geminiResult, groqKey, serperKey, stepAISettings] = await Promise.all([
       getGeminiKeyForRequest(supabase, user.id),
       getGroqKeyForRequest(supabase, user.id),
+      getSerperKeyForRequest(supabase, user.id),
       getStepAISettingsForRequest(supabase, user.id),
     ])
     const primaryProvider = bodyPrimaryModel ?? stepAISettings.ai_primary_model
@@ -181,6 +182,7 @@ export async function POST(req: Request) {
             userId: user.id,
             geminiKey: gemini,
             groqKey,
+            serperKey,
             primaryProvider,
             stepAISettings,
             mode,

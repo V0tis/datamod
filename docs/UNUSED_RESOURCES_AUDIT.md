@@ -38,7 +38,7 @@
 | `app/api/analyses/route.ts` | `GET /api/analyses` | Old `/analyses` page redirects to `/history`; `/history` uses `/api/research/history` | Served old "내 분석" page (analysis_history table) |
 | `app/api/health/route.ts` | `GET /api/health` | No client fetch | Uptime/monitoring (e.g. Vercel, external checks) |
 | `app/api/me/route.ts` | `GET /api/me` | No client fetch in app code | Documented for auth; possibly used by middleware or external tools |
-| `app/api/research/route.ts` | `POST /api/research` | Client uses `/api/research/run` | Non-streaming initial research (grounding/OpenAI fallback) |
+| `app/api/research/route.ts` | `POST /api/research` | Client uses `/api/research/run` | Non-streaming initial research (grounding) |
 | `app/api/research/stream/route.ts` | `POST /api/research/stream` | Client uses `/api/research/run` | Legacy SSE stream; `vercel.json` references it |
 | `app/api/trends/update/route.ts` | `POST /api/trends/update` | No client fetch | Cron/manual refresh of global trends; `refreshGlobalTrends()` |
 

@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
     const { data: row, error } = await supabase
       .from('research_history')
-      .select('id, analysis_status, progress_step, report_id, key_metrics, updated_at')
+      .select('id, analysis_status, progress_step, report_id, key_metrics, serper_used, updated_at')
       .eq('user_id', user.id)
       .eq('keyword', keyword)
       .eq('country_code', country)
@@ -77,6 +77,7 @@ export async function GET(req: Request) {
         content: (report?.content ?? {}) as Record<string, unknown>,
         source_links: (report as { source_links?: unknown })?.source_links ?? [],
         updated_at: row.updated_at,
+        serper_used: (row as { serper_used?: boolean }).serper_used === true,
       }
 
       return NextResponse.json({

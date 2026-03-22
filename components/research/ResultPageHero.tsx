@@ -118,13 +118,15 @@ export interface ResultPageHeroProps {
   progressSlot?: React.ReactNode
   /** When false, hide score gauge, badges, and top insight (only title + timeline + actions). Use when analysis has no result yet. */
   showScoreAndConclusion?: boolean
-  /** Analysis meta badges: depth, cost, time, token, model (shown when result is available) */
+  /** Analysis meta badges: depth, cost, time, token, model, serper (shown when result is available) */
   analysisMeta?: {
     depth?: string
     cost?: string
     time?: string
     token?: string
     model?: string
+    /** true = Serper 웹 검색으로 분석됨 */
+    serperUsed?: boolean
   } | null
   className?: string
 }
@@ -185,7 +187,7 @@ export const ResultPageHero = memo(function ResultPageHero({
           {statusText && (
             <p className="mt-2 text-sm text-muted-foreground">{statusText}</p>
           )}
-          {analysisMeta && (analysisMeta.depth ?? analysisMeta.time ?? analysisMeta.token) && (
+          {analysisMeta && (analysisMeta.depth ?? analysisMeta.time ?? analysisMeta.token ?? analysisMeta.serperUsed) && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {analysisMeta.depth && (
                 <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -200,6 +202,11 @@ export const ResultPageHero = memo(function ResultPageHero({
               {analysisMeta.token && (
                 <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   토큰: {analysisMeta.token}
+                </span>
+              )}
+              {analysisMeta.serperUsed && (
+                <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  Serper 웹 검색 분석
                 </span>
               )}
             </div>

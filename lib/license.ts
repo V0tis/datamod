@@ -37,17 +37,3 @@ export function getEffectiveLicenseKeys(userGemini: string | null | undefined): 
     canSearch: gemini.length > 0,
   }
 }
-
-/** OpenAI 키: 사용자 입력 키 우선, 없으면 env. (분석 리포트 탭·Fallback) */
-export function getEffectiveOpenAIKey(userOpenAI: string | null | undefined): string {
-  const systemOpenAI = (process.env.OPENAI_API_KEY ?? '').trim()
-  const hasUser = !!(userOpenAI && userOpenAI.trim())
-  return hasUser ? userOpenAI!.trim() : systemOpenAI
-}
-
-/** Anthropic(Claude) 키: 사용자 입력 키 우선, 없으면 env. (인사이트 탭) */
-export function getEffectiveAnthropicKey(userAnthropic: string | null | undefined): string {
-  const system = (process.env.ANTHROPIC_API_KEY ?? '').trim()
-  const hasUser = !!(userAnthropic && userAnthropic.trim())
-  return hasUser ? userAnthropic!.trim() : system
-}

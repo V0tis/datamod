@@ -62,7 +62,7 @@ export interface StrategyEnginePipelineProps {
   /** When true, all stages show as completed */
   allCompleted?: boolean
   streamingStepId?: string
-  /** Current article title during article_extraction/article_summary (e.g. "기사 읽는 중: OpenAI...") */
+  /** Current article title during article_extraction/article_summary (e.g. "기사 읽는 중: ...") */
   currentArticleTitle?: string
   /** Shown when retrying after 429 (e.g. "재시도 중...") */
   retryMessage?: string

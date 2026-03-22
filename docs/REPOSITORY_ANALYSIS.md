@@ -48,7 +48,7 @@
   Combines: global research state (keyword, status, result, newsList, error, insights), **stream consumption** (SSE parsing, toasts, retry scheduling), `loadFromHistory`, `loadReportByKeyword`, and `fetchGeminiQuota`. Store both holds UI state and implements fetch/stream logic; moving stream to a dedicated service would clarify boundaries.
 
 - **`app/api/research/route.ts`**  
-  Initial research using **Gemini with grounding** (or OpenAI fallback). Separate from the main **stream** flow (which uses RSS + Gemini without grounding). Two “initial research” paths exist; when each is used from the product is unclear from the route alone (stream is the one used by the current home → results flow).
+  Initial research using **Gemini with grounding**. Separate from the main **stream** flow (which uses RSS + Gemini without grounding). Two “initial research” paths exist; when each is used from the product is unclear from the route alone (stream is the one used by the current home → results flow).
 
 - **`app/api/research/history/route.ts`**  
   Single responsibility: return one cached report by (keyword, country). Does **not** implement the **list** or **delete** semantics that `app/history/page.tsx` and home “recent reports” expect (`GET` without params → `list`, `DELETE` with body `{ id }`). Responsibility is clear for “get by keyword”, but the **API contract** assumed by the frontend is not implemented here.
@@ -68,7 +68,7 @@
 ### Duplication
 - **Consensus normalization:** Two normalizers (Consensus vs ConsensusData) with overlapping legacy/new handling. Unifying on one type and one normalizer (e.g. in `lib/` or `services/ai`) and mapping to component props would remove duplication and keep behavior in sync.
 - **JSON “ensure object”:** `ensureObject` in `app/api/research/history/route.ts` parses string/object from DB. Similar needs exist elsewhere; could live in `lib/` (e.g. `lib/json-utils.ts`) and be reused.
-- **Key resolution:** Multiple helpers (`getGeminiKeyForRequest`, `getResearchKeysForInitialAnalysis`, `getTabProviderKeys`) are already centralized in `lib/research-keys.ts` and `lib/license.ts`; the only duplication is “tab uses env-only” vs “stream uses user+env”, which is a product choice, not logic duplication.
+- **Key resolution:** Helpers like `getGeminiKeyForRequest` are centralized in `lib/research-keys.ts` and `lib/license.ts`; the only duplication is “tab uses env-only” vs “stream uses user+env”, which is a product choice, not logic duplication.
 
 ### Tight coupling
 - **Results page ↔ store ↔ APIs:** Results page knows store shape, history vs stream, tab API payload (keyword, reportId, tab, provider, isReanalyze, countryCode), and response shape (groq/gemini/consensus, errors). Changing API or store shape forces broad edits in one large file.
@@ -113,7 +113,7 @@ Do **not** implement yet; this is the recommended order and scope of changes.
 
 ### Phase 4: Clarify research entry points and docs
 6. **Research routes**  
-   - Document when to use `POST /api/research` (initial with grounding/OpenAI) vs `POST /api/research/stream` (current main flow: RSS + Gemini). If the non-stream route is unused by the app, consider deprecating or removing it to avoid confusion.  
+   - Document when to use `POST /api/research` (initial with grounding) vs `POST /api/research/stream` (current main flow: RSS + Gemini). If the non-stream route is unused by the app, consider deprecating or removing it to avoid confusion.  
    - Optionally add a one-line comment in each route: “Used by: …” so that product flow is obvious.
 
 7. **Keys and follow-up**  

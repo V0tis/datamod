@@ -10,6 +10,7 @@ type HistoryRow = {
   report_id: string | null
   analysis_status?: string | null
   analysis_depth?: string | null
+  serper_used?: boolean | null
   analysis_target?: string | null
   confidence_score?: number | null
   market_temperature_score?: number | null
@@ -167,6 +168,7 @@ export async function GET(req: Request) {
       keyword,
       analysis_status: ensureAnalysisStatus(row.analysis_status),
       analysis_depth: row.analysis_depth ?? undefined,
+      serper_used: row.serper_used === true,
       analysis_target: row.analysis_target ?? undefined,
       confidence_score: typeof row.confidence_score === 'number' ? row.confidence_score : undefined,
       market_temperature_score: typeof row.market_temperature_score === 'number' ? row.market_temperature_score : undefined,

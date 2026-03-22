@@ -54,13 +54,6 @@ export function safeParseAiJson<T>(
     return { ok: false, fallback }
   }
 
-  if (!isJsonLike(raw)) {
-    if (logFailures) {
-      logger.warn('AI JSON: invalid structure', { context, preview: raw.slice(0, 80) })
-    }
-    return { ok: false, fallback }
-  }
-
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)

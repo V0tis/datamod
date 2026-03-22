@@ -54,6 +54,8 @@ export interface ResearchResponse {
   reportId?: string | null
   /** Depth used for this run: fast | standard | deep (for result page badges) */
   analysis_depth?: 'fast' | 'standard' | 'deep' | null
+  /** true if Serper web search was used for this analysis */
+  serper_used?: boolean
   error?: string
   /** 핵심 결론 3가지 (하단 Badge용) */
   keyConclusions?: string[]
@@ -432,6 +434,7 @@ export type StreamingUpdatePayload = {
   reportId?: string | null
   newsList?: NewsItem[]
   analysis_depth?: 'fast' | 'standard' | 'deep' | null
+  serper_used?: boolean
   error?: string
 }
 
@@ -784,11 +787,12 @@ export const useResearchStore = create<ResearchStore>()(
           recommendedActionsSection,
           insightsSection
         )
-        if (result && (payload.reportId != null || payload.analysis_depth != null)) {
+        if (result && (payload.reportId != null || payload.analysis_depth != null || payload.serper_used != null)) {
           result = {
             ...result,
             reportId: payload.reportId ?? result.reportId,
             analysis_depth: payload.analysis_depth ?? result.analysis_depth,
+            serper_used: payload.serper_used ?? result.serper_used,
           }
         }
 
@@ -1088,10 +1092,12 @@ export const useResearchStore = create<ResearchStore>()(
                     publisher: l.publisher,
                   }))
                   const depth = (event as { analysis_depth?: 'fast' | 'standard' | 'deep' }).analysis_depth
+                  const serperUsed = (event as { serper_used?: boolean }).serper_used
                   applyUpdate({
                     reportId: event.reportId ?? null,
                     newsList: newsList.length ? newsList : undefined,
                     analysis_depth: depth ?? undefined,
+                    serper_used: serperUsed,
                   })
                   set({ streamingState: createCompletedState(event.reportId ?? null) })
                   streamEnded = true
@@ -1126,7 +1132,7 @@ export const useResearchStore = create<ResearchStore>()(
               const buf = buffer.trim()
               if (buf.length > 100_000) throw new Error('Event too long')
               if (buf[0] !== '{' && buf[0] !== '[') throw new Error('Invalid event format')
-              const event = JSON.parse(buf) as { type?: string; reportId?: string; message?: string; sourceLinks?: Array<{ title?: string; url?: string; publisher?: string }> }
+              const event = JSON.parse(buf) as { type?: string; reportId?: string; message?: string; sourceLinks?: Array<{ title?: string; url?: string; publisher?: string }>; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
               if (!event || typeof event !== 'object') throw new Error('Invalid event')
               if (event?.type === 'done') {
                 const newsList = (event.sourceLinks ?? []).map((l) => ({
@@ -1135,10 +1141,12 @@ export const useResearchStore = create<ResearchStore>()(
                   publisher: l.publisher,
                 }))
                 const depth = (event as { analysis_depth?: 'fast' | 'standard' | 'deep' }).analysis_depth
+                const serperUsed = (event as { serper_used?: boolean }).serper_used
                 applyUpdate({
                   reportId: event.reportId ?? null,
                   newsList: newsList.length ? newsList : undefined,
                   analysis_depth: depth ?? undefined,
+                  serper_used: serperUsed,
                 })
                 set({ streamingState: createCompletedState(event.reportId ?? null) })
               } else if (event?.type === 'error') {
@@ -1180,6 +1188,7 @@ export const useResearchStore = create<ResearchStore>()(
             reportId?: string
             keyword?: string
             analysis_depth?: 'fast' | 'standard' | 'deep' | null
+            serper_used?: boolean
             content?: Record<string, unknown>
             source_links?: Array<{ title?: string; url?: string }>
             ai_responses?: Record<string, string>
@@ -1252,6 +1261,7 @@ export const useResearchStore = create<ResearchStore>()(
               competitorTrends: typeof content.competitorTrends === 'string' ? content.competitorTrends : (summarySection.competitorTrends ?? ''),
               reportId: data.reportId,
               analysis_depth: data.analysis_depth ?? undefined,
+              serper_used: data.serper_used === true,
               ai_responses: (data.ai_responses && typeof data.ai_responses === 'object') ? data.ai_responses : {},
               source_links: Array.isArray(data.source_links) ? data.source_links : [],
               updated_at: data.updated_at ?? undefined,
@@ -1288,6 +1298,7 @@ export const useResearchStore = create<ResearchStore>()(
           ? rawContent
           : {}) as Record<string, unknown>
         const km = parseJsonField(pollResult.key_metrics) as ResearchResponse['key_metrics']
+        const poll = pollResult as { reportId?: string; key_metrics?: unknown; content?: Record<string, unknown>; source_links?: unknown[]; updated_at?: string; serper_used?: boolean }
         const fullResult: ResearchResponse = {
           ...content,
           marketNews: Array.isArray(content.marketNews) ? (content.marketNews as string[]) : [],
@@ -1296,6 +1307,7 @@ export const useResearchStore = create<ResearchStore>()(
           reportId: pollResult.reportId,
           source_links: Array.isArray(pollResult.source_links) ? (pollResult.source_links as Array<{ title?: string; url?: string }>) : [],
           updated_at: pollResult.updated_at ?? undefined,
+          serper_used: poll.serper_used === true,
           key_metrics: km,
         } as ResearchResponse
         set({
