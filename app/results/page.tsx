@@ -317,18 +317,32 @@ function ResultsContent() {
     }
     const cacheKey = `${k}|${countryFromUrl}`
     if (prevKeywordRef.current === cacheKey) return
+
+    const prevKey = prevKeywordRef.current
     prevKeywordRef.current = cacheKey
+
+    const isKeywordChange = prevKey != null && prevKey !== cacheKey
+    const storeHasResultForKeyword =
+      result?.reportId && (storeKeyword?.trim() ?? '') === k
+
     resetForRouteChange(k)
-    setHistoryLoadDone(false)
-    setHasCachedResult(null)
-    setPolledStatus(null)
-    setPolledError(null)
+
+    if (isKeywordChange) {
+      setHistoryLoadDone(false)
+      setHasCachedResult(null)
+      setPolledStatus(null)
+      setPolledError(null)
+    } else if (storeHasResultForKeyword) {
+      setHistoryLoadDone(true)
+      setHasCachedResult(true)
+    }
+
     const countryCode = countryFromUrl
     loadFromHistory(k, countryCode).then((status) => {
       setHistoryLoadDone(true)
       setHasCachedResult(status === 'cached')
     })
-  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, resetForRouteChange])
+  }, [keyword, storeKeyword, countryFromUrl, loadFromHistory, resetForRouteChange, result?.reportId])
 
   // Poll analysis status when we have keyword but no result (detects background analysis on refresh/new tab)
   // Skip polling while streaming so we don't overwrite with old cached result when user clicked "다시 분석하기"

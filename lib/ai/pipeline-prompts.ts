@@ -2,18 +2,29 @@
  * Multi-step AI Analysis Pipeline - PM decision support.
  * Each step follows PM thinking: situation → meaning → impact → opportunity → risk → strategy → action.
  */
-import { BASE_JSON_PROMPT, KOREAN_ONLY_SUFFIX, PM_THINKING_ORDER, PM_STRUCTURED_RULE, PM_REQUIRED_OUTPUT_STRUCTURE, INNOVATION_INSTRUCTION } from './base-prompt'
+import {
+  BASE_JSON_PROMPT,
+  KOREAN_ONLY_SUFFIX,
+  PM_THINKING_ORDER,
+  PM_STRUCTURED_RULE,
+  PM_REQUIRED_OUTPUT_STRUCTURE,
+  INNOVATION_INSTRUCTION,
+  buildDataDrivenPrompt,
+} from './base-prompt'
 
 export const PIPELINE_BASE_SYSTEM = `${BASE_JSON_PROMPT}
 
 PM 의사결정 지원용 파이프라인입니다. 챗봇이 아닙니다.
+사용자 메시지는 INPUT / DATA / TASK / RULES 형식이다. DATA에 있는 내용만 근거로 한다. RULES를 반드시 준수한다.
 - ${PM_THINKING_ORDER}
 - ${PM_STRUCTURED_RULE}
 - 분석은 summary, insight, impact, opportunity, risk, strategy, action을 반영해야 합니다. 누락 시 무효.`
 
-/** Step 3: Insight Extraction – title, summary, why important, business impact, PM decision meaning */
+/** Step 3: Insight Extraction – title, summary, why important, business impact, PM decision meaning. DATA-DRIVEN ONLY. */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 인사이트는 PM이 의사결정에 쓸 수 있게 작성하세요. ${INNOVATION_INSTRUCTION}
+
+필수: 제공된 DATA에서만 추출. 추측·발명·할루시네이션 금지. DATA에 없는 내용을 만들지 마세요.
 
 1. "core_insights": 3-5개. 각 항목 필수:
    - "title": 짧은 제목 (5-15자). 요약 문장과 중복 금지.
@@ -41,17 +52,24 @@ export function buildInsightExtractionPrompt(
   marketOverview: string,
   competitionSummary: string
 ): string {
-  return `Keyword: ${keyword}
-
-Market Overview: ${marketOverview}
-
-Competition: ${competitionSummary}
-
-Extract 3-5 core_insights: each with title, summary, why important, business impact, PM decision meaning. No duplicates, no empty. Also key_insights, opportunity_signals, risk_signals. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+  const collectedData = [
+    marketOverview?.trim() && `trend / market overview (from prior step):\n${marketOverview.trim()}`,
+    competitionSummary?.trim() && `competition summary (from prior step):\n${competitionSummary.trim()}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  if (!collectedData.trim()) return ''
+  return buildDataDrivenPrompt({
+    keyword,
+    sections: { collectedData },
+    task: `Extract 3-5 core_insights using ONLY the DATA above. key_insights, opportunity_signals, risk_signals must be grounded in DATA. No duplicates, no empty fields.`,
+    suffix: `Return ONLY the JSON object per system format. ${KOREAN_ONLY_SUFFIX}`,
+  })
 }
 
-/** Step 4: Strategic Recommendation – why this strategy, expected result, risk, difficulty, priority */
+/** Step 4: Strategic Recommendation – why this strategy, expected result, risk, difficulty, priority. DATA-DRIVEN ONLY. */
 export const STRATEGIC_RECOMMENDATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
+전략 제안은 반드시 제공된 DATA를 근거로 작성. 추측·발명·할루시네이션 금지.
 전략 제안은 반드시 포함: 왜 이 전략인지(why), 기대 결과(expected result), 리스크(risk), 실행 난이도(difficulty), 우선순위(priority).
 ${PM_REQUIRED_OUTPUT_STRUCTURE}
 Format: {
@@ -74,19 +92,29 @@ export function buildStrategicRecommendationPrompt(
     ...(extractedInsights.opportunity_signals ?? []),
     ...(extractedInsights.risk_signals ?? []),
   ].filter(Boolean)
-  const insightsBlock = insights.length ? `\nExtracted insights:\n${insights.map((i) => `- ${i}`).join('\n')}` : ''
-  return `Keyword: ${keyword}
-
-Market Overview: ${marketOverview}
-
-Competition: ${competitionSummary}${insightsBlock}
-
-Produce strategy: include why this strategy, expected result, risk, difficulty, priority. summary, insight, impact, opportunity, risk, strategy, action을 반영. Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+  const insightsBlock = insights.length
+    ? `extracted insights (from prior step):\n${insights.map((i) => `- ${i}`).join('\n')}`
+    : ''
+  const collectedData = [
+    marketOverview?.trim() && `market overview:\n${marketOverview.trim()}`,
+    competitionSummary?.trim() && `competition:\n${competitionSummary.trim()}`,
+    insightsBlock,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  if (!collectedData.trim()) return ''
+  return buildDataDrivenPrompt({
+    keyword,
+    sections: { collectedData },
+    task: `Produce strategic recommendations using ONLY the DATA above. opportunities, risks, strategy_summary, market_summary must cite DATA. Include why, expected result, risk, difficulty, priority.`,
+    suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
+  })
 }
 
-/** Step 5: PM Action Plan – goal, step-by-step plan, priority, risk, expected impact */
+/** Step 5: PM Action Plan – goal, step-by-step plan, priority, risk, expected impact. DATA-DRIVEN ONLY. */
 export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 You MUST return a valid JSON object. No markdown, no code fences, no extra text.
+액션 플랜은 반드시 제공된 DATA를 근거로 작성. 추측·발명·할루시네이션 금지.
 액션 플랜 필수: goal(목표), step-by-step plan(단계별 실행 계획), priority(우선순위), risk(리스크), expected impact(기대 영향). 각 액션에 왜·영향을 포함.
 
 Preferred format (include at least pm_action_plan or steps):
@@ -130,20 +158,26 @@ export function buildPMActionPlanPrompt(
   opportunitiesSummary: string,
   risksSummary: string
 ): string {
-  return `Keyword: ${keyword}
-
-Strategy: ${strategySummary}
-
-Opportunities: ${opportunitiesSummary}
-
-Risks: ${risksSummary}
-
-Generate PM action plan: goal, step-by-step plan, priority, risk, expected impact. 각 단계에 왜·기대 영향 포함. Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`
+  const collectedData = [
+    strategySummary?.trim() && `strategy summary:\n${strategySummary.trim()}`,
+    opportunitiesSummary?.trim() && `opportunities:\n${opportunitiesSummary.trim()}`,
+    risksSummary?.trim() && `risks:\n${risksSummary.trim()}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  if (!collectedData.trim()) return ''
+  return buildDataDrivenPrompt({
+    keyword,
+    sections: { collectedData },
+    task: `Generate PM action plan using ONLY the DATA above. goal, steps, product_actions, feature_ideas must follow from DATA.`,
+    suffix: `Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`,
+  })
 }
 
-/** Strategy Evaluation – score + reason supporting PM decision */
+/** Strategy Evaluation – score + reason supporting PM decision. DATA-DRIVEN ONLY. */
 export const STRATEGY_EVALUATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-전략을 PM 사고 순서로 평가: 상황·의미·영향·기회·리스크를 반영한 점수와 이유를 제시하세요.
+전략을 PM 사고 순서로 평가. 반드시 제공된 DATA를 근거로 점수 산정. 추측·발명 금지.
+상황·의미·영향·기회·리스크를 반영한 점수와 이유를 제시하세요.
 For each dimension: score (1-10), label, reason (why this score, impact, risk/opportunity). PM 의사결정에 쓸 수 있는 근거 필수.
 Format: {
   "market_attractiveness": number (1=low, 10=high),
@@ -169,17 +203,23 @@ export function buildStrategyEvaluationPrompt(
   competitionSummary: string,
   productActions: string[]
 ): string {
-  const actionsBlock = productActions.length ? `Product actions:\n${productActions.slice(0, 5).map((a, i) => `${i + 1}. ${a}`).join('\n')}` : ''
-  return `Keyword: ${keyword}
-
-Strategy: ${strategySummary}
-
-Opportunities: ${opportunitiesSummary}
-
-Risks: ${risksSummary}
-
-Competition: ${competitionSummary}
-${actionsBlock ? `\n${actionsBlock}` : ''}
-
-Evaluate this strategy. For each dimension return score, label, and reason (score reason with impact). Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`
+  const actionsBlock = productActions.length
+    ? `product actions (from prior step):\n${productActions.slice(0, 5).map((a, i) => `${i + 1}. ${a}`).join('\n')}`
+    : ''
+  const collectedData = [
+    strategySummary?.trim() && `strategy:\n${strategySummary.trim()}`,
+    opportunitiesSummary?.trim() && `opportunities:\n${opportunitiesSummary.trim()}`,
+    risksSummary?.trim() && `risks:\n${risksSummary.trim()}`,
+    competitionSummary?.trim() && `competition:\n${competitionSummary.trim()}`,
+    actionsBlock,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  if (!collectedData.trim()) return ''
+  return buildDataDrivenPrompt({
+    keyword,
+    sections: { collectedData },
+    task: `Evaluate strategy using ONLY the DATA above. Scores (1-10) and _reason fields must cite DATA. Do not invent dimensions or numbers.`,
+    suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
+  })
 }

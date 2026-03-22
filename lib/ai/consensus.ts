@@ -98,13 +98,20 @@ function pmAnalysisToConsensus(pm: PMAnalysisOutput): Consensus {
       trend: trendMap[market_temperature.trend] ?? 'stable',
       ratio: normRatio,
     },
-    impactAnalysis: [
-      { subject: '시장성', score: 5, reason: exp.positive_signals?.[0] ?? '—' },
-      { subject: '기술성', score: 5, reason: exp.neutral_signals?.[0] ?? '—' },
-      { subject: '반응성', score: 5, reason: exp.negative_risks?.[0] ?? '—' },
-      { subject: '규제/환경', score: 5, reason: insights.hypotheses?.[0] ?? '—' },
-      { subject: '경쟁력', score: 5, reason: insights.inferences?.[0] ?? '—' },
-    ],
+    impactAnalysis: (() => {
+      const posCount = exp.positive_signals?.length ?? 0
+      const neuCount = exp.neutral_signals?.length ?? 0
+      const negCount = exp.negative_risks?.length ?? 0
+      const infCount = insights.inferences?.length ?? 0
+      const base = Math.min(10, Math.max(1, Math.round(score100 / 10)))
+      return [
+        { subject: '시장성', score: Math.min(10, Math.max(1, base + (posCount > 0 ? 1 : 0))), reason: exp.positive_signals?.[0] ?? '—' },
+        { subject: '기술성', score: base, reason: exp.neutral_signals?.[0] ?? '—' },
+        { subject: '반응성', score: Math.min(10, Math.max(1, base - (negCount > 0 ? 1 : 0))), reason: exp.negative_risks?.[0] ?? '—' },
+        { subject: '규제/환경', score: base, reason: insights.hypotheses?.[0] ?? '—' },
+        { subject: '경쟁력', score: Math.min(10, Math.max(1, base + (infCount > 0 ? 1 : 0))), reason: insights.inferences?.[0] ?? '—' },
+      ]
+    })(),
     strategicSummary: {
       summary: insights.inferences?.join(' ').slice(0, 500) ?? '',
       opportunity: exp.positive_signals?.join(' ').slice(0, 300) ?? '—',
@@ -139,18 +146,24 @@ function legacyToConsensus(o: Record<string, unknown>): Consensus {
     : typeof action_item === 'string' && action_item !== '—'
       ? [action_item.trim()].filter(Boolean)
       : []
+  const isFallback = summary === '분석 불가. 데이터가 부족합니다.'
   return {
     marketNews: [],
     painPoints: [],
     competitorTrends: '',
     sentiment: { score: sentimentScore, trend: 'stable', ratio: { positive: 0, neutral: 0, negative: 0 } },
-    impactAnalysis: [
-      { subject: '시장성', score: 5, reason: '—' },
-      { subject: '기술성', score: 5, reason: '—' },
-      { subject: '반응성', score: 5, reason: '—' },
-      { subject: '규제/환경', score: 5, reason: '—' },
-      { subject: '경쟁력', score: 5, reason: '—' },
-    ],
+    impactAnalysis: isFallback
+      ? [] /* No fake data when parse failed */
+      : (() => {
+          const s = Math.min(10, Math.max(1, Math.round((sentimentScore + 100) / 20)))
+          return [
+            { subject: '시장성', score: s, reason: '—' },
+            { subject: '기술성', score: s, reason: '—' },
+            { subject: '반응성', score: s, reason: '—' },
+            { subject: '규제/환경', score: s, reason: '—' },
+            { subject: '경쟁력', score: s, reason: '—' },
+          ]
+        })(),
     strategicSummary: {
       summary,
       opportunity:
@@ -214,7 +227,7 @@ export function normalizeConsensus(raw: unknown): Consensus | null {
             ? (sent.ratio as { positive?: number; neutral?: number; negative?: number })
             : undefined,
       },
-      impactAnalysis: impact.length >= 5 ? impact : (FALLBACK_CONSENSUS.impactAnalysis ?? []),
+      impactAnalysis: impact.length > 0 ? impact : (FALLBACK_CONSENSUS.impactAnalysis ?? []),
       strategicSummary: {
         summary: typeof ss.summary === 'string' ? ss.summary.trim().slice(0, 500) : '—',
         opportunity: typeof ss.opportunity === 'string' ? ss.opportunity.trim().slice(0, 300) : '—',

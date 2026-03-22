@@ -173,22 +173,29 @@ export type StructuredAnalysisFields = {
   }
 }
 
-const DEFAULT_CHART_SENTIMENT: ChartSentiment = { positive: 65, neutral: 20, negative: 15 }
-const DEFAULT_IMPACT: ChartImpactItem[] = [
-  { subject: '경제', score: 5 },
-  { subject: '사회', score: 5 },
-  { subject: '기술', score: 5 },
-  { subject: '정치', score: 5 },
-  { subject: '환경', score: 5 },
-]
+/** Derive sentiment from numeric score when no chart data. Data-driven: score = positive bias. */
+function sentimentFromScore(score: number): ChartSentiment {
+  const s = Math.min(100, Math.max(0, score))
+  return {
+    positive: s,
+    neutral: 0,
+    negative: Math.max(0, 100 - s),
+  }
+}
 
-/** Normalize to 0–100 and scale so positive+neutral+negative = 100. */
-function normalizeChartSentiment(sd: { positive?: number; neutral?: number; negative?: number } | undefined): ChartSentiment {
-  const positive = Math.min(100, Math.max(0, typeof sd?.positive === 'number' ? sd.positive : 65))
-  const neutral = Math.min(100, Math.max(0, typeof sd?.neutral === 'number' ? sd.neutral : 20))
-  const negative = Math.min(100, Math.max(0, typeof sd?.negative === 'number' ? sd.negative : 15))
+/** Normalize to 0–100 and scale so positive+neutral+negative = 100. Uses fallbackSentiment when sd is missing. */
+function normalizeChartSentiment(
+  sd: { positive?: number; neutral?: number; negative?: number } | undefined,
+  fallbackSentiment?: number
+): ChartSentiment {
+  const hasSd = sd && (typeof sd.positive === 'number' || typeof sd.neutral === 'number' || typeof sd.negative === 'number')
+  if (!hasSd && typeof fallbackSentiment === 'number') return sentimentFromScore(fallbackSentiment)
+  const positive = Math.min(100, Math.max(0, typeof sd?.positive === 'number' ? sd.positive : 0))
+  const neutral = Math.min(100, Math.max(0, typeof sd?.neutral === 'number' ? sd.neutral : 0))
+  const negative = Math.min(100, Math.max(0, typeof sd?.negative === 'number' ? sd.negative : 0))
   const sum = positive + neutral + negative
-  if (sum <= 0) return DEFAULT_CHART_SENTIMENT
+  if (sum <= 0 && typeof fallbackSentiment === 'number') return sentimentFromScore(fallbackSentiment)
+  if (sum <= 0) return sentimentFromScore(50)
   return {
     positive: Math.round((positive / sum) * 100),
     neutral: Math.round((neutral / sum) * 100),
@@ -196,14 +203,19 @@ function normalizeChartSentiment(sd: { positive?: number; neutral?: number; nega
   }
 }
 
-/** Keep only valid subject+score; clamp score 0–10; max 8 items; fallback to DEFAULT_IMPACT if empty. */
-function normalizeChartImpact(raw: Array<{ subject?: string; score?: number }> | undefined): ChartImpactItem[] {
+/** Keep only valid subject+score; clamp score 0–10; max 8 items. When empty, derive from sentiment (data-driven). */
+function normalizeChartImpact(
+  raw: Array<{ subject?: string; score?: number }> | undefined,
+  fallbackSentiment?: number
+): ChartImpactItem[] {
   const list = Array.isArray(raw) ? raw : []
   const impactList = list
     .filter((i): i is { subject: string; score: number } => typeof i?.subject === 'string' && typeof i?.score === 'number')
     .map((i) => ({ subject: i.subject, score: Math.min(10, Math.max(0, i.score)) }))
     .slice(0, 8)
-  return impactList.length > 0 ? impactList : DEFAULT_IMPACT
+  if (impactList.length > 0) return impactList
+  const s = Math.min(100, Math.max(0, fallbackSentiment ?? 50))
+  return [{ subject: '시장 온도', score: Math.min(10, Math.max(1, Math.round(s / 10))) }]
 }
 
 function isPmAnalysisOutput(o: unknown): o is PMAnalysisOutput {
@@ -300,8 +312,8 @@ export function parseInitialResearchResponse(
 
   const sentiment =
     typeof legacy.sentiment === 'number' ? Math.min(100, Math.max(0, legacy.sentiment)) : 0
-  const chartSentiment = normalizeChartSentiment(legacy.chartData?.sentiment)
-  const chartImpact = normalizeChartImpact(legacy.chartData?.impact)
+  const chartSentiment = normalizeChartSentiment(legacy.chartData?.sentiment, sentiment)
+  const chartImpact = normalizeChartImpact(legacy.chartData?.impact, sentiment)
   const chartData: ChartData = { sentiment: chartSentiment, impact: chartImpact }
 
   const articleSummaries = Array.isArray(legacy.articleSummaries)

@@ -5,7 +5,8 @@
  * This file will be removed once all API routes migrate to the new streaming architecture.
  */
 import { parseAiJsonOr } from '@/lib/ai/safe-json-parse'
-import type { InitialResearchSummary, ChartData, StructuredAnalysisFields } from '@/lib/research-parser'
+import { buildChartDataFromAnalysis } from '@/lib/ai/chart-data-utils'
+import type { InitialResearchSummary, StructuredAnalysisFields } from '@/lib/research-parser'
 import { sanitizeDeep } from '@/lib/text-sanitize'
 
 export type Pass1Output = {
@@ -34,20 +35,7 @@ export function parsePass2Response(text: string): Pass2Output | null {
   return p
 }
 
-function defaultChartData(): ChartData {
-  return {
-    sentiment: { positive: 65, neutral: 20, negative: 15 },
-    impact: [
-      { subject: '경제', score: 5 },
-      { subject: '사회', score: 5 },
-      { subject: '기술', score: 5 },
-      { subject: '정치', score: 5 },
-      { subject: '환경', score: 5 },
-    ],
-  }
-}
-
-/** Build InitialResearchSummary from pass1 only (partial). */
+/** Build InitialResearchSummary from pass1 only (partial). Chart from temperature only (no pos/neu/neg in pass1). */
 export function pass1ToSummary(p1: Pass1Output, articleSummaries: string[] = []): InitialResearchSummary {
   const marketNews = p1.insights.slice(0, 5)
   const keyConclusions = p1.insights.slice(0, 5)
@@ -57,7 +45,7 @@ export function pass1ToSummary(p1: Pass1Output, articleSummaries: string[] = [])
     competitorTrends: '',
     sentiment: p1.temperature,
     publicReactionTrends: p1.summary,
-    chartData: defaultChartData(),
+    chartData: buildChartDataFromAnalysis(0, 0, 0, p1.temperature),
     articleSummaries,
     keyConclusions,
   }
@@ -95,7 +83,7 @@ export function mergePass1Pass2(
     competitorTrends,
     sentiment: p1.temperature,
     publicReactionTrends,
-    chartData: defaultChartData(),
+    chartData: buildChartDataFromAnalysis(pos.length, neu.length, neg.length, p1.temperature),
     articleSummaries: [],
     keyConclusions,
   }

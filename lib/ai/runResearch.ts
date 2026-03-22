@@ -30,6 +30,7 @@ import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep, getExponentialDelayMs } from './retry-with-backoff'
 import { computeOpportunityScore } from './opportunity-score-formula'
+import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { hasNonKoreanContent, ensureKoreanText } from '@/lib/ai/language-validate'
 
@@ -261,7 +262,7 @@ type CompetitionTaskResult = {
   primaryProviderError?: string
 }
 
-/** Run trend analysis (no yield; for parallel execution). */
+/** Run trend analysis (no yield; for parallel execution). Requires real data - no AI call when data empty. */
 async function runTrendTask(
   geminiKey: string,
   groqKey: string | null | undefined,
@@ -270,7 +271,14 @@ async function runTrendTask(
   primaryProvider: AIPrimaryModel,
   webContext?: string
 ): Promise<TrendTaskResult> {
+  const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
+  if (!hasData) {
+    throw new Error('트렌드 분석에 필요한 데이터가 없습니다. 뉴스·웹 검색 결과를 확인해 주세요.')
+  }
   const prompt = buildTaskTrendsPrompt(keyword, articles, webContext)
+  if (!prompt.trim()) {
+    throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
+  }
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -318,13 +326,21 @@ async function runTrendTask(
   if (usedGemini) await trackUsage('gemini')
   const fallbackTrend = {
     market_score: 50 as number,
-    summary: '데이터를 불러오지 못했습니다.',
+    summary: '',
     positive_signals: [] as string[],
     neutral_signals: [] as string[],
   }
-  const parsed = parseAiJson<
+  const parseResult = safeParseAiJson<
     { market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }
-  >(typeof text === 'string' ? text : '', fallbackTrend, 'trend_analysis')
+  >(typeof text === 'string' ? text : '', {
+    fallback: fallbackTrend,
+    logFailures: true,
+    context: 'trend_analysis',
+  })
+  if (!parseResult.ok) {
+    throw new Error('트렌드 분석 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
+  }
+  const parsed = parseResult.data
   const trendData = {
     summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
     market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
@@ -384,6 +400,16 @@ Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
   }
 }
 
+/** Non-competitor patterns: magazines, blogs, news media – filter these out from competitive_landscape */
+const NON_COMPETITOR_PATTERNS = /\b(magazine|mag|blog|뉴스|매거진|블로그|미디어|daily|times|post|journal|review|techcrunch|vogue|elle|forbes|medium\.com|substack|언론|매체)\b/i
+
+function isLikelyNonCompetitor(entry: { name?: string; positioning?: string }): boolean {
+  const name = (entry.name ?? '').trim()
+  const positioning = (entry.positioning ?? '').trim()
+  const combined = `${name} ${positioning}`.toLowerCase()
+  return NON_COMPETITOR_PATTERNS.test(combined)
+}
+
 /** Run competition analysis from articles (no yield; for parallel execution with trend). */
 async function runCompetitionTask(
   geminiKey: string,
@@ -391,9 +417,21 @@ async function runCompetitionTask(
   keyword: string,
   articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
-  webContext?: string
+  webContext?: string,
+  competitorWebContext?: string
 ): Promise<CompetitionTaskResult> {
-  const prompt = buildTaskCompetitionPromptFromNews(keyword, articles, webContext)
+  const hasData =
+    (competitorWebContext?.trim().length ?? 0) > 0 ||
+    (webContext?.trim().length ?? 0) > 0 ||
+    articles.length > 0
+  if (!hasData) {
+    return {
+      competitionData: { competitive_landscape: [], market_structure: undefined },
+      usedFallback: false,
+    }
+  }
+
+  const prompt = buildTaskCompetitionPromptFromNews(keyword, articles, webContext, competitorWebContext)
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -442,7 +480,7 @@ async function runCompetitionTask(
     competitive_landscape: [] as Array<{ name?: string; positioning?: string }>,
     market_structure: undefined as { summary?: string } | undefined,
   }
-  const parsed = parseAiJson<{
+  const compParseResult = safeParseAiJson<{
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
@@ -454,10 +492,19 @@ async function runCompetitionTask(
       weakness?: string
     }>
     market_structure?: { summary?: string }
-  }>(typeof text === 'string' ? text : '', fallbackCompetition, 'competition_analysis')
+  }>(typeof text === 'string' ? text : '', {
+    fallback: fallbackCompetition,
+    logFailures: true,
+    context: 'competition_analysis',
+  })
+  if (!compParseResult.ok) {
+    throw new Error('경쟁사 분석 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
+  }
+  const parsed = compParseResult.data
   const landscape = Array.isArray(parsed?.competitive_landscape)
     ? parsed.competitive_landscape
         .filter((c): c is NonNullable<typeof parsed.competitive_landscape>[number] => typeof c?.name === 'string')
+        .filter((c) => !isLikelyNonCompetitor(c))
         .slice(0, 10)
         .map((c) => ({
           name: String(c.name),
@@ -577,6 +624,9 @@ async function runInsightExtractionTask(
   fallbackContext: { trendSignals: string[]; marketScore: number }
 ): Promise<{ data: InsightExtractionResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary)
+  if (!prompt?.trim()) {
+    throw new Error('인사이트 추출에 필요한 데이터가 없습니다. 트렌드·경쟁 분석 결과를 확인해 주세요.')
+  }
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -675,6 +725,9 @@ async function runStrategicRecommendationTask(
   primaryProvider: AIPrimaryModel
 ): Promise<{ data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildStrategicRecommendationPrompt(keyword, marketOverview, competitionSummary, extractedInsights)
+  if (!prompt?.trim()) {
+    throw new Error('전략 제안에 필요한 데이터가 없습니다. 시장 개요·경쟁 분석 결과를 확인해 주세요.')
+  }
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -779,6 +832,9 @@ async function runPMActionPlanTask(
   primaryProviderError?: string
 }> {
   const prompt = buildPMActionPlanPrompt(keyword, strategySummary, opportunitiesSummary, risksSummary)
+  if (!prompt?.trim()) {
+    throw new Error('PM 액션 플랜에 필요한 데이터가 없습니다. 전략·기회·리스크 데이터를 확인해 주세요.')
+  }
   const tryGemini = () =>
     generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
@@ -1010,6 +1066,9 @@ async function runStrategyEvaluationTask(
     competitionSummary,
     executionData.product_actions.map((a) => a.action)
   )
+  if (!prompt?.trim()) {
+    throw new Error('전략 평가에 필요한 데이터가 없습니다.')
+  }
   let text!: string
   const tryGemini = () =>
     generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 450, model: GEMINI_MODEL, isRetryable: () => false })
@@ -1025,8 +1084,8 @@ async function runStrategyEvaluationTask(
     } else {
       text = (await tryGemini()) ?? ''
     }
-  } catch {
-    return { market_attractiveness: 5, competition_risk: 5, execution_difficulty: 5, growth_potential: 5 }
+  } catch (err) {
+    throw new Error('전략 평가 중 오류가 발생했습니다. ' + (err instanceof Error ? err.message : String(err)))
   }
   const fallbackEval: StrategyEvaluationResult = {
     market_attractiveness: 5,
@@ -1034,11 +1093,14 @@ async function runStrategyEvaluationTask(
     execution_difficulty: 5,
     growth_potential: 5,
   }
-  const parsed = parseAiJson<StrategyEvaluationResult>(
+  const evalParseResult = safeParseAiJson<StrategyEvaluationResult>(
     typeof text === 'string' ? text : '',
-    fallbackEval,
-    'strategy_evaluation'
+    { fallback: fallbackEval, logFailures: true, context: 'strategy_evaluation' }
   )
+  if (!evalParseResult.ok) {
+    throw new Error('전략 평가 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
+  }
+  const parsed = evalParseResult.data
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : undefined)
   return {
     market_attractiveness: clampScore(parsed.market_attractiveness),
@@ -1229,7 +1291,7 @@ function buildStructuredFromStrategic(
     competitorTrends: competitorSummary || marketStructureSummary,
     sentiment: score,
     publicReactionTrends: [...pos, ...neu, ...neg].join('. ').slice(0, 500),
-    chartData: defaultChartData(),
+    chartData: buildChartDataFromAnalysis(pos.length, neu.length, neg.length, score),
     articleSummaries: [],
     keyConclusions: allActions.slice(0, 5).map((a) => a.title),
   }
@@ -1266,19 +1328,6 @@ const FALLBACK_PASS1: Pass1Result = {
   summary: '분석 중 일부 데이터를 처리하지 못했습니다. 다시 시도해 주세요.',
   temperature: 50,
   insights: ['데이터 수집 완료', '분석 진행 중'],
-}
-
-function defaultChartData(): ChartData {
-  return {
-    sentiment: { positive: 65, neutral: 20, negative: 15 },
-    impact: [
-      { subject: '경제', score: 5 },
-      { subject: '사회', score: 5 },
-      { subject: '기술', score: 5 },
-      { subject: '정치', score: 5 },
-      { subject: '환경', score: 5 },
-    ],
-  }
 }
 
 function buildStructuredFields(
@@ -1321,7 +1370,7 @@ function buildStructuredFields(
     competitorTrends,
     sentiment: p1.temperature,
     publicReactionTrends,
-    chartData: defaultChartData(),
+    chartData: buildChartDataFromAnalysis(pos.length, neu.length, neg.length, p1.temperature),
     articleSummaries: [],
     keyConclusions,
   }
@@ -1624,6 +1673,22 @@ export async function* runResearch(
     return
   }
 
+  // Competitor-specific web search: "[keyword] competitors" / "[keyword] market" for real business data
+  let competitorWebContext = ''
+  try {
+    const compQueries = [`${keyword} competitors`, `${keyword} market leaders`, `${keyword} platforms`]
+    const compResults = await Promise.all(
+      compQueries.slice(0, 2).map((q) => searchWeb(q, { num: 5 }))
+    )
+    const merged = compResults.flat().slice(0, 12)
+    if (merged.length > 0) {
+      competitorWebContext = formatWebContext(merged, 12)
+      log('competition_analysis', 'competitor_search_done', { resultsCount: merged.length })
+    }
+  } catch (err) {
+    console.warn('[AI Timeline] competitor web search failed (continuing without)', { keyword, err })
+  }
+
   // Layer 2+3: Parallel Analysis - Trend + Competition (both use keyword + articles)
   log('trend_analysis', 'running (parallel)')
   log('competition_analysis', 'running (parallel)')
@@ -1634,7 +1699,7 @@ export async function* runResearch(
 
   const [trendSettled, compSettled] = await Promise.allSettled([
     runTrendTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'market'), webContext),
-    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext),
+    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, resolveAIForStep(effectiveStepSettings, 'competitor'), webContext, competitorWebContext || undefined),
   ])
 
   if (trendSettled.status === 'rejected') {
@@ -1948,13 +2013,29 @@ export async function* runResearch(
     ...executionData.go_to_market_steps.slice(0, 2),
   ].filter(Boolean)
 
+  const opportunityScoreData = computeOpportunityScore({
+    market_score: trendData.market_score,
+    positive_signals_count: pos.length,
+    neutral_signals_count: neu.length,
+    competitor_count: competitionData.competitive_landscape.length,
+    opportunities_count: strategyData.opportunities.length,
+    risks_count: strategyData.risks.length,
+    product_actions_count: executionData.product_actions.length,
+  })
+
   const fullSummary: InitialResearchSummary = {
     marketNews: pos.slice(0, 5),
     painPoints: neg.slice(0, 5),
     competitorTrends: competitionSummary,
     sentiment: trendData.market_score,
     publicReactionTrends: [...pos, ...neu, ...neg].join('. ').slice(0, 500),
-    chartData: defaultChartData(),
+    chartData: buildChartDataFromAnalysis(
+      pos.length,
+      neu.length,
+      neg.length,
+      trendData.market_score,
+      opportunityScoreData.breakdown
+    ),
     articleSummaries: [],
     keyConclusions: keyConclusions.slice(0, 5),
   }
@@ -2071,16 +2152,6 @@ export async function* runResearch(
   yield { type: 'post_processing', stepId: 'key_metrics' }
   yield { type: 'pass2', structured }
 
-  // Opportunity Score - deterministic formula (no LLM call)
-  const opportunityScoreData = computeOpportunityScore({
-    market_score: trendData.market_score,
-    positive_signals_count: trendData.positive_signals.length,
-    neutral_signals_count: trendData.neutral_signals.length,
-    competitor_count: competitionData.competitive_landscape.length,
-    opportunities_count: strategyData.opportunities.length,
-    risks_count: strategyData.risks.length,
-    product_actions_count: executionData.product_actions.length,
-  })
   structured.opportunity_score = opportunityScoreData.opportunity_score
   structured.opportunity_score_breakdown = opportunityScoreData.breakdown
   structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning

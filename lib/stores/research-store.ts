@@ -1441,6 +1441,9 @@ export const useResearchStore = create<ResearchStore>()(
         }
         const state = get()
         const isSameJob = state.activeJobId === jobId && (state.keyword?.trim() ?? '') === (job.keyword?.trim() ?? '')
+        const isSameKeyword = (state.keyword?.trim() ?? '') === (job.keyword?.trim() ?? '')
+        const haveCompletedResult = !!(state.result?.reportId && (state.analysisStatus === 'completed' || state.status === 'done'))
+        const preserveResult = isSameKeyword && haveCompletedResult
         const status = job.status === 'succeeded' ? 'done' : job.status === 'failed' || job.status === 'cancelled' ? 'error' : 'loading'
         const analysisStatus = jobStatusToTaskStatus(job.status)
         set({
@@ -1449,7 +1452,7 @@ export const useResearchStore = create<ResearchStore>()(
           status,
           analysisStatus,
           error: job.error ?? null,
-          ...(isSameJob ? {} : { result: null, newsList: [], summarySection: null, marketTemperatureSection: null, recommendedActionsSection: null, insightsSection: null }),
+          ...(isSameJob || preserveResult ? {} : { result: null, newsList: [], summarySection: null, marketTemperatureSection: null, recommendedActionsSection: null, insightsSection: null }),
         })
         if (job.status === 'succeeded') {
           await get().loadFromHistory(job.keyword, job.country_code)
