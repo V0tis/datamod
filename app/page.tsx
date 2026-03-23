@@ -425,11 +425,6 @@ function RinAISearchInner() {
                       disabled={showAnalysisUI}
                       className="border-0 bg-transparent pl-0 pr-28 h-full py-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-0"
                     />
-                    {query.length > 0 && !showAnalysisUI && (
-                      <button type="button" onClick={() => setQuery('')} className="absolute right-24 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors" aria-label="검색어 지우기">
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
                     <div className="absolute right-2 top-1/2 -translate-y-1/2">
                       {(searching || isAnalyzingNow()) ? (
                         <Button type="button" variant="destructive" onClick={handleAbort} size="sm" className="h-9 px-4 text-sm font-medium rounded-lg">

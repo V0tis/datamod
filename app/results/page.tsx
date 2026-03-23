@@ -451,7 +451,12 @@ function ResultsContent() {
       })
   }, [keyword, storeKeyword, newsDays, countryFromUrl])
 
-  const loading = canonicalStatus === 'queued' || canonicalStatus === 'analyzing' || polledStatus === 'running'
+  /** 스토어 `status === 'loading'` 포함: canonical이 한 틱 늦을 때도 분석 중으로 간주 */
+  const loading =
+    canonicalStatus === 'queued' ||
+    canonicalStatus === 'analyzing' ||
+    polledStatus === 'running' ||
+    status === 'loading'
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   const showPolledError = polledStatus === 'failed'
   const hasStepFailure = (analysisTasks ?? []).some((t) => t.status === 'failed')
@@ -530,6 +535,16 @@ function ResultsContent() {
       : (loading && !needsRunAction
           ? { key_metrics: { ...DEFAULT_KEY_METRICS_LOADING, opportunity_score: undefined } } as ResearchResponse
           : null)
+
+  /** Hero·타임라인·네비: `loading` 외에도 스트리밍·완료 상태만 있어도 표시 (canonical과 스토어 불일치 대비) */
+  const showAnalysisShell =
+    displayResult != null ||
+    effectiveDisplayResult != null ||
+    loading ||
+    (analysisTasks?.length ?? 0) > 0 ||
+    streamingState.status === 'running' ||
+    streamingState.status === 'streaming' ||
+    streamingState.status === 'completed'
 
   /** reportId 변경 시 insight 초기화 */
   useEffect(() => {
@@ -1107,14 +1122,14 @@ function ResultsContent() {
     return (
       <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
         {/* 좌측 섹션 네비 – 분석 중/결과 있을 때 표시 (콘텐츠와 동일 조건) */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {showAnalysisShell && !needsRunAction && (
           <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-card/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden shadow-sm">
             <ResultSectionNav variant="sidebar" mode="core" progress={navProgress} />
           </aside>
         )}
         <div className={cn(
           'flex min-w-0 max-w-[1920px] mx-auto',
-          (displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && 'lg:pl-[208px]'
+          showAnalysisShell && !needsRunAction && 'lg:pl-[208px]'
         )}>
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
@@ -1125,7 +1140,7 @@ function ResultsContent() {
           </div>
         )}
         {/* 1. Result Page Hero – single control area (PDF, Save, Retry) */}
-        {(effectiveDisplayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && (
+        {showAnalysisShell && !needsRunAction && (
           <ResultPageHero
             title={heroTitle}
             analysisMeta={
@@ -1534,7 +1549,7 @@ function ResultsContent() {
 
 
         {/* 다음 탐색: 같은 키워드로 추가 질문 + 관련 시장 아이디어 + 다른 시장 분석하기 */}
-        {(displayResult != null || loading || (analysisTasks?.length ?? 0) > 0) && !needsRunAction && currentKeyword && (
+        {showAnalysisShell && !needsRunAction && currentKeyword && (
           <ResultSectionErrorBoundary sectionName="next-exploration">
           <NextExplorationSection
             followUp={displayResult ? {

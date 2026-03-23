@@ -77,7 +77,8 @@ export function ResultTimelineSection({
     polledStatus ||
     streamingState.status !== 'idle' ||
     displayResult != null ||
-    streamDone
+    streamDone ||
+    loading
   if (!show) return null
 
   return (
