@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorToastProvider } from "@/components/error-toast-provider";
 import { ApiKeyValidationProvider } from "@/components/api-key-validation-provider";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Rin-AI",
@@ -39,6 +40,7 @@ export default function RootLayout({
             </RootErrorBoundary>
           </AuthProvider>
         </ThemeProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
