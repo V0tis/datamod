@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api/require-auth'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 /** Aggregated per-keyword for dashboard (global analysis data). */
 export type DashboardKeywordRow = {
@@ -23,14 +22,15 @@ const TOP_N = 5
  * - High opportunity: top 5 by opportunity_score DESC
  * - High risk: top 5 by risk_score DESC (from strategy_evaluation.competition_risk, scaled 0-100)
  * - analysis_count: number of analyses per keyword
- * Uses admin client to read all research_history (no RLS).
+ * Uses 로그인 세션 Supabase 클라이언트. RLS: research_history는 인증 사용자 전체 조회 가능(033).
+ * 서비스 롤 불필요 — Vercel에 SUPABASE_SERVICE_ROLE_KEY 없어도 동작.
  */
 export async function GET() {
   try {
     const auth = await requireAuth({ body: { highOpportunity: [], highRisk: [] } })
     if ('response' in auth) return auth.response
 
-    const supabase = createAdminClient()
+    const { supabase } = auth
     const { data: rows, error } = await supabase
       .from('research_history')
       .select('keyword, country_code, key_metrics, updated_at')

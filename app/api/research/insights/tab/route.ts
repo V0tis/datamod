@@ -324,13 +324,13 @@ export async function POST(req: Request) {
 
   if ((provider === 'all' || provider === 'groq') && !groqKey) {
     return NextResponse.json(
-      { error: 'Groq API 키가 설정되지 않았습니다. GROQ_API_KEY를 설정해 주세요.' },
+      { error: 'Groq API 키가 없습니다. 설정 → API KEY에서 Groq 키를 저장해 주세요.' },
       { status: 400 }
     )
   }
   if ((provider === 'all' || provider === 'gemini') && !geminiKey) {
     return NextResponse.json(
-      { error: 'Gemini API 키가 설정되지 않았습니다. GOOGLE_GENAI_API_KEY를 설정해 주세요.' },
+      { error: 'Gemini API 키가 없습니다. 설정 → API KEY에서 Gemini 키를 저장해 주세요.' },
       { status: 400 }
     )
   }

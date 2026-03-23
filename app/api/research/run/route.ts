@@ -112,27 +112,32 @@ export async function POST(req: Request) {
     const primaryProvider = bodyPrimaryModel ?? stepAISettings.ai_primary_model
     if (bodyPrimaryModel) stepAISettings.ai_primary_model = bodyPrimaryModel
     const { gemini, canSearch } = geminiResult
+    const hasGemini = !!(gemini && gemini.length > 0)
+    const hasGroq = !!(groqKey && groqKey.length > 0)
 
     logger.info('AI analysis: provider selection', {
       userId: user.id.slice(0, 8) + '...',
       primaryProvider,
       canSearch,
-      hasGemini: !!gemini && gemini.length > 0,
-      hasGroq: !!groqKey && groqKey.length > 0,
+      hasGemini,
+      hasGroq,
       runtime: 'nodejs',
     })
 
-    if (!canSearch || !gemini) {
-      return NextResponse.json(
-        { error: '설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
-        { status: 400 }
-      )
-    }
-    if (primaryProvider === 'groq' && !groqKey) {
-      return NextResponse.json(
-        { error: 'AI 우선 분석을 Groq로 설정한 경우 Groq API 키가 필요합니다.' },
-        { status: 400 }
-      )
+    if (primaryProvider === 'groq') {
+      if (!hasGroq) {
+        return NextResponse.json(
+          { error: 'AI 우선 분석을 Groq로 설정한 경우 Groq API 키(설정 또는 서버 환경 변수)가 필요합니다.' },
+          { status: 400 }
+        )
+      }
+    } else {
+      if (!hasGemini || !canSearch) {
+        return NextResponse.json(
+          { error: '설정에서 Gemini API 키를 등록한 뒤 분석을 사용할 수 있습니다.' },
+          { status: 400 }
+        )
+      }
     }
 
     const encoder = new TextEncoder()
@@ -177,6 +182,7 @@ export async function POST(req: Request) {
 
         try {
           const generator = runResearch({
+            supabase,
             keyword,
             countryCode,
             userId: user.id,

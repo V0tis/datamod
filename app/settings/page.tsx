@@ -15,7 +15,7 @@ import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, Exte
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 
-type LicenseOrigin = 'USER' | 'SYSTEM'
+type LicenseOrigin = 'USER' | 'NONE'
 
 type StepAIModels = {
   ai_market_model: string | null

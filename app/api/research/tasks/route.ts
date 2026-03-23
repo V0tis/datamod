@@ -5,7 +5,6 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 const STEP_ORDER = [
   'signal_layer',
@@ -45,8 +44,7 @@ export async function GET(req: Request) {
       console.log('[research/tasks] GET 폴링', { analysisId: analysisId.slice(0, 50) + '...' })
     }
 
-    const admin = createAdminClient()
-    const { data: rows, error } = await admin
+    const { data: rows, error } = await supabase
       .from('analysis_tasks')
       .select('step_name, status, output_data, error_message, started_at, completed_at, provider, fallback_used, primary_provider_error')
       .eq('analysis_id', analysisId)

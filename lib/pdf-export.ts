@@ -28,10 +28,13 @@ function buildPdfPayload(
       weakness?: string
     }>
   } | undefined
-  const executionOutput = taskData?.execution_planning as {
+  const executionOutput = taskData?.execution_layer as {
     product_idea?: string
     target_customer?: string
     monetization?: string
+    product_actions?: Array<{ action?: string; reasoning?: string; priority?: string }>
+    pm_action_plan?: Array<{ action_title?: string; description?: string; priority?: string }>
+    next_actions_pm?: Array<{ action?: string; why?: string; priority?: string }>
   } | undefined
 
   const competitors = Array.isArray(competitionOutput?.competitive_landscape)
@@ -42,22 +45,38 @@ function buildPdfPayload(
 
   const pmPlan = km?.pm_action_plan ?? []
   const pmActions = km?.pm_actions?.recommended_actions ?? []
-  const actionPlan = pmPlan.length > 0
-    ? pmPlan.map((a) => ({
-        action_title: a.action_title,
-        description: a.description ?? a.expected_outcome,
-        priority: a.priority,
-      }))
-    : pmActions.map((a) => ({
-        title: typeof a === 'string' ? a : (a as { title?: string }).title,
-        reasoning: typeof a === 'object' && a && typeof (a as { reasoning?: string }).reasoning === 'string'
-          ? (a as { reasoning: string }).reasoning
-          : undefined,
-        priority:
-          typeof a === 'object' && a
-            ? ((a as { urgency_level?: string }).urgency_level as string | undefined)
-            : undefined,
-      }))
+  const productActions = executionOutput?.product_actions ?? []
+  const nextActionsPm = executionOutput?.next_actions_pm ?? []
+  const actionPlan =
+    pmPlan.length > 0
+      ? pmPlan.map((a) => ({
+          action_title: a.action_title,
+          description: a.description ?? a.expected_outcome,
+          priority: a.priority,
+        }))
+      : pmActions.length > 0
+        ? pmActions.map((a) => ({
+            title: typeof a === 'string' ? a : (a as { title?: string }).title,
+            reasoning: typeof a === 'object' && a && typeof (a as { reasoning?: string }).reasoning === 'string'
+              ? (a as { reasoning: string }).reasoning
+              : undefined,
+            priority:
+              typeof a === 'object' && a
+                ? ((a as { urgency_level?: string }).urgency_level as string | undefined)
+                : undefined,
+          }))
+        : [
+            ...productActions.map((a) => ({
+              action_title: a.action,
+              description: a.reasoning,
+              priority: a.priority,
+            })),
+            ...nextActionsPm.map((a) => ({
+              action_title: a.action,
+              description: a.why,
+              priority: a.priority,
+            })),
+          ]
 
   return {
     keyword: keyword || '시장',

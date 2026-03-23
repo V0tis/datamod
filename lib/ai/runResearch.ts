@@ -4,7 +4,7 @@
  * DB write only occurs after full analysis success.
  */
 import Parser from 'rss-parser'
-import { createAdminClient } from '@/lib/supabase/admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { BASE_MARKDOWN_PROMPT } from './base-prompt'
 import { generateText, runTabAnalysis, completeChat } from './unified-ai-service'
@@ -146,6 +146,8 @@ export type ResearchStreamEvent =
 export type AIPrimaryModel = 'gemini' | 'groq'
 
 export type RunResearchParams = {
+  /** 서버에서 만든 Supabase 클라이언트(세션). 서비스 롤 없이 RLS로 동작하려면 마이그레이션 049 필요 */
+  supabase: SupabaseClient
   keyword: string
   countryCode: string
   userId: string
@@ -1458,7 +1460,20 @@ function checkAborted(signal: AbortSignal | undefined): boolean {
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
-  const { keyword, countryCode, userId, geminiKey, groqKey, serperKey, mode: depthMode = 'standard', primaryProvider: primaryProviderParam, stepAISettings: stepSettings, signal, forceReanalyze } = params
+  const {
+    supabase,
+    keyword,
+    countryCode,
+    userId,
+    geminiKey,
+    groqKey,
+    serperKey,
+    mode: depthMode = 'standard',
+    primaryProvider: primaryProviderParam,
+    stepAISettings: stepSettings,
+    signal,
+    forceReanalyze,
+  } = params
   const webSearchOptions = (serperKey ?? '').trim() ? { apiKey: (serperKey ?? '').trim() } : {}
   const serperUsed = !!(serperKey && serperKey.trim())
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
@@ -1466,7 +1481,6 @@ export async function* runResearch(
   const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
     ? { ...stepSettings, ai_primary_model: (stepSettings.ai_primary_model === 'groq' ? 'groq' : 'gemini') }
     : { ai_primary_model: primaryProvider }
-  const supabase = createAdminClient()
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
   // Check cache first (skip when forceReanalyze = true: 사용자가 "다시 분석하기"를 누른 경우)

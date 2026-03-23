@@ -4,7 +4,7 @@
  */
 import Parser from 'rss-parser'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getGeminiKeyForRequest, getTabProviderKeys } from '@/lib/research-keys'
+import { getGeminiKeyForRequest, getTabProviderKeysForUser } from '@/lib/research-keys'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { BASE_MARKDOWN_PROMPT } from '@/lib/ai/base-prompt'
 import { generateText, runTabAnalysis } from '@/lib/ai'
@@ -312,7 +312,7 @@ export async function runAnalysisJob(jobId: string) {
     }
 
     // Creative analysis: run tab analysis in background and write to research_history.
-    const tabKeys = getTabProviderKeys()
+    const tabKeys = await getTabProviderKeysForUser(supabase, cacheKey.userId)
     const provider =
       tabKeys.groq && tabKeys.gemini
         ? 'all'

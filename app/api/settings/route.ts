@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getEffectiveLicenseKeys, getSystemGeminiKey } from '@/lib/license'
+import { getEffectiveLicenseKeys } from '@/lib/license'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,16 +37,15 @@ export async function GET() {
   const hasGeminiKey = !!(row?.gemini_api_key && row.gemini_api_key.trim().length > 0)
   const groqKey = (row as { groq_api_key?: string } | undefined)?.groq_api_key?.trim()
   const hasGroqKey = !!(groqKey && groqKey.length > 0)
+  /** DB에 저장된 키만: Gemini 우선이면 Gemini, Groq 우선이면 Groq 필요 */
+  const aiPrimary = (row as { ai_primary_model?: string } | null)?.ai_primary_model
+  const canSearchAny =
+    aiPrimary === 'groq' ? hasGroqKey : hasGeminiKey
   const serperKey = (row as { serper_api_key?: string } | undefined)?.serper_api_key?.trim()
   const hasSerperKey = !!(serperKey && serperKey.length > 0)
-  const groqOrigin = hasGroqKey ? 'USER' : (process.env.GROQ_API_KEY?.trim() ? 'SYSTEM' : null)
+  const groqOrigin = hasGroqKey ? 'USER' : null
 
-  const systemGemini = getSystemGeminiKey().length > 0
-
-  const systemGroq = !!(process.env.GROQ_API_KEY ?? '').trim()
-  const systemSerper = !!(process.env.SERPER_API_KEY ?? '').trim()
-
-  const aiPrimaryModel = (row as { ai_primary_model?: string } | null)?.ai_primary_model
+  const aiPrimaryModel = aiPrimary
   const geminiApiKey = hasGeminiKey && row?.gemini_api_key ? String(row.gemini_api_key) : ''
   const groqApiKeyValue = hasGroqKey && groqKey ? groqKey : ''
 
@@ -74,13 +73,14 @@ export async function GET() {
     geminiApiKey,
     groqApiKey: groqApiKeyValue,
     serperApiKey: hasSerperKey && serperKey ? serperKey : '',
-    hasServerGemini: systemGemini,
-    hasServerGroq: systemGroq,
-    hasServerSerper: systemSerper,
-    canSearch: effective.canSearch,
+    /** 서버 env 키 폴백 미사용 — UI 호환용 false */
+    hasServerGemini: false,
+    hasServerGroq: false,
+    hasServerSerper: false,
+    canSearch: canSearchAny,
     licenseOrigin: {
       gemini: effective.geminiOrigin,
-      groq: groqOrigin ?? (systemGroq ? 'SYSTEM' : null),
+      groq: groqOrigin,
     },
   })
   res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')

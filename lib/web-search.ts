@@ -1,7 +1,7 @@
 /**
  * Web search grounding for research pipeline.
  * Flow: user query → web search → extract top sources → feed to LLM.
- * Uses Serper API (https://serper.dev). Set SERPER_API_KEY in env for web grounding.
+ * Uses Serper API (https://serper.dev). 키는 호출 시 전달(apiKey) — 서버 env 폴백 없음.
  */
 
 export type WebSearchResult = {
@@ -13,7 +13,7 @@ export type WebSearchResult = {
 export type WebSearchOptions = {
   /** Max number of results to return (default 10) */
   num?: number
-  /** Serper API key. If not provided, uses process.env.SERPER_API_KEY */
+  /** Serper API key (필수). 설정 페이지에 저장된 키를 전달 */
   apiKey?: string
 }
 
@@ -21,14 +21,13 @@ const SERPER_ENDPOINT = 'https://google.serper.dev/search'
 
 /**
  * Run web search for the given query and return top sources.
- * apiKey: user key from settings, or process.env.SERPER_API_KEY as fallback.
- * Returns empty array if no key is available (graceful fallback).
+ * apiKey가 없으면 검색하지 않고 빈 배열 반환.
  */
 export async function searchWeb(
   query: string,
   options: WebSearchOptions = {}
 ): Promise<WebSearchResult[]> {
-  const apiKey = (options.apiKey ?? process.env.SERPER_API_KEY ?? '').trim()
+  const apiKey = (options.apiKey ?? '').trim()
   if (!apiKey) {
     return []
   }

@@ -91,10 +91,15 @@ GROQ_TAB_MODEL=llama-3.3-70b-versatile
 ```
 
 **Gemini / Groq API 키:**  
-설정 → API KEY에서 사용자별로 등록합니다. `.env`의 `GEMINI_API_KEY`, `GROQ_API_KEY`는 **비로그인/시스템 fallback**용이며, 로그인 사용자는 설정 화면 값이 우선합니다.
+로그인 후 **설정 → API KEY**에서 사용자별로 등록합니다. 서버 `.env`의 `GEMINI_API_KEY` / `GROQ_API_KEY`는 사용하지 않습니다(키 없으면 해당 기능은 설정에서 키를 넣을 때까지 동작하지 않습니다).
 
 **Vercel 배포 시:** 위 변수들을 Vercel 대시보드 → **Project → Settings → Environment Variables**에 설정하세요.  
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`는 필수입니다. 저장 후 **Redeploy** 한 번 해주면 적용됩니다.
+
+**프로덕션 동작 (서비스 롤):**  
+- `SUPABASE_SERVICE_ROLE_KEY`는 **필수 아님**. 분석 파이프라인·대시보드 추천·태스크 폴링은 **로그인 세션 + anon 키**로 동작합니다.  
+- DB에 **`049_analysis_tasks_rls_write.sql`** 마이그레이션을 적용해야 `analysis_tasks` upsert가 RLS로 성공합니다. 미적용 시 로컬/배포 모두 분석 저장 단계에서 실패할 수 있습니다.  
+- 분석·검색 등은 **설정에 저장한 키**만 사용합니다. Groq 우선이면 Groq 키, Gemini 우선이면 Gemini 키가 필요합니다.
 
 ---
 
@@ -110,6 +115,7 @@ npx supabase db push
 
 마이그레이션 파일은 `supabase/migrations/` 에 있으며, 인증·reports·RLS·usage_stats·global_trends·research_history 등이 순서대로 정의되어 있습니다.  
 - `032_research_history_drop_analysis_hf.sql`: Hugging Face 제거에 따른 `analysis_hf` 컬럼 삭제.  
+- `049_analysis_tasks_rls_write.sql`: 서비스 롤 없이 분석 파이프라인이 `analysis_tasks`에 쓰기 가능하도록 RLS 정책 추가.  
 CLI 사용이 어려우면 Supabase 대시보드 → SQL Editor에서 `001_` 부터 순서대로 실행하면 됩니다.
 
 ---
@@ -138,7 +144,7 @@ components/
   research-report-view.tsx # 리포트·뉴스 뷰
 lib/
   stores/research-store.ts # 검색·결과·쿼터 상태
-  license.ts               # API 키 결정 (Gemini), getSystemGeminiKey()
+  license.ts               # 사용자 DB 기준 Gemini 키·출처 (USER만)
   usage.ts                 # 사용량 기록 (trackUsage)
   trends-cache.ts          # 구글 트렌드 RSS 수집 (국가별 키워드·뉴스)
 ```

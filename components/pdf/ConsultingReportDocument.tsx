@@ -9,16 +9,16 @@ import {
   Font,
 } from '@react-pdf/renderer'
 
-// 한글 지원: Noto Sans KR (WOFF - 한글 깨짐 방지)
+// 한글 지원: Noto Sans KR TTF (@react-pdf는 WOFF에서 Unknown font format 에러 발생)
 Font.register({
   family: 'NotoSansKR',
   fonts: [
     {
-      src: 'https://fonts.gstatic.com/s/notosanskr/v27/PbykFmXiEBPT4ITbgNA5Cgm20HTs4JMMuA.woff',
+      src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-Regular.ttf',
       fontWeight: 400,
     },
     {
-      src: 'https://fonts.gstatic.com/s/notosanskr/v27/PbykFmXiEBPT4ITbgNA5Cgm20HTs4JMMuA.woff',
+      src: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-Bold.ttf',
       fontWeight: 700,
     },
   ],

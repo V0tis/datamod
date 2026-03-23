@@ -872,7 +872,7 @@ export const useResearchStore = create<ResearchStore>()(
           if (checkRes.ok) {
             const checkData = (await checkRes.json()) as { canSearch?: boolean }
             if (checkData.canSearch === false) {
-              toast.error('설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.')
+              toast.error('설정 → API KEY에서 필요한 키를 입력해 주세요. (Gemini 우선이면 Gemini, Groq 우선이면 Groq)')
               set({
                 status: 'error',
                 analysisStatus: 'failed',

@@ -11,8 +11,7 @@ export type ResearchKeysResult = {
 }
 
 /**
- * Resolve Gemini key for a request: user key from DB if logged in, else system env.
- * Returns empty string when no key is available.
+ * Resolve Gemini key: **사용자 DB에 저장된 키만**. 서버 env 폴백 없음.
  */
 export async function getGeminiKeyForRequest(
   supabase: SupabaseClient,
@@ -80,49 +79,41 @@ export async function getStepAISettingsForRequest(
 }
 
 /**
- * Resolve Groq key for a request: user key from DB if logged in, else system env.
+ * Resolve Groq key: **사용자 DB만**. 서버 env 폴백 없음.
  */
 export async function getGroqKeyForRequest(
   supabase: SupabaseClient,
   userId: string | undefined
 ): Promise<string> {
-  let userGroq: string | null = null
-  if (userId) {
-    const { data: row } = await supabase
-      .from('user_settings')
-      .select('groq_api_key')
-      .eq('user_id', userId)
-      .maybeSingle()
-    userGroq = (row as { groq_api_key?: string } | null)?.groq_api_key ?? null
-  }
-  const systemGroq = (process.env.GROQ_API_KEY ?? '').trim()
-  const hasUser = !!(userGroq && userGroq.trim())
-  return hasUser ? userGroq!.trim() : systemGroq
+  if (!userId) return ''
+  const { data: row } = await supabase
+    .from('user_settings')
+    .select('groq_api_key')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const userGroq = (row as { groq_api_key?: string } | null)?.groq_api_key?.trim()
+  return userGroq && userGroq.length > 0 ? userGroq : ''
 }
 
 /**
- * Resolve Serper key for web search: user key from DB if logged in, else system env.
+ * Resolve Serper key: **사용자 DB만**. 서버 env 폴백 없음.
  */
 export async function getSerperKeyForRequest(
   supabase: SupabaseClient,
   userId: string | undefined
 ): Promise<string> {
-  let userSerper: string | null = null
-  if (userId) {
-    const { data: row } = await supabase
-      .from('user_settings')
-      .select('serper_api_key')
-      .eq('user_id', userId)
-      .maybeSingle()
-    userSerper = (row as { serper_api_key?: string } | null)?.serper_api_key ?? null
-  }
-  const systemSerper = (process.env.SERPER_API_KEY ?? '').trim()
-  const hasUser = !!(userSerper && userSerper.trim())
-  return hasUser ? userSerper!.trim() : systemSerper
+  if (!userId) return ''
+  const { data: row } = await supabase
+    .from('user_settings')
+    .select('serper_api_key')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const userSerper = (row as { serper_api_key?: string } | null)?.serper_api_key?.trim()
+  return userSerper && userSerper.length > 0 ? userSerper : ''
 }
 
 /**
- * Tab insight API: prefer user keys, fallback to server env.
+ * 탭 인사이트 API: 사용자 DB 키만.
  */
 export async function getTabProviderKeysForUser(
   supabase: SupabaseClient,
@@ -132,15 +123,6 @@ export async function getTabProviderKeysForUser(
     getGroqKeyForRequest(supabase, userId),
     getGeminiKeyForRequest(supabase, userId),
   ])
-  const gemini = geminiResult.gemini || (process.env.GOOGLE_GENAI_API_KEY ?? '').trim()
-  return { groq, gemini }
-}
-
-/** @deprecated Use getTabProviderKeysForUser for user-based keys. Server env fallback. */
-export function getTabProviderKeys(): { groq: string; gemini: string } {
-  return {
-    groq: (process.env.GROQ_API_KEY ?? '').trim(),
-    gemini: (process.env.GOOGLE_GENAI_API_KEY ?? '').trim(),
-  }
+  return { groq, gemini: geminiResult.gemini }
 }
 
