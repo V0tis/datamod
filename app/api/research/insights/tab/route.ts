@@ -335,41 +335,63 @@ export async function POST(req: Request) {
     )
   }
 
-  const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
-
-  const aiCallDetail = needGroq && needGemini ? 'groq_and_gemini' : needGroq ? 'groq' : 'gemini'
-  logCacheEvent('miss', {
-    scope: CACHE_SCOPE,
-    keyword,
-    countryCode,
-    tab,
-    detail: aiCallDetail,
-  })
+  /** Creative 재분석: DB에서 Groq/Gemini creative 텍스트를 이미 채웠으면 탭 LLM 재호출 없이 Consensus만 실행 */
+  const skipTabLLM =
+    isReanalyze && tab === 'creative' && !needGroq && !needGemini
 
   let analysisResult: Awaited<ReturnType<typeof runTabAnalysis>>
-  try {
-  analysisResult = await runTabAnalysis({
-    groqKey: groqKey || null,
-    geminiKey: geminiKey || null,
-    provider,
-    systemPrompt: UNIFIED_SYSTEM_PROMPT,
-    userPrompt,
-  })
-  } catch (e) {
-    logger.error('API: tab analysis failed', {
-      route: '/api/research/insights/tab',
+
+  if (skipTabLLM) {
+    logCacheEvent('miss', {
+      scope: CACHE_SCOPE,
       keyword,
+      countryCode,
       tab,
-      error: e instanceof Error ? e.message : String(e),
+      detail: 'consensus_only_reanalyze',
     })
-    return NextResponse.json(
-      {
-        error: 'AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-        groq: null,
-        gemini: null,
-      },
-      { status: 500 }
-    )
+    analysisResult = {
+      groqText: mergedGroq,
+      geminiText: mergedGemini,
+      groqQuotaError: false,
+      geminiQuotaExceeded: false,
+      fallbackMessage: undefined,
+    }
+  } else {
+    const userPrompt = buildUserPrompt(tab, keyword, summary, newsHeadlines, logicText, creativeText)
+
+    const aiCallDetail = needGroq && needGemini ? 'groq_and_gemini' : needGroq ? 'groq' : 'gemini'
+    logCacheEvent('miss', {
+      scope: CACHE_SCOPE,
+      keyword,
+      countryCode,
+      tab,
+      detail: aiCallDetail,
+    })
+
+    try {
+      analysisResult = await runTabAnalysis({
+        groqKey: groqKey || null,
+        geminiKey: geminiKey || null,
+        provider,
+        systemPrompt: UNIFIED_SYSTEM_PROMPT,
+        userPrompt,
+      })
+    } catch (e) {
+      logger.error('API: tab analysis failed', {
+        route: '/api/research/insights/tab',
+        keyword,
+        tab,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return NextResponse.json(
+        {
+          error: 'AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+          groq: null,
+          gemini: null,
+        },
+        { status: 500 }
+      )
+    }
   }
 
   const groqText = needGroq ? analysisResult.groqText : mergedGroq
@@ -394,13 +416,22 @@ export async function POST(req: Request) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
     console.log('[AI Insight Consensus] generateConsensus', { provider: consensusModel, keyword })
-    consensus = await synthesizeConsensus({
-      apiKey: geminiKey || '',
-      geminiAnalysis: geminiInput,
-      groqAnalysis: groqInput,
-      preferredProvider: consensusModel,
-      groqKey: groqKey || undefined,
-    })
+    try {
+      consensus = await synthesizeConsensus({
+        apiKey: geminiKey || '',
+        geminiAnalysis: geminiInput,
+        groqAnalysis: groqInput,
+        preferredProvider: consensusModel,
+        groqKey: groqKey || undefined,
+      })
+    } catch (consensusErr) {
+      logger.error('API: consensus synthesis threw (unexpected)', {
+        route: '/api/research/insights/tab',
+        keyword,
+        error: consensusErr instanceof Error ? consensusErr.message : String(consensusErr),
+      })
+      consensus = FALLBACK_CONSENSUS
+    }
     if (isReanalyze) {
       console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })
     }

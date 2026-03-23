@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 
 export type AnalysisTaskStatus = 'pending' | 'running' | 'completed' | 'failed'
 
@@ -19,6 +20,8 @@ export type AnalysisTasksResponse = {
   all_completed: boolean
   any_failed: boolean
   running_step: string | null
+  /** true when DB read failed (e.g. RLS/migration); 태스크는 pending으로 채워짐 */
+  fetch_error?: boolean
 }
 
 const POLL_INTERVAL_MS = 1500
@@ -32,6 +35,7 @@ export function useAnalysisTasksPoll(
 ) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number | null>(null)
+  const fetchErrorToastShownRef = useRef(false)
 
   const stopPolling = () => {
     if (intervalRef.current) {
@@ -48,6 +52,7 @@ export function useAnalysisTasksPoll(
     }
 
     startTimeRef.current = Date.now()
+    fetchErrorToastShownRef.current = false
 
     const poll = async () => {
       try {
@@ -58,6 +63,13 @@ export function useAnalysisTasksPoll(
         const res = await fetch(`/api/research/tasks?analysis_id=${encodeURIComponent(analysisId)}`)
         if (!res.ok) return
         const data = (await res.json()) as AnalysisTasksResponse
+        if (data.fetch_error && !fetchErrorToastShownRef.current) {
+          fetchErrorToastShownRef.current = true
+          toast.error('분석 단계 상태를 불러오지 못했습니다.', {
+            description: 'Supabase에 analysis_tasks 마이그레이션(040·049) 적용 여부를 확인해 주세요.',
+            duration: 8000,
+          })
+        }
         onTasks(data)
         if (data.all_completed || data.any_failed) {
           stopPolling()

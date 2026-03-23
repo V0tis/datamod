@@ -52,11 +52,32 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.log('[research/tasks] DB 에러', error)
-      return NextResponse.json(
-        { error: '태스크 상태를 불러오지 못했습니다.' },
-        { status: 500 }
-      )
+      console.error('[research/tasks] DB 에러', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      })
+      /** 500 대신 200 + fetch_error: 콘솔 Failed to load resource 완화, 클라이언트에서 1회 토스트 가능 */
+      const tasks = STEP_ORDER.map((step) => ({
+        step_name: step,
+        status: 'pending' as const,
+        output_data: null,
+        error_message: null,
+        started_at: null,
+        completed_at: null,
+        provider: null,
+        fallback_used: false,
+        primary_provider_error: null,
+      }))
+      return NextResponse.json({
+        analysis_id: analysisId,
+        tasks,
+        all_completed: false,
+        any_failed: false,
+        running_step: null,
+        fetch_error: true,
+      })
     }
 
     const byStep = new Map(
