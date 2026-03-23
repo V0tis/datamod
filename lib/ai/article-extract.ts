@@ -4,7 +4,6 @@
  * Google News RSS URLs are decoded to actual article URLs before fetch.
  */
 import { Readability } from '@mozilla/readability'
-import { JSDOM } from 'jsdom'
 
 const MAX_ARTICLE_CHARS = 3000
 const REQUEST_DELAY_MS = 500
@@ -100,6 +99,8 @@ export async function extractArticleContent(
   try {
     const resolvedUrl = resolveArticleUrl(item.url)
     const { html, finalUrl } = await fetchWithRetry(resolvedUrl)
+    /** 동적 import: 번들러가 jsdom 서브트리를 정적으로 끌어오며 CJS/ESM 충돌 나는 것 완화 */
+    const { JSDOM } = await import('jsdom')
     const dom = new JSDOM(html, { url: finalUrl })
     const doc = dom.window.document
 
