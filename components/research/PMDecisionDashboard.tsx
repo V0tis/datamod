@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useAnalysisTasksPoll } from '@/hooks/use-analysis-tasks-poll'
+import { useAnalysisTasksPoll, type AnalysisTasksResponse } from '@/hooks/use-analysis-tasks-poll'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { AnalysisResultSections } from './AnalysisResultSections'
 import { ProductStrategyResult } from './ProductStrategyResult'
@@ -55,6 +55,22 @@ export interface PMDecisionDashboardProps {
   hideTimeline?: boolean
 }
 
+/** 폴링이 DB 반영 지연으로 pending을 주면, 스트리밍에서 이미 completed로 본 단계를 덮어쓰지 않음 */
+function mergeAnalysisTasksPreferProgress(
+  prev: PMDecisionDashboardProps['analysisTasks'] | null | undefined,
+  incoming: NonNullable<AnalysisTasksResponse['tasks']>
+): NonNullable<AnalysisTasksResponse['tasks']> {
+  if (!prev?.length) return incoming
+  const rank = (s: string) => (s === 'completed' ? 4 : s === 'failed' ? 3 : s === 'running' ? 2 : 1)
+  const byName = new Map(prev.map((t) => [t.step_name, t]))
+  return incoming.map((inc) => {
+    const p = byName.get(inc.step_name)
+    if (!p) return inc
+    if (rank(p.status) > rank(inc.status)) return { ...inc, ...p, status: p.status }
+    return inc
+  })
+}
+
 export function PMDecisionDashboard({
   keyword,
   result,
@@ -86,8 +102,10 @@ export function PMDecisionDashboard({
   const setAnalysisTasks = useResearchStore((s) => s.setAnalysisTasks)
 
   const onTasks = useCallback(
-    (data: { tasks: typeof analysisTasks }) => {
-      setAnalysisTasks(data.tasks)
+    (data: AnalysisTasksResponse) => {
+      if (data.fetch_error) return
+      const prev = useResearchStore.getState().analysisTasks
+      setAnalysisTasks(mergeAnalysisTasksPreferProgress(prev, data.tasks))
     },
     [setAnalysisTasks]
   )
@@ -99,25 +117,26 @@ export function PMDecisionDashboard({
   const analysisComplete = result != null && !isAnalyzing
   const showResultSections = (result != null || isAnalyzing || (effectiveAnalysisTasks?.length ?? 0) > 0) && Boolean(keyword?.trim())
 
+  const streamDone = streamingState.status === 'completed' && !hasError
   const timelineStep =
     polledStatus === 'running' && polledProgressStep != null
       ? Math.min(6, Math.max(0, polledProgressStep))
       : streamingState.status === 'running' || streamingState.status === 'streaming'
         ? streamingState.currentStep
-        : displayResult != null && !isAnalyzing && !hasError
+        : streamDone || (displayResult != null && !isAnalyzing && !hasError)
           ? 6
           : -1
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* 1. 타임라인 (hideTimeline이면 상단에서 렌더링) */}
-      {!hideTimeline && showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null) && (
+      {!hideTimeline && showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null || streamDone) && (
         <div id="section-timeline" className="scroll-mt-24 rounded-lg border border-border bg-card/50 p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">AI 분석 타임라인</h3>
           <StrategyEnginePipeline
             keyword={keyword}
             currentStep={timelineStep}
-            allCompleted={displayResult != null && !isAnalyzing && !hasError}
+            allCompleted={!hasError && (streamDone || (displayResult != null && !isAnalyzing))}
             streamingStepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState.stepId : undefined}
             retryMessage={'retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined}
             taskData={taskData ?? {}}

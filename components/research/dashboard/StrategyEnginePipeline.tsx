@@ -401,10 +401,21 @@ export function StrategyEnginePipeline({
     if (i === 6) {
       const riskTask = taskMap['risk_opportunity']
       if (riskTask) return riskTask.status
+      /** task 행이 아직 없어도 key_metrics가 오면 리스크/기회 단계는 완료로 */
+      if (
+        result?.key_metrics != null &&
+        typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
+      )
+        return 'completed'
       const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
     if (i === 7) {
+      if (
+        result?.key_metrics != null &&
+        typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
+      )
+        return 'completed'
       const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }

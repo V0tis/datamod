@@ -598,13 +598,14 @@ export const useResearchStore = create<ResearchStore>()(
         status: 'completed' | 'failed' | 'running',
         opts?: { outputData?: unknown; errorMessage?: string | null; provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
       ) => {
+        /** `/api/research/tasks`·runResearch와 동일 순서. insight_extraction 누락 시 병합마다 해당 단계가 사라져 타임라인이 대기로 되돌아감 */
         const STEP_ORDER = [
           'signal_layer',
           'trend_analysis',
           'competition_analysis',
+          'insight_extraction',
           'strategy_generation',
           'execution_layer',
-          'risk_opportunity',
         ] as const
         set((s) => {
           const prev = s.analysisTasks ?? []
@@ -928,6 +929,8 @@ export const useResearchStore = create<ResearchStore>()(
           const applyUpdate = get().applyStreamingUpdate
           const setStepProgress = get().setStepProgress
           const setAnalysisId = get().setAnalysisId
+          /** `done` 이벤트 수신 시 스트림 종료 후 DB에서 key_metrics·차트 등 전체 리포트 로드 */
+          let shouldHydrateFromHistoryAfterDone = false
 
           // Product Strategy Engine - 5 layers + post_processing (6)
           const stepMap: Record<string, number> = {
@@ -1100,6 +1103,7 @@ export const useResearchStore = create<ResearchStore>()(
                     serper_used: serperUsed,
                   })
                   set({ streamingState: createCompletedState(event.reportId ?? null) })
+                  shouldHydrateFromHistoryAfterDone = true
                   streamEnded = true
                   break
                 } else if (type === 'cached') {
@@ -1149,6 +1153,7 @@ export const useResearchStore = create<ResearchStore>()(
                   serper_used: serperUsed,
                 })
                 set({ streamingState: createCompletedState(event.reportId ?? null) })
+                shouldHydrateFromHistoryAfterDone = true
               } else if (event?.type === 'error') {
                 set({ streamingState: createErrorState(event.message ?? '분석 중 오류가 발생했습니다.', lastSuccessfulStep) })
                 applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
@@ -1157,6 +1162,10 @@ export const useResearchStore = create<ResearchStore>()(
               set({ streamingState: createErrorState('잘못된 응답 형식입니다.', lastSuccessfulStep) })
               get().applyStreamingUpdate({ error: '잘못된 응답 형식입니다.' })
             }
+          }
+
+          if (shouldHydrateFromHistoryAfterDone) {
+            await get().loadFromHistory(k, countryCode)
           }
         } catch (err) {
           // Handle abort separately

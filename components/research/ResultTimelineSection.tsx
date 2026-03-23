@@ -61,16 +61,23 @@ export function ResultTimelineSection({
   className,
 }: ResultTimelineSectionProps) {
   const effectiveMaxHeight = embedded ? maxHeight : (maxHeight ?? '320px')
+  /** 스트림 `done` 직후 loadFromHistory 전 한 틱 동안 displayResult가 비어도 완료 단계 유지 */
+  const streamDone = streamingState.status === 'completed' && !hasError
   const timelineStep =
     polledStatus === 'running' && polledProgressStep != null
       ? Math.min(7, Math.max(0, polledProgressStep))
       : streamingState.status === 'running' || streamingState.status === 'streaming'
         ? streamingState.currentStep
-        : displayResult != null && !loading && !hasError
+        : streamDone || (displayResult != null && !loading && !hasError)
           ? 7
           : -1
 
-  const show = polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null
+  const show =
+    polledProgressStep != null ||
+    polledStatus ||
+    streamingState.status !== 'idle' ||
+    displayResult != null ||
+    streamDone
   if (!show) return null
 
   return (
@@ -88,7 +95,7 @@ export function ResultTimelineSection({
           resultId={resultId}
           keyword={keyword}
           currentStep={timelineStep}
-          allCompleted={displayResult != null && !loading && !hasError}
+          allCompleted={!hasError && (streamDone || (displayResult != null && !loading))}
           streamingStepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState.stepId : undefined}
           currentArticleTitle={(streamingState as { currentArticleTitle?: string }).currentArticleTitle}
           retryMessage={'retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined}
