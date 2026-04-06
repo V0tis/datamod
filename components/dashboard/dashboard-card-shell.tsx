@@ -16,6 +16,8 @@ export type DashboardCardShellProps = {
   children: ReactNode
   footer?: ReactNode
   emphasis?: DashboardCardEmphasis
+  /** 액션층 등: 헤더·간격 축소 */
+  compact?: boolean
   className?: string
 }
 
@@ -35,6 +37,7 @@ export function DashboardCardShell({
   children,
   footer,
   emphasis = 'default',
+  compact = false,
   className,
 }: DashboardCardShellProps) {
   return (
@@ -47,15 +50,16 @@ export function DashboardCardShell({
         className
       )}
     >
-      <div className={cn('flex flex-col gap-6', dashboardCardPadding)}>
+      <div className={cn('flex flex-col', compact ? 'gap-4 p-4 sm:p-5' : cn('gap-6', dashboardCardPadding))}>
         {lead != null && lead !== false ? <div className="min-w-0">{lead}</div> : null}
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 flex-1 gap-3">
+        <div className={cn('flex flex-col sm:flex-row sm:items-start sm:justify-between', compact ? 'gap-2' : 'gap-4')}>
+          <div className={cn('flex min-w-0 flex-1', compact ? 'gap-2.5' : 'gap-3')}>
             {icon != null ? (
               <div
                 className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                  'flex shrink-0 items-center justify-center rounded-lg',
+                  compact ? 'h-9 w-9' : 'h-10 w-10',
                   emphasis === 'hero'
                     ? 'bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400'
                     : 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300'
@@ -65,18 +69,25 @@ export function DashboardCardShell({
                 {icon}
               </div>
             ) : null}
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <h2
                 id={titleId}
                 className={cn(
                   'font-semibold tracking-tight text-neutral-900 dark:text-zinc-50',
-                  emphasis === 'hero' ? 'text-xl sm:text-2xl' : 'text-lg'
+                  compact ? 'text-base' : emphasis === 'hero' ? 'text-xl sm:text-2xl' : 'text-lg'
                 )}
               >
                 {title}
               </h2>
               {description ? (
-                <p className="text-sm leading-snug text-slate-600 dark:text-zinc-400">{description}</p>
+                <p
+                  className={cn(
+                    'leading-snug text-slate-600 dark:text-zinc-400',
+                    compact ? 'text-xs' : 'text-sm'
+                  )}
+                >
+                  {description}
+                </p>
               ) : null}
             </div>
           </div>

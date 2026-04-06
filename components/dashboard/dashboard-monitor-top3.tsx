@@ -28,7 +28,7 @@ export function DashboardMonitorTop3({
   const riskTop = risks.slice(0, 3)
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       <MonitorBlock
         title="고기회 시장 TOP 3"
         icon={<Target className="h-4 w-4 text-emerald-600" aria-hidden />}
@@ -41,27 +41,26 @@ export function DashboardMonitorTop3({
           <Link
             key={`opp-${row.keyword}-${i}`}
             href={`/results?keyword=${encodeURIComponent(row.keyword)}&country=${encodeURIComponent(trendCountry)}`}
-            className={cn(
-              dashboardCardClass,
-              'flex items-center gap-3 p-4 transition-shadow hover:shadow-md'
-            )}
+            className="flex min-h-[48px] items-center gap-2.5 px-3 py-2 transition-colors hover:bg-[#F8F9FA] sm:gap-3 sm:px-4 dark:hover:bg-zinc-900/80"
           >
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-sm font-bold text-slate-900 dark:text-zinc-50">{row.keyword}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+              aria-hidden
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-bold leading-tight text-[#222] dark:text-zinc-50">{row.keyword}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400">
+                <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
                   {opportunityInsightTag(row.opportunity_score)}
                 </span>
-                <span className="text-[10px] text-slate-500 dark:text-zinc-400">{row.analysis_count}건 데이터</span>
+                <span className="hidden sm:inline">· {row.analysis_count}건</span>
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{row.opportunity_score}</span>
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 dark:text-zinc-500">
-                <BookOpen className="h-3 w-3" aria-hidden />
-                출처
-              </span>
-            </div>
+            <span className="shrink-0 text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {row.opportunity_score}
+            </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-zinc-600" aria-hidden />
           </Link>
         ))}
@@ -79,28 +78,29 @@ export function DashboardMonitorTop3({
           <Link
             key={`risk-${row.keyword}-${i}`}
             href={`/results?keyword=${encodeURIComponent(row.keyword)}&country=${encodeURIComponent(trendCountry)}`}
-            className={cn(dashboardCardClass, 'flex items-center gap-3 p-4 transition-shadow hover:shadow-md')}
+            className="flex min-h-[48px] items-center gap-2.5 px-3 py-2 transition-colors hover:bg-[#F8F9FA] sm:gap-3 sm:px-4 dark:hover:bg-zinc-900/80"
           >
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-sm font-bold text-slate-900 dark:text-zinc-50">{row.keyword}</span>
-              <span className="w-fit rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 dark:bg-red-950/40 dark:text-red-200">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-red-100 text-[10px] font-bold text-red-800 dark:bg-red-950/50 dark:text-red-200"
+              aria-hidden
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-bold leading-tight text-[#222] dark:text-zinc-50">{row.keyword}</p>
+              <span className="mt-0.5 inline-block rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">
                 {riskInsightTag(row.risk_score)}
               </span>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className="text-xl font-bold tabular-nums text-red-600 dark:text-red-400">{row.risk_score}</span>
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 dark:text-zinc-500">
-                <BookOpen className="h-3 w-3" aria-hidden />
-                출처
-              </span>
-            </div>
+            <span className="shrink-0 text-base font-bold tabular-nums text-red-600 dark:text-red-400">{row.risk_score}</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-zinc-600" aria-hidden />
           </Link>
         ))}
       </MonitorBlock>
 
-      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-zinc-400">
-        출처: 완료된 리서치의 기회·경쟁 지표. 카드 선택 시 상세 리포트로 이동합니다.
+      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-zinc-400">
+        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+        완료된 리서치 기준 · 행 선택 시 상세 리포트로 이동합니다.
       </p>
     </div>
   )
@@ -130,17 +130,24 @@ function MonitorBlock({
         <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-50">{title}</h2>
       </div>
       {loading ? (
-        <div className="space-y-2">
+        <div className={cn(dashboardCardClass, 'divide-y divide-[#E8EAED] overflow-hidden shadow-sm dark:divide-zinc-800')}>
           {[1, 2, 3].map((i) => (
-            <div key={i} className={cn(dashboardCardClass, 'h-16 animate-pulse bg-slate-50 dark:bg-zinc-900')} />
+            <div key={i} className="h-12 animate-pulse bg-slate-50/80 px-4 dark:bg-zinc-900/80" />
           ))}
         </div>
       ) : rowCount === 0 ? (
-        <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-6 text-center text-xs text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+        <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-6 text-center text-xs text-slate-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
           {empty}
         </p>
       ) : (
-        <div className="space-y-2">{children}</div>
+        <div
+          className={cn(
+            dashboardCardClass,
+            'divide-y divide-[#E8EAED] overflow-hidden p-0 shadow-sm dark:divide-zinc-800'
+          )}
+        >
+          {children}
+        </div>
       )}
     </section>
   )

@@ -12,6 +12,7 @@ export const dashboardCardClass = cn(
 
 export const dashboardCardPadding = 'p-5 sm:p-6'
 
-export const dashboardPageBg = 'bg-[#F9FAFB] dark:bg-zinc-950'
+/** 페이지 배경: 카드(화이트)와 대비 (#F8F9FA) */
+export const dashboardPageBg = 'bg-[#F8F9FA] dark:bg-zinc-950'
 export const dashboardHeroBg =
   'rounded-2xl border border-[#E5E7EB] bg-white bg-gradient-to-br from-white via-[#FAFFFE] to-[#F0FDFC] shadow-sm dark:border-zinc-800 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900'

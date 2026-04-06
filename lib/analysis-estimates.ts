@@ -5,9 +5,9 @@
 export type DepthMode = 'fast' | 'standard' | 'deep'
 
 export const DEPTH_LABELS: Record<DepthMode, string> = {
-  fast: '빠르게',
-  standard: '기본',
-  deep: '깊게',
+  fast: '빠른 분석',
+  standard: '표준 분석',
+  deep: '심층 분석',
 }
 
 /** API mode: quick = fast, standard, deep */
