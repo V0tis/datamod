@@ -1,15 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { ChevronDown, ExternalLink, Trash2, Loader2 } from 'lucide-react'
-import { TimeAgo } from '@/components/time-ago'
+import { ChevronDown, ExternalLink, Trash2, Loader2, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { textToBullets } from '@/lib/text-to-bullets'
 import { cn } from '@/lib/utils'
-import { motionConfig } from '@/lib/motion-config'
 import type { SavedInsight } from '@/lib/insights-types'
 
 export type ImportanceLevel = 'low' | 'medium' | 'high'
@@ -23,9 +20,9 @@ function getImportanceFromScore(score: number | undefined): ImportanceLevel {
 
 const IMPORTANCE_STYLES: Record<ImportanceLevel, { badge: string; border: string; bg: string }> = {
   high: {
-    badge: 'bg-primary/15 text-primary border-primary/30',
-    border: 'border-l-primary',
-    bg: 'bg-primary/5',
+    badge: 'bg-[#E8FAF9] text-[#0f766e] border-[#2AC1BC]/40',
+    border: 'border-l-[#2AC1BC]',
+    bg: 'bg-[#E8FAF9]/40',
   },
   medium: {
     badge: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
@@ -51,14 +48,33 @@ export interface InsightCardProps {
   countryLabel: string
   onDelete: (id: string) => void
   deletingId: string | null
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
+  formattedDate?: string
 }
 
 /**
  * Insight card with title, short summary, detailed explanation (expandable),
  * importance level, bullet points, and highlight colors.
  */
-export function InsightCard({ item, resultsHref, countryLabel, onDelete, deletingId }: InsightCardProps) {
+function formatSavedDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+export function InsightCard({
+  item,
+  resultsHref,
+  countryLabel,
+  onDelete,
+  deletingId,
+  selected = false,
+  onToggleSelect,
+  formattedDate,
+}: InsightCardProps) {
   const [open, setOpen] = useState(false)
+  const dateLine = formattedDate ?? formatSavedDate(item.created_at)
 
   const summary = (item.snapshot?.summary ?? item.snapshot?.strategicSummary?.summary ?? '').trim()
   const explanation = (item.snapshot?.qualityScore?.explanation ?? '').trim()
@@ -94,61 +110,85 @@ export function InsightCard({ item, resultsHref, countryLabel, onDelete, deletin
   const hasDetail = detailBullets.length > 0 || item.note
 
   return (
-    <motion.article
-      layout={false}
-      whileHover={{
-        y: motionConfig.cardHover.y,
-        transition: motionConfig.cardHover.transition,
-      }}
+    <article
       className={cn(
-        'rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm',
-        'hover:shadow-md border-l-4',
-        styles.border
+        'rin-pro-card overflow-hidden border-l-4 transition-shadow hover:shadow-md',
+        styles.border,
+        selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA]'
       )}
     >
       <div className={cn('p-4 sm:p-5', hasDetail && 'pb-0')}>
-        <div className="flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h3 className="text-base font-semibold text-foreground break-words">{item.name}</h3>
-                <span
-                  className={cn(
-                    'text-[11px] font-medium px-2 py-0.5 rounded border shrink-0',
-                    styles.badge
-                  )}
-                >
-                  {IMPORTANCE_LABELS[importance]}
-                </span>
+        <div className="flex gap-3 sm:gap-4">
+          {onToggleSelect && (
+            <label className="flex shrink-0 cursor-pointer items-start pt-1">
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelect(item.id)}
+                className="mt-0.5 h-4 w-4 rounded border-[#E8EAED] text-[#2AC1BC] focus:ring-[#2AC1BC]"
+                aria-label={`${item.name} 선택`}
+              />
+            </label>
+          )}
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8FAF9] text-[#2AC1BC]"
+            title="분석 결과에서 저장됨"
+          >
+            <BarChart3 className="h-5 w-5" strokeWidth={2} />
+          </div>
+          <div className="min-w-0 flex-1 flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h3 className="text-base font-bold text-[#222] break-words">{item.name}</h3>
+                  <span
+                    className={cn(
+                      'text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0',
+                      styles.badge
+                    )}
+                  >
+                    {IMPORTANCE_LABELS[importance]}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  <span className="font-medium text-foreground/80">{item.snapshot?.keyword ?? '—'}</span>
+                  <span className="mx-1.5 text-border">|</span>
+                  {countryLabel}
+                  <span className="mx-1.5 text-border">|</span>
+                  {dateLine}
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {item.snapshot?.keyword ?? '—'} · {countryLabel}
-                <span className="ml-2">· <TimeAgo isoString={item.created_at} /></span>
-              </p>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-xs">
-                <Link href={resultsHref} className="gap-1">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  결과
-                </Link>
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onDelete(item.id)}
-                disabled={deletingId === item.id}
-                className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/5"
-                aria-label="인사이트 삭제"
-              >
-                {deletingId === item.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </Button>
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                <Button
+                  size="sm"
+                  className="h-9 rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab] gap-1"
+                  asChild
+                >
+                  <Link href={resultsHref}>
+                    <ExternalLink className="h-4 w-4" />
+                    분석으로 이동
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50"
+                  onClick={() => onDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  aria-label="인사이트 삭제"
+                >
+                  {deletingId === item.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
+        </div>
+
+        <div className={cn('space-y-3', onToggleSelect ? 'mt-4 pl-0 sm:pl-[calc(1rem+2.5rem+1rem)]' : 'mt-3')}>
 
           <p className="text-sm text-foreground/90 leading-relaxed">{shortSummary}</p>
 
@@ -205,6 +245,6 @@ export function InsightCard({ item, resultsHref, countryLabel, onDelete, deletin
           )}
         </div>
       </div>
-    </motion.article>
+    </article>
   )
 }

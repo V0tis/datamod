@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TrendingUp, Loader2, X, History, ChevronRight, Target, Sparkles, AlertTriangle } from 'lucide-react'
+import { TrendingUp, Loader2, X, History, Sparkles, BarChart3, Clock, Search } from 'lucide-react'
 import Link from 'next/link'
 import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { AnalysisProgressOverlay } from '@/components/research/AnalysisProgressOverlay'
@@ -24,12 +24,43 @@ import { LandingPage } from '@/components/landing/landing-page'
 import type { SavedInsight } from '@/lib/insights-types'
 import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
 import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
-import { DecisionSummary, type DecisionSummaryData } from '@/components/dashboard/decision-summary'
+import { type DecisionSummaryData } from '@/components/dashboard/decision-summary'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { DashboardCardShell } from '@/components/dashboard/dashboard-card-shell'
+import { dashboardPageBg, dashboardCardClass } from '@/components/dashboard/dashboard-tokens'
+import { DashboardChartsBlock } from '@/components/dashboard/dashboard-charts'
+import { MiniSparkline } from '@/components/dashboard/mini-sparkline'
+import { DashboardHeroBaemin } from '@/components/dashboard/dashboard-hero-baemin'
+import { DashboardKpiStrip } from '@/components/dashboard/dashboard-kpi-strip'
+import { DashboardMonitorTop3 } from '@/components/dashboard/dashboard-monitor-top3'
+import { DashboardInsightStrip } from '@/components/dashboard/dashboard-insight-strip'
+import { useDashboardSignalCounts } from '@/hooks/use-dashboard-data'
 
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 const ANALYSIS_DEPTH_KEY = 'rin_analysis_depth'
+
+function opportunityInsightTag(score: number): string {
+  if (score >= 75) return '진입 추천'
+  if (score >= 50) return '성장 중'
+  return '관망'
+}
+
+function riskInsightTag(score: number): string {
+  if (score >= 70) return '경쟁 높음'
+  if (score >= 45) return '주의'
+  return '경쟁 낮음'
+}
+
+function recentInsightLabel(score: number | null | undefined, analyzing: boolean): string {
+  if (analyzing) return '분석 중'
+  if (score == null) return '요약 대기'
+  if (score >= 70) return '진입 추천'
+  if (score >= 45) return '성장 중'
+  return '관망'
+}
+
+const itemCardClass =
+  'rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950'
 
 function RinAISearchInner() {
   const router = useRouter()
@@ -126,10 +157,7 @@ function RinAISearchInner() {
         recommendedKeyword: top.keyword,
         confidence: top.opportunity_score,
         confidenceLabel: `추천 신뢰도 ${top.opportunity_score}점`,
-        reasons: [
-          `완료된 분석 중 기회 점수가 가장 높은 키워드입니다 (${top.opportunity_score}점).`,
-          `${top.analysis_count}건의 분석 결과가 이 시장 판단에 반영되었습니다.`,
-        ],
+        reasons: [`기회 ${top.opportunity_score}점 · 상위 코호트`, `분석 ${top.analysis_count}건 반영`],
         strategyHref: `/results?keyword=${encodeURIComponent(top.keyword)}&country=${encodeURIComponent(trendCountry)}`,
         source: 'opportunity',
       }
@@ -144,10 +172,7 @@ function RinAISearchInner() {
         recommendedKeyword: displayLabel,
         confidence: null,
         confidenceLabel: '트렌드 기반 제안',
-        reasons: [
-          `${trendCountry} 지역 급상승 트렌드 상위에 오른 주제입니다.`,
-          '검색·뉴스 RSS 신호를 바탕으로 시장 관심이 빠르게 움직이는지 확인할 수 있습니다.',
-        ],
+        reasons: [`${trendCountry} 트렌드 상위`, '관심 급증 신호'],
         strategyHref: `/results?keyword=${encodeURIComponent(t.keyword)}&country=${encodeURIComponent(trendCountry)}`,
         source: 'trend',
       }
@@ -156,10 +181,7 @@ function RinAISearchInner() {
       recommendedKeyword: null,
       confidence: null,
       confidenceLabel: '데이터 준비 중',
-      reasons: [
-        '상단 검색창에 시장 키워드를 입력하면 기회·리스크·전략을 한 번에 분석합니다.',
-        '첫 분석이 끝나면 이 영역에 자동으로 추천이 표시됩니다.',
-      ],
+      reasons: ['키워드 입력 → 분석 시작', '완료 후 자동 추천'],
       strategyHref: null,
       source: 'empty',
     }
@@ -383,6 +405,17 @@ function RinAISearchInner() {
   }, [showAnalysisUI])
   const stepElapsedMs = showAnalysisUI ? tickTime - stepStartTime : 0
 
+  const displayName = useMemo(() => {
+    if (!user) return 'PM'
+    const meta = user.user_metadata as { full_name?: string } | undefined
+    return meta?.full_name?.trim() || user.email?.split('@')[0] || 'PM'
+  }, [user])
+
+  const { strongOppCount, strongRiskCount } = useDashboardSignalCounts(
+    dashboardRecs.highOpportunity,
+    dashboardRecs.highRisk
+  )
+
   const getButtonLabel = () => {
     if (showAnalysisUI) {
       const state = streamingState
@@ -408,7 +441,7 @@ function RinAISearchInner() {
   const trendItems = (sharedTrends[trendCountry] ?? []).slice(0, 10)
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className={cn(dashboardPageBg, 'relative min-h-screen')}>
       {navigatingFromTrend && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" aria-label="이동 중">
           <div className="flex flex-col items-center gap-3">
@@ -442,7 +475,7 @@ function RinAISearchInner() {
             exit={{ opacity: 0 }}
             className="min-h-[calc(100vh-3.5rem)] overflow-y-auto"
           >
-            <DashboardLayout>
+            <DashboardLayout className="gap-6">
             {(error != null || (user && canSearch === false)) && (
               <div className="flex flex-col gap-3">
                 {error && (
@@ -463,35 +496,87 @@ function RinAISearchInner() {
               </div>
             )}
 
-            <DecisionSummary
-              loading={decisionSummaryLoading}
-              data={decisionSummaryData}
-              startDisabled={showAnalysisUI}
-              onStartAnalysis={() => {
-                const top = dashboardRecs.highOpportunity[0]
-                if (top) {
-                  setQuery(top.keyword)
-                  setError(null)
-                } else {
-                  const t = (sharedTrends[trendCountry] ?? [])[0]
-                  if (t) {
-                    setQuery(t.keyword)
-                    setError(null)
-                  }
-                }
-                scrollToSearchAndFocus()
-              }}
+            <DashboardHeroBaemin
+              displayName={displayName}
+              strongOppCount={strongOppCount}
+              strongRiskCount={strongRiskCount}
             />
+
+            <DashboardKpiStrip
+              opportunities={dashboardRecs.highOpportunity}
+              risks={dashboardRecs.highRisk}
+              trendItems={trendItems}
+              recentAnalysisCount={recentReports.length}
+              loading={dashboardRecsLoading || trendsLoading}
+            />
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+              <div className="space-y-4">
+                <DashboardMonitorTop3
+                  opportunities={dashboardRecs.highOpportunity}
+                  risks={dashboardRecs.highRisk}
+                  trendCountry={trendCountry}
+                  loading={dashboardRecsLoading}
+                  opportunityInsightTag={opportunityInsightTag}
+                  riskInsightTag={riskInsightTag}
+                />
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link href="/history">기록에서 키워드 고르기</Link>
+                </Button>
+              </div>
+
+              <div className="min-w-0 space-y-4">
+                <div className={cn(dashboardCardClass, 'overflow-hidden p-4 sm:p-5')}>
+                  <div className="mb-4 flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-50">트렌드 · 기회 · 리스크</h3>
+                  </div>
+                  <DashboardChartsBlock
+                    variant="stack"
+                    opportunities={dashboardRecs.highOpportunity}
+                    risks={dashboardRecs.highRisk}
+                    trendItems={trendItems}
+                    loading={dashboardRecsLoading || trendsLoading}
+                  />
+                </div>
+                <DashboardInsightStrip
+                  loading={decisionSummaryLoading}
+                  data={decisionSummaryData}
+                  startDisabled={showAnalysisUI}
+                  onStartAnalysis={() => {
+                    const top = dashboardRecs.highOpportunity[0]
+                    if (top) {
+                      setQuery(top.keyword)
+                      setError(null)
+                    } else {
+                      const t = (sharedTrends[trendCountry] ?? [])[0]
+                      if (t) {
+                        setQuery(t.keyword)
+                        setError(null)
+                      }
+                    }
+                    scrollToSearchAndFocus()
+                  }}
+                />
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CountryChips value={trendCountry} onChange={setTrendCountry} compact />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/trends">트렌드 더보기</Link>
+                  </Button>
+                </div>
 
             <DashboardCardShell
               id="dashboard-analysis"
-              icon={<Sparkles className="h-5 w-5 text-primary" aria-hidden />}
-              title="시장 키워드 입력"
-              description="키워드를 입력하면 AI가 기회·경쟁·전략을 한 번에 분석합니다. 예시 칩을 눌러 바로 채울 수 있습니다."
+              icon={<Search className="h-5 w-5 text-sky-600 dark:text-sky-400" aria-hidden />}
+              title="시장 키워드"
+              description="검색 후 즉시 분석 · 깊이 선택"
               footer={
                 !showAnalysisUI ? (
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    다음 단계: 키워드 확정 → <span className="font-medium text-foreground/80">분석 시작</span> → 결과에서 전략·액션 플랜 확인
+                  <p className="text-xs text-slate-600 dark:text-zinc-400">
+                    키워드 확정 → <span className="font-semibold text-neutral-800 dark:text-zinc-200">분석</span> → 전략 확인
                   </p>
                 ) : undefined
               }
@@ -499,7 +584,7 @@ function RinAISearchInner() {
                 <form onSubmit={handleSearch} className="space-y-4">
                   <div
                     className={cn(
-                      'relative flex items-center rounded-xl border border-border bg-background/80 shadow-sm h-12 sm:h-14 px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-md transition-all',
+                      'relative flex h-12 items-center rounded-xl border border-[#E5E7EB] bg-white px-4 shadow-sm transition-all focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 dark:border-zinc-700 dark:bg-zinc-950 sm:h-14',
                       showAnalysisUI && 'opacity-70'
                     )}
                   >
@@ -545,8 +630,8 @@ function RinAISearchInner() {
                         className={cn(
                           'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
                           analysisDepth === d
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground'
+                            ? 'border-sky-500 bg-sky-50 text-sky-800 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-200'
+                            : 'border-[#E5E7EB] bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
                         )}
                       >
                         {DEPTH_LABELS[d]}
@@ -560,17 +645,18 @@ function RinAISearchInner() {
                     </div>
                   )}
                   <div className="space-y-2 pt-1">
-                    <p className="text-xs font-medium text-muted-foreground">빠른 시작 · 예시 키워드</p>
-                    <div className="flex flex-wrap gap-2">
-                      {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크 플랫폼', '건강 모니터링', '전동킥보드 공유', 'B2B 결제', '클린뷰티 D2C'].map((k) => (
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">빠른 분석 키워드</p>
+                    <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 pt-0.5">
+                      {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크', 'B2B 결제', '클린뷰티 D2C'].map((k) => (
                         <button
                           key={k}
                           type="button"
                           onClick={() => { setQuery(k); setError(null); searchInputRef.current?.focus() }}
                           disabled={showAnalysisUI}
-                          className="rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground/90 hover:border-primary/35 hover:bg-muted transition-colors disabled:opacity-40"
+                          className="shrink-0 rounded-xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50/90 to-sky-50/80 px-4 py-2.5 text-left shadow-sm transition hover:border-cyan-300 disabled:opacity-40 dark:border-cyan-900/50 dark:from-cyan-950/40 dark:to-sky-950/30"
                         >
-                          {k}
+                          <span className="text-xs font-bold text-cyan-900 dark:text-cyan-100">{k}</span>
+                          <span className="mt-0.5 block text-[10px] font-medium text-cyan-700/80 dark:text-cyan-300/80">탭하여 분석</span>
                         </button>
                       ))}
                     </div>
@@ -578,7 +664,7 @@ function RinAISearchInner() {
                 </form>
 
                 {showAnalysisUI && streamingState.status !== 'idle' && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 shadow-sm">
+                  <div className="rounded-xl border border-[#E5E7EB] bg-sky-50 px-4 py-3 dark:border-zinc-700 dark:bg-sky-950/30">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                       <p className="text-sm font-medium text-foreground flex-1">
@@ -604,233 +690,69 @@ function RinAISearchInner() {
                 )}
             </DashboardCardShell>
 
-            <section className="space-y-4" aria-labelledby="dash-opportunity-heading">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <p id="dash-opportunity-heading" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    시장 신호
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    우선 검토할 키워드를 고르세요. 행을 누르면 결과로 이동하고, 하단에서 심층 분석을 이어갈 수 있습니다.
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-auto" asChild>
-                  <Link href="/history">기록에서 고르기</Link>
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <DashboardCardShell
-                  icon={<TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />}
-                  title="기회 높은 시장"
-                  description="완료된 분석에서 기회 점수가 높게 나온 키워드입니다."
-                  footer={
-                    dashboardRecs.highOpportunity.length > 0 ? (
-                      <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                        <Button className="w-full sm:w-auto" asChild>
-                          <Link href={`/results?keyword=${encodeURIComponent(dashboardRecs.highOpportunity[0].keyword)}&country=${encodeURIComponent(trendCountry)}`}>
-                            상위 키워드 심층 분석
-                          </Link>
-                        </Button>
-                        <Button variant="outline" className="w-full sm:w-auto" asChild>
-                          <Link
-                            href={`/results?keyword=${encodeURIComponent(dashboardRecs.highOpportunity[0].keyword)}&country=${encodeURIComponent(trendCountry)}#section-strategic-recommendations`}
-                          >
-                            전략만 보기
-                          </Link>
-                        </Button>
-                      </div>
-                    ) : undefined
-                  }
-                >
-                  <div className="space-y-3">
-                    {dashboardRecsLoading ? (
-                      [...Array(3)].map((_, i) => (
-                        <div key={i} className="rounded-lg bg-white/60 dark:bg-white/5 h-12 animate-pulse" />
-                      ))
-                    ) : dashboardRecs.highOpportunity.length === 0 ? (
-                      <div className="rounded-xl bg-muted/20 border border-dashed border-border py-8 px-4 text-center space-y-3">
-                        <Target className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-                        <p className="text-sm text-muted-foreground">완료된 분석이 쌓이면 기회 상위 키워드가 여기 표시됩니다.</p>
-                        <Button type="button" variant="secondary" size="sm" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                          첫 분석 시작하기
-                        </Button>
-                      </div>
-                    ) : (
-                      dashboardRecs.highOpportunity.slice(0, 4).map((row, i) => (
-                          <Link
-                            key={`opp-${row.keyword}-${i}`}
-                            href={`/results?keyword=${encodeURIComponent(row.keyword)}&country=${encodeURIComponent(trendCountry)}#section-strategic-recommendations`}
-                            className="group flex items-start gap-3 rounded-lg border border-border/80 bg-background/50 px-4 py-3 transition-colors hover:bg-muted/30"
-                          >
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">키워드</span>
-                                <span className="truncate text-sm font-semibold text-foreground">{row.keyword}</span>
-                              </div>
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                왜: 집계된 분석에서 기회 점수가 높습니다. {row.analysis_count}건의 완료 분석이 반영되었습니다.
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-1">
-                              <span className="text-xs text-muted-foreground">기회 점수</span>
-                              <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{row.opportunity_score}</span>
-                              <ChevronRight className="mt-1 h-4 w-4 text-muted-foreground/50 group-hover:text-emerald-600" aria-hidden />
-                            </div>
-                          </Link>
-                        ))
-                    )}
-                  </div>
-                </DashboardCardShell>
-
-                <DashboardCardShell
-                  icon={<AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden />}
-                  title="리스크 높은 시장"
-                  description="경쟁·포화 신호가 강한 키워드입니다. 진입 전 검증을 권장합니다."
-                  footer={
-                    dashboardRecs.highRisk.length > 0 ? (
-                      <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                        <Button className="w-full sm:w-auto" asChild>
-                          <Link href={`/results?keyword=${encodeURIComponent(dashboardRecs.highRisk[0].keyword)}&country=${encodeURIComponent(trendCountry)}`}>
-                            리스크 시장 재분석
-                          </Link>
-                        </Button>
-                        <Button variant="outline" className="w-full sm:w-auto" asChild>
-                          <Link
-                            href={`/results?keyword=${encodeURIComponent(dashboardRecs.highRisk[0].keyword)}&country=${encodeURIComponent(trendCountry)}#section-competitor-landscape`}
-                          >
-                            경쟁 환경만 보기
-                          </Link>
-                        </Button>
-                      </div>
-                    ) : undefined
-                  }
-                >
-                  <div className="space-y-3">
-                    {dashboardRecsLoading ? (
-                      [...Array(3)].map((_, i) => (
-                        <div key={i} className="rounded-lg bg-white/60 dark:bg-white/5 h-12 animate-pulse" />
-                      ))
-                    ) : dashboardRecs.highRisk.length === 0 ? (
-                      <div className="rounded-xl bg-muted/20 border border-dashed border-border py-8 px-4 text-center space-y-3">
-                        <AlertTriangle className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-                        <p className="text-sm text-muted-foreground">리스크 지표가 의미 있게 쌓이면 경쟁·포화 신호가 여기 표시됩니다.</p>
-                        <Button type="button" variant="secondary" size="sm" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                          시장 분석으로 데이터 쌓기
-                        </Button>
-                      </div>
-                    ) : (
-                      dashboardRecs.highRisk.slice(0, 4).map((row, i) => (
-                          <Link
-                            key={`risk-${row.keyword}-${i}`}
-                            href={`/results?keyword=${encodeURIComponent(row.keyword)}&country=${encodeURIComponent(trendCountry)}#section-competitor-landscape`}
-                            className="group flex items-start gap-3 rounded-lg border border-border/80 bg-background/50 px-4 py-3 transition-colors hover:bg-muted/30"
-                          >
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">키워드</span>
-                                <span className="truncate text-sm font-semibold text-foreground">{row.keyword}</span>
-                              </div>
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                왜: 전략 평가에서 경쟁 리스크 지표가 높게 나온 키워드입니다. 진입 장벽·포지셔닝을 결과에서 먼저 확인하세요.
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-1">
-                              <span className="text-xs text-muted-foreground">리스크 점수</span>
-                              <span className="text-base font-bold tabular-nums text-red-600 dark:text-red-400">{row.risk_score}</span>
-                              <ChevronRight className="mt-1 h-4 w-4 text-muted-foreground/50 group-hover:text-red-600" aria-hidden />
-                            </div>
-                          </Link>
-                        ))
-                    )}
-                  </div>
-                </DashboardCardShell>
-              </div>
-            </section>
-
             <section aria-labelledby="dash-trends-heading">
               <DashboardCardShell
                 titleId="dash-trends-heading"
-                emphasis="subtle"
-                icon={<TrendingUp className="h-5 w-5 text-primary" aria-hidden />}
+                icon={<TrendingUp className="h-5 w-5 text-sky-600 dark:text-sky-400" aria-hidden />}
                 title="급상승 트렌드"
-                description="RSS·검색 트렌드 피드 기준입니다. 행마다 분석을 눌러 수요·경쟁 신호를 확인하세요."
+                description="실시간 급상승 키워드"
                 headerRight={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CountryChips value={trendCountry} onChange={setTrendCountry} compact />
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/trends">트렌드 허브</Link>
-                    </Button>
-                  </div>
-                }
-                footer={
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    출처: RSS·트렌드 피드 · 약 1시간 캐시. 다음 단계: 관심 키워드에서 <span className="font-medium text-foreground/80">분석</span> 실행.
-                  </p>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/trends">전체</Link>
+                  </Button>
                 }
               >
-                <div className="max-h-[280px] overflow-auto rounded-lg border border-border/60 bg-background/40 -mx-1">
+                <div className="max-h-[min(70vh,520px)] space-y-3 overflow-y-auto pr-1">
                   {trendsLoading ? (
-                    <div className="space-y-2 p-4">
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                        <div key={i} className="h-12 animate-pulse rounded-xl bg-muted/50" />
-                      ))}
-                    </div>
+                    [1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="h-24 animate-pulse rounded-xl border border-[#E5E7EB] bg-slate-100 dark:border-zinc-800 dark:bg-zinc-900" />
+                    ))
                   ) : trendItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center space-y-3 px-4 py-12 text-center">
-                      <TrendingUp className="h-8 w-8 text-muted-foreground/25" />
-                      <p className="text-sm text-muted-foreground">이 지역에 표시할 트렌드가 없습니다.</p>
-                      <Button type="button" variant="secondary" size="sm" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                        직접 키워드 분석
+                    <div className={cn(itemCardClass, 'py-8 text-center')}>
+                      <p className="text-sm text-slate-600 dark:text-zinc-400">표시할 트렌드 없음</p>
+                      <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
+                        직접 분석
                       </Button>
                     </div>
                   ) : (
-                    <div className="divide-y divide-border/60">
-                      {trendItems.map((item, i) => {
-                        const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
-                        const showBoth = trendCountry !== 'KR' && hasTranslation
-                        const displayName = showBoth ? `${item.keyword} · ${item.title_ko}` : hasTranslation ? item.title_ko! : item.keyword
-                        const subLabel = item.search_volume ?? (item.rank ? `#${item.rank}` : null)
-                        const runAnalysis = () => {
-                          const originalKeyword = item.keyword
-                          const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
-                          setNavigatingFromTrend(true)
-                          const params = new URLSearchParams({ keyword: originalKeyword, country: trendCountry })
-                          if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
-                          router.push(`/results?${params.toString()}`)
-                          startStreamingResearch(originalKeyword, { country_code: trendCountry })
-                        }
-                        return (
-                          <div
-                            key={`${trendCountry}-${item.keyword}-${i}`}
-                            className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center"
-                          >
-                            <div className="flex min-w-0 flex-1 items-start gap-3">
-                              <span className="w-6 shrink-0 pt-0.5 text-xs font-medium tabular-nums text-muted-foreground">{i + 1}</span>
-                              <div className="min-w-0 flex-1 space-y-1">
-                                <span className="block truncate text-sm font-semibold text-foreground">{displayName}</span>
-                                <p className="text-xs leading-relaxed text-muted-foreground">
-                                  급상승 트렌드에 오른 주제입니다. 한 번의 분석으로 수요와 경쟁 구도를 함께 봅니다.
-                                </p>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground/85">
-                                  {subLabel != null && subLabel !== '' && <span className="tabular-nums">{subLabel}</span>}
-                                  {item.started_at && (
-                                    <span className="tabular-nums">
-                                      <TimeAgo isoString={item.started_at} />
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                    trendItems.slice(0, 8).map((item, i) => {
+                      const hasTranslation = item.title_ko != null && item.title_ko !== item.keyword
+                      const showBoth = trendCountry !== 'KR' && hasTranslation
+                      const trendRowTitle = showBoth ? `${item.keyword} · ${item.title_ko}` : hasTranslation ? item.title_ko! : item.keyword
+                      const subLabel = item.search_volume ?? (item.rank ? `#${item.rank}` : null)
+                      const runAnalysis = () => {
+                        const originalKeyword = item.keyword
+                        const translatedKeyword = item.title_ko && item.title_ko !== item.keyword ? item.title_ko : undefined
+                        setNavigatingFromTrend(true)
+                        const params = new URLSearchParams({ keyword: originalKeyword, country: trendCountry })
+                        if (translatedKeyword) params.set('keywordTranslated', translatedKeyword)
+                        router.push(`/results?${params.toString()}`)
+                        startStreamingResearch(originalKeyword, { country_code: trendCountry })
+                      }
+                      return (
+                        <div key={`${trendCountry}-${item.keyword}-${i}`} className={itemCardClass}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-neutral-900 dark:text-zinc-100">{trendRowTitle}</p>
+                              <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">
+                                성장 중 · 급상승
+                                {subLabel != null && subLabel !== '' ? ` · ${subLabel}` : ''}
+                                {item.started_at ? (
+                                  <>
+                                    {' · '}
+                                    <TimeAgo isoString={item.started_at} />
+                                  </>
+                                ) : null}
+                              </p>
                             </div>
-                            <div className="flex shrink-0 items-center pl-9 sm:pl-0">
-                              <Button type="button" size="sm" className="w-full font-semibold sm:w-auto" onClick={runAnalysis} disabled={showAnalysisUI}>
-                                분석
-                              </Button>
-                            </div>
+                            <MiniSparkline seed={i * 31 + item.keyword.length} />
                           </div>
-                        )
-                      })}
-                    </div>
+                          <Button type="button" size="sm" className="mt-3 w-full font-semibold" onClick={runAnalysis} disabled={showAnalysisUI}>
+                            분석
+                          </Button>
+                        </div>
+                      )
+                    })
                   )}
                 </div>
               </DashboardCardShell>
@@ -839,81 +761,78 @@ function RinAISearchInner() {
             <section aria-labelledby="dash-recent-heading">
               <DashboardCardShell
                 titleId="dash-recent-heading"
-                emphasis="subtle"
-                icon={<History className="h-5 w-5 text-muted-foreground" aria-hidden />}
+                icon={<History className="h-5 w-5 text-slate-600 dark:text-zinc-400" aria-hidden />}
                 title="최근 분석"
-                description="방금 다룬 키워드입니다. 이어서 보거나 새 분석으로 넘어가세요."
+                description="타임라인 · 결과로 이동"
                 headerRight={
-                  <Button variant="ghost" size="sm" className="text-primary hover:text-primary" asChild>
-                    <Link href="/history">전체 기록</Link>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/history">기록</Link>
                   </Button>
                 }
                 footer={
                   recentReports.length > 0 ? (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-muted-foreground">다음 단계: 항목을 열어 요약을 확인하거나, 새 키워드로 분석을 이어가세요.</p>
-                      <Button type="button" variant="default" size="sm" className="shrink-0 self-start sm:self-auto" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                        새 분석
-                      </Button>
-                    </div>
+                    <Button type="button" size="sm" className="w-full font-semibold" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
+                      새 분석
+                    </Button>
                   ) : undefined
                 }
               >
-                <div className="max-h-[260px] overflow-auto rounded-lg border border-border/60 bg-background/40 -mx-1">
+                <div className="max-h-[min(55vh,440px)] space-y-3 overflow-y-auto pr-1">
                   {recentReportsLoading ? (
-                    <div className="space-y-2 p-4">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/50" />
-                      ))}
-                    </div>
+                    [1, 2, 3, 4].map((i) => (
+                      <div key={i} className="h-28 animate-pulse rounded-xl border border-[#E5E7EB] bg-slate-100 dark:border-zinc-800 dark:bg-zinc-900" />
+                    ))
                   ) : recentReports.length > 0 ? (
-                    <div className="divide-y divide-border/60">
-                      {recentReports.map((r, i) => (
+                    recentReports.slice(0, 8).map((r, i) => {
+                      const analyzing = r.analysis_status === 'analyzing'
+                      const href = `/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`
+                      const isCurrent = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
+                      const hasStep = analyzing && isCurrent && (streamingState.status === 'running' || streamingState.status === 'streaming')
+                      const stepNum = hasStep ? (streamingState.currentStep ?? 0) + 1 : 1
+                      return (
                         <Link
                           key={r.keyword + (r.created_at ?? '') + (r.country_code ?? '') + i}
-                          href={`/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`}
-                          className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/25"
+                          href={href}
+                          className={cn(itemCardClass, 'block transition-shadow hover:shadow-md')}
                         >
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors group-hover:text-primary">
-                            {r.keyword}
-                          </span>
-                          {r.opportunity_score != null && r.analysis_status !== 'analyzing' && (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                              {r.opportunity_score}
-                            </span>
-                          )}
-                          {r.analysis_status === 'analyzing' &&
-                            (() => {
-                              const isCurrent = (r.keyword?.trim() ?? '') === (currentAnalysisKeyword?.trim() ?? '')
-                              const hasStep = isCurrent && (streamingState.status === 'running' || streamingState.status === 'streaming')
-                              const stepNum = hasStep ? (streamingState.currentStep ?? 0) + 1 : 1
-                              return (
-                                <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                  {stepNum}/{PROGRESS_STEPS.length}
-                                </span>
-                              )
-                            })()}
-                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground/80">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 flex-1 items-start gap-2">
+                              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-zinc-500" aria-hidden />
+                              <span className="truncate text-sm font-semibold text-neutral-900 dark:text-zinc-100">{r.keyword}</span>
+                            </div>
+                            {r.opportunity_score != null && !analyzing && (
+                              <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold tabular-nums text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+                                {r.opportunity_score}
+                              </span>
+                            )}
+                            {analyzing && (
+                              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                {stepNum}/{PROGRESS_STEPS.length}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-600 dark:text-zinc-400">{recentInsightLabel(r.opportunity_score, analyzing)}</p>
+                          <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500">
                             <TimeAgo isoString={r.created_at} />
-                          </span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/45 transition-colors group-hover:text-foreground" />
+                            <span className="font-semibold text-sky-600 dark:text-sky-400">열기 →</span>
+                          </div>
                         </Link>
-                      ))}
-                    </div>
+                      )
+                    })
                   ) : (
-                    <div className="flex flex-col items-center justify-center space-y-3 px-4 py-12 text-center">
-                      <History className="h-8 w-8 text-muted-foreground/25" />
-                      <p className="text-sm text-muted-foreground">분석 기록이 없습니다</p>
-                      <p className="text-xs text-muted-foreground">키워드를 입력하고 첫 분석을 실행해 보세요.</p>
-                      <Button type="button" size="sm" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                        지금 분석 시작
+                    <div className={cn(itemCardClass, 'py-8 text-center')}>
+                      <p className="text-sm text-slate-600 dark:text-zinc-400">기록 없음</p>
+                      <Button type="button" size="sm" className="mt-3" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
+                        분석 시작
                       </Button>
                     </div>
                   )}
                 </div>
               </DashboardCardShell>
             </section>
+            </div>
+            </div>
             </DashboardLayout>
           </motion.div>
         )}

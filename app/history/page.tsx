@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Search, Loader2, ChevronDown, ChevronRight, Trash2, Copy, Eye, BarChart3 } from 'lucide-react'
+import { Search, Loader2, ChevronDown, Trash2, Copy, Eye, BarChart3 } from 'lucide-react'
 import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
+import { DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 
 const TARGET_LABELS: Record<string, string> = {
   product: '제품',
@@ -30,6 +31,7 @@ interface ResearchRecord {
   report_id: string | null
   analysis_status?: 'queued' | 'analyzing' | 'completed' | 'failed'
   analysis_target?: string | null
+  analysis_depth?: string | null
   confidence_score?: number | null
   market_temperature_score?: number | null
   opportunity_score?: number | null
@@ -40,7 +42,7 @@ interface ResearchRecord {
   date: string
 }
 
-type DateFilterOption = 'all' | 'today' | 'week' | 'month'
+type PeriodFilter = 'all' | '1m' | '3m' | '6m'
 type ScoreFilterOption = 'all' | 'high' | 'medium' | 'low'
 type MarketTypeFilterOption = 'all' | string
 type SortOption = 'newest' | 'oldest'
@@ -64,11 +66,11 @@ const STATUS_LABELS: Record<string, string> = {
   queued: '대기 중',
 }
 
-const DATE_FILTER_OPTIONS: { value: DateFilterOption; label: string }[] = [
-  { value: 'all', label: '전체 기간' },
-  { value: 'today', label: '오늘' },
-  { value: 'week', label: '이번 주' },
-  { value: 'month', label: '이번 달' },
+const PERIOD_CHIPS: { value: PeriodFilter; label: string }[] = [
+  { value: 'all', label: '전체' },
+  { value: '1m', label: '1개월' },
+  { value: '3m', label: '3개월' },
+  { value: '6m', label: '6개월' },
 ]
 
 const SCORE_FILTER_OPTIONS: { value: ScoreFilterOption; label: string; range: [number, number] | null }[] = [
@@ -84,6 +86,17 @@ function formatCreatedDate(isoString: string | null): string {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
+function formatDateTime(isoString: string | null): string {
+  if (!isoString) return '—'
+  const d = new Date(isoString)
+  return `${formatCreatedDate(isoString)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function analysisModeLabel(depth: string | null | undefined): string {
+  if (depth === 'fast' || depth === 'standard' || depth === 'deep') return DEPTH_LABELS[depth as DepthMode]
+  return '표준'
+}
+
 function getOpportunityScore(r: ResearchRecord): number | null {
   return r.opportunity_score ?? r.market_temperature_score ?? null
 }
@@ -95,7 +108,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState<DateFilterOption>('all')
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
   const [clearAllOpen, setClearAllOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
@@ -117,26 +130,13 @@ export default function HistoryPage() {
       )
     }
 
-    if (dateFilter !== 'all') {
-      const now = new Date()
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const startOfWeek = new Date(startOfToday)
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
+    if (periodFilter !== 'all') {
+      const months = periodFilter === '1m' ? 1 : periodFilter === '3m' ? 3 : 6
+      const cutoff = new Date()
+      cutoff.setMonth(cutoff.getMonth() - months)
       result = result.filter((r) => {
         if (!r.updated_at) return false
-        const date = new Date(r.updated_at)
-        switch (dateFilter) {
-          case 'today':
-            return date >= startOfToday
-          case 'week':
-            return date >= startOfWeek
-          case 'month':
-            return date >= startOfMonth
-          default:
-            return true
-        }
+        return new Date(r.updated_at) >= cutoff
       })
     }
 
@@ -165,7 +165,7 @@ export default function HistoryPage() {
       return sortOrder === 'newest' ? db - da : da - db
     })
     return sorted
-  }, [records, searchQuery, dateFilter, scoreFilter, marketTypeFilter, statusFilter, sortOrder])
+  }, [records, searchQuery, periodFilter, scoreFilter, marketTypeFilter, statusFilter, sortOrder])
 
   const marketTypes = useMemo(() => {
     const set = new Set<string>()
@@ -272,8 +272,8 @@ export default function HistoryPage() {
     return (
       <div className="rin-page">
         <header className="rin-page-header">
-          <h1 className="rin-page-title">리서치 아카이브</h1>
-          <p className="rin-page-subtitle">PM을 위한 분석 기록 보관소</p>
+          <h1 className="rin-page-title">분석 기록</h1>
+          <p className="rin-page-subtitle">완료된 리서치를 키워드·일시·점수로 빠르게 찾습니다.</p>
         </header>
         <HistoryCardSkeletonList count={6} grid />
       </div>
@@ -301,13 +301,13 @@ export default function HistoryPage() {
     return (
       <div className="rin-page min-h-[60vh]">
         <header className="rin-page-header">
-          <h1 className="rin-page-title">리서치 아카이브</h1>
-          <p className="rin-page-subtitle">PM을 위한 분석 기록 보관소</p>
+          <h1 className="rin-page-title">분석 기록</h1>
+          <p className="rin-page-subtitle">아직 저장된 분석이 없습니다. 대시보드에서 첫 키워드를 실행해 보세요.</p>
         </header>
         <div className="rin-empty-container">
           <EmptyState
-            title="분석 기록이 없습니다"
-            description="대시보드에서 시장 키워드를 검색하면 리서치 결과가 여기에 쌓입니다. 첫 분석을 시작해 보세요."
+            title="기록이 없습니다"
+            description="시장 키워드 분석을 실행하면 여기에 일시·점수와 함께 쌓입니다."
             icon={<BarChart3 className="h-12 w-12 text-primary/70" strokeWidth={1.5} />}
             action={
               <Link href="/">
@@ -327,8 +327,8 @@ export default function HistoryPage() {
     <div className="rin-page">
       <header className="rin-page-header flex items-start justify-between gap-4">
         <div>
-          <h1 className="rin-page-title">리서치 아카이브</h1>
-          <p className="rin-page-subtitle">PM을 위한 분석 기록 보관소</p>
+          <h1 className="rin-page-title">분석 기록</h1>
+          <p className="rin-page-subtitle">키워드 · 일시 · 기회 점수 · 분석 모드를 한눈에 확인하세요.</p>
         </div>
         <Button
           variant="outline"
@@ -381,37 +381,37 @@ export default function HistoryPage() {
         </div>
       )}
 
-      <div className="rin-section mb-6">
-        {/* Search */}
+      <div className="rin-pro-card mb-6 space-y-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="키워드로 검색"
-            className="pl-10 h-11 text-sm border-border/60 bg-background placeholder:text-muted-foreground rounded-lg"
+            placeholder="키워드 검색"
+            className="h-11 rounded-xl border-[#E8EAED] bg-[#F8F9FA] pl-10 text-sm placeholder:text-muted-foreground"
             aria-label="검색"
           />
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">기간</span>
-            <div className="relative">
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value as DateFilterOption)}
-                className="h-9 rounded-lg border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {DATE_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">기간</span>
+          {PERIOD_CHIPS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setPeriodFilter(c.value)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                periodFilter === c.value
+                  ? 'border-[#2AC1BC] bg-[#E8FAF9] text-[#222]'
+                  : 'border-border bg-white text-muted-foreground hover:border-[#2AC1BC]/50'
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3 items-center border-t border-border pt-4">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground shrink-0">점수</span>
             <div className="relative">
@@ -481,127 +481,103 @@ export default function HistoryPage() {
           검색·필터 결과가 없습니다.
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="space-y-3 list-none p-0 m-0">
           {filteredRecords.map((record) => {
             const resultsHref = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
             const opportunityScore = getOpportunityScore(record)
-            const confidence = record.confidence_score ?? null
 
             return (
-              <article
-                key={record.id}
-                className={cn(
-                  'group rounded-lg border border-border/60 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-md cursor-pointer',
-                  (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'opacity-75'
-                )}
-                onClick={() => record.analysis_status === 'completed' && goToReport(record)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if ((e.key === 'Enter' || e.key === ' ') && record.analysis_status === 'completed') {
-                    e.preventDefault()
-                    goToReport(record)
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-foreground line-clamp-1 flex-1 min-w-0">
-                    {record.keyword}
-                  </h3>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-                      record.analysis_status === 'completed' && 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-                      record.analysis_status === 'failed' && 'bg-destructive/15 text-destructive',
-                      (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                    )}
-                  >
-                    {STATUS_LABELS[record.analysis_status ?? 'completed'] ?? '완료'}
-                  </span>
-                </div>
-                {record.country_code && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {COUNTRY_LABELS[record.country_code] ?? record.country_code}
-                    {record.analysis_target && ` · ${TARGET_LABELS[record.analysis_target] ?? record.analysis_target}`}
-                  </p>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Opportunity Score</span>
-                    <p className="font-semibold text-foreground">
-                      {opportunityScore != null ? opportunityScore : '—'}
-                    </p>
+              <li key={record.id}>
+                <article
+                  className={cn(
+                    'rin-pro-card flex flex-col gap-4 p-4 transition-shadow hover:shadow-md sm:flex-row sm:items-center sm:justify-between sm:gap-6',
+                    (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'opacity-80'
+                  )}
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold tracking-tight text-foreground">{record.keyword}</h3>
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                        {analysisModeLabel(record.analysis_depth)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span className="tabular-nums">{formatDateTime(record.updated_at)}</span>
+                      {record.country_code ? (
+                        <span>{COUNTRY_LABELS[record.country_code] ?? record.country_code}</span>
+                      ) : null}
+                      {record.analysis_target ? (
+                        <span>{TARGET_LABELS[record.analysis_target] ?? record.analysis_target}</span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Confidence</span>
-                    <p className="font-semibold text-foreground">
-                      {confidence != null ? `${confidence}%` : '—'}
-                    </p>
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground mt-3">
-                  생성일 {formatCreatedDate(record.updated_at)}
-                </p>
-
-                <div className="mt-4 pt-4 border-t border-border/60 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Link href={resultsHref} className="flex-1 min-w-[80px]">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full gap-2 group/btn"
-                      disabled={record.analysis_status !== 'completed'}
-                      title="결과 보기"
-                    >
-                      {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          분석 중...
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-4 w-4" />
-                          보기
-                          <ChevronRight className="h-4 w-4 group-hover/btn:translate-x-0.5 transition-transform" />
-                        </>
-                      )}
-                    </Button>
-                  </Link>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    title="동일 키워드로 다시 분석"
-                    onClick={() => handleDuplicate(record)}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 text-destructive border-destructive/50 hover:bg-destructive/10"
-                    disabled={deletingId === record.id}
-                    onClick={() => deleteRecord(record.id)}
-                    aria-label="삭제"
-                    title="삭제"
-                  >
-                    {deletingId === record.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
+                    {opportunityScore != null ? (
+                      <span
+                        className={cn(
+                          'inline-flex min-w-[3.5rem] items-center justify-center rounded-lg px-3 py-2 text-lg font-bold tabular-nums',
+                          opportunityScore >= 70 && 'bg-[#E8FAF9] text-[#0d9488]',
+                          opportunityScore >= 40 && opportunityScore < 70 && 'bg-muted text-foreground',
+                          opportunityScore < 40 && 'bg-red-50 text-[#FF5F5F] dark:bg-red-950/30 dark:text-red-300'
+                        )}
+                      >
+                        {opportunityScore}
+                      </span>
                     ) : (
-                      <Trash2 className="h-4 w-4" />
+                      <span className="text-sm font-medium text-muted-foreground">점수 —</span>
                     )}
-                  </Button>
-                </div>
-              </article>
+                    <span
+                      className={cn(
+                        'rounded-full px-2.5 py-1 text-xs font-bold',
+                        record.analysis_status === 'completed' && 'bg-[#E8FAF9] text-[#0f766e]',
+                        record.analysis_status === 'failed' && 'bg-red-50 text-[#FF5F5F]',
+                        (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'bg-amber-50 text-amber-800'
+                      )}
+                    >
+                      {STATUS_LABELS[record.analysis_status ?? 'completed'] ?? '완료'}
+                    </span>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Link href={resultsHref}>
+                        <Button
+                          size="sm"
+                          className="h-9 rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab]"
+                          disabled={record.analysis_status !== 'completed'}
+                        >
+                          {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Eye className="mr-1 h-4 w-4" />
+                              보기
+                            </>
+                          )}
+                        </Button>
+                      </Link>
+                      <Button size="sm" variant="outline" className="h-9" title="다시 분석" onClick={() => handleDuplicate(record)}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-9 text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50"
+                        disabled={deletingId === record.id}
+                        onClick={() => deleteRecord(record.id)}
+                        aria-label="삭제"
+                      >
+                        {deletingId === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              </li>
             )
           })}
-        </div>
+        </ul>
       )}
 
       {filteredRecords.length > 0 && (
         <p className="text-sm text-muted-foreground mt-8">
-          {searchQuery || dateFilter !== 'all' || scoreFilter !== 'all' || marketTypeFilter !== 'all' || statusFilter !== 'all'
+          {searchQuery || periodFilter !== 'all' || scoreFilter !== 'all' || marketTypeFilter !== 'all' || statusFilter !== 'all'
             ? `검색·필터 결과 ${filteredRecords.length}건`
             : `총 ${records.length}건`}
         </p>

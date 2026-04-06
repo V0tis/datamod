@@ -13,16 +13,71 @@ export type NextActionItem = {
   estimated_effort?: string
 }
 
+type ExecutionLayerOutput = {
+  pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string }>
+  next_actions_pm?: NextActionItem[]
+}
+
+/** PM 액션 목록 추출 (액션 탭 테이블 등에서 재사용) */
+export function extractNextActionItems(
+  result: ResearchResponse | null,
+  taskData?: Partial<Record<string, unknown>>,
+  analysisTasks?: Array<{ step_name: string; output_data: unknown }> | null,
+  options?: { maxItems?: number }
+): NextActionItem[] {
+  const maxItems = options?.maxItems ?? 12
+  const fromTaskData = taskData?.execution_layer as ExecutionLayerOutput | undefined
+  const fromAnalysisTasks = analysisTasks?.find((t) => t.step_name === 'execution_layer')?.output_data as ExecutionLayerOutput | undefined
+  const execLayer = fromTaskData ?? fromAnalysisTasks
+  const kmFromResult = result?.key_metrics ?? {}
+  const km =
+    (Array.isArray(kmFromResult.pm_action_plan) && kmFromResult.pm_action_plan.length > 0) ||
+    (Array.isArray(kmFromResult.next_actions_pm) && kmFromResult.next_actions_pm.length > 0)
+      ? kmFromResult
+      : { ...kmFromResult, pm_action_plan: execLayer?.pm_action_plan ?? kmFromResult.pm_action_plan, next_actions_pm: execLayer?.next_actions_pm ?? kmFromResult.next_actions_pm }
+  const fromPmActionPlan = (m: NonNullable<ResearchResponse['key_metrics']>): NextActionItem[] => {
+    const plan = m.pm_action_plan ?? []
+    const actions = m.pm_actions?.recommended_actions ?? []
+    if (plan.length > 0) {
+      return plan.map((a) => ({
+        action: a.action_title ?? '',
+        why: a.expected_outcome,
+        how_to_execute: a.description,
+        priority: (a.priority ?? 'medium') as 'high' | 'medium' | 'low',
+        estimated_effort: undefined,
+      }))
+    }
+    if (actions.length > 0) {
+      return actions.map((a) => ({
+        action: a.title,
+        why: a.reasoning,
+        how_to_execute: undefined,
+        priority: (a.urgency_level ?? 'medium') as 'high' | 'medium' | 'low',
+        estimated_effort: undefined,
+      }))
+    }
+    return []
+  }
+  if (Array.isArray(km.next_actions_pm) && km.next_actions_pm.length > 0) {
+    return km.next_actions_pm
+      .filter((a): a is typeof a & { action: string } => !!a.action?.trim())
+      .slice(0, maxItems)
+      .map((a) => ({
+        action: a.action,
+        why: a.why,
+        how_to_execute: a.how_to_execute,
+        priority: a.priority,
+        estimated_effort: a.estimated_effort,
+      }))
+  }
+  return fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>).filter((a) => a.action?.trim()).slice(0, maxItems)
+}
+
 const PRIORITY_COLORS = {
   high: 'bg-destructive/15 text-destructive border-destructive/30',
   medium: 'bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/30',
   low: 'bg-muted text-muted-foreground border-border',
 } as const
-
-type ExecutionLayerOutput = {
-  pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string }>
-  next_actions_pm?: NextActionItem[]
-}
 
 export interface NextActionsForPMProps {
   result: ResearchResponse | null
@@ -34,55 +89,8 @@ export interface NextActionsForPMProps {
   embedded?: boolean
 }
 
-/** Derive NextActionItem from pm_action_plan for backward compatibility */
-function fromPmActionPlan(km: NonNullable<ResearchResponse['key_metrics']>): NextActionItem[] {
-  const plan = km.pm_action_plan ?? []
-  const actions = km.pm_actions?.recommended_actions ?? []
-  if (plan.length > 0) {
-    return plan.slice(0, 5).map((a) => ({
-      action: a.action_title,
-      why: a.expected_outcome,
-      how_to_execute: a.description,
-      priority: (a.priority ?? 'medium') as 'high' | 'medium' | 'low',
-      estimated_effort: undefined,
-    }))
-  }
-  if (actions.length > 0) {
-    return actions.slice(0, 5).map((a) => ({
-      action: a.title,
-      why: a.reasoning,
-      how_to_execute: undefined,
-      priority: (a.urgency_level ?? 'medium') as 'high' | 'medium' | 'low',
-      estimated_effort: undefined,
-    }))
-  }
-  return []
-}
-
 export function NextActionsForPM({ result, taskData, analysisTasks, loading = false, embedded = false }: NextActionsForPMProps) {
-  const fromTaskData = taskData?.execution_layer as ExecutionLayerOutput | undefined
-  const fromAnalysisTasks = analysisTasks?.find((t) => t.step_name === 'execution_layer')?.output_data as ExecutionLayerOutput | undefined
-  const execLayer = fromTaskData ?? fromAnalysisTasks
-  const kmFromResult = result?.key_metrics ?? {}
-  const km =
-    (Array.isArray(kmFromResult.pm_action_plan) && kmFromResult.pm_action_plan.length > 0) ||
-    (Array.isArray(kmFromResult.next_actions_pm) && kmFromResult.next_actions_pm.length > 0)
-      ? kmFromResult
-      : { ...kmFromResult, pm_action_plan: execLayer?.pm_action_plan ?? kmFromResult.pm_action_plan, next_actions_pm: execLayer?.next_actions_pm ?? kmFromResult.next_actions_pm }
-  const nextActions: NextActionItem[] =
-    Array.isArray(km.next_actions_pm) && km.next_actions_pm.length > 0
-      ? km.next_actions_pm
-          .filter((a): a is typeof a & { action: string } => !!a.action?.trim())
-          .slice(0, 5)
-          .map((a) => ({
-            action: a.action,
-            why: a.why,
-            how_to_execute: a.how_to_execute,
-            priority: a.priority,
-            estimated_effort: a.estimated_effort,
-          }))
-      : fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>)
-
+  const nextActions = extractNextActionItems(result, taskData, analysisTasks, { maxItems: 5 })
   const hasContent = nextActions.length > 0
 
   const Wrapper = embedded ? 'div' : 'section'

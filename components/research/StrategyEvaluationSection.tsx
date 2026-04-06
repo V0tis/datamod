@@ -86,7 +86,7 @@ export function StrategyEvaluationSection({
           전략 평가
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          AI가 생성된 전략을 평가한 1–10 점수
+          시장 매력·경쟁 리스크·실행 난이도·성장 잠재력 축별 1–10 스코어
         </p>
       </div>
       {loading && !hasContent ? (

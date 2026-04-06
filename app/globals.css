@@ -4,58 +4,58 @@
 /* 다크 모드: Tailwind dark 전략은 'class'. html에 .dark 클래스 적용 시 다크 모드 (next-themes와 동일) */
 @custom-variant dark (&:is(.dark *));
 
-/* RIN-AI: neutral SaaS shell + blue accent (8px rhythm via Tailwind spacing) */
+/* RIN-AI: B2B+B2C 리브랜드 — 배경 #F8F9FA, 포지티브 #2AC1BC, 리스크 #FF5F5F, 본문 #222 */
 :root {
-  --rin-primary: #2563eb;
-  --rin-bg: #FFFFFF;
-  --rin-foreground: #0f172a;
-  --background: #f8fafc;
+  --rin-primary: #2ac1bc;
+  --rin-bg: #ffffff;
+  --rin-foreground: #222222;
+  --rin-risk: #ff5f5f;
+  --background: #f8f9fa;
   --background-elevated: #ffffff;
-  --foreground: #0f172a;
-  --foreground-muted: #6b7280;
-  --card: #FFFFFF;
-  --card-foreground: #1A1A1A;
-  --popover: #FFFFFF;
-  --popover-foreground: #1A1A1A;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #1A1A1A;
-  --muted: #f3f4f6;
-  --muted-hover: #e5e7eb;
-  --muted-foreground: #6b7280;
-  /* Neutral hover/surface — reserve blue for primary actions only */
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: #FFFFFF;
-  --success: #10b981;
-  --success-foreground: #FFFFFF;
+  --foreground: #222222;
+  --foreground-muted: #5c5c5c;
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+  --primary: #2ac1bc;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f4;
+  --secondary-foreground: #222222;
+  --muted: #eef1f4;
+  --muted-hover: #e2e6ea;
+  --muted-foreground: #5c5c5c;
+  --accent: #e8faf9;
+  --accent-foreground: #222222;
+  --destructive: #ff5f5f;
+  --destructive-foreground: #ffffff;
+  --success: #2ac1bc;
+  --success-foreground: #ffffff;
   --warning: #e5a84b;
-  --warning-foreground: #1A1A1A;
-  --error: #ef4444;
-  --error-foreground: #FFFFFF;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #2563EB;
-  --chart-1: #2563EB;
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.5rem;
-  --sidebar-bg: #0f172a;
-  --sidebar-fg: #f8fafc;
-  --sidebar-fg-muted: #94a3b8;
-  --sidebar-active: rgba(255, 255, 255, 0.08);
-  --sidebar: #0f172a;
-  --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #2563EB;
-  --sidebar-primary-foreground: #ffffff;
+  --warning-foreground: #222222;
+  --error: #ff5f5f;
+  --error-foreground: #ffffff;
+  --border: #e8eaed;
+  --input: #e8eaed;
+  --ring: #2ac1bc;
+  --chart-1: #2ac1bc;
+  --chart-2: #ff5f5f;
+  --chart-3: #3b82f6;
+  --chart-4: #94a3b8;
+  --chart-5: #222222;
+  --radius: 0.75rem;
+  --sidebar-bg: #111827;
+  --sidebar-fg: #f9fafb;
+  --sidebar-fg-muted: #9ca3af;
+  --sidebar-active: rgba(42, 193, 188, 0.15);
+  --sidebar: #111827;
+  --sidebar-foreground: #f9fafb;
+  --sidebar-primary: #2ac1bc;
+  --sidebar-primary-foreground: #111827;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #f8fafc;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-ring: #2563EB;
+  --sidebar-accent-foreground: #f9fafb;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #2ac1bc;
 }
 
 /* Dark theme: 부드러운 다크 그레이, 명확한 계층·대비, 순수 검정 배제 */
@@ -106,8 +106,9 @@
 @theme inline {
   --font-sans: 'Pretendard', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, monospace;
-  --color-rin-primary: #2563eb;
-  --color-rin-bg: #FFFFFF;
+  --color-rin-primary: #2ac1bc;
+  --color-rin-bg: #ffffff;
+  --color-rin-risk: #ff5f5f;
   --shadow-rin-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --color-background: var(--background);
   --color-background-elevated: var(--background-elevated);
@@ -282,19 +283,26 @@ body {
 
 /* UI consistency: page layout, cards, typography */
 .rin-page {
-  @apply p-4 md:p-6 max-w-5xl mx-auto min-h-screen bg-background;
+  @apply p-4 md:p-8 max-w-6xl mx-auto min-h-screen bg-background;
 }
 .rin-page-narrow {
-  @apply p-4 md:p-6 max-w-2xl mx-auto min-h-screen bg-background;
+  @apply p-4 md:p-8 max-w-3xl mx-auto min-h-screen bg-background;
 }
 .rin-page-header {
-  @apply mb-6;
+  @apply mb-8;
 }
 .rin-page-title {
-  @apply text-lg font-semibold text-foreground tracking-tight;
+  @apply text-xl sm:text-2xl font-bold text-foreground tracking-tight;
 }
 .rin-page-subtitle {
-  @apply text-muted-foreground text-xs mt-0.5;
+  @apply text-muted-foreground text-sm mt-1.5 max-w-2xl leading-relaxed;
+}
+/* 상용 대시보드 공통 카드 */
+.rin-pro-card {
+  @apply rounded-xl border border-border bg-white p-5 shadow-sm;
+}
+.dark .rin-pro-card {
+  @apply bg-card border-border;
 }
 .rin-section {
   @apply space-y-6;

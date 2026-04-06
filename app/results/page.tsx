@@ -28,7 +28,6 @@ import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCa
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
-import { ResultSectionNav } from '@/components/research/ResultSectionNav'
 import { ResultSectionErrorBoundary } from '@/components/research/ResultSectionErrorBoundary'
 import { ResultShareActions } from '@/components/research/ResultShareActions'
 import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
@@ -39,7 +38,7 @@ import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScor
 import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionLayer'
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
-import { ResultPageStructuredSections } from '@/components/research/ResultPageStructuredSections'
+import { ResultLDashboard } from '@/components/analysis/result-l-dashboard'
 import { AnalysisActivityFeed } from '@/components/research/analysis-activity-feed'
 import { AnalysisPhaseRerunBar } from '@/components/research/analysis-phase-rerun-bar'
 import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
@@ -231,7 +230,6 @@ function ResultsContent() {
   /** Consensus 재분석 중일 때는 DB analysis_results로 덮어쓰지 않음 */
   const isReanalyzingConsensusRef = useRef(false)
   const prevReportIdRef = useRef<string | null>(null)
-  const navProgressHighWaterRef = useRef(0)
 
   /** AI Insight Consensus: managed by useResultPageState (insightData), never overwrite success with fail */
   /** Consensus만 재분석 중일 때 true (Groq/Gemini 카드는 로딩 안 함) */
@@ -1082,57 +1080,11 @@ function ResultsContent() {
     return signals
   })()
 
-  const navProgress = (() => {
-    const isAnalyzing = loading
-
-    // New analysis started — reset high-water mark
-    if (isAnalyzing && (streamingState.status === 'running') && navProgressHighWaterRef.current >= 80) {
-      const step = 'currentStep' in streamingState ? streamingState.currentStep : 0
-      if (step <= 1) navProgressHighWaterRef.current = 0
-    }
-
-    const raw = (() => {
-      if (canonicalStatus === 'completed' || polledStatus === 'completed' || streamingState.status === 'completed') {
-        return { loading: false, percent: 100 }
-      }
-      if (displayResult?.reportId && !isAnalyzing) return { loading: false, percent: 100 }
-      if (analysisTasks?.length) {
-        const MAIN = ['trend_analysis', 'competition_analysis', 'insight_extraction', 'strategy_generation', 'execution_layer', 'risk_opportunity']
-        const done = analysisTasks.filter((t) => MAIN.includes(t.step_name) && t.status === 'completed').length
-        return { loading: isAnalyzing, percent: Math.min(100, (done / MAIN.length) * 100) }
-      }
-      const step = (streamingState.status === 'running' || streamingState.status === 'streaming')
-        ? Math.min(7, Math.max(0, 'currentStep' in streamingState ? streamingState.currentStep : 0))
-        : -1
-      if (isAnalyzing && step >= 0) {
-        return { loading: true, percent: Math.round(((step + 1) / 8) * 100) }
-      }
-      return { loading: isAnalyzing, percent: isAnalyzing ? 10 : 0 }
-    })()
-
-    // High-water mark prevents progress from regressing during transient state gaps
-    if (raw.percent >= navProgressHighWaterRef.current) {
-      navProgressHighWaterRef.current = raw.percent
-    } else if (navProgressHighWaterRef.current >= 80 && raw.percent < navProgressHighWaterRef.current) {
-      return { loading: raw.loading, percent: navProgressHighWaterRef.current }
-    }
-    return raw
-  })()
-
   const showTabs = hasKeyword
   if (showTabs) {
     return (
       <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
-        {/* 좌측 섹션 네비 – 분석 중/결과 있을 때 표시 (콘텐츠와 동일 조건) */}
-        {showAnalysisShell && !needsRunAction && (
-          <aside className="hidden lg:block fixed left-0 top-14 z-30 w-48 pt-2 pb-4 pl-4 pr-2 border-r border-border/60 bg-card/95 backdrop-blur h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden shadow-sm">
-            <ResultSectionNav variant="sidebar" mode="core" progress={navProgress} />
-          </aside>
-        )}
-        <div className={cn(
-          'flex min-w-0 max-w-[1920px] mx-auto',
-          showAnalysisShell && !needsRunAction && 'lg:pl-[208px]'
-        )}>
+        <div className="flex min-w-0 max-w-[1920px] mx-auto">
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
@@ -1344,13 +1296,7 @@ function ResultsContent() {
         )}
 
         {/* 모바일/태블릿: 스크롤 시 따라오는 섹션 탭 – only when result ready (no chart/conclusion during analyzing) */}
-        {!showInsightSequence && displayResult?.reportId && !needsRunAction && (
-          <div className="lg:hidden mt-3 -mx-2 sm:-mx-3 md:-mx-4">
-            <ResultSectionNav variant="tabs" mode="core" className="!top-14" progress={navProgress} />
-          </div>
-        )}
-
-        {/* 섹션 콘텐츠 (시퀀스 미표시 시에만) – 좌측 섹션 사이드바로 이동 */}
+        {/* 섹션 콘텐츠 (시퀀스 미표시 시에만) — L자형 대시보드에 통합 탭 네비 */}
         {!showInsightSequence && (
           <>
         <div className="space-y-5 mt-4">
@@ -1389,7 +1335,7 @@ function ResultsContent() {
         ) : (
           <div role="region" aria-label="AI 리포트" className="space-y-6">
             <ResultSectionErrorBoundary sectionName="structured-sections">
-              <ResultPageStructuredSections
+              <ResultLDashboard
                 result={effectiveResultForCards ?? displayResult}
                 displayResult={effectiveResultForCards ?? displayResult}
                 taskData={taskData}

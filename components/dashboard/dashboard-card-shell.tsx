@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { dashboardCardClass, dashboardCardPadding } from '@/components/dashboard/dashboard-tokens'
 
-const divider = <div className="h-px w-full shrink-0 bg-border" role="separator" />
-
-export type DashboardCardEmphasis = 'hero' | 'default' | 'subtle'
+export type DashboardCardEmphasis = 'hero' | 'default'
 
 export type DashboardCardShellProps = {
   id?: string
@@ -12,11 +11,7 @@ export type DashboardCardShellProps = {
   title: string
   description?: string
   icon?: ReactNode
-  /** 헤더 우측 액션(국가 칩, 링크 등) */
   headerRight?: ReactNode
-  /**
-   * 카드 최상단에 배치(의사결정 카드: 주요 CTA를 먼저).
-   */
   lead?: ReactNode
   children: ReactNode
   footer?: ReactNode
@@ -25,7 +20,8 @@ export type DashboardCardShellProps = {
 }
 
 /**
- * 대시보드 카드 공통 골격: (선택 lead) → 제목/설명 → 구분선 → 본문 → 구분선 → 푸터 CTA
+ * 대시보드 카드: 흰 배경, #E5E7EB 테두리, 12px radius, 20–24px 패딩.
+ * 본문은 여백으로 구분 (라인 최소화).
  */
 export function DashboardCardShell({
   id,
@@ -46,56 +42,51 @@ export function DashboardCardShell({
       id={id}
       aria-label={ariaLabel}
       className={cn(
-        'overflow-hidden rounded-2xl border border-border text-card-foreground shadow-sm',
-        emphasis === 'hero' &&
-          'border-primary/20 bg-card shadow-md ring-1 ring-primary/10 dark:border-primary/25',
-        emphasis === 'default' && 'bg-card',
-        emphasis === 'subtle' && 'border-border/80 bg-muted/20 shadow-none dark:bg-muted/15',
+        dashboardCardClass,
+        emphasis === 'hero' && 'shadow-md ring-1 ring-slate-200/80 dark:ring-zinc-700',
         className
       )}
     >
-      <div className="flex flex-col gap-4 p-6">
-        {lead != null && lead !== false && (
-          <>
-            <div className="min-w-0">{lead}</div>
-            {divider}
-          </>
-        )}
+      <div className={cn('flex flex-col gap-6', dashboardCardPadding)}>
+        {lead != null && lead !== false ? <div className="min-w-0">{lead}</div> : null}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 flex-1 gap-3">
-            {icon != null && (
+            {icon != null ? (
               <div
                 className={cn(
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                  emphasis === 'hero' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                  emphasis === 'hero'
+                    ? 'bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400'
+                    : 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300'
                 )}
                 aria-hidden
               >
                 {icon}
               </div>
-            )}
+            ) : null}
             <div className="min-w-0 flex-1 space-y-1">
-              <h2 id={titleId} className="text-lg font-semibold tracking-tight text-foreground">
+              <h2
+                id={titleId}
+                className={cn(
+                  'font-semibold tracking-tight text-neutral-900 dark:text-zinc-50',
+                  emphasis === 'hero' ? 'text-xl sm:text-2xl' : 'text-lg'
+                )}
+              >
                 {title}
               </h2>
               {description ? (
-                <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+                <p className="text-sm leading-snug text-slate-600 dark:text-zinc-400">{description}</p>
               ) : null}
             </div>
           </div>
           {headerRight != null ? <div className="shrink-0 sm:pt-0.5">{headerRight}</div> : null}
         </div>
 
-        {divider}
-
-        <div className="min-w-0 space-y-4 text-sm leading-normal">{children}</div>
+        <div className="min-w-0 text-sm leading-normal text-neutral-800 dark:text-zinc-200">{children}</div>
 
         {footer != null && footer !== false ? (
-          <>
-            {divider}
-            <div className="min-w-0 pt-0">{footer}</div>
-          </>
+          <div className="min-w-0 text-sm text-slate-600 dark:text-zinc-400">{footer}</div>
         ) : null}
       </div>
     </section>

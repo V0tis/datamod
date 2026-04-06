@@ -34,7 +34,7 @@ export function ChangePasswordForm({ user, userEmail }: { user: User; userEmail:
   const [fieldError, setFieldError] = useState<string | null>(null)
 
   const sectionShell = (title: string, body: ReactNode) => (
-    <div className="border-t border-border pt-6">
+    <div className="mt-10">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       <div className="mt-2">{body}</div>
     </div>
@@ -97,7 +97,7 @@ export function ChangePasswordForm({ user, userEmail }: { user: User; userEmail:
   }
 
   return (
-    <div className="border-t border-border pt-6">
+    <div className="mt-10">
       <h3 className="text-sm font-semibold text-foreground">비밀번호 변경</h3>
       <p className="mt-1 text-sm text-muted-foreground">보안을 위해 현재 비밀번호 확인 후 새 비밀번호로 갱신합니다.</p>
       <form onSubmit={handleSubmit} className="mt-4 max-w-md space-y-4">

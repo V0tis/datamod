@@ -489,10 +489,16 @@ function SettingsPageInner() {
               <CardTitle className="text-lg">내 정보</CardTitle>
               <CardDescription>로그인 이메일과 비밀번호를 한곳에서 확인·변경합니다.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-0">
               <div className="max-w-md space-y-2">
                 <Label htmlFor="email">이메일</Label>
-                <Input id="email" type="email" value={data?.email ?? ''} readOnly className="bg-muted/50 cursor-not-allowed" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={data?.email ?? ''}
+                  readOnly
+                  className="cursor-not-allowed border-[#E5E7EB] bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900/80"
+                />
               </div>
               {user && <ChangePasswordForm user={user} userEmail={(data?.email ?? user.email ?? '').trim()} />}
             </CardContent>

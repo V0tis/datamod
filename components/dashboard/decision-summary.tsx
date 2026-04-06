@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils'
 
 export type DecisionSummaryData = {
   recommendedKeyword: string | null
-  /** 0–100 when backed by opportunity score; null for trend-only or empty */
   confidence: number | null
   confidenceLabel: string
   reasons: string[]
@@ -28,12 +27,12 @@ export function DecisionSummary({ loading, data, onStartAnalysis, startDisabled 
 
   const primaryActions = (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">다음 행동</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">다음 행동</p>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Button
           type="button"
           size="lg"
-          className="w-full sm:w-auto sm:min-w-[140px] h-11 text-base font-semibold shadow-sm"
+          className="h-11 w-full text-base font-semibold shadow-sm sm:w-auto sm:min-w-[140px]"
           onClick={onStartAnalysis}
           disabled={startDisabled || loading}
         >
@@ -41,11 +40,11 @@ export function DecisionSummary({ loading, data, onStartAnalysis, startDisabled 
           분석 시작
         </Button>
         {strategyHref ? (
-          <Button variant="outline" size="lg" className="w-full sm:w-auto h-11 text-base font-medium" asChild>
+          <Button variant="outline" size="lg" className="h-11 w-full text-base font-medium sm:w-auto" asChild>
             <Link href={`${strategyHref}#section-strategic-recommendations`}>전략 보기</Link>
           </Button>
         ) : (
-          <Button type="button" variant="outline" size="lg" className="w-full sm:w-auto h-11 text-base" disabled>
+          <Button type="button" variant="outline" size="lg" className="h-11 w-full text-base sm:w-auto" disabled>
             전략 보기
           </Button>
         )}
@@ -60,55 +59,55 @@ export function DecisionSummary({ loading, data, onStartAnalysis, startDisabled 
       lead={primaryActions}
       icon={<Compass className="h-5 w-5" aria-hidden />}
       title="지금 집중할 시장"
-      description="완료된 분석·트렌드 신호를 바탕으로 오늘의 우선 키워드를 제안합니다."
+      description="데이터 기반 우선 키워드 · 한눈에 결정"
     >
       {loading ? (
-        <div className="space-y-4 animate-pulse py-1">
-          <div className="h-10 w-2/3 max-w-md rounded-lg bg-muted/70" />
-          <div className="h-9 w-40 rounded-md bg-muted/50" />
-          <div className="h-4 w-full max-w-lg rounded bg-muted/40" />
-          <div className="h-4 w-full max-w-md rounded bg-muted/30" />
+        <div className="space-y-4 py-1">
+          <div className="h-10 w-2/3 max-w-md animate-pulse rounded-lg bg-slate-100 dark:bg-zinc-900" />
+          <div className="h-9 w-40 animate-pulse rounded-md bg-slate-100 dark:bg-zinc-900" />
+          <div className="h-4 w-full max-w-lg animate-pulse rounded bg-slate-100 dark:bg-zinc-900" />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">추천 키워드</p>
-            <p className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl break-words">
-              {recommendedKeyword ?? '키워드를 입력해 첫 분석을 시작하세요'}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">추천</p>
+            <p className="break-words text-3xl font-bold leading-tight tracking-tight text-neutral-900 dark:text-zinc-50 sm:text-4xl">
+              {recommendedKeyword ?? '키워드 입력 후 첫 분석'}
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <span
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums',
-                  source === 'opportunity' && confidence != null
-                    ? 'border-border bg-muted/60 text-foreground'
-                    : 'border-transparent bg-muted/40 text-muted-foreground'
+                  'inline-flex items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-slate-50 px-3 py-1.5 text-sm font-medium tabular-nums dark:border-zinc-700 dark:bg-zinc-900',
+                  source === 'opportunity' && confidence != null ? 'text-neutral-900 dark:text-zinc-100' : 'text-slate-600 dark:text-zinc-400'
                 )}
               >
-                <LineChart className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <LineChart className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
                 {confidenceLabel}
               </span>
               {source === 'trend' && (
-                <span className="text-xs text-muted-foreground">트렌드 신호 기반</span>
+                <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                  성장 중
+                </span>
               )}
               {source === 'empty' && (
-                <span className="text-xs text-muted-foreground">데이터가 쌓이면 자동 추천</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  데이터 대기
+                </span>
               )}
             </div>
           </div>
 
           {reasons.length > 0 && (
-            <>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">왜 이 키워드인가</p>
-              <ul className="space-y-3 rounded-xl border border-border/70 bg-muted/15 px-4 py-4 dark:bg-muted/10">
-                {reasons.slice(0, 2).map((r, i) => (
-                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-foreground/95">
-                    <span className="font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {reasons.slice(0, 2).map((r, i) => (
+                <span
+                  key={i}
+                  className="inline-flex max-w-full items-center rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium leading-snug text-neutral-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                >
+                  {r}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       )}

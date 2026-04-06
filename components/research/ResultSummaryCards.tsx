@@ -23,9 +23,17 @@ export interface ResultSummaryCardsProps {
   }> | null
   loading?: boolean
   className?: string
+  /** saas: 흰 카드·그레이 보더 (분석 L-대시보드 등) */
+  variant?: 'default' | 'saas'
 }
 
-function SummaryCard({ card }: { card: { id: string; label: string; value: string | null; icon: typeof TrendingUp; showCalculating?: boolean; explanation?: string | null } }) {
+function SummaryCard({
+  card,
+  variant,
+}: {
+  card: { id: string; label: string; value: string | null; icon: typeof TrendingUp; showCalculating?: boolean; explanation?: string | null }
+  variant: 'default' | 'saas'
+}) {
   const [expanded, setExpanded] = useState(false)
   const Icon = card.icon
   const displayValue = card.id === 'opportunity' && card.showCalculating && !card.value
@@ -37,8 +45,10 @@ function SummaryCard({ card }: { card: { id: string; label: string; value: strin
   return (
     <div
       className={cn(
-        'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-5 shadow-sm',
-        'transition-colors hover:border-primary/40 hover:from-primary/12'
+        'rounded-xl p-5 shadow-sm transition-colors',
+        variant === 'saas'
+          ? 'border border-[#E5E7EB] bg-white hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600'
+          : 'border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent hover:border-primary/40 hover:from-primary/12'
       )}
     >
       <div className="flex items-center gap-2 mb-3">
@@ -75,6 +85,7 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
   analysisTasks,
   loading = false,
   className,
+  variant = 'default',
 }: ResultSummaryCardsProps) {
   const km = result?.key_metrics ?? {}
   const breakdown = km.opportunity_score_breakdown ?? {}
@@ -182,7 +193,7 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
   return (
     <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-4', className)}>
       {cards.map((card) => (
-        <SummaryCard key={card.id} card={card} />
+        <SummaryCard key={card.id} card={card} variant={variant} />
       ))}
     </div>
   )

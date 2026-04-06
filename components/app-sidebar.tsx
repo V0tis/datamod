@@ -55,30 +55,27 @@ export function AppSidebar() {
   const isResultsPage = pathname?.startsWith('/results')
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col">
-      {/* Logo */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
+    <div className="flex h-full w-full flex-col bg-[#111827] text-gray-300">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-4">
+        <Link href="/" className="flex items-center gap-2 text-white transition-opacity hover:opacity-90">
           <RinLogo size={24} className="shrink-0" />
-          <span className="font-semibold text-foreground text-sm tracking-tight">rin-ai</span>
+          <span className="text-sm font-semibold tracking-tight">rin-ai</span>
         </Link>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="메인 메뉴">
-        <ul className="space-y-1" role="list">
+      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="메인 메뉴">
+        <ul className="space-y-0.5" role="list">
           {navItems.map((item) => {
             const active = isActive(item)
             const Icon = item.icon
             return (
               <li key={item.href + item.label} className="relative">
-                {/* Animated active indicator */}
                 <motion.span
                   aria-hidden
                   initial={false}
                   animate={{ opacity: active ? 1 : 0 }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-full bg-primary"
+                  className="absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-r-full bg-[#2AC1BC]"
                 />
                 <Link href={item.href} title={item.tooltip} className="block">
                   <motion.span
@@ -88,17 +85,17 @@ export function AppSidebar() {
                       transition: motionConfig.navHover.transition,
                     }}
                     className={cn(
-                      'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
-                      'border-l-2 -ml-px pl-[11px] transition-colors duration-200',
+                      'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200',
+                      'border-l-2 border-transparent pl-[11px]',
                       active
-                        ? 'border-primary bg-muted text-foreground'
-                        : 'border-transparent text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                        ? 'border-[#2AC1BC] bg-white/10 text-white'
+                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
                     )}
                   >
                     <Icon
                       className={cn(
                         'h-4 w-4 shrink-0 transition-colors duration-200',
-                        active ? 'text-foreground' : 'opacity-70'
+                        active ? 'text-[#2AC1BC]' : 'opacity-80'
                       )}
                     />
                     {item.label}
@@ -110,15 +107,14 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {/* Footer: theme + user + sign out */}
-      <div className="shrink-0 border-t border-border/60 px-3 py-4 space-y-3">
-        <div className="flex justify-between items-center px-1">
-          <span className="text-xs text-muted-foreground">테마</span>
+      <div className="shrink-0 space-y-3 border-t border-white/10 px-3 py-4">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-500">테마</span>
           <ThemeSwitcher />
         </div>
         {user ? (
           <div className="space-y-1">
-            <p className="truncate px-3 py-1.5 text-xs text-muted-foreground" title={user.email ?? ''}>
+            <p className="truncate px-3 py-1.5 text-xs text-gray-500" title={user.email ?? ''}>
               {user.email ?? 'User'}
             </p>
             <button
@@ -128,11 +124,11 @@ export function AppSidebar() {
               title="로그아웃"
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                'text-gray-400 hover:bg-white/5 hover:text-white',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
-              <LogOut className="h-4 w-4 shrink-0 opacity-70" />
+              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
               로그아웃
             </button>
           </div>
@@ -142,10 +138,10 @@ export function AppSidebar() {
             title="로그인"
             className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+              'text-gray-400 hover:bg-white/5 hover:text-white'
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0 opacity-70" />
+            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
             로그인
           </Link>
         )}
@@ -154,13 +150,13 @@ export function AppSidebar() {
   )
 
   const topbarContent = (
-    <div className="flex h-14 min-h-[3.5rem] max-h-14 w-full items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 border-b border-border bg-card">
-      <div className="flex items-center gap-2 sm:gap-6 min-w-0 overflow-x-auto">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity shrink-0">
+    <div className="flex h-14 min-h-[3.5rem] max-h-14 w-full items-center justify-between gap-2 border-b border-border bg-white px-3 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto sm:gap-6">
+        <Link href="/" className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90">
           <RinLogo size={22} className="shrink-0" />
-          <span className="font-semibold text-foreground text-sm tracking-tight">rin-ai</span>
+          <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-zinc-100">rin-ai</span>
         </Link>
-        <nav className="flex items-center gap-1 shrink-0" aria-label="메인 메뉴">
+        <nav className="flex shrink-0 items-center gap-1" aria-label="메인 메뉴">
           {navItems.map((item) => {
             const active = isActive(item)
             const Icon = item.icon
@@ -172,22 +168,22 @@ export function AppSidebar() {
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200',
                   active
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                    ? 'bg-slate-100 text-neutral-900 dark:bg-zinc-800 dark:text-zinc-100'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-neutral-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
                 )}
               >
-                <Icon className={cn('h-4 w-4 shrink-0 transition-colors duration-200', active ? 'text-foreground' : 'opacity-70')} />
+                <Icon className={cn('h-4 w-4 shrink-0 transition-colors duration-200', active ? 'text-[#2AC1BC]' : 'opacity-80')} />
                 {item.label}
               </Link>
             )
           })}
         </nav>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-3">
         <ThemeSwitcher />
         {user ? (
           <>
-            <span className="truncate max-w-[140px] text-xs text-muted-foreground" title={user.email ?? ''}>
+            <span className="max-w-[140px] truncate text-xs text-slate-500 dark:text-zinc-400" title={user.email ?? ''}>
               {user.email ?? 'User'}
             </span>
             <button
@@ -197,11 +193,11 @@ export function AppSidebar() {
               title="로그아웃"
               className={cn(
                 'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
-                'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                'text-slate-600 hover:bg-slate-100 hover:text-neutral-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
-              <LogOut className="h-4 w-4 shrink-0 opacity-70" />
+              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
               로그아웃
             </button>
           </>
@@ -211,10 +207,10 @@ export function AppSidebar() {
             title="로그인"
             className={cn(
               'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
-              'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+              'text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0 opacity-70" />
+            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
             로그인
           </Link>
         )}
@@ -224,7 +220,7 @@ export function AppSidebar() {
 
   if (isResultsPage) {
     return (
-      <header className="fixed left-0 right-0 top-0 z-40 h-14 shrink-0 border-b border-border bg-card overflow-hidden">
+      <header className="fixed left-0 right-0 top-0 z-40 h-14 shrink-0 overflow-hidden border-b border-border bg-white dark:border-zinc-800 dark:bg-zinc-950">
         {topbarContent}
       </header>
     )
@@ -232,29 +228,26 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground lg:hidden"
+        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-neutral-900 shadow-sm lg:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
         aria-label="메뉴 열기"
       >
         {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
-      {/* Overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-border bg-card',
+          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-white/10 shadow-xl',
           'lg:flex lg:translate-x-0',
           'transition-transform duration-200 ease-out',
           mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full lg:flex'
