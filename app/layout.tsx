@@ -7,6 +7,8 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorToastProvider } from "@/components/error-toast-provider";
 import { ApiKeyValidationProvider } from "@/components/api-key-validation-provider";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
+import { SupabaseConfigGate } from "@/components/supabase-config-gate";
+import { LogoutProvider } from "@/components/providers/logout-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
@@ -33,11 +35,15 @@ export default function RootLayout({
       <body className="font-sans antialiased text-foreground bg-background transition-colors duration-300">
         <ThemeProvider>
           <AuthProvider>
-            <RootErrorBoundary>
-              <AppShell>{children}</AppShell>
-              <ErrorToastProvider />
-              <ApiKeyValidationProvider />
-            </RootErrorBoundary>
+            <SupabaseConfigGate>
+              <LogoutProvider>
+                <RootErrorBoundary>
+                  <AppShell>{children}</AppShell>
+                  <ErrorToastProvider />
+                  <ApiKeyValidationProvider />
+                </RootErrorBoundary>
+              </LogoutProvider>
+            </SupabaseConfigGate>
           </AuthProvider>
         </ThemeProvider>
         <SpeedInsights />

@@ -54,6 +54,12 @@ function toUserFriendlyError(err: unknown, fallback: string): string {
 }
 import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
+import {
+  loadPipelineResumeState,
+  type CompetitionDataShape,
+  type TrendDataShape,
+  type PipelineResumeState,
+} from '@/lib/ai/pipeline-resume'
 import { searchWeb, formatWebContext } from '@/lib/web-search'
 import type {
   InitialResearchSummary,
@@ -142,6 +148,7 @@ export type ResearchStreamEvent =
   | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
+  | { type: 'pipeline_resume'; phase: 2 | 3; skippedSteps: string[]; message: string }
 
 export type AIPrimaryModel = 'gemini' | 'groq'
 
@@ -165,6 +172,11 @@ export type RunResearchParams = {
   signal?: AbortSignal
   /** true면 DB 캐시 무시하고 항상 새 분석 실행 (다시 분석하기용) */
   forceReanalyze?: boolean
+  /**
+   * 부분 재실행: 2 = 인사이트부터(데이터 수집 스킵), 3 = 전략·실행부터(인사이트까지 스킵).
+   * 저장된 analysis_tasks가 없으면 전체 파이프라인으로 폴백합니다.
+   */
+  rerunFromPhase?: 1 | 2 | 3
 }
 
 type RssItem = {
@@ -1473,6 +1485,7 @@ export async function* runResearch(
     stepAISettings: stepSettings,
     signal,
     forceReanalyze,
+    rerunFromPhase,
   } = params
   const webSearchOptions = (serperKey ?? '').trim() ? { apiKey: (serperKey ?? '').trim() } : {}
   const serperUsed = !!(serperKey && serperKey.trim())
@@ -1483,9 +1496,11 @@ export async function* runResearch(
     : { ai_primary_model: primaryProvider }
   const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
 
+  const wantsPartialRerun = rerunFromPhase === 2 || rerunFromPhase === 3
+
   // Check cache first (skip when forceReanalyze = true: 사용자가 "다시 분석하기"를 누른 경우)
   let cacheRow: { report_id: string; updated_at: string } | null = null
-  if (!forceReanalyze) {
+  if (!forceReanalyze && !wantsPartialRerun) {
     const { data } = await supabase
       .from('research_history')
       .select('report_id, updated_at')
@@ -1498,7 +1513,23 @@ export async function* runResearch(
 
   const pipelineStartMs = Date.now()
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
-  console.log('[AI Pipeline] Start', { keyword, primaryProvider, hasGemini: !!geminiKey, hasGroq: !!groqKey, forceReanalyze })
+
+  let resumeState: PipelineResumeState | null = null
+  if (wantsPartialRerun && !forceReanalyze) {
+    resumeState = await loadPipelineResumeState(supabase, analysisId, rerunFromPhase === 3 ? 3 : 2)
+  }
+  const skipDataCollection = !!resumeState
+  const skipInsightExtraction = resumeState?.kind === 'before_strategy'
+
+  console.log('[AI Pipeline] Start', {
+    keyword,
+    primaryProvider,
+    hasGemini: !!geminiKey,
+    hasGroq: !!groqKey,
+    forceReanalyze,
+    partialResume: skipDataCollection,
+    rerunFromPhase,
+  })
   const log = (step: string, detail: string, extra?: Record<string, unknown>) => {
     console.log('[AI Timeline]', { step, detail, provider: primaryProvider, analysisId: analysisId.slice(0, 40) + '...', keyword, elapsedMs: Date.now() - pipelineStartMs, ...extra })
   }
@@ -1559,14 +1590,16 @@ export async function* runResearch(
 
   // Web search grounding: user input → web search → top sources → feed to LLM
   let webContext = ''
-  try {
-    const webResults = await searchWeb(keyword, { num: 10, ...webSearchOptions })
-    webContext = formatWebContext(webResults, 10)
-    if (webResults.length > 0) {
-      log('web_grounding', 'completed', { sourcesCount: webResults.length })
+  if (!skipDataCollection) {
+    try {
+      const webResults = await searchWeb(keyword, { num: 10, ...webSearchOptions })
+      webContext = formatWebContext(webResults, 10)
+      if (webResults.length > 0) {
+        log('web_grounding', 'completed', { sourcesCount: webResults.length })
+      }
+    } catch (err) {
+      console.warn('[AI Timeline] web search failed (continuing without)', { keyword, err })
     }
-  } catch (err) {
-    console.warn('[AI Timeline] web search failed (continuing without)', { keyword, err })
   }
 
   const depthForDb = depthMode === 'quick' ? 'fast' : depthMode
@@ -1592,12 +1625,53 @@ export async function* runResearch(
   console.log('[AI Analysis] 시작', { keyword: cacheKey.keyword, countryCode: cacheKey.countryCode, analysisId: analysisId.slice(0, 50) + '...' })
   yield { type: 'analysis_started', analysisId }
 
+  let news: NewsItem[] = []
+  let trendData: TrendDataShape = {
+    summary: '',
+    market_score: 50,
+    positive_signals: [],
+    neutral_signals: [],
+  }
+  let competitionData: CompetitionDataShape = { competitive_landscape: [] }
+  let marketOverview = ''
+  let competitionSummary = ''
+
+  if (skipDataCollection && resumeState) {
+    const phase = rerunFromPhase === 3 ? 3 : 2
+    const skippedSteps =
+      resumeState.kind === 'before_strategy'
+        ? ['signal_layer', 'article_extraction', 'trend_analysis', 'competition_analysis', 'insight_extraction']
+        : ['signal_layer', 'article_extraction', 'trend_analysis', 'competition_analysis']
+    yield {
+      type: 'pipeline_resume',
+      phase,
+      skippedSteps,
+      message:
+        resumeState.kind === 'before_strategy'
+          ? '저장된 인사이트까지 반영된 상태에서 전략·실행 단계만 다시 수행합니다.'
+          : '저장된 데이터 수집 결과를 사용하고 인사이트부터 다시 수행합니다.',
+    }
+    news = resumeState.news as NewsItem[]
+    trendData = resumeState.trendData
+    competitionData = resumeState.competitionData
+    marketOverview = resumeState.marketOverview
+    competitionSummary = resumeState.competitionSummary
+    yield { type: 'news', items: news }
+    yield {
+      type: 'pass1',
+      summary: trendData.summary,
+      temperature: trendData.market_score,
+      insights: trendData.positive_signals,
+    }
+    await updateProgress(skipInsightExtraction ? 3 : 2, 'analyzing')
+  }
+
   // Layer 1: Signal Layer - collect news, extract article content, summarize
+  if (!skipDataCollection) {
   const articleCount = ARTICLE_COUNT_BY_DEPTH[depthMode]
   log('signal_layer', 'running', { depthMode, articleCount })
   await upsertAnalysisTask('signal_layer', 'running', { provider: null, fallback_used: false })
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
-  let news: NewsItem[]
   try {
     news = await fetchNewsTitles(keyword, cacheKey.countryCode, Math.max(articleCount, 15))
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
@@ -1755,8 +1829,8 @@ export async function* runResearch(
 
   const trendResult = trendSettled.value
   const compResult = compSettled.value
-  const trendData = trendResult.trendData
-  const competitionData = compResult.competitionData
+  trendData = trendResult.trendData
+  competitionData = compResult.competitionData
 
   const trendProvider = marketProvider === 'gemini' ? (trendResult.usedFallback ? 'groq' : 'gemini') : (trendResult.usedFallback ? 'gemini' : 'groq')
   const compProvider = competitorProvider === 'gemini' ? (compResult.usedFallback ? 'groq' : 'gemini') : (compResult.usedFallback ? 'gemini' : 'groq')
@@ -1801,23 +1875,30 @@ export async function* runResearch(
     insights: trendData.positive_signals,
   }
 
-  const competitionSummary = competitionData.competitive_landscape
+  competitionSummary = competitionData.competitive_landscape
     .map((c) => (c.positioning ? `${c.name}: ${c.positioning}` : c.name))
     .join('. ') || competitionData.market_structure || ''
 
-  const marketOverview = trendData.summary
+  marketOverview = trendData.summary
 
   if (checkAborted(signal)) {
     yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'trend_competition' }
     return
   }
 
+  } // end if (!skipDataCollection)
+
   // Step 3: Insight Extraction
   const insightProviderResolved = resolveAIForStep(effectiveStepSettings, 'insight')
+  let insightData: InsightExtractionResult
+
+  if (skipInsightExtraction && resumeState?.kind === 'before_strategy') {
+    insightData = resumeState.insightData as InsightExtractionResult
+    log('insight_extraction', 'skipped_resume', {})
+  } else {
   log('insight_extraction', 'running')
   await upsertAnalysisTask('insight_extraction', 'running', { provider: insightProviderResolved, fallback_used: false })
   yield { type: 'task', task: 'insight_extraction', status: 'running', provider: insightProviderResolved, fallback_used: false }
-  let insightData: InsightExtractionResult
   try {
     const insightResult = await runInsightExtractionTask(
       geminiKey,
@@ -1859,6 +1940,7 @@ export async function* runResearch(
       ),
     }
   }
+  } // end else (insight extraction path)
 
   const stratPrimaryIsGemini = primaryProvider === 'gemini'
 

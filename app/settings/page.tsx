@@ -14,6 +14,7 @@ import { showErrorToast } from '@/lib/error-toast'
 import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
+import { ChangePasswordForm } from '@/components/settings/change-password-form'
 
 type LicenseOrigin = 'USER' | 'NONE'
 
@@ -486,15 +487,14 @@ function SettingsPageInner() {
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
-              <CardDescription>로그인에 사용한 이메일입니다.</CardDescription>
+              <CardDescription>로그인 이메일과 비밀번호를 한곳에서 확인·변경합니다.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4 max-w-md">
-                <div className="space-y-2">
-                  <Label htmlFor="email">이메일</Label>
-                  <Input id="email" type="email" value={data?.email ?? ''} readOnly className="bg-muted/50 cursor-not-allowed" />
-                </div>
+              <div className="max-w-md space-y-2">
+                <Label htmlFor="email">이메일</Label>
+                <Input id="email" type="email" value={data?.email ?? ''} readOnly className="bg-muted/50 cursor-not-allowed" />
               </div>
+              {user && <ChangePasswordForm user={user} userEmail={(data?.email ?? user.email ?? '').trim()} />}
             </CardContent>
           </Card>
         </TabsContent>

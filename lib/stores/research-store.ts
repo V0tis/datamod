@@ -25,6 +25,7 @@ import {
   isAnalyzing,
   getStepCount,
 } from '@/lib/types/analysis-modes'
+import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 
 export interface NewsItem {
   title: string
@@ -319,6 +320,8 @@ interface ResearchState {
     fallback_used?: boolean
     primary_provider_error?: string | null
   }> | null
+  /** 최근 스트리밍 활동 로그 (실시간 피드백용, 최대 40행 유지) */
+  streamingActivityLog: Array<{ ts: number; message: string }>
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -445,7 +448,17 @@ interface ResearchStore extends ResearchState {
   /** Apply streaming section updates. Composes result from sections. */
   applyStreamingUpdate: (payload: StreamingUpdatePayload) => void
   /** Start analysis via streaming API (replaces job polling). */
-  startStreamingResearch: (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq'; force_reanalyze?: boolean }) => Promise<void>
+  startStreamingResearch: (
+    keyword: string,
+    options?: {
+      country_code?: string
+      mode?: AnalysisMode
+      ai_primary_model?: 'gemini' | 'groq'
+      force_reanalyze?: boolean
+      /** 2: 인사이트부터, 3: 전략부터. 1은 전체 재분석과 동일 → force_reanalyze 사용 */
+      rerun_from_phase?: 1 | 2 | 3
+    }
+  ) => Promise<void>
   /** Abort current analysis in progress */
   abortAnalysis: () => void
   /** Set analysis mode for next analysis */
@@ -516,6 +529,7 @@ const initialState: ResearchState = {
   taskData: {},
   analysisId: null,
   analysisTasks: null,
+  streamingActivityLog: [],
 }
 
 export const useResearchStore = create<ResearchStore>()(
@@ -809,7 +823,16 @@ export const useResearchStore = create<ResearchStore>()(
         })
       },
 
-      startStreamingResearch: async (keyword: string, options?: { country_code?: string; mode?: AnalysisMode; ai_primary_model?: 'gemini' | 'groq'; force_reanalyze?: boolean }) => {
+      startStreamingResearch: async (
+        keyword: string,
+        options?: {
+          country_code?: string
+          mode?: AnalysisMode
+          ai_primary_model?: 'gemini' | 'groq'
+          force_reanalyze?: boolean
+          rerun_from_phase?: 1 | 2 | 3
+        }
+      ) => {
         const k = keyword?.trim()
         if (!k) {
           toast.error('검색어가 없습니다.')
@@ -866,7 +889,14 @@ export const useResearchStore = create<ResearchStore>()(
           taskData: {},
           analysisId: null,
           analysisTasks: null,
+          streamingActivityLog: [],
         })
+
+        const appendActivity = (message: string) => {
+          set((state) => ({
+            streamingActivityLog: [...state.streamingActivityLog.slice(-39), { ts: Date.now(), message }],
+          }))
+        }
 
         try {
           const checkRes = await fetch('/api/settings', { credentials: 'same-origin', signal })
@@ -892,7 +922,12 @@ export const useResearchStore = create<ResearchStore>()(
               country_code: countryCode,
               mode,
               ai_primary_model: options?.ai_primary_model,
-              force_reanalyze: options?.force_reanalyze === true,
+              force_reanalyze:
+                options?.force_reanalyze === true || options?.rerun_from_phase === 1,
+              rerun_from_phase:
+                options?.rerun_from_phase === 2 || options?.rerun_from_phase === 3
+                  ? options.rerun_from_phase
+                  : undefined,
             }),
             credentials: 'same-origin',
             signal,
@@ -926,6 +961,7 @@ export const useResearchStore = create<ResearchStore>()(
           let buffer = ''
           let streamEnded = false
           let lastSuccessfulStep = 0
+          appendActivity('분석 파이프라인에 연결되었습니다. 단계별 진행 상황을 표시합니다.')
           const applyUpdate = get().applyStreamingUpdate
           const setStepProgress = get().setStepProgress
           const setAnalysisId = get().setAnalysisId
@@ -1006,6 +1042,15 @@ export const useResearchStore = create<ResearchStore>()(
                 if (type === 'analysis_started') {
                   const ev = event as { analysisId?: string }
                   if (ev.analysisId) setAnalysisId(ev.analysisId)
+                  appendActivity('데이터 수집·AI 분석을 시작합니다.')
+                }
+
+                if (type === 'pipeline_resume') {
+                  const ev = event as { message?: string; phase?: number; skippedSteps?: string[] }
+                  appendActivity(
+                    ev.message ??
+                      `저장된 결과에서 이어 실행합니다 (단계 ${ev.phase ?? '?'})`
+                  )
                 }
 
                 // Handle task events (AI Analysis Console)
@@ -1013,6 +1058,13 @@ export const useResearchStore = create<ResearchStore>()(
                   const ev = event as { task?: string; status?: string; data?: unknown; error?: string; fallbackMessage?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string; currentArticleTitle?: string }
                   const task = ev.task
                   const status = ev.status
+                  if (task && status === 'running') {
+                    appendActivity(
+                      getAnalysisActivityMessage(task, undefined, {
+                        currentArticleTitle: ev.currentArticleTitle,
+                      })
+                    )
+                  }
                   if (task && task in stepMap) {
                     const stepIdx = stepMap[task]
                     setStepProgress(stepIdx, task, ev.retryMessage, ev.currentArticleTitle)

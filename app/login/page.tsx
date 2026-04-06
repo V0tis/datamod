@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Info } from 'lucide-react'
 import Link from 'next/link'
-import { RinLogo } from '@/components/rin-logo'
+import { AuthPageShell } from '@/components/auth/auth-page-shell'
 
 const loginRequiredReason = 'login_required'
 
@@ -74,93 +74,87 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12 bg-[#f5f5f5]">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center space-y-2">
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center gap-2"
-            aria-label="홈으로 이동"
-          >
-            <RinLogo size={32} className="shrink-0" />
-            <span className="text-xl font-bold text-[#1A1A1A]">Rin</span>
-          </Link>
-          <p className="text-sm text-[#6b7280]">PM 의사결정을 위한 시장 분석 도구</p>
-        </div>
-
-        <div className="rounded-2xl border border-[#e8e8e8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          <form onSubmit={handleLogin} className="space-y-5">
-            {showLoginRequired && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-xl border border-[#FFE082] bg-[#FFFDE7] px-3 py-2.5 text-sm text-[#5D4037]"
-              >
-                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#FFB800]" />
-                <span>로그인이 필요한 서비스입니다.</span>
-              </div>
-            )}
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-[#FFAB91] bg-[#FFEBEE] px-3 py-2.5 text-sm text-[#C62828]"
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-[#1A1A1A] font-semibold text-sm">
-                이메일
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12 rounded-xl border-[#e0e0e0] bg-[#fafafa] text-[#1A1A1A] placeholder:text-[#9e9e9e] focus-visible:ring-2 focus-visible:ring-[#FFB800] focus-visible:border-[#FFB800]"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-[#1A1A1A] font-semibold text-sm">
-                비밀번호
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-12 rounded-xl border-[#e0e0e0] bg-[#fafafa] text-[#1A1A1A] placeholder:text-[#9e9e9e] focus-visible:ring-2 focus-visible:ring-[#FFB800] focus-visible:border-[#FFB800]"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 rounded-xl bg-[#FFB800] hover:bg-[#E6A600] text-[#1A1A1A] font-bold shadow-[0_2px_4px_rgba(255,184,0,0.3)]"
+    <AuthPageShell
+      subtitle="AI 기반 시장 리서치 도구"
+      tagline="빠르게 분석하고, 바로 실행하세요"
+    >
+      <div className="p-6 sm:p-8">
+        <form onSubmit={handleLogin} className="space-y-5">
+          {showLoginRequired && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-foreground"
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : '로그인'}
-            </Button>
-
-            <div className="text-center pt-2 text-sm text-[#6b7280]">
-              계정이 없으신가요? <Link href="/auth/signup" className="text-[#FFB800] font-semibold hover:underline">회원가입</Link>
+              <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" aria-hidden />
+              <span>로그인이 필요한 서비스입니다.</span>
             </div>
-          </form>
-        </div>
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive"
+            >
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm font-medium">
+              이메일
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-11"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-sm font-medium">
+              비밀번호
+            </Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-11"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          <Button type="submit" disabled={loading} className="w-full h-11 font-semibold">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" aria-label="로그인 중" /> : '로그인'}
+          </Button>
+
+          <p className="text-center text-sm text-muted-foreground pt-1">
+            계정이 없으신가요?{' '}
+            <Link href="/auth/signup" className="font-medium text-primary hover:underline">
+              회원가입
+            </Link>
+          </p>
+        </form>
       </div>
-    </div>
+    </AuthPageShell>
   )
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#f5f5f5] text-[#6b7280]">로딩 중...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
+          로딩 중…
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   )

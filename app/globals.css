@@ -4,14 +4,14 @@
 /* 다크 모드: Tailwind dark 전략은 'class'. html에 .dark 클래스 적용 시 다크 모드 (next-themes와 동일) */
 @custom-variant dark (&:is(.dark *));
 
-/* 배민 스타일: 연한 회색 페이지 배경 + 흰색 카드 (전체 페이지 공통) */
+/* RIN-AI: neutral SaaS shell + blue accent (8px rhythm via Tailwind spacing) */
 :root {
-  --rin-primary: #FFB800;
+  --rin-primary: #2563eb;
   --rin-bg: #FFFFFF;
-  --rin-foreground: #1A1A1A;
-  --background: #f5f5f5;
-  --background-elevated: #FFFFFF;
-  --foreground: #1A1A1A;
+  --rin-foreground: #0f172a;
+  --background: #f8fafc;
+  --background-elevated: #ffffff;
+  --foreground: #0f172a;
   --foreground-muted: #6b7280;
   --card: #FFFFFF;
   --card-foreground: #1A1A1A;
@@ -24,8 +24,9 @@
   --muted: #f3f4f6;
   --muted-hover: #e5e7eb;
   --muted-foreground: #6b7280;
-  --accent: #f0f7ff;
-  --accent-foreground: #1A1A1A;
+  /* Neutral hover/surface — reserve blue for primary actions only */
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: #FFFFFF;
   --success: #10b981;
@@ -42,7 +43,7 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.75rem;
+  --radius: 0.5rem;
   --sidebar-bg: #0f172a;
   --sidebar-fg: #f8fafc;
   --sidebar-fg-muted: #94a3b8;
@@ -105,7 +106,7 @@
 @theme inline {
   --font-sans: 'Pretendard', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, monospace;
-  --color-rin-primary: #FFB800;
+  --color-rin-primary: #2563eb;
   --color-rin-bg: #FFFFFF;
   --shadow-rin-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --color-background: var(--background);

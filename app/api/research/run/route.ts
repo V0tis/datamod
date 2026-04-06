@@ -62,6 +62,8 @@ export async function POST(req: Request) {
       mode?: string
       ai_primary_model?: string
       force_reanalyze?: boolean
+      /** 2: 인사이트부터, 3: 전략·실행부터 (저장된 태스크 필요) */
+      rerun_from_phase?: number
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
@@ -80,6 +82,9 @@ export async function POST(req: Request) {
       ? (modeRaw as 'quick' | 'standard' | 'deep')
       : 'standard'
     const forceReanalyze = body?.force_reanalyze === true
+    const rawPhase = body?.rerun_from_phase
+    const rerunFromPhase =
+      rawPhase === 1 || rawPhase === 2 || rawPhase === 3 ? (rawPhase as 1 | 2 | 3) : undefined
 
     if (!keyword) {
       return NextResponse.json(
@@ -194,6 +199,7 @@ export async function POST(req: Request) {
             mode,
             signal: combinedController.signal,
             forceReanalyze,
+            rerunFromPhase,
           })
 
           try {

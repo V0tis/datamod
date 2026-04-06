@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isAuthPage) {
     return (
-      <main className="min-h-screen overflow-auto bg-[#f5f5f5] text-[#1A1A1A]">
+      <main className="min-h-screen overflow-auto bg-background text-foreground">
         <ErrorBoundary>
           <PageTransition>{children}</PageTransition>
         </ErrorBoundary>
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isResultsPage ? 'pt-14' : 'pt-14 lg:pt-0 lg:pl-[220px]'
         )}
       >
-        <main className="min-h-screen bg-background overflow-auto">
+        <main className="min-h-screen bg-muted/25 overflow-auto">
           <ErrorBoundary>
             <PageTransition>{children}</PageTransition>
           </ErrorBoundary>
