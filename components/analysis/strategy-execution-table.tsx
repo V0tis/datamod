@@ -36,7 +36,7 @@ export function StrategyExecutionTable({
 }: {
   result: ResearchResponse | null
   taskData?: Partial<Record<string, unknown>>
-  analysisTasks?: Array<{ step_name: string; output_data: unknown }> | null
+  analysisTasks?: Array<{ step_name: string; output_data: unknown; status?: string }> | null
   loading?: boolean
   keyword?: string
 }) {
@@ -44,6 +44,11 @@ export function StrategyExecutionTable({
     () => extractNextActionItems(result, taskData, analysisTasks, { maxItems: 15 }),
     [result, taskData, analysisTasks]
   )
+  const executionTask = analysisTasks?.find((t) => t.step_name === 'execution_layer')
+  const executionPending =
+    !!result?.reportId &&
+    rows.length === 0 &&
+    (executionTask?.status === 'running' || executionTask?.status === 'pending')
   const reportId = result?.reportId ?? null
   const key = useMemo(() => storageKey(reportId, keyword), [reportId, keyword])
 
@@ -92,10 +97,13 @@ export function StrategyExecutionTable({
     setExpanded((prev) => ({ ...prev, [index]: !prev[index] }))
   }
 
-  if (loading && rows.length === 0) {
+  if ((loading || executionPending) && rows.length === 0) {
     return (
       <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
         <SectionContentSkeleton variant="list" />
+        <p className="mt-3 text-center text-xs text-slate-500 dark:text-zinc-400">
+          실행 과제·GTM 항목을 불러오는 중입니다…
+        </p>
       </div>
     )
   }
@@ -103,7 +111,7 @@ export function StrategyExecutionTable({
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-        전략 실행 과제가 아직 없습니다. 분석을 완료하면 GTM·시장 선점 관련 과제가 여기에 표시됩니다.
+        PM 액션 플랜이 비어 있습니다. 분석을 완료했는데도 비어 있으면 &ldquo;다시 분석하기&rdquo;로 재실행하거나, 인사이트 탭의 전략 요약을 참고하세요.
       </div>
     )
   }

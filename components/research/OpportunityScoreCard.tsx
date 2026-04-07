@@ -2,6 +2,7 @@
 
 import { Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 const BREAKDOWN_LABELS: Record<string, string> = {
   market_growth: '시장 성장',
@@ -233,7 +234,7 @@ export function OpportunityScoreCard({
               AI 분석 근거
             </h3>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-              {reasoning.trim()}
+              {sanitizeForKoreanDisplay(reasoning.trim())}
             </p>
           </div>
         )}

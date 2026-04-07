@@ -18,6 +18,41 @@ type ExecutionLayerOutput = {
   next_actions_pm?: NextActionItem[]
 }
 
+type StrategyGenerationOutput = {
+  key_strategic_insights?: string[]
+  opportunities?: string[]
+  strategy_summary?: string
+}
+
+function strategyFallbackActions(
+  result: ResearchResponse | null,
+  maxItems: number,
+  taskData?: Partial<Record<string, unknown>>,
+  analysisTasks?: Array<{ step_name: string; output_data: unknown }> | null
+): NextActionItem[] {
+  const fromTask = taskData?.strategy_generation as StrategyGenerationOutput | undefined
+  const fromRow = analysisTasks?.find((t) => t.step_name === 'strategy_generation')?.output_data as StrategyGenerationOutput | undefined
+  const strat = fromTask ?? fromRow
+  const km = result?.key_metrics as { key_strategic_insights?: string[] } | undefined
+  const lines: string[] = []
+  if (Array.isArray(strat?.key_strategic_insights)) lines.push(...strat.key_strategic_insights)
+  if (Array.isArray(strat?.opportunities)) lines.push(...strat.opportunities)
+  if (Array.isArray(km?.key_strategic_insights)) lines.push(...km.key_strategic_insights)
+  if (typeof strat?.strategy_summary === 'string' && strat.strategy_summary.trim()) {
+    lines.push(strat.strategy_summary.trim())
+  }
+  const seen = new Set<string>()
+  const out: NextActionItem[] = []
+  for (const raw of lines) {
+    const action = typeof raw === 'string' ? raw.trim() : ''
+    if (action.length < 8 || seen.has(action)) continue
+    seen.add(action)
+    out.push({ action: action.length > 220 ? `${action.slice(0, 217)}…` : action, priority: 'medium' })
+    if (out.length >= maxItems) break
+  }
+  return out
+}
+
 /** PM 액션 목록 추출 (액션 탭 테이블 등에서 재사용) */
 export function extractNextActionItems(
   result: ResearchResponse | null,
@@ -70,7 +105,11 @@ export function extractNextActionItems(
         estimated_effort: a.estimated_effort,
       }))
   }
-  return fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>).filter((a) => a.action?.trim()).slice(0, maxItems)
+  const fromPlan = fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>)
+    .filter((a) => a.action?.trim())
+    .slice(0, maxItems)
+  if (fromPlan.length > 0) return fromPlan
+  return strategyFallbackActions(result, maxItems, taskData, analysisTasks)
 }
 
 const PRIORITY_COLORS = {

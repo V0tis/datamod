@@ -3,6 +3,12 @@
  * so runResearch can skip upstream steps (lower API cost, faster UX).
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  normalizeOpportunitySignalsFromParse,
+  normalizeRiskSignalsFromParse,
+  type OpportunitySignalItem,
+  type RiskSignalItem,
+} from '@/lib/ai/pipeline-prompts'
 
 /** Compatible with runResearch `NewsItem` (avoid circular import). */
 export type ResumeNewsItem = { title: string; url: string; publisher?: string }
@@ -21,6 +27,8 @@ export type CompetitionDataShape = {
     name: string
     positioning?: string
     target_market?: string
+    market_presence?: number
+    innovation_level?: number
     key_feature?: string
     pricing?: string
     differentiation?: string
@@ -32,8 +40,8 @@ export type CompetitionDataShape = {
 
 export type InsightDataShape = {
   key_insights: string[]
-  opportunity_signals: string[]
-  risk_signals: string[]
+  opportunity_signals: OpportunitySignalItem[]
+  risk_signals: RiskSignalItem[]
   core_insights: Array<{
     title: string
     summary: string
@@ -99,6 +107,11 @@ function parseTrendData(payload: unknown): TrendDataShape | null {
   }
 }
 
+function clampCompetitorScore1to10(n: unknown): number | undefined {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return undefined
+  return Math.min(10, Math.max(1, Math.round(n)))
+}
+
 function parseCompetitionData(payload: unknown): CompetitionDataShape | null {
   if (!payload || typeof payload !== 'object') return null
   const p = payload as {
@@ -116,6 +129,8 @@ function parseCompetitionData(payload: unknown): CompetitionDataShape | null {
         name,
         positioning: str('positioning'),
         target_market: str('target_market'),
+        market_presence: clampCompetitorScore1to10(c.market_presence),
+        innovation_level: clampCompetitorScore1to10(c.innovation_level),
         key_feature: str('key_feature'),
         pricing: str('pricing'),
         differentiation: str('differentiation'),
@@ -138,12 +153,12 @@ function parseInsightData(payload: unknown): InsightDataShape | null {
   const key_insights = Array.isArray(p.key_insights)
     ? p.key_insights.filter((x): x is string => typeof x === 'string')
     : []
-  const opportunity_signals = Array.isArray(p.opportunity_signals)
-    ? p.opportunity_signals.filter((x): x is string => typeof x === 'string')
-    : []
-  const risk_signals = Array.isArray(p.risk_signals)
-    ? p.risk_signals.filter((x): x is string => typeof x === 'string')
-    : []
+  const opportunity_signals = normalizeOpportunitySignalsFromParse(
+    Array.isArray(p.opportunity_signals) ? (p.opportunity_signals as unknown[]) : undefined
+  )
+  const risk_signals = normalizeRiskSignalsFromParse(
+    Array.isArray(p.risk_signals) ? (p.risk_signals as unknown[]) : undefined
+  )
   const core_raw = Array.isArray(p.core_insights) ? p.core_insights : []
   const core_insights = core_raw
     .map((item) => {

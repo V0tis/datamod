@@ -12,8 +12,9 @@ import {
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
+import { CHART_GRAY_AXIS, CHART_MINT } from '@/lib/chart-theme'
 
-const CHART_COLORS = ['#2563EB', '#009588', '#104e64', '#fcbb00', '#f99c00', '#60a5fa', '#34d399', '#a78bfa']
+const CHART_COLORS = [CHART_MINT, '#94a3b8', '#64748b', '#cbd5e1', '#2dd4bf', '#475569', '#99f6e4', '#334155']
 
 export interface BreakdownItem {
   name: string
@@ -56,8 +57,8 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
     <div className={cn('h-[220px] w-full', className)}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
-          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
+          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
           <Tooltip
             formatter={(v: number) => [`${v}/100`, '점수']}
             contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
@@ -94,8 +95,8 @@ export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, class
       <div className="h-[220px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
-            <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
+            <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
             <Tooltip
               formatter={(v: number) => [`${v}/100`, '점수']}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}

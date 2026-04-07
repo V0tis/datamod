@@ -1,6 +1,6 @@
 'use client'
 
-import { TrendingUp, Shield, Zap, BarChart3 } from 'lucide-react'
+import { TrendingUp, Shield, Zap, BarChart3, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
@@ -54,6 +54,25 @@ const DIMENSIONS = [
     className: 'border-primary/30 bg-primary/5',
   },
 ]
+
+/** 1–10 스코어를 5점 만점 별로 환산 (시각적 직관) */
+function StarRow5({ score10 }: { score10: number }) {
+  const filled = Math.min(5, Math.max(0, Math.round(score10 / 2)))
+  return (
+    <div className="mt-2 flex gap-0.5" aria-label={`5점 만점 ${filled}점`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          className={cn(
+            'h-3.5 w-3.5',
+            i < filled ? 'fill-[#2AC1BC] text-[#2AC1BC]' : 'fill-none text-muted-foreground/35'
+          )}
+          strokeWidth={i < filled ? 0 : 1.5}
+        />
+      ))}
+    </div>
+  )
+}
 
 export interface StrategyEvaluationSectionProps {
   result: ResearchResponse | null
@@ -124,17 +143,18 @@ export function StrategyEvaluationSection({
                     {score != null ? `${score}/10` : '—'}
                   </p>
                   {score != null && (
-                    <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          d.higherIsBetter
-                            ? 'bg-emerald-500'
-                            : 'bg-amber-500'
-                        )}
-                        style={{ width: `${(score / 10) * 100}%` }}
-                      />
-                    </div>
+                    <>
+                      <StarRow5 score10={score} />
+                      <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-all',
+                            d.higherIsBetter ? 'bg-[#2AC1BC]' : 'bg-amber-500'
+                          )}
+                          style={{ width: `${(score / 10) * 100}%` }}
+                        />
+                      </div>
+                    </>
                   )}
                   {reason && (
                     <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-2.5">

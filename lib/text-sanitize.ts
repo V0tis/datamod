@@ -61,6 +61,12 @@ export function sanitizeForKoreanDisplay(s: string | null | undefined): string {
   let t = s.trim()
   if (!t) return ''
 
+  try {
+    t = t.normalize('NFC')
+  } catch {
+    /* ignore invalid unicode */
+  }
+
   t = t.replace(ENCODING_ARTIFACTS, '')
   t = t.replace(FOREIGN_SCRIPTS, '')
   t = normalizeBullets(t)

@@ -1,6 +1,6 @@
 'use client'
 
-import { Target, Info } from 'lucide-react'
+import { Target, Info, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
@@ -34,6 +34,10 @@ export interface OpportunityScoreBreakdownProps {
   score: number | null
   /** While analysis is running, show "산출 중..." instead of numeric score */
   loading?: boolean
+  /** 이전에 확정된 점수 (부분 실패 시 표시 유지) */
+  stableScore?: number | null
+  /** 단계 실패 등으로 점수가 신뢰 불가일 때 배지 */
+  analysisFailed?: boolean
   breakdown?: {
     market_growth?: number
     trend_momentum?: number
@@ -61,14 +65,22 @@ const BASE = 50
 export function OpportunityScoreBreakdown({
   score,
   loading = false,
+  stableScore = null,
+  analysisFailed = false,
   breakdown,
   useKoreanLabels = false,
   compact = false,
   className,
 }: OpportunityScoreBreakdownProps) {
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
-  const hasScore = !loading && score != null && Number.isFinite(score)
-  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, score))) : null
+  const resolvedRaw =
+    score != null && Number.isFinite(score)
+      ? score
+      : analysisFailed && stableScore != null && Number.isFinite(stableScore)
+        ? stableScore
+        : null
+  const hasScore = !loading && resolvedRaw != null
+  const normScore = hasScore ? Math.round(Math.min(100, Math.max(0, resolvedRaw))) : null
 
   const items = effectiveBreakdown
     ? ORDER.filter((k) => effectiveBreakdown[k as keyof typeof effectiveBreakdown] != null).map((k) => {
@@ -183,17 +195,30 @@ export function OpportunityScoreBreakdown({
 
         {/* 3. Final score */}
         <div className="pt-2 mt-4 border-t border-border/80">
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <span className="text-sm font-semibold text-foreground w-28 sm:w-32 shrink-0">{finalLabel}</span>
-            <div className="flex-1 h-10 rounded-lg bg-primary/15 dark:bg-primary/20 border-2 border-primary/40 flex items-center justify-center min-w-0">
-              {loading ? (
-                <span className="text-sm font-medium text-muted-foreground">
-                  산출 중...
+            <div className="flex-1 h-10 rounded-lg bg-primary/15 dark:bg-primary/20 border-2 border-primary/40 flex items-center justify-center gap-2 min-w-0 px-2">
+              {loading && normScore == null ? (
+                <span className="flex items-center gap-2 w-full max-w-[200px]">
+                  <span className="h-6 flex-1 rounded-md bg-primary/20 animate-pulse" aria-hidden />
                 </span>
+              ) : normScore != null ? (
+                <>
+                  <span className={cn('text-xl font-bold tabular-nums text-primary', analysisFailed && 'opacity-90')}>
+                    {normScore} / 100
+                  </span>
+                  {analysisFailed ? (
+                    <span
+                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200 shrink-0"
+                      title="일부 분석 단계가 실패했습니다. 마지막으로 유효한 점수를 표시합니다."
+                    >
+                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      오류
+                    </span>
+                  ) : null}
+                </>
               ) : (
-                <span className="text-xl font-bold tabular-nums text-primary">
-                  {normScore != null ? `${normScore} / 100` : '—'}
-                </span>
+                <span className="text-xl font-bold tabular-nums text-muted-foreground/70">0 / 100</span>
               )}
             </div>
             {normScore != null && !loading && (

@@ -37,6 +37,8 @@ export interface ResultPageStructuredSectionsProps {
   newsList?: NewsItem[]
   loading?: boolean
   keyword?: string
+  /** 부분 실패 시에도 마지막 기회 점수·근거 UI 유지 */
+  analysisFailed?: boolean
 }
 
 const SECTION_IDS = {

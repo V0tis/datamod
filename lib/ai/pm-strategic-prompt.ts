@@ -81,15 +81,18 @@ Format: {
     "name": "경쟁사명",
     "positioning": "포지셔닝 (1문장)",
     "target_market": "타겟 시장",
-    "key_feature": "핵심 기능/차별점",
-    "pricing": "가격 모델",
+    "market_presence": number,
+    "innovation_level": number,
     "differentiation": "차별화 포인트",
     "strength": "강점 (1문장)",
-    "weakness": "약점 (1문장, PM이 활용할 기회·진입 포인트)"
+    "weakness": "약점 (PM이 파고들 수 있는 진입 포인트)"
   }],
   "market_structure": { "summary": "시장 구조·공백·진입 포인트 (상황·의미·영향)" }
 }
-5~8개 경쟁사. name, positioning 필수. 새로운 사업 기회 관점으로 weakness 작성. Return ONLY valid JSON. All text in Korean.`
+- market_presence: 정수 1-10. DATA에 근거한 시장 점유·브랜드 인지도·노출 강도의 상대 평가(UI 시각화용).
+- innovation_level: 정수 1-10. DATA에 근거한 기술·제품·비즈니스 모델 혁신성의 상대 평가(UI 시각화용).
+- 수치는 반드시 DATA의 사실·비교 언급을 바탕으로 산정. 근거가 매우 약하면 보수적으로 4-6 범위를 사용하고, 그 이유는 strength/weakness 문장에 녹인다.
+5~8개 경쟁사. name, positioning, market_presence, innovation_level 필수. 새로운 사업 기회 관점으로 weakness 작성. Return ONLY valid JSON. All text in Korean.`
 
 /** Competition prompt using articles (for parallel execution with trend) */
 export function buildTaskCompetitionPromptFromNews(
@@ -121,7 +124,7 @@ export function buildTaskCompetitionPromptFromNews(
       searchResults: searchResults || undefined,
       collectedData: collectedData || undefined,
     },
-    task: `Analyze competitive landscape using ONLY the DATA above. List companies/platforms only if explicitly named in DATA. If none, competitive_landscape: []. market_structure.summary must reflect DATA only. Exclude publishers/media as competitors.`,
+    task: `Analyze competitive landscape using ONLY the DATA above. List companies/platforms only if explicitly named in DATA. If none, competitive_landscape: []. For each competitor include market_presence and innovation_level as integers 1-10 grounded in DATA (for dashboard charts). market_structure.summary must reflect DATA only. Exclude publishers/media as competitors.`,
     suffix: `If DATA does not name competitors for "${keyword}", return competitive_landscape: []. Return ONLY JSON. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

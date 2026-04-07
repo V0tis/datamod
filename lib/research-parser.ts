@@ -51,6 +51,8 @@ export type StructuredAnalysisFields = {
   positive_signals?: string[]
   neutral_signals?: string[]
   negative_risks?: string[]
+  /** 인사이트 추출 단계: 리스크 문장 + 심각도·발생 가능성(1–10) */
+  risk_signals?: Array<{ risk: string; severity: number; likelihood: number }>
   summary_insights?: string
   pm_actions?: {
     recommended_actions?: StructuredRecommendedAction[]
@@ -61,6 +63,8 @@ export type StructuredAnalysisFields = {
     name?: string
     positioning?: string
     target_market?: string
+    market_presence?: number
+    innovation_level?: number
     key_feature?: string
     pricing?: string
     differentiation?: string

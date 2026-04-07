@@ -12,7 +12,7 @@ import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/st
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/hooks/use-current-task'
 import { exportAnalysisToPdf } from '@/lib/pdf-export'
-import { X, ExternalLink, Newspaper, Loader2, RefreshCw, ChevronDown, Bookmark, Cpu, Database } from 'lucide-react'
+import { X, ExternalLink, Newspaper, Loader2, RefreshCw, Bookmark, Cpu, Database, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
 import { fetchTrendsForCountry } from '@/lib/fetch-trends'
@@ -247,8 +247,9 @@ function ResultsContent() {
   const [saveInsightName, setSaveInsightName] = useState('')
   const [saveInsightNote, setSaveInsightNote] = useState('')
   const [saveInsightSaving, setSaveInsightSaving] = useState(false)
-  const [detailExpanded, setDetailExpanded] = useState(false)
-  const [engineExpanded, setEngineExpanded] = useState(false)
+  const [engineModalOpen, setEngineModalOpen] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [heroStableOppScore, setHeroStableOppScore] = useState<number | null>(null)
 
   const currentKeyword = keyword ?? storeKeyword
   const urlKeyword = keyword?.trim() ?? null
@@ -474,6 +475,30 @@ function ResultsContent() {
     taskData?.competition_analysis != null
   const needsRunAction = historyLoadDone && hasCachedResult === false && !loading && !displayResult?.reportId && hasKeyword && !hasFailure
 
+  const prevAnalysisToastRef = useRef<{ canonical: string; polled: string | null } | null>(null)
+  useEffect(() => {
+    const prev = prevAnalysisToastRef.current
+    if (prev === null) {
+      prevAnalysisToastRef.current = { canonical: canonicalStatus, polled: polledStatus }
+      return
+    }
+    const canonChanged = prev.canonical !== canonicalStatus
+    const pollChanged = prev.polled !== polledStatus
+    if (!canonChanged && !pollChanged) return
+    const completedNow =
+      (prev.canonical === 'analyzing' && canonicalStatus === 'completed') ||
+      (prev.polled === 'running' && polledStatus === 'completed')
+    const failedNow =
+      (prev.canonical === 'analyzing' && canonicalStatus === 'failed') ||
+      (prev.polled === 'running' && polledStatus === 'failed')
+    if (completedNow) {
+      toast.success('분석이 완료되었습니다.', { id: 'analysis-complete-toast' })
+    } else if (failedNow) {
+      toast.error('분석 중 오류가 발생했습니다.', { id: 'analysis-fail-toast' })
+    }
+    prevAnalysisToastRef.current = { canonical: canonicalStatus, polled: polledStatus }
+  }, [canonicalStatus, polledStatus])
+
   // Fallback: if loading persists >30s with no result, auto-refetch
   useEffect(() => {
     const k = (keyword ?? storeKeyword)?.trim()
@@ -522,6 +547,12 @@ function ResultsContent() {
   })
 
   const effectiveDisplayResult = pageAnalysisData ?? displayResult
+
+  useEffect(() => {
+    const v = effectiveDisplayResult?.key_metrics?.opportunity_score
+    if (typeof v === 'number' && Number.isFinite(v)) setHeroStableOppScore(v)
+  }, [effectiveDisplayResult?.key_metrics?.opportunity_score])
+
   /** 분석 중 key_metrics가 없을 때 default 값 사용 (차트 등 UI). 단, opportunity_score는 완료 후에만 표시 */
   const effectiveKeyMetrics =
     effectiveDisplayResult?.key_metrics ??
@@ -1087,6 +1118,7 @@ function ResultsContent() {
         <div className="flex min-w-0 max-w-[1920px] mx-auto">
           <main className="flex-1 min-w-0 min-h-[320px]">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
+        <div className="mx-auto w-full max-w-[1280px] px-3 sm:px-4 md:px-6">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
         {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
@@ -1112,11 +1144,16 @@ function ResultsContent() {
                   })()
                 : undefined
             }
-            opportunityScore={
-              loading && !needsRunAction
-                ? null
-                : (typeof effectiveKeyMetrics?.opportunity_score === 'number' ? effectiveKeyMetrics.opportunity_score : null) ?? null
-            }
+            opportunityScore={(() => {
+              if (loading && !needsRunAction && !displayResult?.reportId) return null
+              const live =
+                typeof effectiveKeyMetrics?.opportunity_score === 'number'
+                  ? effectiveKeyMetrics.opportunity_score
+                  : null
+              if (live != null) return live
+              if (hasFailure && heroStableOppScore != null) return heroStableOppScore
+              return null
+            })()}
             confidenceScore={
               (() => {
                 if (loading && !effectiveDisplayResult) return null
@@ -1344,167 +1381,180 @@ function ResultsContent() {
                 newsList={newsList}
                 loading={loading && !hasAnalysisStarted}
                 keyword={currentKeyword ?? ''}
+                analysisFailed={hasFailure && !!displayResult?.reportId}
               />
             </ResultSectionErrorBoundary>
-            {/* AI 분석 엔진 (다른 섹션과 동일 카드 스타일) */}
+            {/* AI 분석 엔진 — 상세는 모달 (페이지 스크롤 유지) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
               <section id="section-engine" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
-                <button
-                  type="button"
-                  onClick={() => setEngineExpanded((e) => !e)}
-                  className={cn(
-                    'flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl',
-                    engineExpanded && 'rounded-b-none'
-                  )}
-                  aria-expanded={engineExpanded}
-                >
+                <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
                   <div className="min-w-0 flex-1">
                     <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
-                      <span className="shrink-0 text-primary"><Cpu className="h-5 w-5" /></span>
+                      <Cpu className="h-5 w-5 shrink-0 text-primary" aria-hidden />
                       AI 분석 엔진
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1">단계별 분석 파이프라인과 실행 상태</p>
+                    <p className="text-sm text-muted-foreground mt-1">단계별 파이프라인과 실행 상태를 모달에서 확인합니다.</p>
                   </div>
-                  <span className={cn('shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-transform duration-200', engineExpanded && 'rotate-180')}>
-                    <ChevronDown className="h-4 w-4" aria-hidden />
-                  </span>
-                </button>
-                {engineExpanded && (
-                  <div className="border-t border-border p-0">
-                    <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} hideHeader className="border-0 rounded-none" />
-                  </div>
-                )}
+                  <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setEngineModalOpen(true)}>
+                    <Maximize2 className="h-4 w-4" aria-hidden />
+                    자세히 보기
+                  </Button>
+                </div>
               </section>
             )}
 
           </div>
         )}
 
-        {/* 상세 섹션 (다른 섹션과 동일 카드 스타일): 데이터 출처 + 뉴스 */}
+        {/* 상세 (데이터 출처 · 뉴스) — 모달로 표시 */}
         {currentKeyword && (
           <section id="section-detail" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
-            <button
-              type="button"
-              onClick={() => setDetailExpanded((e) => !e)}
-              className={cn(
-                'flex w-full items-start justify-between gap-4 p-4 sm:p-5 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl',
-                detailExpanded && 'rounded-b-none'
-              )}
-              aria-expanded={detailExpanded}
-            >
+            <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
-                  <span className="shrink-0 text-primary"><Database className="h-5 w-5" /></span>
+                  <Database className="h-5 w-5 shrink-0 text-primary" aria-hidden />
                   상세 (데이터 출처 · 뉴스)
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">데이터 출처와 실시간 뉴스</p>
+                <p className="text-sm text-muted-foreground mt-1">출처·뉴스 전체는 모달에서 동일 너비로 표시됩니다.</p>
               </div>
-              <span className={cn('shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-transform duration-200', detailExpanded && 'rotate-180')}>
-                <ChevronDown className="h-4 w-4" aria-hidden />
-              </span>
-            </button>
-            {detailExpanded && (
-              <div className="border-t border-border space-y-6 px-3 sm:px-4 py-3 sm:py-4">
-                <ResultSectionErrorBoundary sectionName="data-sources" fallbackTitle="데이터 출처를 불러오지 못했습니다">
-                  <div id="section-data" className="scroll-mt-24">
-                    <DataSourcesSection
-                      signals={dataSourceSignals}
-                      loading={loading && !displayResult}
-                    />
-                  </div>
-                </ResultSectionErrorBoundary>
-
-                <ResultSectionErrorBoundary sectionName="news-section" fallbackTitle="뉴스 섹션을 불러오지 못했습니다">
-                <section id="section-news" className="scroll-mt-24 pt-6 border-t border-border first:pt-0 first:border-t-0" aria-label="뉴스 및 데이터">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Newspaper className="h-4 w-4 text-primary" />
-                실시간 뉴스
-                {rssNewsLoading && (
-                  <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    불러오는 중
-                  </span>
-                )}
-              </h3>
-              <div className="flex items-center gap-1" role="group" aria-label="뉴스 기간 선택">
-                {([7, 14, 30, 90] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setNewsDays(d)}
-                    className={cn(
-                      'min-w-[2.25rem] py-1.5 px-2 text-xs font-medium rounded-md border transition-colors',
-                      newsDays === d
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                  >
-                    {d}일
-                  </button>
-                ))}
-              </div>
+              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setDetailModalOpen(true)}>
+                <Maximize2 className="h-4 w-4" aria-hidden />
+                자세히 보기
+              </Button>
             </div>
-            {rssNewsLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
-                    <div className="h-3.5 w-full bg-muted rounded mb-2" />
-                    <div className="h-3 w-3/4 bg-muted rounded" />
-                  </div>
-                ))}
-              </div>
-            ) : rssNewsFetched && rssNews.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다.</p>
-            ) : rssNews.length > 0 ? (
-              (() => {
-                const kw = (currentKeyword ?? '').trim()
-                return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {rssNews.map((item, i) => {
-                      const title = item.title || '제목 없음'
-                      const hasKeywordMatch = kw && title.toLowerCase().includes(kw.toLowerCase())
-                      return (
-                        <article key={i} className="rounded-lg border border-border bg-card p-4 hover:border-primary/20 transition-colors text-left flex flex-col">
-                          <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2 mb-1">
-                            {hasKeywordMatch && kw ? (
-                              title.split(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')).map((part, j) =>
-                                part.toLowerCase() === kw.toLowerCase() ? (
-                                  <mark key={j} className="bg-primary/20 text-foreground rounded px-0.5">{part}</mark>
-                                ) : (
-                                  part
-                                )
-                              )
-                            ) : (
-                              title
-                            )}
-                          </h4>
-                          <p className="text-xs text-muted-foreground mb-2">{item.source || '언론사'}</p>
-                          {item.pubDate && (
-                            <p className="text-[11px] text-muted-foreground/70 mb-2">
-                              {new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })}
-                            </p>
-                          )}
-                          <div className="mt-auto flex items-center justify-end text-xs text-muted-foreground pt-2">
-                            {item.link && (
-                              <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
-                                원문 보기 <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
-                )
-              })()
-            ) : null}
-          </section>
-                </ResultSectionErrorBoundary>
-              </div>
-            )}
           </section>
         )}
+
+        {engineModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="engine-modal-title">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setEngineModalOpen(false)} aria-hidden />
+            <div className="relative flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-3 sm:p-4">
+                <h2 id="engine-modal-title" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Cpu className="h-5 w-5 text-primary" aria-hidden />
+                  AI 분석 엔진
+                </h2>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setEngineModalOpen(false)} aria-label="닫기">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-4">
+                <AnalysisEngineSection analysisTasks={analysisTasks ?? undefined} aiPrimaryModel={aiPrimaryModel} hideHeader className="border-0 rounded-lg" />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {detailModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setDetailModalOpen(false)} aria-hidden />
+            <div className="relative flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-3 sm:p-4">
+                <h2 id="detail-modal-title" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Database className="h-5 w-5 text-primary" aria-hidden />
+                  데이터 출처 · 실시간 뉴스
+                </h2>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setDetailModalOpen(false)} aria-label="닫기">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto space-y-6 p-3 sm:p-5">
+                <ResultSectionErrorBoundary sectionName="data-sources" fallbackTitle="데이터 출처를 불러오지 못했습니다">
+                  <div id="section-data" className="scroll-mt-24">
+                    <DataSourcesSection signals={dataSourceSignals} loading={loading && !displayResult} />
+                  </div>
+                </ResultSectionErrorBoundary>
+                <ResultSectionErrorBoundary sectionName="news-section" fallbackTitle="뉴스 섹션을 불러오지 못했습니다">
+                  <section id="section-news" className="scroll-mt-24 pt-6 border-t border-border first:pt-0 first:border-t-0" aria-label="뉴스 및 데이터">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Newspaper className="h-4 w-4 text-primary" />
+                        실시간 뉴스
+                        {rssNewsLoading && (
+                          <span className="inline-flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            불러오는 중
+                          </span>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-1" role="group" aria-label="뉴스 기간 선택">
+                        {([7, 14, 30, 90] as const).map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setNewsDays(d)}
+                            className={cn(
+                              'min-w-[2.25rem] py-1.5 px-2 text-xs font-medium rounded-md border transition-colors',
+                              newsDays === d
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                            )}
+                          >
+                            {d}일
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {rssNewsLoading ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="rounded-lg border border-border bg-card p-3 animate-pulse">
+                            <div className="h-3.5 w-full bg-muted rounded mb-2" />
+                            <div className="h-3 w-3/4 bg-muted rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : rssNewsFetched && rssNews.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">이 키워드에 대한 실시간 뉴스가 지금은 없습니다.</p>
+                    ) : rssNews.length > 0 ? (
+                      (() => {
+                        const kw = (currentKeyword ?? '').trim()
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {rssNews.map((item, i) => {
+                              const title = item.title || '제목 없음'
+                              const hasKeywordMatch = kw && title.toLowerCase().includes(kw.toLowerCase())
+                              return (
+                                <article key={i} className="rounded-lg border border-border bg-card p-4 hover:border-primary/20 transition-colors text-left flex flex-col">
+                                  <h4 className="font-medium text-foreground text-sm leading-snug line-clamp-2 mb-1">
+                                    {hasKeywordMatch && kw ? (
+                                      title.split(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')).map((part, j) =>
+                                        part.toLowerCase() === kw.toLowerCase() ? (
+                                          <mark key={j} className="bg-primary/20 text-foreground rounded px-0.5">{part}</mark>
+                                        ) : (
+                                          part
+                                        )
+                                      )
+                                    ) : (
+                                      title
+                                    )}
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground mb-2">{item.source || '언론사'}</p>
+                                  {item.pubDate && (
+                                    <p className="text-[11px] text-muted-foreground/70 mb-2">
+                                      {new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    </p>
+                                  )}
+                                  <div className="mt-auto flex items-center justify-end text-xs text-muted-foreground pt-2">
+                                    {item.link && (
+                                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                                        원문 보기 <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </article>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()
+                    ) : null}
+                  </section>
+                </ResultSectionErrorBoundary>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
 
         {/* 다음 탐색: 같은 키워드로 추가 질문 + 관련 시장 아이디어 + 다른 시장 분석하기 */}
@@ -1604,6 +1654,7 @@ function ResultsContent() {
             </div>
           </div>
         )}
+        </div>
         </div>
         </main>
         </div>

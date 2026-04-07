@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -16,6 +16,7 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
+import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 
 type TabValue = 'insight' | 'action'
 
@@ -31,12 +32,37 @@ export function ResultLDashboard({
   newsList = [],
   loading = false,
   keyword = '',
+  analysisFailed = false,
 }: ResultPageStructuredSectionsProps) {
   const effectiveResult = displayResult ?? result
   const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
   const [tab, setTab] = useState<TabValue>('insight')
+  const reportId = effectiveResult?.reportId ?? null
+  const liveOpp = effectiveResult?.key_metrics?.opportunity_score
+  const liveOppNum =
+    typeof liveOpp === 'number' && Number.isFinite(liveOpp) ? liveOpp : null
+  const lastStableOppRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    lastStableOppRef.current = null
+  }, [reportId])
+
+  useEffect(() => {
+    if (liveOppNum != null) lastStableOppRef.current = liveOppNum
+  }, [liveOppNum])
+
+  const stableOppScore =
+    liveOppNum ?? (analysisFailed ? lastStableOppRef.current : null)
 
   const goTab = (t: TabValue) => setTab(t)
+
+  const km = effectiveResult?.key_metrics
+  const scoreRationale =
+    sanitizeForKoreanDisplay(
+      km?.strategic_decision_layer?.market_opportunity_explanation ?? km?.opportunity_score_reasoning
+    )?.trim() || null
+  const conclusionFull =
+    sanitizeForKoreanDisplay(km?.summary_insights)?.trim() || '핵심 전략 방향을 분석 완료 후 확인할 수 있습니다.'
 
   if (!hasResultData) {
     return (
@@ -53,13 +79,17 @@ export function ResultLDashboard({
       aria-label="분석 결과 대시보드"
     >
       <Tabs value={tab} onValueChange={(v) => goTab(v as TabValue)} className="w-full">
-        <div className="mx-auto flex max-w-[1280px] flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start lg:gap-8">
+        <div className="mx-auto flex w-full flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start lg:gap-8">
           <ResultLeftRail
             effectiveResult={effectiveResult ?? null}
             taskData={taskData}
             analysisTasks={analysisTasks ?? undefined}
             loading={loading}
             onNavigateTab={(t) => goTab(t === 'action' ? 'action' : 'insight')}
+            stableOpportunityScore={stableOppScore}
+            analysisFailed={analysisFailed}
+            scoreRationaleSummary={scoreRationale}
+            conclusionFull={conclusionFull}
           />
 
           <div className="min-w-0 space-y-4">
@@ -93,11 +123,13 @@ export function ResultLDashboard({
                   <OpportunityScoreBreakdown
                     score={effectiveResult?.key_metrics?.opportunity_score ?? null}
                     loading={loading}
+                    stableScore={stableOppScore}
+                    analysisFailed={analysisFailed}
                     breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
                     useKoreanLabels
                     className="border-[#E8EAED] bg-white dark:border-zinc-700 dark:bg-zinc-900"
                   />
-                  <OverviewOpportunityRiskChart result={effectiveResult ?? null} />
+                  <OverviewOpportunityRiskChart result={effectiveResult ?? null} loading={loading} />
                   <ResultSummaryCards
                     result={effectiveResult ?? null}
                     consensusData={consensusData}

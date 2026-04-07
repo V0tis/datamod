@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Activity, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useResearchStore } from '@/lib/stores/research-store'
@@ -9,10 +9,6 @@ export function AnalysisActivityFeed({ className }: { className?: string }) {
   const log = useResearchStore((s) => s.streamingActivityLog)
   const analyzing = useResearchStore((s) => s.analysisStatus === 'analyzing')
   const bottomRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [log.length])
 
   if (log.length === 0 && !analyzing) return null
 

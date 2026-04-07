@@ -25,6 +25,12 @@ import {
   buildPMActionPlanPrompt,
   STRATEGY_EVALUATION_SYSTEM,
   buildStrategyEvaluationPrompt,
+  normalizeOpportunitySignalsFromParse,
+  normalizeRiskSignalsFromParse,
+  flattenOpportunitySignalsForPrompt,
+  flattenRiskSignalsForPrompt,
+  type OpportunitySignalItem,
+  type RiskSignalItem,
 } from './pipeline-prompts'
 import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
@@ -111,7 +117,11 @@ export type TaskCompletedPayload = {
   signal_layer?: { signals: string[]; news_activity?: Array<{ title: string; url?: string; publisher?: string }> }
   trend_analysis?: { trend_summary: string; market_temperature_score: number; growth_signals?: string[] }
   competition_analysis?: { competitive_landscape: Array<{ name: string; positioning?: string }>; market_structure?: string }
-  insight_extraction?: { key_insights: string[]; opportunity_signals: string[]; risk_signals: string[] }
+  insight_extraction?: {
+    key_insights: string[]
+    opportunity_signals: OpportunitySignalItem[]
+    risk_signals: RiskSignalItem[]
+  }
   strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string; market_summary?: string; key_strategic_insights?: string[] }
   execution_layer?: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -262,6 +272,10 @@ type CompetitorEntry = {
   name: string
   positioning?: string
   target_market?: string
+  /** 1-10, DATA 기반 시장 존재감·인지도 (UI 차트) */
+  market_presence?: number
+  /** 1-10, DATA 기반 혁신성 (UI 차트) */
+  innovation_level?: number
   key_feature?: string
   pricing?: string
   differentiation?: string
@@ -496,11 +510,18 @@ async function runCompetitionTask(
     competitive_landscape: [],
     market_structure: undefined,
   }
+  function clampCompetitorScore1to10(n: unknown): number | undefined {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return undefined
+    return Math.min(10, Math.max(1, Math.round(n)))
+  }
+
   type CompParsedSchema = {
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
       target_market?: string
+      market_presence?: number
+      innovation_level?: number
       key_feature?: string
       pricing?: string
       differentiation?: string
@@ -532,6 +553,8 @@ async function runCompetitionTask(
           name: String(c.name),
           positioning: typeof c.positioning === 'string' ? c.positioning : undefined,
           target_market: typeof c.target_market === 'string' ? c.target_market.trim() : undefined,
+          market_presence: clampCompetitorScore1to10(c.market_presence),
+          innovation_level: clampCompetitorScore1to10(c.innovation_level),
           key_feature: typeof c.key_feature === 'string' ? c.key_feature.trim() : undefined,
           pricing: typeof c.pricing === 'string' ? c.pricing.trim() : undefined,
           differentiation: typeof c.differentiation === 'string' ? c.differentiation.trim() : undefined,
@@ -556,8 +579,8 @@ export type CoreInsightItem = {
 
 type InsightExtractionResult = {
   key_insights: string[]
-  opportunity_signals: string[]
-  risk_signals: string[]
+  opportunity_signals: OpportunitySignalItem[]
+  risk_signals: RiskSignalItem[]
   core_insights: CoreInsightItem[]
 }
 
@@ -693,17 +716,22 @@ async function runInsightExtractionTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
-  const fallbackInsight = { key_insights: [] as string[], opportunity_signals: [] as string[], risk_signals: [] as string[], core_insights: [] as CoreInsightItem[] }
+  const fallbackInsight: InsightExtractionResult = {
+    key_insights: [],
+    opportunity_signals: [],
+    risk_signals: [],
+    core_insights: [],
+  }
   const parsed = parseAiJson<{
     key_insights?: string[]
-    opportunity_signals?: string[]
-    risk_signals?: string[]
+    opportunity_signals?: unknown[]
+    risk_signals?: unknown[]
     core_insights?: Array<Record<string, unknown>>
-  }>(typeof text === 'string' ? text : '', fallbackInsight as Record<string, unknown>, 'insight_extraction')
+  }>(typeof text === 'string' ? text : '', fallbackInsight as unknown as Record<string, unknown>, 'insight_extraction')
 
   const key_insights = Array.isArray(parsed?.key_insights) ? parsed.key_insights.filter((s): s is string => typeof s === 'string') : []
-  const opportunity_signals = Array.isArray(parsed?.opportunity_signals) ? parsed.opportunity_signals.filter((s): s is string => typeof s === 'string') : []
-  const risk_signals = Array.isArray(parsed?.risk_signals) ? parsed.risk_signals.filter((s): s is string => typeof s === 'string') : []
+  const opportunity_signals = normalizeOpportunitySignalsFromParse(parsed?.opportunity_signals)
+  const risk_signals = normalizeRiskSignalsFromParse(parsed?.risk_signals)
 
   let core_insights: CoreInsightItem[] = []
   if (Array.isArray(parsed?.core_insights) && parsed.core_insights.length > 0) {
@@ -794,9 +822,11 @@ async function runStrategicRecommendationTask(
   }
   const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
   if (usedGemini) await trackUsage('gemini')
+  const fallbackOpp = flattenOpportunitySignalsForPrompt(extractedInsights.opportunity_signals)
+  const fallbackRisk = flattenRiskSignalsForPrompt(extractedInsights.risk_signals)
   const fallbackStrategy: StrategicRecommendationResult = {
-    opportunities: extractedInsights.opportunity_signals,
-    risks: extractedInsights.risk_signals,
+    opportunities: fallbackOpp,
+    risks: fallbackRisk,
     strategy_summary: marketOverview,
   }
   const parsed = parseAiJson<StrategicRecommendationResult>(
@@ -806,8 +836,10 @@ async function runStrategicRecommendationTask(
   )
   return {
     data: {
-      opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.filter((s): s is string => typeof s === 'string') : extractedInsights.opportunity_signals,
-      risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : extractedInsights.risk_signals,
+      opportunities: Array.isArray(parsed.opportunities)
+        ? parsed.opportunities.filter((s): s is string => typeof s === 'string')
+        : fallbackOpp,
+      risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : fallbackRisk,
       strategy_summary: typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary : marketOverview,
       market_summary: typeof parsed.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
       key_strategic_insights: Array.isArray(parsed.key_strategic_insights)
@@ -858,9 +890,9 @@ async function runPMActionPlanTask(
     throw new Error('PM 액션 플랜에 필요한 데이터가 없습니다. 전략·기회·리스크 데이터를 확인해 주세요.')
   }
   const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1600, model: GEMINI_MODEL, isRetryable: () => false })
+    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
   const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1600 })
+    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
   const primaryIsGemini = primaryProvider === 'gemini'
   const getText = async (): Promise<string> => {
     for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
@@ -906,6 +938,7 @@ async function runPMActionPlanTask(
   const primaryProviderError: string | undefined = undefined
   if (primaryIsGemini) await trackUsage('gemini')
   type ParsedShape = {
+    priority_action?: { action?: string; reasoning?: string; expected_outcome?: string }
     product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
     feature_ideas?: string[]
     go_to_market_steps?: string[]
@@ -943,20 +976,40 @@ async function runPMActionPlanTask(
   const toStrArr = (arr: unknown): string[] =>
     Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : []
   const stepsArr = toStrArr(parsed?.steps)
+  const stepsLimited = stepsArr.slice(0, 6)
+  const paObj = parsed?.priority_action && typeof parsed.priority_action === 'object' ? parsed.priority_action : null
+  const paAction = paObj && typeof paObj.action === 'string' ? paObj.action.trim() : ''
+  const hasLegacyActions =
+    Array.isArray(parsed?.product_actions) &&
+    parsed.product_actions.some((a) => typeof (a as { action?: string })?.action === 'string')
   const hasValidPlan =
-    (Array.isArray(parsed?.pm_action_plan) && parsed.pm_action_plan.length > 0) || stepsArr.length > 0
+    (Array.isArray(parsed?.pm_action_plan) && parsed.pm_action_plan.length > 0) ||
+    stepsLimited.length > 0 ||
+    paAction.length > 0 ||
+    hasLegacyActions
   if (!hasValidPlan && typeof text === 'string' && text.trim().length > 20) {
     try {
       const retryText = await getText()
       const retryParsed = parseAiJson<ParsedShape>(retryText, fallbackPm, 'execution_layer')
-      const retrySteps = toStrArr(retryParsed?.steps)
+      const retrySteps = toStrArr(retryParsed?.steps).slice(0, 6)
+      const retryPa =
+        retryParsed?.priority_action && typeof retryParsed.priority_action === 'object' && typeof retryParsed.priority_action.action === 'string'
+          ? retryParsed.priority_action.action.trim()
+          : ''
       const retryPlan = Array.isArray(retryParsed?.pm_action_plan) ? retryParsed.pm_action_plan : []
-      if (retryPlan.length > 0 || retrySteps.length > 0) parsed = retryParsed
+      const retryLegacy =
+        Array.isArray(retryParsed?.product_actions) &&
+        retryParsed.product_actions.some((a) => typeof (a as { action?: string })?.action === 'string')
+      if (retryPlan.length > 0 || retrySteps.length > 0 || retryPa.length > 0 || retryLegacy) parsed = retryParsed
     } catch {
       // keep first parse
     }
   }
-  const actions = Array.isArray(parsed?.product_actions)
+  const stepsFinal = toStrArr(parsed?.steps).slice(0, 6)
+  const paFinal = parsed?.priority_action && typeof parsed.priority_action === 'object' ? parsed.priority_action : null
+  const paActionFinal = paFinal && typeof paFinal.action === 'string' ? paFinal.action.trim() : ''
+
+  let actions = Array.isArray(parsed?.product_actions)
     ? parsed.product_actions
         .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
         .map((a) => ({ action: String((a as { action: string }).action), priority: (a as { priority?: string }).priority, reasoning: (a as { reasoning?: string }).reasoning }))
@@ -981,15 +1034,24 @@ async function runPMActionPlanTask(
             : undefined,
         }))
     : []
-  if (pmPlan.length === 0 && stepsArr.length > 0) {
-    const priorityStr = typeof parsed?.priority === 'string' ? parsed.priority : 'medium'
-    const priority = (['high', 'medium', 'low'] as const).includes(priorityStr as 'high' | 'medium' | 'low') ? (priorityStr as 'high' | 'medium' | 'low') : 'medium'
-    pmPlan = stepsArr.map((step) => ({
-      action_title: step,
-      description: typeof parsed?.goal === 'string' ? parsed.goal : undefined,
-      expected_outcome: typeof parsed?.risk === 'string' ? parsed.risk : undefined,
-      priority,
-      category: undefined,
+  if (pmPlan.length === 0 && (paActionFinal.length > 0 || stepsFinal.length > 0)) {
+    if (paActionFinal) {
+      pmPlan.push({
+        action_title: paActionFinal,
+        description: typeof paFinal?.reasoning === 'string' ? paFinal.reasoning.trim() : undefined,
+        expected_outcome: typeof paFinal?.expected_outcome === 'string' ? paFinal.expected_outcome.trim() : undefined,
+        priority: 'high',
+      })
+    }
+    for (const step of stepsFinal) {
+      pmPlan.push({ action_title: step, priority: 'medium' })
+    }
+  }
+  if (actions.length === 0 && pmPlan.length > 0) {
+    actions = pmPlan.map((p) => ({
+      action: p.action_title,
+      priority: p.priority,
+      reasoning: [p.description, p.expected_outcome].filter((x): x is string => typeof x === 'string' && x.trim().length > 0).join(' — ') || undefined,
     }))
   }
   const napm = Array.isArray(parsed?.next_actions_pm)
@@ -1930,7 +1992,10 @@ export async function* runResearch(
     yield { type: 'error', message: msg, step: 'insight_extraction' }
     insightData = {
       key_insights: trendData.positive_signals,
-      opportunity_signals: trendData.positive_signals,
+      opportunity_signals: trendData.positive_signals.map((s) => ({
+        signal: s,
+        impact_level: 'Medium' as const,
+      })),
       risk_signals: [],
       core_insights: buildFallbackCoreInsights(
         keyword,
@@ -2000,8 +2065,8 @@ export async function* runResearch(
     const errorForUi = cause && cause !== msg ? `전략 추천: ${cause}` : msg
     await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: errorForUi, provider: effectiveStrategyProvider, fallback_used: false })
     strategyData = {
-      opportunities: insightData.opportunity_signals,
-      risks: insightData.risk_signals,
+      opportunities: flattenOpportunitySignalsForPrompt(insightData.opportunity_signals),
+      risks: flattenRiskSignalsForPrompt(insightData.risk_signals),
       strategy_summary: marketOverview,
       market_summary: undefined,
       key_strategic_insights: undefined,
@@ -2220,6 +2285,7 @@ export async function* runResearch(
     positive_signals: pos.length ? pos : undefined,
     neutral_signals: neu.length ? neu : undefined,
     negative_risks: neg.length ? neg : undefined,
+    risk_signals: insightData.risk_signals?.length ? insightData.risk_signals : undefined,
     pm_actions: {
       recommended_actions: allActions,
       monitoring_points: strategyData.risks,
@@ -2234,6 +2300,8 @@ export async function* runResearch(
       name: c.name,
       positioning: c.positioning,
       target_market: c.target_market,
+      market_presence: c.market_presence,
+      innovation_level: c.innovation_level,
       key_feature: c.key_feature,
       pricing: c.pricing,
       differentiation: c.differentiation,

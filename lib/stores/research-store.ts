@@ -83,6 +83,8 @@ export interface ResearchResponse {
     positive_signals?: string[]
     neutral_signals?: string[]
     negative_risks?: string[]
+    /** PM 리스크 신호등 UI용 (severity×likelihood, 최대 100) */
+    risk_signals?: Array<{ risk: string; severity: number; likelihood: number }>
     market_temperature_score?: number
     confidence_score?: number
     analysis_target?: string
@@ -1258,6 +1260,16 @@ export const useResearchStore = create<ResearchStore>()(
             analysis_groq?: { summary: string; modelName: string }
             analysis_gemini?: Record<string, string>
             analysis_results?: { summary?: string; sentiment?: number; strategic_insight?: string; action_item?: string; confidence?: number }
+            pipeline_analysis_id?: string
+            pipeline_tasks?: Array<{
+              step_name: string
+              status: 'pending' | 'running' | 'completed' | 'failed'
+              output_data: unknown
+              error_message: string | null
+              provider?: string | null
+              fallback_used?: boolean
+              primary_provider_error?: string | null
+            }>
           }) : {}
           if (!res.ok) {
             if (res.status === 401) return 'none'
@@ -1331,6 +1343,31 @@ export const useResearchStore = create<ResearchStore>()(
               analysis_results: ar,
               key_metrics: km,
             } as ResearchResponse
+            const pipelineTasks = Array.isArray(data.pipeline_tasks) ? data.pipeline_tasks : null
+            const pipelineAnalysisId =
+              typeof data.pipeline_analysis_id === 'string' && data.pipeline_analysis_id.length > 0
+                ? data.pipeline_analysis_id
+                : null
+            const taskDataFromPipeline: Partial<Record<string, unknown>> = {}
+            if (pipelineTasks && pipelineTasks.length > 0) {
+              for (const t of pipelineTasks) {
+                if (t.status === 'completed' && t.output_data != null && typeof t.step_name === 'string') {
+                  taskDataFromPipeline[t.step_name] = t.output_data
+                }
+              }
+            }
+            const normalizedPipelineTasks =
+              pipelineTasks && pipelineTasks.length > 0
+                ? pipelineTasks.map((t) => ({
+                    step_name: t.step_name,
+                    status: t.status,
+                    output_data: t.output_data,
+                    error_message: t.error_message,
+                    provider: t.provider ?? null,
+                    fallback_used: t.fallback_used ?? false,
+                    primary_provider_error: t.primary_provider_error ?? null,
+                  }))
+                : null
             set({
               keyword: k,
               status: statusFromBackend,
@@ -1342,6 +1379,13 @@ export const useResearchStore = create<ResearchStore>()(
               result: fullResult,
               error: null,
               newsList: (data.source_links ?? []) as NewsItem[],
+              ...(normalizedPipelineTasks
+                ? {
+                    analysisTasks: normalizedPipelineTasks,
+                    taskData: taskDataFromPipeline,
+                    analysisId: pipelineAnalysisId,
+                  }
+                : {}),
             })
             return 'cached'
           }
@@ -1666,6 +1710,8 @@ export const useResearchStore = create<ResearchStore>()(
 }),
     {
       name: 'rin-research-store',
+      /** Next.js SSR: 첫 페인트는 서버와 동일한 기본 상태로 맞추고, 클라이언트 마운트 후 rehydrate */
+      skipHydration: true,
       migrate: (persisted: unknown, version: number) => {
         const p = persisted as { state?: Partial<ResearchState>; version?: number }
         const s = p?.state as Partial<ResearchState> | undefined

@@ -12,14 +12,42 @@ import {
   ResponsiveContainer,
   Tooltip,
   CartesianGrid,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
+import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT, CHART_MINT_SOFT } from '@/lib/chart-theme'
+import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 
-const CHART_PRIMARY = '#6366f1'
-const CHART_EMERALD = '#10b981'
-const CHART_BLUE = '#3b82f6'
+const CHART_GRAY_FILL = '#94a3b8'
+
+const RADAR_LABELS: Record<string, string> = {
+  market_growth: '시장 성장',
+  trend_momentum: '트렌드 모멘텀',
+  competition_density: '경쟁 밀도',
+  competition_pressure: '경쟁 압력',
+  funding_signals: '투자 신호',
+  risk_factors: '리스크 요인',
+  user_demand: '수요',
+  product_differentiation: '차별화',
+  market_timing: '시장 타이밍',
+}
+
+function breakdownToRadarRows(breakdown: Record<string, number | undefined>): { subject: string; score: number; fullMark: number }[] {
+  return Object.entries(breakdown)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({
+      subject: RADAR_LABELS[k] ?? k,
+      score: Math.min(100, Math.max(0, v as number)),
+      fullMark: 100,
+    }))
+    .slice(0, 8)
+}
 
 /** Normalize market_growth to -20..+20 scale (handles both formula and legacy 0-100) */
 function normMarketGrowth(v: number): number {
@@ -81,6 +109,7 @@ export interface ChartInsights {
   market_size?: { insight?: string; takeaway?: string }
   adoption_rate?: { insight?: string; takeaway?: string }
   score_distribution?: { insight?: string; takeaway?: string }
+  multi_angle?: { insight?: string; takeaway?: string }
 }
 
 export interface MarketGrowthChartsProps {
@@ -95,11 +124,12 @@ export interface MarketGrowthChartsProps {
   keyword?: string
   chartInsights?: ChartInsights
   className?: string
+  /** 기회 점수·트렌드가 아직 없을 때 방사형 차트 영역만 스켈레톤 */
+  radarSkeleton?: boolean
 }
 
 /**
- * Visual charts for Market Growth Analysis: Search trend, Market size projection, Adoption rate.
- * Replaces long text with scannable visuals.
+ * 시장 성장: 방사형(다각도) + 트렌드 라인 · 규모 바 · 도입 영역 (민트·그레이 톤).
  */
 export function MarketGrowthCharts({
   opportunityScore,
@@ -108,8 +138,8 @@ export function MarketGrowthCharts({
   marketTemperatureScore,
   chartInsights,
   className,
+  radarSkeleton = false,
 }: MarketGrowthChartsProps) {
-  /** Data source: result.key_metrics (opportunity_score_breakdown, opportunity_score). Safe fallback when missing. */
   const defaultBreakdown = { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : defaultBreakdown
   const marketGrowth = effectiveBreakdown?.market_growth ?? 0
@@ -120,99 +150,132 @@ export function MarketGrowthCharts({
   const sizeData = buildMarketSizeData(score)
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
 
+  let radarRows = breakdownToRadarRows(effectiveBreakdown as Record<string, number | undefined>)
+  if (radarRows.length < 4) {
+    radarRows = [
+      { subject: '시장 성장', score: Math.round(score * 0.85), fullMark: 100 },
+      { subject: '트렌드', score: Math.round(score * 0.92), fullMark: 100 },
+      { subject: '수요 신호', score: Math.round(score * 0.78), fullMark: 100 },
+      { subject: '경쟁 압력', score: Math.round(Math.max(0, 100 - score) * 0.7), fullMark: 100 },
+      { subject: '타이밍', score: Math.round(score * 0.8), fullMark: 100 },
+    ]
+  }
+
   const st = chartInsights?.search_trend
   const ms = chartInsights?.market_size
   const ar = chartInsights?.adoption_rate
+  const ma = chartInsights?.multi_angle
 
   return (
-    <div className={cn('grid grid-cols-1 lg:grid-cols-3 gap-4', className)}>
-      {/* 1. Search trend growth line chart */}
-      <ChartWithInsight
-        title="검색 트렌드 성장"
-        insight={st?.insight}
-        takeaway={st?.takeaway}
-      >
-        <div className="h-[160px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
-              <Tooltip
-                formatter={(v: number) => [`${v}`, '검색 관심도']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                cursor={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={CHART_BLUE}
-                strokeWidth={2}
-                dot={{ fill: CHART_BLUE, r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartWithInsight>
+    <div className={cn('space-y-4', className)}>
+      {radarSkeleton ? (
+        <SectionContentSkeleton variant="chart" className="rounded-xl border border-border/40 bg-card/30 p-3" />
+      ) : (
+        <ChartWithInsight
+          title="시장 다각도 분석 (레이더)"
+          insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
+          takeaway={ma?.takeaway}
+          className="border border-border/60 bg-card/50"
+        >
+          <div className="h-[260px] w-full min-h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="72%" data={radarRows}>
+                <PolarGrid stroke={CHART_GRAY_GRID} />
+                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                <PolarRadiusAxis angle={45} domain={[0, 100]} tick={{ fontSize: 9, fill: CHART_GRAY_AXIS }} />
+                <Tooltip
+                  formatter={(v: number) => [`${v}/100`, '점수']}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
+                />
+                <Radar
+                  name="지표"
+                  dataKey="score"
+                  stroke={CHART_MINT}
+                  fill={CHART_MINT_SOFT}
+                  fillOpacity={0.45}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: CHART_MINT }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartWithInsight>
+      )}
 
-      {/* 2. Market size projection chart */}
-      <ChartWithInsight
-        title="시장 규모 전망"
-        insight={ms?.insight}
-        takeaway={ms?.takeaway}
-      >
-        <div className="h-[160px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" vertical={false} />
-              <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 120]} tick={{ fontSize: 10 }} width={28} />
-              <Tooltip
-                formatter={(v: number) => [`${v}/100`, '시장 매력도']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                cursor={false}
-              />
-              <Bar dataKey="size" fill={CHART_EMERALD} radius={[4, 4, 0, 0]} maxBarSize={48} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartWithInsight>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <ChartWithInsight title="검색 트렌드 성장" insight={st?.insight} takeaway={st?.takeaway}>
+          <div className="h-[160px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
+                <Tooltip
+                  formatter={(v: number) => [`${v}`, '검색 관심도']}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  cursor={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke={CHART_MINT}
+                  strokeWidth={2}
+                  dot={{ fill: CHART_MINT, r: 3 }}
+                  activeDot={{ r: 5, fill: CHART_MINT }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartWithInsight>
 
-      {/* 3. Adoption rate trend */}
-      <ChartWithInsight
-        title="시장 도입 추이"
-        insight={ar?.insight}
-        takeaway={ar?.takeaway}
-      >
-        <div className="h-[160px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="market-growth-adoption-grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={CHART_PRIMARY} stopOpacity={0.3} />
-                  <stop offset="100%" stopColor={CHART_PRIMARY} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" />
-              <XAxis dataKey="stage" tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
-              <Tooltip
-                formatter={(v: number) => [`${v}%`, '도입률']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                cursor={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="rate"
-                stroke={CHART_PRIMARY}
-                strokeWidth={2}
-                fill="url(#market-growth-adoption-grad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartWithInsight>
+        <ChartWithInsight title="시장 규모 전망" insight={ms?.insight} takeaway={ms?.takeaway}>
+          <div className="h-[160px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} vertical={false} />
+                <XAxis dataKey="period" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                <YAxis domain={[0, 120]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
+                <Tooltip
+                  formatter={(v: number) => [`${v}/100`, '시장 매력도']}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  cursor={false}
+                />
+                <Bar dataKey="size" fill={CHART_MINT} radius={[4, 4, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartWithInsight>
+
+        <ChartWithInsight title="시장 도입 추이" insight={ar?.insight} takeaway={ar?.takeaway}>
+          <div className="h-[160px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="market-growth-adoption-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CHART_MINT} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={CHART_MINT} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
+                <XAxis dataKey="stage" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
+                <Tooltip
+                  formatter={(v: number) => [`${v}%`, '도입률']}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  cursor={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="rate"
+                  stroke={CHART_GRAY_FILL}
+                  strokeWidth={1.5}
+                  fill="url(#market-growth-adoption-grad)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartWithInsight>
+      </div>
     </div>
   )
 }

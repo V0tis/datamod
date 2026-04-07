@@ -1,10 +1,39 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api/require-auth'
+import { requireAuth, type RequireAuthResult } from '@/lib/api/require-auth'
 import { isCacheValid, RESEARCH_CACHE_TTL_MS } from '@/lib/research-cache'
 import { logger } from '@/lib/logger'
+import { buildPipelineTasksFromRows, PIPELINE_STEP_ORDER } from '@/lib/research-pipeline-tasks'
 
 /** Authoritative analysis status. UI renders ONLY from this; no inference from partial data. */
 export type AnalysisStatus = 'queued' | 'analyzing' | 'completed' | 'failed'
+
+type AuthedSupabase = Extract<RequireAuthResult, { user: unknown }>['supabase']
+
+async function fetchPipelineSnapshotForKeyword(
+  supabase: AuthedSupabase,
+  userId: string,
+  keyword: string,
+  country: string
+): Promise<{ pipeline_analysis_id: string; pipeline_tasks: ReturnType<typeof buildPipelineTasksFromRows> } | null> {
+  const pipeline_analysis_id = `${userId}|${keyword}|${country}`
+  const { data: rows, error } = await supabase
+    .from('analysis_tasks')
+    .select(
+      'step_name, status, output_data, error_message, started_at, completed_at, provider, fallback_used, primary_provider_error'
+    )
+    .eq('analysis_id', pipeline_analysis_id)
+    .in('step_name', [...PIPELINE_STEP_ORDER])
+
+  if (error) {
+    logger.error('API: research history pipeline_tasks', { message: error.message })
+    return null
+  }
+  if (!rows?.length) return null
+  return {
+    pipeline_analysis_id,
+    pipeline_tasks: buildPipelineTasksFromRows(rows as Array<Record<string, unknown>>),
+  }
+}
 
 type HistoryRow = {
   report_id: string | null
@@ -161,6 +190,8 @@ export async function GET(req: Request) {
       .eq('id', row.report_id)
       .maybeSingle()
 
+    const pipelineExtra = await fetchPipelineSnapshotForKeyword(supabase, user.id, keyword, country)
+
     const basePayload = {
       cached: true,
       cacheExpired,
@@ -178,6 +209,7 @@ export async function GET(req: Request) {
       analysis_gemini: ensureTabAnalysisRecord(row.analysis_gemini) ?? undefined,
       analysis_results: ensureObject(row.analysis_results),
       key_metrics: ensureObject(row.key_metrics),
+      ...(pipelineExtra ?? {}),
     }
     if (reportError || !report) {
       return NextResponse.json({

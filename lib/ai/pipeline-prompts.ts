@@ -12,6 +12,88 @@ import {
   buildDataDrivenPrompt,
 } from './base-prompt'
 
+/** 인사이트 추출 — 기회 시그널 (전략 단계·프롬프트 플랫닝에 사용) */
+export type OpportunitySignalItem = {
+  signal: string
+  impact_level: 'High' | 'Medium' | 'Low'
+}
+
+/** 인사이트 추출 — 리스크 시그널 */
+export type RiskSignalItem = {
+  risk: string
+  severity: number
+  likelihood: number
+}
+
+function clampInsightScore1to10(n: unknown, fallback = 5): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return fallback
+  return Math.min(10, Math.max(1, Math.round(n)))
+}
+
+function parseImpactLevel(v: unknown): 'High' | 'Medium' | 'Low' {
+  if (v === 'High' || v === 'Medium' || v === 'Low') return v
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : ''
+  if (/^high|^상|^높/.test(s)) return 'High'
+  if (/^low|^하|^낮/.test(s)) return 'Low'
+  return 'Medium'
+}
+
+/** AI JSON 파싱 직후: 레거시 string[] + 신규 객체 배열 모두 수용 */
+export function normalizeOpportunitySignalsFromParse(raw: unknown[] | undefined | null): OpportunitySignalItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: OpportunitySignalItem[] = []
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const t = item.trim()
+      if (t) out.push({ signal: t, impact_level: 'Medium' })
+      continue
+    }
+    if (item && typeof item === 'object') {
+      const o = item as Record<string, unknown>
+      const signal = typeof o.signal === 'string' ? o.signal.trim() : ''
+      if (!signal) continue
+      out.push({ signal, impact_level: parseImpactLevel(o.impact_level) })
+    }
+  }
+  return out
+}
+
+export function normalizeRiskSignalsFromParse(raw: unknown[] | undefined | null): RiskSignalItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: RiskSignalItem[] = []
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const t = item.trim()
+      if (t) out.push({ risk: t, severity: 5, likelihood: 5 })
+      continue
+    }
+    if (item && typeof item === 'object') {
+      const o = item as Record<string, unknown>
+      const risk = typeof o.risk === 'string' ? o.risk.trim() : ''
+      if (!risk) continue
+      out.push({
+        risk,
+        severity: clampInsightScore1to10(o.severity),
+        likelihood: clampInsightScore1to10(o.likelihood),
+      })
+    }
+  }
+  return out
+}
+
+/** 전략 프롬프트·fallback용 문자열 리스트 */
+export function flattenOpportunitySignalsForPrompt(items: readonly OpportunitySignalItem[] | undefined): string[] {
+  if (!items?.length) return []
+  return items.map((x) => `[${x.impact_level}] ${x.signal}`.trim()).filter(Boolean)
+}
+
+export function flattenRiskSignalsForPrompt(items: readonly RiskSignalItem[] | undefined): string[] {
+  if (!items?.length) return []
+  return items
+    .map((x) => `${x.risk} (심각도 ${x.severity}/10, 발생 가능성 ${x.likelihood}/10)`.trim())
+    .filter(Boolean)
+}
+
 export const PIPELINE_BASE_SYSTEM = `${BASE_JSON_PROMPT}
 
 PM 의사결정 지원용 파이프라인입니다. 챗봇이 아닙니다.
@@ -42,10 +124,16 @@ Format: {
     { "title": "제목", "summary": "요약(왜 중요한지)", "impact": "비즈니스 영향", "reason": "PM 의사결정 의미" }
   ],
   "key_insights": ["문자열"],
-  "opportunity_signals": ["문자열"],
-  "risk_signals": ["문자열"]
+  "opportunity_signals": [
+    { "signal": "기회 내용", "impact_level": "High" | "Medium" | "Low" }
+  ],
+  "risk_signals": [
+    { "risk": "리스크 내용", "severity": number, "likelihood": number }
+  ]
 }
-Return ONLY valid JSON. All strings in Korean.`
+- opportunity_signals: signal은 한국어. impact_level은 파싱 일관성을 위해 반드시 영문 "High", "Medium", "Low" 중 하나만 사용 (다른 표기 금지).
+- risk_signals: risk는 한국어. severity·likelihood는 정수 1-10 (심각도·발생 가능성). DATA 근거로 산정.
+Return ONLY valid JSON. signal·risk·key_insights·core_insights 본문은 한국어.`
 
 export function buildInsightExtractionPrompt(
   keyword: string,
@@ -62,7 +150,7 @@ export function buildInsightExtractionPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Extract 3-5 core_insights using ONLY the DATA above. key_insights, opportunity_signals, risk_signals must be grounded in DATA. No duplicates, no empty fields.`,
+    task: `Extract 3-5 core_insights using ONLY the DATA above. key_insights, opportunity_signals (signal + impact_level), risk_signals (risk + severity + likelihood) must be grounded in DATA. No duplicates, no empty fields.`,
     suffix: `Return ONLY the JSON object per system format. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
@@ -73,24 +161,30 @@ export const STRATEGIC_RECOMMENDATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 전략 제안은 반드시 포함: 왜 이 전략인지(why), 기대 결과(expected result), 리스크(risk), 실행 난이도(difficulty), 우선순위(priority).
 ${PM_REQUIRED_OUTPUT_STRUCTURE}
 Format: {
-  "opportunities": ["기회 (근거·영향)"],
-  "risks": ["리스크 (영향·대응)"],
-  "strategy_summary": "2-3문장 전략 요약 (왜 이 전략인지, 기대 결과, 리스크, 난이도, 우선순위 포함)",
+  "opportunities": ["기회 (근거·영향)", "..."],
+  "risks": ["리스크 (영향·대응)", "..."],
+  "strategy_summary": "마크다운(Markdown) 전략 보고서를 **하나의 JSON 문자열 값**으로만 출력. 필수 구조: (1) ## 배경 (2) ## 핵심 전략 (3) ## 예상 효과 — 위 순서를 지키고, 각 섹션 본문은 불릿(- 또는 *)으로 항목화. 왜 이 전략인지·기대 결과·리스크·난이도·우선순위는 세 섹션에 분배해 서술.",
   "market_summary": "1-2문장 시장 요약 (상황·의미·영향)",
   "key_strategic_insights": ["전략 인사이트 (이유·영향·PM 의사결정 의미)"]
 }
-Each field must support PM decision. Return ONLY valid JSON. All text in Korean.`
+- strategy_summary는 유효한 JSON 객체 **안의 문자열 필드**에만 마크다운을 넣는다 (문자열 내부 줄바꿈은 JSON 규칙에 따라 이스케이프).
+- opportunities·risks는 문자열 배열을 유지한다 (추후 객체 배열 확장 가능).
+Each field must support PM decision. Return ONLY valid JSON. 서술·불릿 본문은 한국어. 섹션 제목은 반드시 ## 배경 / ## 핵심 전략 / ## 예상 효과 형태의 마크다운 헤더를 사용한다.`
 
 export function buildStrategicRecommendationPrompt(
   keyword: string,
   marketOverview: string,
   competitionSummary: string,
-  extractedInsights: { key_insights?: string[]; opportunity_signals?: string[]; risk_signals?: string[] }
+  extractedInsights: {
+    key_insights?: string[]
+    opportunity_signals?: OpportunitySignalItem[]
+    risk_signals?: RiskSignalItem[]
+  }
 ): string {
   const insights = [
     ...(extractedInsights.key_insights ?? []),
-    ...(extractedInsights.opportunity_signals ?? []),
-    ...(extractedInsights.risk_signals ?? []),
+    ...flattenOpportunitySignalsForPrompt(extractedInsights.opportunity_signals),
+    ...flattenRiskSignalsForPrompt(extractedInsights.risk_signals),
   ].filter(Boolean)
   const insightsBlock = insights.length
     ? `extracted insights (from prior step):\n${insights.map((i) => `- ${i}`).join('\n')}`
@@ -106,38 +200,26 @@ export function buildStrategicRecommendationPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Produce strategic recommendations using ONLY the DATA above. opportunities, risks, strategy_summary, market_summary must cite DATA. Include why, expected result, risk, difficulty, priority.`,
+    task: `Produce strategic recommendations using ONLY the DATA above. opportunities, risks, market_summary must cite DATA. strategy_summary must be a Markdown report inside one JSON string with sections ## 배경, ## 핵심 전략, ## 예상 효과 and bullet lists; include why, expected result, risk, difficulty, priority within those sections.`,
     suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
 
-/** Step 5: PM Action Plan – goal, step-by-step plan, priority, risk, expected impact. DATA-DRIVEN ONLY. */
+/** Step 5: PM Action Plan – 슬림 JSON, 토큰 절약. DATA-DRIVEN ONLY. */
 export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 You MUST return a valid JSON object. No markdown, no code fences, no extra text.
 액션 플랜은 반드시 제공된 DATA를 근거로 작성. 추측·발명·할루시네이션 금지.
-액션 플랜 필수: goal(목표), step-by-step plan(단계별 실행 계획), priority(우선순위), risk(리스크), expected impact(기대 영향). 각 액션에 왜·영향을 포함.
+Keep descriptions concise to avoid token overflow. 짧은 구·불릿 수준으로 작성. 빈 배열·빈 객체는 보내지 말 것.
 
-Preferred format (include at least pm_action_plan or steps):
+Preferred format (이 키만 사용 권장 — 중복 배열·장문 필드 금지):
 {
   "goal": "목표 한 문장 (필수)",
-  "steps": ["실행 단계1", "실행 단계2", "..."],
-  "priority": "high|medium|low 또는 한글 우선순위",
-  "risk": "주요 리스크 한 문장",
-  "expected_outcome": "기대 결과 요약 (또는 pm_action_plan 각 항목의 expected_outcome)",
-  "product_idea": "구체적 제품 컨셉",
-  "target_customer": "타겟 고객 세그먼트",
-  "monetization": "수익화 모델",
-  "product_actions": [{"action": "액션명", "priority": "high|medium|low", "reasoning": "근거"}],
-  "feature_ideas": ["아이디어1", "아이디어2"],
-  "go_to_market_steps": ["GTM 단계1", "GTM 단계2"],
-  "pm_action_plan": [{
-    "action_title": "액션 제목",
-    "description": "구체적 실행 방법",
-    "expected_outcome": "기대 결과 (필수)",
-    "priority": "high|medium|low",
-    "category": "mvp_experiment|user_interview|feature_prioritization|go_to_market"
-  }],
-  "next_actions_pm": [{"action": "액션명", "why": "이유", "how_to_execute": "실행 방법", "priority": "high|medium|low"}],
+  "steps": ["실행 단계1", "실행 단계2", "실행 단계3"],
+  "priority_action": {
+    "action": "가장 시급한 단일 액션",
+    "reasoning": "근거 (한두 문장)",
+    "expected_outcome": "기대 결과 (한두 문장)"
+  },
   "strategic_decision_layer": {
     "market_opportunity_explanation": "한 줄",
     "competition_intensity": "low|medium|high",
@@ -147,10 +229,12 @@ Preferred format (include at least pm_action_plan or steps):
     "entry_strategy": "진입 전략 요약",
     "entry_explanation": "한 줄"
   },
-  "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
-  "jtbd": { "main_jobs": [], "pains": [], "gains": [] }
+  "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] }
 }
-Required: goal, step-by-step plan (steps or pm_action_plan 4-8 items), priority, risk, expected impact. 누락 시 무효. All text in Korean.`
+- steps는 **최대 6개**까지. 핵심 실행 순서만.
+- priority_action은 **하나**만 (최우선 1건).
+- strategic_decision_layer·swot_analysis 각 필드 값은 짧게 (항목당 1줄 권장).
+Required: goal, priority_action (action 필수), steps(1개 이상 권장, 최대 6). strategic_decision_layer·swot_analysis는 DATA가 있으면 채운다. All text in Korean.`
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -169,7 +253,7 @@ export function buildPMActionPlanPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Generate PM action plan using ONLY the DATA above. goal, steps, product_actions, feature_ideas must follow from DATA.`,
+    task: `Generate PM action plan using ONLY the DATA above. Use the slim schema: goal, steps (max 6), priority_action, strategic_decision_layer, swot_analysis. Be concise. No duplicate action lists.`,
     suffix: `Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

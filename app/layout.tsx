@@ -9,6 +9,7 @@ import { ApiKeyValidationProvider } from "@/components/api-key-validation-provid
 import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { SupabaseConfigGate } from "@/components/supabase-config-gate";
 import { LogoutProvider } from "@/components/providers/logout-provider";
+import { ResearchStoreRehydrate } from "@/components/research-store-rehydrate";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased text-foreground bg-background transition-colors duration-300">
         <ThemeProvider>
+          <ResearchStoreRehydrate />
           <AuthProvider>
             <SupabaseConfigGate>
               <LogoutProvider>

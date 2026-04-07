@@ -7,6 +7,8 @@ import { AnalysisResultSections } from './AnalysisResultSections'
 import { ProductStrategyResult } from './ProductStrategyResult'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { StrategyEnginePipeline } from './dashboard/StrategyEnginePipeline'
+import { RiskSignalsSeverityList } from '@/components/research/RiskSignalsSeverityList'
+import { normalizeRiskSignalsFromParse } from '@/lib/ai/pipeline-prompts'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import type { StreamingState } from '@/lib/types/analysis-modes'
 
@@ -161,27 +163,49 @@ export function PMDecisionDashboard({
         const summary = typeof output?.strategy_summary === 'string' ? output.strategy_summary : ''
         const hasContent = risks.length > 0 || opportunities.length > 0 || (summary?.trim().length ?? 0) > 0
         const km = result?.key_metrics
+        const insightTask = effectiveAnalysisTasks?.find((t) => t.step_name === 'insight_extraction')
+        const insightRaw =
+          insightTask?.output_data && typeof insightTask.output_data === 'object'
+            ? (insightTask.output_data as { risk_signals?: unknown[] })
+            : (taskData?.insight_extraction as { risk_signals?: unknown[] } | undefined)
+        const riskSignalItems = normalizeRiskSignalsFromParse(
+          Array.isArray(insightRaw?.risk_signals)
+            ? insightRaw.risk_signals
+            : Array.isArray(km?.risk_signals)
+              ? km.risk_signals
+              : []
+        )
         const fallbackRisks = km?.negative_risks ?? result?.painPoints ?? []
         const fallbackOpps = km?.positive_signals ?? result?.marketNews ?? []
+        const showRiskBlock =
+          hasContent ||
+          fallbackRisks.length > 0 ||
+          fallbackOpps.length > 0 ||
+          riskSignalItems.length > 0
         return (
           <div id="section-risks-opportunities" className="scroll-mt-24 rounded-lg border border-border bg-card/50 p-4 sm:p-5 animate-in fade-in duration-300">
             <div className="flex items-center justify-between gap-2 mb-3">
               <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
                 리스크 및 기회 평가
               </h3>
-              {!isAnalyzing && (hasContent || fallbackRisks.length > 0 || fallbackOpps.length > 0) && (
+              {!isAnalyzing && showRiskBlock && (
                 <span className="flex items-center gap-1.5 text-xs font-medium text-primary shrink-0">
                   <span aria-hidden>✓</span> 완료
                 </span>
               )}
             </div>
             <div className="space-y-4">
-              {isAnalyzing && !hasContent && (
+              {isAnalyzing && !showRiskBlock && (
                 <SectionContentSkeleton variant="mixed" />
               )}
-              {(hasContent || fallbackRisks.length > 0 || fallbackOpps.length > 0) && (
+              {showRiskBlock && (
                 <>
                   {summary && <p className="text-sm text-muted-foreground leading-relaxed">{summary}</p>}
+                  {riskSignalItems.length > 0 ? (
+                    <div className="rounded-xl border border-border/60 bg-muted/5 p-3 sm:p-4">
+                      <RiskSignalsSeverityList items={riskSignalItems} maxItems={6} />
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">리스크</p>

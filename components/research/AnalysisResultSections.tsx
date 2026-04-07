@@ -20,7 +20,11 @@ import { QuickActions } from '@/components/research/QuickActions'
 import { StrategicActionsSection, type StrategicActionItem } from '@/components/research/StrategicActionsSection'
 import { textToBullets } from '@/lib/text-to-bullets'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
-import { StreamingBulletList } from '@/components/research/StreamingInsightText'
+import { StreamingBulletList, StreamingRiskList } from '@/components/research/StreamingInsightText'
+import { CompetitorPositioningScatter } from '@/components/research/CompetitorPositioningScatter'
+import { RiskSignalsSeverityList } from '@/components/research/RiskSignalsSeverityList'
+import { normalizeRiskSignalsFromParse } from '@/lib/ai/pipeline-prompts'
+import { MarkdownBody } from '@/components/ui/markdown-body'
 import { cn } from '@/lib/utils'
 import { ExpandableText } from '@/components/ui/expandable-text'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -106,6 +110,7 @@ export function AnalysisResultSections({
   const km = result?.key_metrics ?? (loading ? DEFAULT_KEY_METRICS_LOADING : {})
   const trendOutput = getTaskOutput('trend_analysis', taskData, analysisTasks)
   const competitionOutput = getTaskOutput('competition_analysis', taskData, analysisTasks)
+  const insightOutput = getTaskOutput('insight_extraction', taskData, analysisTasks)
   const strategyOutput = getTaskOutput('strategy_generation', taskData, analysisTasks)
   const executionOutput = getTaskOutput('execution_layer', taskData, analysisTasks)
 
@@ -149,6 +154,8 @@ export function AnalysisResultSections({
         name?: string
         positioning?: string
         target_market?: string
+        market_presence?: number
+        innovation_level?: number
         key_feature?: string
         pricing?: string
         differentiation?: string
@@ -160,6 +167,8 @@ export function AnalysisResultSections({
           name?: string
           positioning?: string
           target_market?: string
+          market_presence?: number
+          innovation_level?: number
           key_feature?: string
           pricing?: string
           differentiation?: string
@@ -207,6 +216,14 @@ export function AnalysisResultSections({
     Array.isArray(strategyOutput?.risks)
       ? (strategyOutput.risks as string[]).filter((s): s is string => typeof s === 'string')
       : (km.negative_risks ?? result?.painPoints ?? [])
+  )
+
+  const riskSignalItems = normalizeRiskSignalsFromParse(
+    Array.isArray(insightOutput?.risk_signals)
+      ? (insightOutput.risk_signals as unknown[])
+      : Array.isArray(km.risk_signals)
+        ? (km.risk_signals as unknown[])
+        : []
   )
 
   const strategicActions: StrategicActionItem[] = pmActions
@@ -274,6 +291,7 @@ export function AnalysisResultSections({
     strategyBullets.length > 0 ||
     allActionItems.length > 0 ||
     strategicActions.length > 0 ||
+    riskSignalItems.length > 0 ||
     !!hasFrameworks
 
   const isPmAnalytics = layout === 'pm-analytics'
@@ -294,6 +312,7 @@ export function AnalysisResultSections({
             marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
             chartInsights={km.chart_insights}
             keyword={keyword}
+            radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
           />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(opportunityScore != null || loading) && (
@@ -343,6 +362,7 @@ export function AnalysisResultSections({
           {competitiveLandscape.length > 0 && (
             <>
               <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
+              <CompetitorPositioningScatter competitors={competitiveLandscape} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <CompetitorTierChart competitors={competitiveLandscape} />
                 <CompetitorLandscapeMap competitors={competitiveLandscape} />
@@ -503,12 +523,22 @@ export function AnalysisResultSections({
           icon={<AlertTriangle className="h-5 w-5" />}
           status={getSectionStatus('strategy_generation', analysisTasks, loading)}
           loading={loading}
-          streamingComplete={!loading && risks.length > 0}
+          streamingComplete={!loading && (risks.length > 0 || riskSignalItems.length > 0)}
         >
-          {loading && risks.length === 0 ? (
+          {loading && risks.length === 0 && riskSignalItems.length === 0 ? (
             <SectionContentSkeleton variant="list" />
+          ) : riskSignalItems.length > 0 ? (
+            <div className="space-y-4">
+              <RiskSignalsSeverityList items={riskSignalItems} maxItems={8} />
+              {risks.length > 0 ? (
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">전략 단계 요약 리스크</p>
+                  <StreamingRiskList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} />
+                </div>
+              ) : null}
+            </div>
           ) : risks.length > 0 ? (
-            <StreamingBulletList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} variant="risk" />
+            <StreamingRiskList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} />
           ) : (
             <p className="text-sm text-muted-foreground">리스크 데이터가 없습니다.</p>
           )}
@@ -533,14 +563,16 @@ export function AnalysisResultSections({
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
-                <StreamingBulletList items={strategyBullets} streaming={loading} skipAnimation={!loading} revealDelayMs={320} />
+                <div className="rounded-lg border border-border/60 bg-card px-3 py-3 sm:px-4">
+                  <MarkdownBody>{strategyBullets.map((b) => `- ${b}`).join('\n')}</MarkdownBody>
+                </div>
               </div>
             )}
             {opportunityReason && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
                 <p className="text-sm text-foreground leading-relaxed">
-                  <ExpandableText text={opportunityReason} maxLength={200} />
+                  <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
                 </p>
               </div>
             )}
@@ -631,6 +663,7 @@ export function AnalysisResultSections({
               marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
               chartInsights={km.chart_insights}
               keyword={keyword}
+              radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(opportunityScore != null || loading) && (
@@ -719,6 +752,7 @@ export function AnalysisResultSections({
                   competitors={competitiveLandscape}
                   loading={loading}
                 />
+                <CompetitorPositioningScatter competitors={competitiveLandscape} />
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <CompetitorTierChart competitors={competitiveLandscape} />
                   <CompetitorLandscapeMap competitors={competitiveLandscape} />
@@ -979,18 +1013,22 @@ export function AnalysisResultSections({
         icon={<AlertTriangle className="h-5 w-5" />}
         status={getSectionStatus('strategy_generation', analysisTasks, loading)}
         loading={loading}
-        streamingComplete={!loading && risks.length > 0}
+        streamingComplete={!loading && (risks.length > 0 || riskSignalItems.length > 0)}
       >
-        {loading && risks.length === 0 ? (
+        {loading && risks.length === 0 && riskSignalItems.length === 0 ? (
           <SectionContentSkeleton variant="list" />
+        ) : riskSignalItems.length > 0 ? (
+          <div className="space-y-4">
+            <RiskSignalsSeverityList items={riskSignalItems} maxItems={8} />
+            {risks.length > 0 ? (
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">전략 단계 요약 리스크</p>
+                <StreamingRiskList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} />
+              </div>
+            ) : null}
+          </div>
         ) : risks.length > 0 ? (
-          <StreamingBulletList
-            items={risks.slice(0, 5)}
-            streaming={loading}
-            skipAnimation={!loading}
-            revealDelayMs={300}
-            variant="risk"
-          />
+          <StreamingRiskList items={risks.slice(0, 5)} streaming={loading} skipAnimation={!loading} revealDelayMs={300} />
         ) : (
           <p className="text-sm text-muted-foreground">리스크 데이터가 없습니다.</p>
         )}
@@ -1022,19 +1060,16 @@ export function AnalysisResultSections({
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
-                <StreamingBulletList
-                  items={strategyBullets}
-                  streaming={loading}
-                  skipAnimation={!loading}
-                  revealDelayMs={320}
-                />
+                <div className="rounded-lg border border-border/60 bg-card px-3 py-3 sm:px-4">
+                  <MarkdownBody>{strategyBullets.map((b) => `- ${b}`).join('\n')}</MarkdownBody>
+                </div>
               </div>
             )}
             {opportunityReason && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
                 <p className="text-sm text-foreground leading-relaxed">
-                  <ExpandableText text={opportunityReason} maxLength={200} />
+                  <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
                 </p>
               </div>
             )}
