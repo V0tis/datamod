@@ -74,8 +74,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </ErrorBoundary>
       <div
         className={cn(
-          'min-h-screen',
-          isResultsPage ? 'pt-14' : 'pt-14 lg:pt-0 lg:pl-[220px]'
+          'min-h-screen w-full',
+          /* <md: 햄버거만, md~lg: 아이콘 레일 72px, lg+: 전체 사이드바 220px */
+          isResultsPage ? 'pt-14' : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[220px]'
         )}
       >
         <main className="min-h-screen bg-muted/25 overflow-auto">

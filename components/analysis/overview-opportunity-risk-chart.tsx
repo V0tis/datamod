@@ -75,7 +75,7 @@ export function OverviewOpportunityRiskChart({
       {showSkeleton ? (
         <SectionContentSkeleton variant="chart" className="rounded-lg border-0 bg-transparent" />
       ) : (
-        <div className="h-[220px] w-full">
+        <div className="aspect-square w-full min-h-[200px] max-h-[320px] sm:min-h-[220px] sm:max-h-[360px]">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="78%" data={radarData}>
               <PolarGrid stroke={CHART_GRAY_GRID} />

@@ -198,7 +198,7 @@ function TrendsPageInner() {
   const items = trends[country] ?? []
 
   return (
-    <div className="p-4 md:p-6 w-full max-w-7xl mx-auto bg-background min-h-screen">
+    <div className="mx-auto w-full min-h-screen max-w-screen-2xl bg-background px-4 py-4 md:p-6">
       <header className="mb-5">
         <h1 className="text-2xl font-bold text-foreground text-foreground flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-primary" />

@@ -842,20 +842,53 @@ export const useResearchStore = create<ResearchStore>()(
           return
         }
 
-        // Prevent duplicate runs
-        if (get().isAnalyzingNow()) {
-          toast.warning('이미 분석이 진행 중입니다.')
-          return
+        const countryCode = options?.country_code ?? 'KR'
+
+        const resetServerAnalyzingRow = async () => {
+          try {
+            await fetch('/api/research/reset-analyzing', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ keyword: k, country_code: countryCode }),
+            })
+          } catch {
+            /* ignore — 재시도는 클라이언트 잠금 해제로 가능 */
+          }
         }
 
-        // Abort any previous request
+        // Prevent duplicate runs. 재분석·단계 재실행은 이전 요청을 중단하고 잠금을 풀고 진행합니다.
+        if (get().isAnalyzingNow()) {
+          const allowBreakStaleClientLock =
+            options?.force_reanalyze === true ||
+            options?.rerun_from_phase === 1 ||
+            options?.rerun_from_phase === 2 ||
+            options?.rerun_from_phase === 3
+          if (allowBreakStaleClientLock) {
+            if (currentAbortController) {
+              currentAbortController.abort()
+              currentAbortController = null
+            }
+            set({
+              streamingState: createIdleState(),
+              status: 'idle',
+              analysisStatus: 'queued',
+              error: null,
+            })
+            await resetServerAnalyzingRow()
+          } else {
+            toast.warning('이미 분석이 진행 중입니다.')
+            return
+          }
+        }
+
+        // Abort any previous request (새 실행 직전)
         if (currentAbortController) {
           currentAbortController.abort()
         }
         currentAbortController = new AbortController()
         const signal = currentAbortController.signal
 
-        const countryCode = options?.country_code ?? 'KR'
         const modeFromStorage =
           typeof window !== 'undefined'
             ? (() => {
@@ -915,6 +948,8 @@ export const useResearchStore = create<ResearchStore>()(
               return
             }
           }
+
+          await resetServerAnalyzingRow()
 
           const res = await fetch('/api/research/run', {
             method: 'POST',
@@ -1171,14 +1206,26 @@ export const useResearchStore = create<ResearchStore>()(
                   streamEnded = true
                   break
                 } else if (type === 'error') {
-                  set({ streamingState: createErrorState(event.message ?? '분석 중 오류가 발생했습니다.', lastSuccessfulStep) })
-                  applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
+                  const errMsg = event.message ?? '분석 중 오류가 발생했습니다.'
+                  set({
+                    streamingState: createErrorState(errMsg, lastSuccessfulStep),
+                    status: 'error',
+                    analysisStatus: 'failed',
+                    error: errMsg,
+                  })
+                  applyUpdate({ error: errMsg })
                   streamEnded = true
                   break
                 }
               } catch {
-                set({ streamingState: createErrorState('잘못된 응답 형식입니다.', lastSuccessfulStep) })
-                applyUpdate({ error: '잘못된 응답 형식입니다.' })
+                const errMsg = '잘못된 응답 형식입니다.'
+                set({
+                  streamingState: createErrorState(errMsg, lastSuccessfulStep),
+                  status: 'error',
+                  analysisStatus: 'failed',
+                  error: errMsg,
+                })
+                applyUpdate({ error: errMsg })
                 streamEnded = true
                 break
               }
@@ -1209,12 +1256,39 @@ export const useResearchStore = create<ResearchStore>()(
                 set({ streamingState: createCompletedState(event.reportId ?? null) })
                 shouldHydrateFromHistoryAfterDone = true
               } else if (event?.type === 'error') {
-                set({ streamingState: createErrorState(event.message ?? '분석 중 오류가 발생했습니다.', lastSuccessfulStep) })
-                applyUpdate({ error: event.message ?? '분석 중 오류가 발생했습니다.' })
+                const errMsg = event.message ?? '분석 중 오류가 발생했습니다.'
+                set({
+                  streamingState: createErrorState(errMsg, lastSuccessfulStep),
+                  status: 'error',
+                  analysisStatus: 'failed',
+                  error: errMsg,
+                })
+                applyUpdate({ error: errMsg })
               }
             } catch {
-              set({ streamingState: createErrorState('잘못된 응답 형식입니다.', lastSuccessfulStep) })
-              get().applyStreamingUpdate({ error: '잘못된 응답 형식입니다.' })
+              const errMsg = '잘못된 응답 형식입니다.'
+              set({
+                streamingState: createErrorState(errMsg, lastSuccessfulStep),
+                status: 'error',
+                analysisStatus: 'failed',
+                error: errMsg,
+              })
+              get().applyStreamingUpdate({ error: errMsg })
+            }
+          }
+
+          if (isAnalyzing(get().streamingState)) {
+            const errMsg = signal.aborted
+              ? '분석이 중단되었습니다.'
+              : '분석 스트림이 비정상적으로 종료되었습니다. 다시 시도해 주세요.'
+            set({
+              status: 'error',
+              analysisStatus: 'failed',
+              streamingState: createErrorState(errMsg, lastSuccessfulStep),
+              error: errMsg,
+            })
+            if (!signal.aborted) {
+              toast.error(errMsg)
             }
           }
 
@@ -1222,8 +1296,18 @@ export const useResearchStore = create<ResearchStore>()(
             await get().loadFromHistory(k, countryCode)
           }
         } catch (err) {
-          // Handle abort separately
           if ((err as Error)?.name === 'AbortError') {
+            if (get().isAnalyzingNow()) {
+              const st = get().streamingState
+              const lastStep =
+                st.status === 'streaming' || st.status === 'running' ? st.currentStep : null
+              set({
+                status: 'error',
+                analysisStatus: 'failed',
+                streamingState: createErrorState('분석 요청이 취소되었습니다.', lastStep),
+                error: '분석 요청이 취소되었습니다.',
+              })
+            }
             return
           }
           const msg = (err as Error)?.message ?? '분석을 시작하지 못했어요.'
@@ -1786,6 +1870,16 @@ export const useResearchStore = create<ResearchStore>()(
         insights: state.insights,
         lastSuccessfulReport: state.lastSuccessfulReport,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        if (state.status === 'loading') {
+          const ss = state.streamingState
+          if (!ss || (ss.status !== 'running' && ss.status !== 'streaming')) {
+            state.status = 'idle'
+            state.analysisStatus = 'queued'
+          }
+        }
+      },
     }
   )
 )

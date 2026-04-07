@@ -53,6 +53,7 @@ export function ResultLeftRail({
             maxLength={160}
             expandMode="modal"
             modalTitle="핵심 결론 전체"
+            markdown
             className="block"
           />
         </div>

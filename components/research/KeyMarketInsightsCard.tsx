@@ -241,21 +241,21 @@ export function KeyMarketInsightsCard({
   if (!hasContent && !loading) return null
 
   return (
-    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 sm:p-5">
+    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5 sm:p-6 md:p-7">
       {showStreamingComplete && (
-        <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-3">분석 완료</p>
+        <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-4">분석 완료</p>
       )}
       {loading && !hasEarlyData ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-5">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="rounded-xl border border-border/60 bg-card/50 p-4 h-24 animate-pulse">
+            <div key={i} className="rounded-xl border border-border/60 bg-card/50 p-5 sm:p-6 h-28 animate-pulse">
               <div className="h-4 w-3/4 rounded bg-muted/50 mb-2" />
               <div className="h-3 w-full rounded bg-muted/30" />
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-6">
           {structuredInsights.slice(0, revealedCount).map((insight, i) => (
             <StructuredInsightCard
               key={i}

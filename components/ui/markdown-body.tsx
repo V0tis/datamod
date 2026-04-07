@@ -35,6 +35,22 @@ export function MarkdownBody({
           code: ({ node: _n, className: codeClass, ...props }) => (
             <code className={cn('rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]', codeClass)} {...props} />
           ),
+          table: ({ children }) => (
+            <div className="rin-table-scroll my-4 rounded-lg border border-border/70 bg-card/20">
+              <table className="w-max min-w-full border-collapse text-left text-sm text-foreground">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead>{children}</thead>,
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => <tr className="border-b border-border/50">{children}</tr>,
+          th: ({ children }) => (
+            <th className="border-b border-border bg-muted/50 px-3 py-2 text-left text-xs font-semibold whitespace-nowrap first:rounded-tl-lg last:rounded-tr-lg">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border-b border-border/40 px-3 py-2 align-top text-foreground">{children}</td>
+          ),
         }}
       >
         {text}

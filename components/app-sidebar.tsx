@@ -150,13 +150,13 @@ export function AppSidebar() {
   )
 
   const topbarContent = (
-    <div className="flex h-14 min-h-[3.5rem] max-h-14 w-full items-center justify-between gap-2 border-b border-border bg-white px-3 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto sm:gap-6">
+    <div className="flex min-h-[3.5rem] w-full flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-border bg-white px-3 py-2 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90">
           <RinLogo size={22} className="shrink-0" />
           <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-zinc-100">rin-ai</span>
         </Link>
-        <nav className="flex shrink-0 items-center gap-1" aria-label="메인 메뉴">
+        <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex-initial" aria-label="메인 메뉴">
           {navItems.map((item) => {
             const active = isActive(item)
             const Icon = item.icon
@@ -179,7 +179,7 @@ export function AppSidebar() {
           })}
         </nav>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:gap-3">
         <ThemeSwitcher />
         {user ? (
           <>
@@ -218,9 +218,71 @@ export function AppSidebar() {
     </div>
   )
 
+  /** 768px~1023px: 아이콘만 고정 레일 (전체 사이드바 대신) */
+  const sidebarIconRail = (
+    <div className="flex h-full w-full flex-col items-center border-r border-white/10 bg-[#111827] py-3 text-gray-300">
+      <Link
+        href="/"
+        className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10"
+        title="홈"
+      >
+        <RinLogo size={22} className="shrink-0" />
+      </Link>
+      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto px-0 py-1" aria-label="메인 메뉴">
+        {navItems.map((item) => {
+          const active = isActive(item)
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.href + '-rail'}
+              href={item.href}
+              title={item.tooltip}
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                active
+                  ? 'bg-white/10 text-[#2AC1BC]'
+                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              )}
+            >
+              <Icon className="h-5 w-5 shrink-0" aria-hidden />
+              <span className="sr-only">{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+      <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
+        <ThemeSwitcher className="border-white/10 bg-white/5 text-white" />
+        {user ? (
+          <button
+            type="button"
+            onClick={() => void logout()}
+            disabled={isLoggingOut}
+            title="로그아웃"
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-white',
+              'disabled:pointer-events-none disabled:opacity-50'
+            )}
+          >
+            <LogOut className="h-5 w-5 shrink-0" aria-hidden />
+            <span className="sr-only">로그아웃</span>
+          </button>
+        ) : (
+          <Link
+            href="/login"
+            title="로그인"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white"
+          >
+            <LogOut className="h-5 w-5 shrink-0" aria-hidden />
+            <span className="sr-only">로그인</span>
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+
   if (isResultsPage) {
     return (
-      <header className="fixed left-0 right-0 top-0 z-40 h-14 shrink-0 overflow-hidden border-b border-border bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <header className="fixed left-0 right-0 top-0 z-40 min-h-14 shrink-0 border-b border-border bg-white dark:border-zinc-800 dark:bg-zinc-950">
         {topbarContent}
       </header>
     )
@@ -228,18 +290,20 @@ export function AppSidebar() {
 
   return (
     <>
+      {/* &lt;768px: 햄버거 + 풀 너비 드로어 */}
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-neutral-900 shadow-sm lg:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        aria-label="메뉴 열기"
+        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-neutral-900 shadow-sm md:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        aria-expanded={mobileOpen}
+        aria-label={mobileOpen ? '메뉴 닫기' : '메뉴 열기'}
       >
         {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -247,12 +311,24 @@ export function AppSidebar() {
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-white/10 shadow-xl',
-          'lg:flex lg:translate-x-0',
+          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-white/10 shadow-xl md:hidden',
           'transition-transform duration-200 ease-out',
-          mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full lg:flex'
+          mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
         )}
       >
+        {sidebarContent}
+      </aside>
+
+      {/* 768px~1023px: 아이콘 레일 */}
+      <aside
+        className="fixed left-0 top-0 z-30 hidden h-screen w-[4.5rem] flex-col md:flex lg:hidden"
+        aria-label="축소 내비게이션"
+      >
+        {sidebarIconRail}
+      </aside>
+
+      {/* ≥1024px: 전체 사이드바 */}
+      <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[220px] flex-col border-r border-white/10 shadow-xl lg:flex">
         {sidebarContent}
       </aside>
     </>

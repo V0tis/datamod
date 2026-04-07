@@ -5,6 +5,7 @@ import { TrendingUp, Shield, Target, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+import { CompactMarkdown } from '@/components/ui/compact-markdown'
 
 function scoreToLabel(score: number): string {
   if (score >= 70) return '높음'
@@ -27,6 +28,10 @@ export interface ResultSummaryCardsProps {
   variant?: 'default' | 'saas'
 }
 
+function looksLikeMarkdown(s: string): boolean {
+  return /(^|\n)#{1,6}\s|(\*\*|__|\*|_[^_\s]|\n[-*]\s|`)/.test(s)
+}
+
 function SummaryCard({
   card,
   variant,
@@ -41,6 +46,10 @@ function SummaryCard({
     : (card.value || '—')
   const isLong = typeof displayValue === 'string' && displayValue.length > 60
   const showReason = !!card.explanation
+  const valueMarkdown =
+    card.id === 'strategy' ||
+    (typeof displayValue === 'string' && displayValue !== '—' && displayValue !== '산출 중...' && looksLikeMarkdown(displayValue))
+  const explanationMarkdown = !!card.explanation && looksLikeMarkdown(card.explanation)
 
   return (
     <div
@@ -57,14 +66,26 @@ function SummaryCard({
           {card.label}
         </span>
       </div>
-      <p className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
-        {displayValue}
-      </p>
-      {showReason && (
-        <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
-          {card.explanation}
+      {valueMarkdown && typeof displayValue === 'string' && displayValue !== '—' && displayValue !== '산출 중...' ? (
+        <div className={cn('text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
+          <CompactMarkdown
+            source={displayValue}
+            className="!text-base !font-bold [&_ul]:!font-medium [&_ol]:!font-medium [&_li]:!text-sm [&_li]:!font-medium"
+          />
+        </div>
+      ) : (
+        <p className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
+          {displayValue}
         </p>
       )}
+      {showReason &&
+        (explanationMarkdown ? (
+          <div className="mt-1.5 text-[11px] text-muted-foreground leading-snug [&_p]:text-[11px] [&_li]:text-[11px]">
+            <CompactMarkdown source={card.explanation!} />
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">{card.explanation}</p>
+        ))}
       {isLong && (
         <button
           type="button"
@@ -179,7 +200,7 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
 
   if (loading && !result) {
     return (
-      <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3', className)}>
+      <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="rounded-xl border border-border/60 bg-muted/10 p-4 animate-pulse">
             <div className="h-4 w-20 bg-muted/50 rounded mb-3" />
@@ -191,7 +212,7 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
   }
 
   return (
-    <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-4', className)}>
+    <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', className)}>
       {cards.map((card) => (
         <SummaryCard key={card.id} card={card} variant={variant} />
       ))}

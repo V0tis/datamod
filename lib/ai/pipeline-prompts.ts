@@ -96,32 +96,28 @@ export function flattenRiskSignalsForPrompt(items: readonly RiskSignalItem[] | u
 
 export const PIPELINE_BASE_SYSTEM = `${BASE_JSON_PROMPT}
 
-PM 의사결정 지원용 파이프라인입니다. 챗봇이 아닙니다.
-사용자 메시지는 INPUT / DATA / TASK / RULES 형식이다. DATA에 있는 내용만 근거로 한다. RULES를 반드시 준수한다.
+역할: PM 의사결정 지원 파이프라인(채팅 UI 아님).
+사용자 메시지는 KEYWORD / COLLECTED_DATA / TASK / RULES 블록으로 온다. 답은 오직 RULES와 스키마에 맞는 JSON 한 덩어리.
 - ${PM_THINKING_ORDER}
 - ${PM_STRUCTURED_RULE}
-- 분석은 summary, insight, impact, opportunity, risk, strategy, action을 반영해야 합니다. 누락 시 무효.`
+- summary·insight·impact·opportunity·risk·strategy·action에 해당하는 정보 밀도를 유지한다.`
 
 /** Step 3: Insight Extraction – title, summary, why important, business impact, PM decision meaning. DATA-DRIVEN ONLY. */
 export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-인사이트는 PM이 의사결정에 쓸 수 있게 작성하세요. ${INNOVATION_INSTRUCTION}
+인사이트는 PM이 바로 우선순위·실험·리소스 배분에 쓸 수 있게 쓴다. ${INNOVATION_INSTRUCTION}
 
-필수: 제공된 DATA에서만 추출. 추측·발명·할루시네이션 금지. DATA에 없는 내용을 만들지 마세요.
+1. "core_insights": 3~5개. 각 항목은 다음을 모두 채운다:
+   - "title": 5~15자 헤드라인. summary와 같은 문장을 반복하지 않는다.
+   - "summary": 1~2문장. DATA 속 관찰과 "그래서 왜 중요한가"를 연결한다.
+   - "impact": 매출·점유·진입 타이밍·단가·규제 등 DATA가 허용하는 파급을 구체적으로.
+   - "reason": 이번 주·스프린트 안에서 PM이 할 수 있는 판단·실험·검증 행동으로 연결.
+   - "score": 선택, 1~10.
 
-1. "core_insights": 3-5개. 각 항목 필수:
-   - "title": 짧은 제목 (5-15자). 요약 문장과 중복 금지.
-   - "summary": 1-2문장 (무슨 일인지, 왜 중요한지).
-   - "impact": 비즈니스 영향 (매출·점유율·진입 타이밍 등). 비어 있으면 무효.
-   - "reason": PM 의사결정에 주는 의미(why important, PM decision meaning). 비어 있으면 무효.
-   - "score": optional 1-10.
-
-Rules: 중복·빈값·동일 문장 반복 금지. title과 summary는 서로 달라야 함. 누락 시 무효.
-
-2. "key_insights", "opportunity_signals", "risk_signals" 배열.
+2. "key_insights", "opportunity_signals", "risk_signals" 배열을 DATA에서 채운다.
 
 Format: {
   "core_insights": [
-    { "title": "제목", "summary": "요약(왜 중요한지)", "impact": "비즈니스 영향", "reason": "PM 의사결정 의미" }
+    { "title": "제목", "summary": "요약", "impact": "비즈니스 영향", "reason": "의사결정·실행 연결" }
   ],
   "key_insights": ["문자열"],
   "opportunity_signals": [
@@ -131,9 +127,9 @@ Format: {
     { "risk": "리스크 내용", "severity": number, "likelihood": number }
   ]
 }
-- opportunity_signals: signal은 한국어. impact_level은 파싱 일관성을 위해 반드시 영문 "High", "Medium", "Low" 중 하나만 사용 (다른 표기 금지).
-- risk_signals: risk는 한국어. severity·likelihood는 정수 1-10 (심각도·발생 가능성). DATA 근거로 산정.
-Return ONLY valid JSON. signal·risk·key_insights·core_insights 본문은 한국어.`
+- opportunity_signals.signal: 한국어. impact_level: 파싱을 위해 정확히 "High", "Medium", "Low" 중 하나만 쓴다.
+- risk_signals: risk는 한국어. severity·likelihood는 1~10 정수, DATA 근거로 산정.
+Return ONLY valid JSON. 본문 필드는 한국어.`
 
 export function buildInsightExtractionPrompt(
   keyword: string,
@@ -150,26 +146,26 @@ export function buildInsightExtractionPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Extract 3-5 core_insights using ONLY the DATA above. key_insights, opportunity_signals (signal + impact_level), risk_signals (risk + severity + likelihood) must be grounded in DATA. No duplicates, no empty fields.`,
+    task: `위 COLLECTED_DATA만 근거로 core_insights 3~5개를 추출한다. 각 core_insight는 impact(파급)와 reason(다음 실행)에 DATA 인용 수준의 구체성을 넣는다. key_insights·opportunity_signals·risk_signals도 같은 DATA에만 기대어 채운다. 동일 문장 반복·빈 필드는 피한다.`,
     suffix: `Return ONLY the JSON object per system format. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
 
 /** Step 4: Strategic Recommendation – why this strategy, expected result, risk, difficulty, priority. DATA-DRIVEN ONLY. */
 export const STRATEGIC_RECOMMENDATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-전략 제안은 반드시 제공된 DATA를 근거로 작성. 추측·발명·할루시네이션 금지.
-전략 제안은 반드시 포함: 왜 이 전략인지(why), 기대 결과(expected result), 리스크(risk), 실행 난이도(difficulty), 우선순위(priority).
+전략은 제공된 DATA와 앞 단계 인사이트에만 기대어 쓴다. 원론(차별화 필요 등)만 말하지 말고, DATA에 나온 경쟁사·수치·이벤트를 빌려 "누구의 어떤 약점·지연·가격·채널을 어떻게 공략할지"까지 문장으로 연결한다.
+반드시 드러낼 것: 전략을 택한 이유(why), 기대 결과, 리스크, 실행 난이도, 우선순위.
 ${PM_REQUIRED_OUTPUT_STRUCTURE}
 Format: {
-  "opportunities": ["기회 (근거·영향)", "..."],
-  "risks": ["리스크 (영향·대응)", "..."],
-  "strategy_summary": "마크다운(Markdown) 전략 보고서를 **하나의 JSON 문자열 값**으로만 출력. 필수 구조: (1) ## 배경 (2) ## 핵심 전략 (3) ## 예상 효과 — 위 순서를 지키고, 각 섹션 본문은 불릿(- 또는 *)으로 항목화. 왜 이 전략인지·기대 결과·리스크·난이도·우선순위는 세 섹션에 분배해 서술.",
-  "market_summary": "1-2문장 시장 요약 (상황·의미·영향)",
-  "key_strategic_insights": ["전략 인사이트 (이유·영향·PM 의사결정 의미)"]
+  "opportunities": ["기회 (DATA 근거·파급·실행 힌트)", "..."],
+  "risks": ["리스크 (파급·완화 시나리오 힌트)", "..."],
+  "strategy_summary": "마크다운 전략 보고를 **하나의 JSON 문자열**로만 담는다. 구조: (1) ## 배경 (2) ## 핵심 전략 (3) ## 예상 효과. 각 본문은 불릿(- 또는 *). why·기대 결과·리스크·난이도·우선순위를 세 섹션에 나누어 쓴다.",
+  "market_summary": "1~2문장. situation·meaning·impact가 한 번에 읽히게.",
+  "key_strategic_insights": ["전략 인사이트: 이유·파급·PM이 내일 할 일"]
 }
-- strategy_summary는 유효한 JSON 객체 **안의 문자열 필드**에만 마크다운을 넣는다 (문자열 내부 줄바꿈은 JSON 규칙에 따라 이스케이프).
-- opportunities·risks는 문자열 배열을 유지한다 (추후 객체 배열 확장 가능).
-Each field must support PM decision. Return ONLY valid JSON. 서술·불릿 본문은 한국어. 섹션 제목은 반드시 ## 배경 / ## 핵심 전략 / ## 예상 효과 형태의 마크다운 헤더를 사용한다.`
+- strategy_summary 문자열 안에만 마크다운을 넣고, JSON 이스케이프 규칙을 지킨다.
+- opportunities·risks는 문자열 배열로 유지한다.
+Return ONLY valid JSON. 본문은 한국어. 섹션 헤더는 ## 배경 / ## 핵심 전략 / ## 예상 효과.`
 
 export function buildStrategicRecommendationPrompt(
   keyword: string,
@@ -200,18 +196,18 @@ export function buildStrategicRecommendationPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Produce strategic recommendations using ONLY the DATA above. opportunities, risks, market_summary must cite DATA. strategy_summary must be a Markdown report inside one JSON string with sections ## 배경, ## 핵심 전략, ## 예상 효과 and bullet lists; include why, expected result, risk, difficulty, priority within those sections.`,
+    task: `위 DATA만으로 전략 JSON을 채운다. opportunities·risks·market_summary에는 DATA 속 사실·비교·인용이 드러나게 쓴다. strategy_summary 한 문자열 안에 ## 배경 / ## 핵심 전략 / ## 예상 효과와 불릿을 넣고, 경쟁이 언급되면 DATA에 근거한 취약점 공략·틈새 진입을 구체 문장으로 넣는다(원론적 차별화 구호만 쓰지 않는다).`,
     suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
 
 /** Step 5: PM Action Plan – 슬림 JSON, 토큰 절약. DATA-DRIVEN ONLY. */
 export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-You MUST return a valid JSON object. No markdown, no code fences, no extra text.
-액션 플랜은 반드시 제공된 DATA를 근거로 작성. 추측·발명·할루시네이션 금지.
-Keep descriptions concise to avoid token overflow. 짧은 구·불릿 수준으로 작성. 빈 배열·빈 객체는 보내지 말 것.
+반드시 하나의 유효한 JSON 객체만 출력한다(마크다운 펜스·전후 설명 없음).
+액션 플랜은 앞 단계 전략·기회·리스크 DATA에만 기대어 쓴다.
+토큰 절약을 위해 문장은 짧은 구와 불릿 수준으로. 값이 없는 키·빈 배열·빈 객체는 출력에서 생략한다.
 
-Preferred format (이 키만 사용 권장 — 중복 배열·장문 필드 금지):
+Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·불필요한 장문 필드는 생략):
 {
   "goal": "목표 한 문장 (필수)",
   "steps": ["실행 단계1", "실행 단계2", "실행 단계3"],
@@ -253,16 +249,15 @@ export function buildPMActionPlanPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Generate PM action plan using ONLY the DATA above. Use the slim schema: goal, steps (max 6), priority_action, strategic_decision_layer, swot_analysis. Be concise. No duplicate action lists.`,
-    suffix: `Return ONLY a valid JSON object. No markdown. ${KOREAN_ONLY_SUFFIX}`,
+    task: `위 DATA로 슬림 스키마를 채운다: goal, steps(최대 6), priority_action, strategic_decision_layer, swot_analysis. 각 step·priority_action은 측정 가능한 다음 행동(누가·무엇을·언제)에 가깝게. 중복 액션 문장은 피한다.`,
+    suffix: `응답은 유효 JSON 객체 하나만. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
 
 /** Strategy Evaluation – score + reason supporting PM decision. DATA-DRIVEN ONLY. */
 export const STRATEGY_EVALUATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
-전략을 PM 사고 순서로 평가. 반드시 제공된 DATA를 근거로 점수 산정. 추측·발명 금지.
-상황·의미·영향·기회·리스크를 반영한 점수와 이유를 제시하세요.
-For each dimension: score (1-10), label, reason (why this score, impact, risk/opportunity). PM 의사결정에 쓸 수 있는 근거 필수.
+제공된 DATA와 앞 단계 요약만으로 네 차원을 평가한다. 각 차원은 점수·라벨·이유를 한 세트로 채운다.
+이유(reason)에는 왜 그 점수인지·파급·기회/리스크가 PM 회의에서 바로 인용되게 한두 문장으로.
 Format: {
   "market_attractiveness": number (1=low, 10=high),
   "market_attractiveness_label": "한 단어 라벨 (예: 높음/보통/낮음)",
@@ -303,7 +298,7 @@ export function buildStrategyEvaluationPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `Evaluate strategy using ONLY the DATA above. Scores (1-10) and _reason fields must cite DATA. Do not invent dimensions or numbers.`,
+    task: `위 DATA만으로 1~10 정수 점수와 각 _reason을 채운다. 이유 문장에 DATA에 나온 요소(경쟁·수치·이벤트)를 끌어와 구체성을 준다.`,
     suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

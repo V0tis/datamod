@@ -29,7 +29,7 @@ export function DashboardInsightStrip({
 
   return (
     <div className={cn(dashboardCardClass, 'p-4 sm:p-5')}>
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: 'rgba(42, 193, 188, 0.14)' }}

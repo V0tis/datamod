@@ -95,7 +95,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
         className
       )}
     >
-      <div className="p-4 sm:p-5">
+      <div className="p-5 sm:p-5 md:p-6 lg:p-7">
         {!titleSameAsContents && (
           <h4 className="text-sm font-semibold text-foreground leading-snug mb-1.5 line-clamp-1">
             {displayTitle}
@@ -150,7 +150,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
       </div>
 
       {expanded && hasDetail && (
-        <div className="border-t border-border/60 px-4 sm:px-5 py-3 space-y-3 bg-muted/20">
+        <div className="border-t border-border/60 px-5 sm:px-6 lg:px-7 py-4 space-y-3 bg-muted/20">
           {hasLongSummary && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">인사이트 요약</p>

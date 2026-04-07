@@ -2,21 +2,32 @@
  * Robust AI response JSON parsing: validation, schema checks, graceful fallback.
  * Never throws; returns safe fallback data on any parse/schema failure.
  */
-import { extractJsonFromText, tryRepairTruncatedJson } from '@/lib/extract-json'
+import {
+  prepareAiJsonText,
+  tryRepairTruncatedJson,
+  isJsonBoundaryString,
+  sanitizeLlmTextForJsonParse,
+} from '@/lib/extract-json'
 import { logger } from '@/lib/logger'
 
 const MAX_JSON_LENGTH = 500_000
 
 /** Quick validation: does text look like JSON (object or array)? */
 export function isJsonLike(text: string): boolean {
-  const s = (text ?? '').trim()
-  if (!s || s.length < 2 || s.length > MAX_JSON_LENGTH) return false
-  const first = s[0]
-  const last = s[s.length - 1]
-  return (
-    (first === '{' && last === '}') ||
-    (first === '[' && last === ']')
-  )
+  return isJsonBoundaryString(text)
+}
+
+function cloneFallbackDeep<T>(fallback: T): T {
+  if (fallback === null || typeof fallback !== 'object') return fallback
+  try {
+    return structuredClone(fallback)
+  } catch {
+    try {
+      return JSON.parse(JSON.stringify(fallback)) as T
+    } catch {
+      return fallback
+    }
+  }
 }
 
 export type SafeParseResult<T> =
@@ -38,20 +49,22 @@ export type SafeParseOptions<T> = {
 
 /**
  * Safely parse AI response JSON. Never throws.
- * Validates input, attempts repair on truncation, schema-validates, returns fallback on any failure.
+ * Pre-process: encoding repair → markdown fence strip → noise stripping → parse → optional repair.
+ * Returns a deep-cloned fallback on any failure (data integrity / no shared mutation).
  */
 export function safeParseAiJson<T>(
   text: string,
   options: SafeParseOptions<T>
 ): SafeParseResult<T> {
   const { fallback, validate, repair = true, logFailures = true, context } = options
+  const safeFallback = cloneFallbackDeep(fallback)
 
-  const raw = extractJsonFromText(typeof text === 'string' ? text : '')
+  const raw = prepareAiJsonText(typeof text === 'string' ? text : '')
   if (!raw || raw.length > MAX_JSON_LENGTH) {
     if (logFailures && raw) {
       logger.warn('AI JSON: empty or too long', { context, length: raw?.length })
     }
-    return { ok: false, fallback }
+    return { ok: false, fallback: safeFallback }
   }
 
   let parsed: unknown
@@ -62,8 +75,9 @@ export function safeParseAiJson<T>(
     if (repair) {
       const repaired = tryRepairTruncatedJson(raw, parseError)
       if (repaired) {
+        const repairedClean = sanitizeLlmTextForJsonParse(repaired)
         try {
-          parsed = JSON.parse(repaired)
+          parsed = JSON.parse(repairedClean)
         } catch {
           if (logFailures) {
             logger.warn('AI JSON: repair failed', {
@@ -72,7 +86,7 @@ export function safeParseAiJson<T>(
               rawPreview: raw.slice(0, 120),
             })
           }
-          return { ok: false, fallback }
+          return { ok: false, fallback: safeFallback }
         }
       } else {
         if (logFailures) {
@@ -82,13 +96,13 @@ export function safeParseAiJson<T>(
             rawPreview: raw.slice(0, 120),
           })
         }
-        return { ok: false, fallback }
+        return { ok: false, fallback: safeFallback }
       }
     } else {
       if (logFailures) {
         logger.warn('AI JSON: parse failed', { context, message: parseError.message })
       }
-      return { ok: false, fallback }
+      return { ok: false, fallback: safeFallback }
     }
   }
 
@@ -96,14 +110,14 @@ export function safeParseAiJson<T>(
     if (logFailures) {
       logger.warn('AI JSON: parsed value not object', { context })
     }
-    return { ok: false, fallback }
+    return { ok: false, fallback: safeFallback }
   }
 
   if (validate && !validate(parsed)) {
     if (logFailures) {
       logger.warn('AI JSON: schema validation failed', { context })
     }
-    return { ok: false, fallback }
+    return { ok: false, fallback: safeFallback }
   }
 
   return { ok: true, data: parsed as T }

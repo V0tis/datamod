@@ -205,13 +205,19 @@
     line-height: 1.5;
   }
   h1 {
-    @apply text-xl sm:text-2xl font-bold tracking-tight text-foreground;
+    font-size: clamp(1.125rem, 0.55rem + 2.4vw, 1.5rem);
+    line-height: 1.2;
+    @apply font-bold tracking-tight text-foreground;
   }
   h2 {
-    @apply text-lg sm:text-xl font-semibold text-foreground;
+    font-size: clamp(1rem, 0.5rem + 1.75vw, 1.25rem);
+    line-height: 1.3;
+    @apply font-semibold text-foreground;
   }
   h3 {
-    @apply text-base sm:text-lg font-semibold text-foreground;
+    font-size: clamp(0.9375rem, 0.45rem + 1.2vw, 1.125rem);
+    line-height: 1.35;
+    @apply font-semibold text-foreground;
   }
 }
 
@@ -283,16 +289,18 @@ body {
 
 /* UI consistency: page layout, cards, typography */
 .rin-page {
-  @apply p-4 md:p-8 max-w-6xl mx-auto min-h-screen bg-background;
+  @apply w-full max-w-screen-2xl mx-auto min-h-screen bg-background px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-8;
 }
 .rin-page-narrow {
-  @apply p-4 md:p-8 max-w-3xl mx-auto min-h-screen bg-background;
+  @apply w-full max-w-3xl mx-auto min-h-screen bg-background px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-8;
 }
 .rin-page-header {
   @apply mb-8;
 }
 .rin-page-title {
-  @apply text-xl sm:text-2xl font-bold text-foreground tracking-tight;
+  font-size: clamp(1.25rem, 0.65rem + 3.2vw, 1.875rem);
+  line-height: 1.2;
+  @apply font-bold text-foreground tracking-tight;
 }
 .rin-page-subtitle {
   @apply text-muted-foreground text-sm mt-1.5 max-w-2xl leading-relaxed;
@@ -310,6 +318,11 @@ body {
 .rin-card {
   @apply rounded-xl border border-border bg-card p-4 sm:p-5 shadow-sm;
 }
+/* 데이터 테이블: 가로 오버플로만 스크롤 (부모 flex/grid 폭 유지) */
+.rin-table-scroll {
+  @apply w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain;
+}
+
 .rin-card-section-title {
   @apply text-base font-semibold text-foreground flex items-center gap-2;
 }

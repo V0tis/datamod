@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -458,6 +458,11 @@ function ResultsContent() {
     canonicalStatus === 'analyzing' ||
     polledStatus === 'running' ||
     status === 'loading'
+  /** 스트리밍 파이프라인이 실제로 돌아가는 구간 — 실패·완료·idle이면 재분석 허용 */
+  const analysisPipelineBusy = useMemo(
+    () => streamingState.status === 'running' || streamingState.status === 'streaming',
+    [streamingState.status]
+  )
   const hasKeyword = Boolean((currentKeyword ?? '').trim())
   const showPolledError = polledStatus === 'failed'
   const hasStepFailure = (analysisTasks ?? []).some((t) => t.status === 'failed')
@@ -1114,11 +1119,11 @@ function ResultsContent() {
   const showTabs = hasKeyword
   if (showTabs) {
     return (
-      <div className="px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 min-h-screen bg-background rin-doc">
-        <div className="flex min-w-0 max-w-[1920px] mx-auto">
-          <main className="flex-1 min-w-0 min-h-[320px]">
+      <div className="w-full min-h-screen bg-background px-3 py-1.5 rin-doc sm:px-4 sm:py-2 md:px-5 md:py-2.5 lg:px-6">
+        <div className="mx-auto flex min-w-0 max-w-screen-2xl">
+          <main className="min-h-[320px] min-w-0 flex-1">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
-        <div className="mx-auto w-full max-w-[1280px] px-3 sm:px-4 md:px-6">
+        <div className="mx-auto w-full max-w-screen-2xl px-3 sm:px-4 md:px-6 lg:px-8">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
         {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
@@ -1245,7 +1250,7 @@ function ResultsContent() {
                         key={v}
                         type="button"
                         onClick={() => handleAiPrimaryChange(v)}
-                        disabled={loading}
+                        disabled={loading || analysisPipelineBusy}
                         className={cn(
                           'px-2.5 py-1 text-xs font-medium rounded transition-colors',
                           aiPrimaryModel === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -1294,10 +1299,15 @@ function ResultsContent() {
                     setPolledError(null)
                     startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
                   }}
-                  disabled={loading || streamingState.status === 'running' || streamingState.status === 'streaming'}
+                  disabled={loading || analysisPipelineBusy}
+                  title={
+                    loading || analysisPipelineBusy
+                      ? '분석이 진행 중일 때는 사용할 수 없습니다. 완료되거나 실패한 뒤 다시 시도하세요.'
+                      : undefined
+                  }
                   className="gap-1.5 text-xs"
                 >
-                  {(streamingState.status === 'running' || streamingState.status === 'streaming') ? (
+                  {analysisPipelineBusy ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -1316,6 +1326,7 @@ function ResultsContent() {
               keyword={currentKeyword ?? ''}
               countryCode={countryFromUrl}
               aiPrimaryModel={aiPrimaryModel}
+              disabled={loading || analysisPipelineBusy}
             />
             <AnalysisActivityFeed />
           </div>
@@ -1356,9 +1367,15 @@ function ResultsContent() {
             <Button
               size="lg"
               onClick={() => startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })}
+              disabled={loading || analysisPipelineBusy}
+              title={
+                loading || analysisPipelineBusy
+                  ? '다른 분석이 끝난 뒤 실행할 수 있습니다.'
+                  : undefined
+              }
               className="gap-2 mb-6"
             >
-              <RefreshCw className="h-4 w-4" />
+              {analysisPipelineBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               분석 실행
             </Button>
             <SuggestedAnalyses
@@ -1366,7 +1383,7 @@ function ResultsContent() {
                 router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
                 startStreamingResearch(k, { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
               }}
-              disabled={loading}
+              disabled={loading || analysisPipelineBusy}
             />
           </div>
         ) : (
@@ -1577,7 +1594,7 @@ function ResultsContent() {
               router.replace(`/results?keyword=${encodeURIComponent(k)}&country=${encodeURIComponent(countryFromUrl)}`)
               startStreamingResearch(k, { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel })
             }}
-            disabled={loading}
+            disabled={loading || analysisPipelineBusy}
           />
           </ResultSectionErrorBoundary>
         )}

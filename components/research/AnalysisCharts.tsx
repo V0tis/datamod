@@ -54,7 +54,7 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
   const data = breakdownToData(breakdown)
   if (data.length === 0) return null
   return (
-    <div className={cn('h-[220px] w-full', className)}>
+    <div className={cn('aspect-video w-full min-h-[200px] max-h-[380px] sm:min-h-[220px]', className)}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
           <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
@@ -92,7 +92,7 @@ export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, class
       takeaway={sd?.takeaway}
       className={className}
     >
-      <div className="h-[220px] w-full">
+      <div className="aspect-video w-full min-h-[200px] max-h-[380px] sm:min-h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
             <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />

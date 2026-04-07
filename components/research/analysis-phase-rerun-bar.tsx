@@ -61,6 +61,7 @@ export function AnalysisPhaseRerunBar({
         size="sm"
         className="h-8 text-xs gap-1.5"
         disabled={disabled || busy}
+        title={busy ? '분석이 진행 중입니다. 완료 또는 실패 후 단계 재실행을 사용할 수 있습니다.' : undefined}
         onClick={() => run(1, '전체 파이프라인을 다시 실행합니다.')}
       >
         <Database className="h-3.5 w-3.5" />
@@ -72,6 +73,7 @@ export function AnalysisPhaseRerunBar({
         size="sm"
         className="h-8 text-xs gap-1.5"
         disabled={disabled || busy}
+        title={busy ? '분석이 진행 중입니다. 완료 또는 실패 후 단계 재실행을 사용할 수 있습니다.' : undefined}
         onClick={() => run(2, '인사이트 단계부터 다시 실행합니다.')}
       >
         <Lightbulb className="h-3.5 w-3.5" />
@@ -83,6 +85,7 @@ export function AnalysisPhaseRerunBar({
         size="sm"
         className="h-8 text-xs gap-1.5"
         disabled={disabled || busy}
+        title={busy ? '분석이 진행 중입니다. 완료 또는 실패 후 단계 재실행을 사용할 수 있습니다.' : undefined}
         onClick={() => run(3, '전략·실행 단계부터 다시 실행합니다.')}
       >
         <Target className="h-3.5 w-3.5" />

@@ -333,7 +333,7 @@ export default function InsightsPage() {
           </Button>
         </div>
       ) : (
-        <ul className="space-y-3 list-none p-0 m-0">
+        <ul className="m-0 max-w-full min-w-0 list-none space-y-3 p-0">
           {filteredList.map((item) => {
             const keyword = item.snapshot?.keyword ?? ''
             const country = item.snapshot?.countryCode ?? 'KR'

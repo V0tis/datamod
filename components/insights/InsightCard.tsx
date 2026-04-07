@@ -118,7 +118,7 @@ export function InsightCard({
       )}
     >
       <div className={cn('p-4 sm:p-5', hasDetail && 'pb-0')}>
-        <div className="flex gap-3 sm:gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           {onToggleSelect && (
             <label className="flex shrink-0 cursor-pointer items-start pt-1">
               <input
@@ -137,7 +137,7 @@ export function InsightCard({
             <BarChart3 className="h-5 w-5" strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1 flex flex-col gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <h3 className="text-base font-bold text-[#222] break-words">{item.name}</h3>
@@ -158,10 +158,10 @@ export function InsightCard({
                   {dateLine}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-1.5 sm:shrink-0">
                 <Button
                   size="sm"
-                  className="h-9 rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab] gap-1"
+                  className="h-9 w-full rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab] gap-1 sm:w-auto"
                   asChild
                 >
                   <Link href={resultsHref}>
@@ -172,7 +172,7 @@ export function InsightCard({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50"
+                  className="h-9 w-full text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50 sm:w-auto"
                   onClick={() => onDelete(item.id)}
                   disabled={deletingId === item.id}
                   aria-label="인사이트 삭제"

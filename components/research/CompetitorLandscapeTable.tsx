@@ -48,7 +48,7 @@ export function CompetitorLandscapeTable({
   return (
     <section
       className={cn(
-        'rounded-xl border border-border/60 bg-card overflow-hidden',
+        'max-w-full min-w-0 rounded-xl border border-border/60 bg-card overflow-hidden',
         className
       )}
       aria-label="Competitor Landscape"
@@ -67,8 +67,8 @@ export function CompetitorLandscapeTable({
           <div className="h-32 rounded-lg bg-muted/30 animate-pulse" />
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="rin-table-scroll">
+          <table className="min-w-[640px] w-full text-sm">
             <thead>
               <tr className="border-b border-border/60 bg-muted/30">
                 {COLUMNS.map((col) => (

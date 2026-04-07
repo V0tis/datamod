@@ -485,7 +485,7 @@ function RinAISearchInner() {
                   </div>
                 )}
                 {user && canSearch === false && (
-                  <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col flex-wrap gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-amber-800 dark:text-amber-400">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
                     <Link href="/settings?tab=license" className="shrink-0">
                       <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-800 dark:text-amber-400 hover:bg-amber-500/10">
@@ -614,9 +614,9 @@ function RinAISearchInner() {
 
                   {showAnalysisUI && streamingState.status !== 'idle' && (
                     <div className="rounded-xl border border-[#E5E7EB] bg-sky-50 px-4 py-3 dark:border-zinc-700 dark:bg-sky-950/30">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-                        <p className="flex-1 text-sm font-medium text-foreground">
+                        <p className="min-w-0 flex-1 text-sm font-medium text-foreground">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming')
                             ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, {
                             elapsedMs: stepElapsedMs,
@@ -670,7 +670,7 @@ function RinAISearchInner() {
             />
 
             {/* B. 메인 7:3 — 좌: TOP3·차트 / 우: 국가 칩 + 급상승 트렌드·최근 분석 */}
-            <div className="grid w-full grid-cols-1 gap-8 lg:grid-cols-10 lg:items-stretch lg:gap-8">
+            <div className="grid w-full grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-10 lg:items-stretch lg:gap-8">
               <div className="flex min-w-0 flex-col gap-6 lg:col-span-7">
                 <DashboardMonitorTop3
                   opportunities={dashboardRecs.highOpportunity}

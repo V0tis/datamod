@@ -177,7 +177,7 @@ export function MarketGrowthCharts({
           takeaway={ma?.takeaway}
           className="border border-border/60 bg-card/50"
         >
-          <div className="h-[260px] w-full min-h-[200px]">
+          <div className="aspect-square w-full min-h-[220px] max-h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="72%" data={radarRows}>
                 <PolarGrid stroke={CHART_GRAY_GRID} />
@@ -202,9 +202,9 @@ export function MarketGrowthCharts({
         </ChartWithInsight>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
         <ChartWithInsight title="검색 트렌드 성장" insight={st?.insight} takeaway={st?.takeaway}>
-          <div className="h-[160px] w-full">
+          <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
@@ -229,7 +229,7 @@ export function MarketGrowthCharts({
         </ChartWithInsight>
 
         <ChartWithInsight title="시장 규모 전망" insight={ms?.insight} takeaway={ms?.takeaway}>
-          <div className="h-[160px] w-full">
+          <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} vertical={false} />
@@ -247,7 +247,7 @@ export function MarketGrowthCharts({
         </ChartWithInsight>
 
         <ChartWithInsight title="시장 도입 추이" insight={ar?.insight} takeaway={ar?.takeaway}>
-          <div className="h-[160px] w-full">
+          <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <defs>

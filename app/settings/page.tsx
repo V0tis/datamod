@@ -436,7 +436,8 @@ function SettingsPageInner() {
 
   if (loading) {
     return (
-      <div className="rin-page w-full max-w-5xl">
+      <div className="rin-page">
+        <div className="mx-auto w-full max-w-5xl">
         <header className="rin-page-header">
           <div className="h-8 w-24 rounded bg-muted/50 animate-pulse mb-2" />
           <div className="h-4 w-56 rounded bg-muted/30 animate-pulse" />
@@ -454,12 +455,14 @@ function SettingsPageInner() {
             </div>
           ))}
         </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="rin-page w-full max-w-5xl">
+    <div className="rin-page">
+      <div className="mx-auto w-full max-w-5xl">
       <header className="rin-page-header">
         <h1 className="rin-page-title">설정</h1>
         <p className="rin-page-subtitle mb-1">
@@ -863,6 +866,7 @@ function SettingsPageInner() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   )
 }

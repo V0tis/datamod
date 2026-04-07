@@ -113,7 +113,7 @@ export function DashboardKpiStrip({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className={cn(dashboardCardClass, 'h-[128px] animate-pulse bg-slate-50 shadow-sm dark:bg-zinc-900')} />
         ))}
@@ -122,7 +122,7 @@ export function DashboardKpiStrip({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <KpiCard
         label="상위 기회 지수"
         value={avgOpp != null ? String(avgOpp) : '—'}

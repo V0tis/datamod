@@ -159,6 +159,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         let isClosed = false
+        let hadTerminalEvent = false
 
         const safeClose = () => {
           if (isClosed) return
@@ -174,6 +175,9 @@ export async function POST(req: Request) {
           if (isClosed) return
           try {
             controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
+            if (event.type === 'error' || event.type === 'done' || event.type === 'cached') {
+              hadTerminalEvent = true
+            }
           } catch {
             isClosed = true
             safeClose()
@@ -181,6 +185,27 @@ export async function POST(req: Request) {
         }
 
         combinedController.signal.addEventListener('abort', () => {
+          if (isClosed) return
+          void markResearchFailed(
+            supabase,
+            user.id,
+            keyword,
+            countryCode,
+            '분석이 중단되었거나 시간이 초과되었습니다.'
+          )
+          try {
+            controller.enqueue(
+              encoder.encode(
+                JSON.stringify({
+                  type: 'error',
+                  message: '분석이 중단되었거나 시간이 초과되었습니다.',
+                }) + '\n'
+              )
+            )
+            hadTerminalEvent = true
+          } catch {
+            /* client may have disconnected */
+          }
           isClosed = true
           safeClose()
         })
@@ -236,6 +261,20 @@ export async function POST(req: Request) {
           })
           await markResearchFailed(supabase, user.id, keyword, countryCode, message)
           send({ type: 'error', message })
+        }
+
+        if (!hadTerminalEvent && !isClosed) {
+          await markResearchFailed(
+            supabase,
+            user.id,
+            keyword,
+            countryCode,
+            '분석이 완료되지 않고 연결이 종료되었습니다.'
+          )
+          send({
+            type: 'error',
+            message: '분석이 완료되지 않고 연결이 종료되었습니다.',
+          })
         }
 
         safeClose()

@@ -10,11 +10,12 @@ import { BASE_MARKDOWN_PROMPT } from './base-prompt'
 import { generateText, runTabAnalysis, completeChat } from './unified-ai-service'
 import {
   TASK_TRENDS_SYSTEM,
-  buildTaskTrendsPrompt,
+  buildTaskTrendsPromptParts,
   TASK_COMPETITION_SYSTEM,
-  buildTaskCompetitionPromptFromNews,
+  buildTaskCompetitionPromptParts,
   type ArticleForAnalysis,
 } from './pm-strategic-prompt'
+import { logDataDrivenPromptInjection, logRssNewsCollectionCheck } from './prompt-integrity-log'
 import { extractArticleContent, type ArticleWithContent } from './article-extract'
 import {
   INSIGHT_EXTRACTION_SYSTEM,
@@ -80,9 +81,9 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const TAB_SYSTEM_PROMPT = `${BASE_MARKDOWN_PROMPT}
 
-PM 의사결정 지원용 요약입니다. 챗봇이 아닙니다. 컨설팅 보고서 수준으로, 한국 PM이 읽는 문서처럼 작성하세요.
-포함할 내용: 상황 설명, 의미, 비즈니스 영향, 기회, 리스크, 전략 제안, 액션 제안. 단순 요약 금지.
-Facts/Hypotheses/Inferences 구분 가능 시 해당 레이블 사용. 캐주얼·대화체·뉴스 요약 톤 금지.`
+PM 의사결정 지원용 마크다운 요약. 상황·의미·파급·기회·리스크·전략·액션이 한 덩어리 보고서로 읽히게 쓴다.
+Facts / Hypotheses / Inferences를 구분할 수 있으면 소제목으로 나눈다.
+톤은 국내 기획·컨설팅 문서체를 유지한다.`
 
 export type NewsItem = {
   title: string
@@ -299,13 +300,21 @@ async function runTrendTask(
   keyword: string,
   articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
-  webContext?: string
+  webContext?: string,
+  prePromptArticleContentChars?: number
 ): Promise<TrendTaskResult> {
   const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
   if (!hasData) {
     throw new Error('트렌드 분석에 필요한 데이터가 없습니다. 뉴스·웹 검색 결과를 확인해 주세요.')
   }
-  const prompt = buildTaskTrendsPrompt(keyword, articles, webContext)
+  const { prompt, sections } = buildTaskTrendsPromptParts(keyword, articles, webContext)
+  logDataDrivenPromptInjection({
+    phase: 'trend_analysis',
+    keyword,
+    prompt,
+    sections,
+    originalSourceChars: prePromptArticleContentChars,
+  })
   if (!prompt.trim()) {
     throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
   }
@@ -385,8 +394,9 @@ async function runTrendTask(
   return { trendData, trendPayload, usedFallback, primaryProviderError }
 }
 
-const ARTICLE_SUMMARY_SYSTEM = `You summarize news articles for market research. For each article, output a 2-3 sentence summary in Korean focusing on key facts, implications, and market relevance.
-Return ONLY a JSON object: { "summaries": ["summary1", "summary2", ...] } in the same order as input. No other text.`
+const ARTICLE_SUMMARY_SYSTEM = `Output only in standard professional Korean. Strictly follow UTF-8 encoding.
+Summarize each news article for market research in 2-3 sentences: key facts, implications, and market relevance.
+Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } in input order, as the sole message.`
 
 /** Summarize articles with AI (batch). Fallback: use title or content slice. */
 async function summarizeArticlesWithAI(
@@ -448,7 +458,8 @@ async function runCompetitionTask(
   articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
   webContext?: string,
-  competitorWebContext?: string
+  competitorWebContext?: string,
+  prePromptArticleContentChars?: number
 ): Promise<CompetitionTaskResult> {
   const hasData =
     (competitorWebContext?.trim().length ?? 0) > 0 ||
@@ -461,7 +472,14 @@ async function runCompetitionTask(
     }
   }
 
-  const prompt = buildTaskCompetitionPromptFromNews(keyword, articles, webContext, competitorWebContext)
+  const { prompt, sections } = buildTaskCompetitionPromptParts(keyword, articles, webContext, competitorWebContext)
+  logDataDrivenPromptInjection({
+    phase: 'competition_analysis',
+    keyword,
+    prompt,
+    sections,
+    originalSourceChars: prePromptArticleContentChars,
+  })
   let text!: string
   let usedFallback = false
   let primaryProviderError: string | undefined
@@ -1487,7 +1505,7 @@ function buildCreativePrompt(
     ? `\n\n실시간 뉴스 헤드라인 (news_items_ko):\n${newsHeadlines}\n\n`
     : ''
   const baseSummary = summary ? `리포트 요약:\n${summary}\n\n` : ''
-  return `키워드: "${keyword}"${newsBlock}${baseSummary}PM 사고 순서로 작성하세요: 무슨 일이 일어나는지, 왜 중요한지, 시장 영향, 기회, 리스크, 전략 제안, 액션 제안. 컨설팅 보고서 수준·한국 PM 문서 톤. 단순 요약 금지. 향후 전망과 투자/행동 아이디어를 2~4문단 마크다운으로 작성하세요.`
+  return `키워드: "${keyword}"${newsBlock}${baseSummary}표준 비즈니스 한국어로, PM 사고 순서(상황→의미→영향→기회→리스크→전략→액션)가 한 흐름으로 읽이게 2~4문단 마크다운을 쓴다. 파급과 실행 아이디어가 문단마다 드러나게. 향후 전망·투자·행동 제안을 구체적으로 넣는다.`
 }
 
 function buildSummaryText(summary: {
@@ -1714,6 +1732,7 @@ export async function* runResearch(
           : '저장된 데이터 수집 결과를 사용하고 인사이트부터 다시 수행합니다.',
     }
     news = resumeState.news as NewsItem[]
+    logRssNewsCollectionCheck(news, keyword, { resumed: true })
     trendData = resumeState.trendData
     competitionData = resumeState.competitionData
     marketOverview = resumeState.marketOverview
@@ -1736,6 +1755,7 @@ export async function* runResearch(
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   try {
     news = await fetchNewsTitles(keyword, cacheKey.countryCode, Math.max(articleCount, 15))
+    logRssNewsCollectionCheck(news, keyword)
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']
     const signalData = {
@@ -1857,8 +1877,18 @@ export async function* runResearch(
   await upsertAnalysisTask('trend_analysis', 'running', { provider: marketProvider, fallback_used: false })
   yield { type: 'task', task: 'trend_analysis', status: 'running', provider: marketProvider, fallback_used: false }
 
+  const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
+
   const trendSettled = await Promise.allSettled([
-    runTrendTask(geminiKey, groqKey, keyword, articlesForAnalysis, marketProvider, webContext),
+    runTrendTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      articlesForAnalysis,
+      marketProvider,
+      webContext,
+      articleRawContentTotalChars
+    ),
   ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>)
 
   if (trendSettled.status === 'rejected') {
@@ -1876,7 +1906,16 @@ export async function* runResearch(
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: competitorProvider, fallback_used: false }
 
   const compSettled = await Promise.allSettled([
-    runCompetitionTask(geminiKey, groqKey, keyword, articlesForAnalysis, competitorProvider, webContext, competitorWebContext || undefined),
+    runCompetitionTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      articlesForAnalysis,
+      competitorProvider,
+      webContext,
+      competitorWebContext || undefined,
+      articleRawContentTotalChars
+    ),
   ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>)
 
   if (compSettled.status === 'rejected') {
