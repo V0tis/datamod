@@ -38,7 +38,6 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultLDashboard } from '@/components/analysis/result-l-dashboard'
-import { AnalysisActivityFeed } from '@/components/research/analysis-activity-feed'
 import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
@@ -1330,24 +1329,6 @@ function ResultsContent() {
             }
             className="mb-3 border-b border-border/60 pb-3"
           />
-        )}
-
-        {showAnalysisShell && !needsRunAction && currentKeyword && (
-          <div className="mb-4 space-y-3">
-            <AnalysisActivityFeed
-              primaryAiModel={aiPrimaryModel}
-              onRetry={
-                currentKeyword && !loading && !analysisPipelineBusy
-                  ? () =>
-                      startStreamingResearch(currentKeyword, {
-                        country_code: countryFromUrl,
-                        ai_primary_model: aiPrimaryModel,
-                        force_reanalyze: true,
-                      })
-                  : undefined
-              }
-            />
-          </div>
         )}
 
         {/* AI 인사이트 생성 시퀀스: 분석 완료 직후 2–4초간 연출 후 리포트 표시 */}

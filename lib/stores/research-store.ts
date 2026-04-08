@@ -27,6 +27,7 @@ import {
   getStepCount,
 } from '@/lib/types/analysis-modes'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
+import { normalizeActivityStepId } from '@/lib/analysis/pipeline-activity-step'
 
 export interface NewsItem {
   title: string
@@ -339,8 +340,8 @@ interface ResearchState {
     fallback_used?: boolean
     primary_provider_error?: string | null
   }> | null
-  /** 최근 스트리밍 활동 로그 (실시간 피드백용, 최대 40행 유지) */
-  streamingActivityLog: Array<{ ts: number; message: string; kind?: 'error'; type?: 'error' }>
+  /** 최근 스트리밍 활동 로그 (단계별 stepId, 최대 150행) */
+  streamingActivityLog: Array<{ ts: number; message: string; kind?: 'error'; type?: 'error'; stepId?: string }>
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -984,14 +985,16 @@ export const useResearchStore = create<ResearchStore>()(
           streamingActivityLog: [],
         })
 
-        const appendActivity = (message: string, kind?: 'error') => {
+        const appendActivity = (message: string, kind?: 'error', stepIdRaw?: string) => {
+          const stepId = stepIdRaw ? normalizeActivityStepId(stepIdRaw) : undefined
           set((state) => ({
             streamingActivityLog: [
-              ...state.streamingActivityLog.slice(-39),
+              ...state.streamingActivityLog.slice(-149),
               {
                 ts: Date.now(),
                 message,
                 ...(kind === 'error' ? { kind: 'error' as const, type: 'error' as const } : {}),
+                ...(stepId ? { stepId } : {}),
               },
             ],
           }))
@@ -1003,7 +1006,7 @@ export const useResearchStore = create<ResearchStore>()(
             const checkData = (await checkRes.json()) as { canSearch?: boolean }
             if (checkData.canSearch === false) {
               const apiKeyMsg = '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.'
-              appendActivity(apiKeyMsg, 'error')
+              appendActivity(apiKeyMsg, 'error', '__global__')
               toast.error('설정 → API KEY에서 필요한 키를 입력해 주세요. (Gemini 우선이면 Gemini, Groq 우선이면 Groq)')
               set({
                 status: 'error',
@@ -1040,7 +1043,7 @@ export const useResearchStore = create<ResearchStore>()(
           if (!res.ok) {
             const errData = (await res.json().catch(() => ({}))) as { error?: string }
             const msg = errData.error ?? '분석 요청에 실패했어요.'
-            appendActivity(msg, 'error')
+            appendActivity(msg, 'error', '__global__')
             set({
               status: 'error',
               analysisStatus: 'failed',
@@ -1053,7 +1056,7 @@ export const useResearchStore = create<ResearchStore>()(
 
           const reader = res.body?.getReader()
           if (!reader) {
-            appendActivity('스트림을 읽을 수 없습니다.', 'error')
+            appendActivity('스트림을 읽을 수 없습니다.', 'error', '__global__')
             set({
               status: 'error',
               analysisStatus: 'failed',
@@ -1067,7 +1070,7 @@ export const useResearchStore = create<ResearchStore>()(
           let buffer = ''
           let streamEnded = false
           let lastSuccessfulStep = 0
-          appendActivity('분석 파이프라인에 연결되었습니다. 단계별 진행 상황을 표시합니다.')
+          appendActivity('분석 파이프라인에 연결되었습니다. 단계별 진행 상황을 표시합니다.', undefined, 'signal_layer')
           const applyUpdate = get().applyStreamingUpdate
           const setStepProgress = get().setStepProgress
           const setAnalysisId = get().setAnalysisId
@@ -1148,14 +1151,16 @@ export const useResearchStore = create<ResearchStore>()(
                 if (type === 'analysis_started') {
                   const ev = event as { analysisId?: string }
                   if (ev.analysisId) setAnalysisId(ev.analysisId)
-                  appendActivity('데이터 수집·AI 분석을 시작합니다.')
+                  appendActivity('데이터 수집·AI 분석을 시작합니다.', undefined, 'signal_layer')
                 }
 
                 if (type === 'pipeline_resume') {
                   const ev = event as { message?: string; phase?: number; skippedSteps?: string[] }
                   appendActivity(
                     ev.message ??
-                      `저장된 결과에서 이어 실행합니다 (단계 ${ev.phase ?? '?'})`
+                      `저장된 결과에서 이어 실행합니다 (단계 ${ev.phase ?? '?'})`,
+                    undefined,
+                    '__global__'
                   )
                 }
 
@@ -1164,7 +1169,7 @@ export const useResearchStore = create<ResearchStore>()(
                   const phase =
                     ev.phase === 1 || ev.phase === 2 || ev.phase === 3 ? ev.phase : 1
                   const msg = typeof ev.message === 'string' ? ev.message : ''
-                  if (msg) appendActivity(msg)
+                  if (msg) appendActivity(msg, undefined, 'post_processing')
                   setStepProgress(7, 'final_refining', undefined, undefined, {
                     refiningPhase: phase,
                     refiningMessage: msg || undefined,
@@ -1197,14 +1202,18 @@ export const useResearchStore = create<ResearchStore>()(
                         getAnalysisActivityMessage(task, undefined, {
                           currentArticleTitle: ev.currentArticleTitle,
                           progressMeta: evPm,
-                        })
+                        }),
+                        undefined,
+                        task
                       )
                     }
                     if (task === 'signal_layer' && status === 'completed' && evPm?.newsCount != null) {
                       appendActivity(
                         getAnalysisActivityMessage('signal_layer', undefined, {
                           progressMeta: evPm,
-                        })
+                        }),
+                        undefined,
+                        'signal_layer'
                       )
                     }
                     if (status === 'completed') {
@@ -1230,7 +1239,7 @@ export const useResearchStore = create<ResearchStore>()(
                         provider: ev.provider ?? null,
                         fallback_used: ev.fallback_used ?? false,
                       })
-                      appendActivity(`${task}: ${ev.fallbackMessage ?? ev.error ?? '단계 실패'}`, 'error')
+                      appendActivity(`${task}: ${ev.fallbackMessage ?? ev.error ?? '단계 실패'}`, 'error', task)
                     }
                   }
                 }
@@ -1310,7 +1319,7 @@ export const useResearchStore = create<ResearchStore>()(
                   break
                 } else if (type === 'error') {
                   const errMsg = event.message ?? '분석 중 오류가 발생했습니다.'
-                  appendActivity(errMsg, 'error')
+                  appendActivity(errMsg, 'error', '__global__')
                   set({
                     streamingState: createErrorState(errMsg, lastSuccessfulStep),
                     status: 'error',
@@ -1323,7 +1332,7 @@ export const useResearchStore = create<ResearchStore>()(
                 }
               } catch {
                 const errMsg = '잘못된 응답 형식입니다.'
-                appendActivity(errMsg, 'error')
+                appendActivity(errMsg, 'error', '__global__')
                 set({
                   streamingState: createErrorState(errMsg, lastSuccessfulStep),
                   status: 'error',
