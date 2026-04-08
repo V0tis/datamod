@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { showErrorToast } from '@/lib/error-toast'
 import { RinLogo } from '@/components/rin-logo'
+import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 import { CheckCircle2 } from 'lucide-react'
 
 function parseHashParams(hash: string): Record<string, string> {
@@ -58,12 +58,8 @@ export default function AuthCallbackPage() {
 
   if (status === 'loading') {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background px-4">
-        <LoadingState
-          message="로그인 처리 중이에요"
-          detail="잠시만 기다려 주세요."
-          size="lg"
-        />
+      <main className="min-h-screen bg-background px-4">
+        <FullPageBrandLoader message="로그인 처리 중이에요. 잠시만 기다려 주세요." />
       </main>
     )
   }
@@ -110,8 +106,8 @@ export default function AuthCallbackPage() {
           asChild
           className="w-full h-12 rounded-lg gap-2 text-base font-medium"
         >
-          <Link href="/">
-            <RinLogo size={20} />
+          <Link href="/" className="inline-flex items-center justify-center gap-2">
+            <RinLogo size={24} className="shrink-0" />
             rin-ai 시작하기
           </Link>
         </Button>

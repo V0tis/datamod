@@ -119,6 +119,7 @@ export type StructuredAnalysisFields = {
     impact: string
     reason: string
     score?: number
+    source_timestamp?: string
   }>
   /** Opportunity areas (from opportunities) */
   opportunity_areas?: string[]
@@ -167,6 +168,9 @@ export type StructuredAnalysisFields = {
     main_jobs?: string[]
     pains?: string[]
     gains?: string[]
+    functional_jobs?: string[]
+    social_jobs?: string[]
+    emotional_jobs?: string[]
   }
   porter_5_forces?: {
     rivalry?: string[]
@@ -174,6 +178,13 @@ export type StructuredAnalysisFields = {
     buyer_power?: string[]
     substitutes?: string[]
     new_entrants?: string[]
+    scores?: {
+      new_entrants?: number
+      supplier_power?: number
+      buyer_power?: number
+      substitutes?: number
+      rivalry?: number
+    }
   }
 }
 

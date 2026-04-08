@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Loader2 } from 'lucide-react'
+import { RinLogo } from '@/components/rin-logo'
 import { createClient } from '@/lib/supabase/client'
 import { useResearchStore } from '@/lib/stores/research-store'
 
@@ -58,12 +59,13 @@ export function LogoutProvider({ children }: { children: ReactNode }) {
       {children}
       {isLoggingOut ? (
         <div
-          className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-3 bg-background text-foreground"
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-4 bg-background text-foreground"
           role="alertdialog"
           aria-busy="true"
           aria-live="assertive"
           aria-label="로그아웃 처리 중"
         >
+          <RinLogo className="h-8 w-8 text-foreground" />
           <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
           <p className="text-sm text-muted-foreground">로그아웃 중입니다…</p>
         </div>

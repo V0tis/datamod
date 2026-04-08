@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import {
   BarChart3,
   Users,
@@ -10,6 +11,7 @@ import {
   LayoutGrid,
 } from 'lucide-react'
 import { ProductStrategySection } from '@/components/research/ProductStrategySection'
+import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { AnalysisCharts } from '@/components/research/AnalysisCharts'
 import { MarketGrowthCharts } from '@/components/research/MarketGrowthCharts'
 import { CompetitorTierChart, CompetitorLandscapeMap } from '@/components/research/CompetitorVisualMap'
@@ -29,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { ExpandableText } from '@/components/ui/expandable-text'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
+import { motionConfig } from '@/lib/motion-config'
 import { sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import type { SectionStatus } from '@/components/research/ProductStrategySection'
 
@@ -206,10 +209,31 @@ export function AnalysisResultSections({
   const swot = km.swot_analysis ?? (executionOutput?.swot_analysis as typeof km.swot_analysis)
   const jtbd = km.jtbd ?? (executionOutput?.jtbd as typeof km.jtbd)
   const porter5 = km.porter_5_forces ?? (executionOutput?.porter_5_forces as typeof km.porter_5_forces)
+  const porterBulletTotal =
+    (porter5?.rivalry?.length ?? 0) +
+    (porter5?.supplier_power?.length ?? 0) +
+    (porter5?.buyer_power?.length ?? 0) +
+    (porter5?.substitutes?.length ?? 0) +
+    (porter5?.new_entrants?.length ?? 0)
+  const hasPorterScores =
+    porter5?.scores != null &&
+    Object.values(porter5.scores).some((v) => typeof v === 'number' && !Number.isNaN(v))
   const hasFrameworks =
-    (swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length)) ||
-    (jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length)) ||
-    (porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length))
+    (swot &&
+      (swot.strengths?.length ||
+        swot.weaknesses?.length ||
+        swot.opportunities?.length ||
+        swot.threats?.length)) ||
+    (jtbd &&
+      (jtbd.main_jobs?.length ||
+        jtbd.pains?.length ||
+        jtbd.gains?.length ||
+        jtbd.functional_jobs?.length ||
+        jtbd.social_jobs?.length ||
+        jtbd.emotional_jobs?.length)) ||
+    (porter5 != null && (porterBulletTotal > 0 || hasPorterScores)) ||
+    opportunityScore != null
+  const frameworkPanelKey = `${result?.reportId ?? 'live'}:${keyword}`
 
   // Strategic Actions for existing component
   const risks = sanitizeStringArray(
@@ -423,98 +447,16 @@ export function AnalysisResultSections({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length) ? (
-                  <div className="rounded-xl border border-border/60 bg-card p-4">
-                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">SWOT</h3>
-                    <div className="space-y-3 text-sm">
-                      {swot.strengths?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mb-1">강점</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {swot.strengths.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-emerald-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {swot.weaknesses?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">약점</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {swot.weaknesses.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-amber-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {swot.opportunities?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 mb-1">기회</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {swot.opportunities.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-blue-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {swot.threats?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mb-1">위협</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {swot.threats.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-rose-500 shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                {jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length) ? (
-                  <div className="rounded-xl border border-border/60 bg-card p-4">
-                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Jobs-To-Be-Done</h3>
-                    <div className="space-y-3 text-sm">
-                      {jtbd.main_jobs?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-primary mb-1">핵심 작업</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {jtbd.main_jobs.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-primary shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {jtbd.pains?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-muted-foreground mb-1">페인포인트</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {jtbd.pains.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-muted-foreground shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {jtbd.gains?.length ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-muted-foreground mb-1">기대 이득</p>
-                          <ul className="list-none pl-0 space-y-1">
-                            {jtbd.gains.map((s, i) => (
-                              <li key={i} className="flex gap-2"><span className="text-primary/70 shrink-0">•</span><span className="text-foreground">{s}</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                {porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length) ? (
-                  <div className="rounded-xl border border-border/60 bg-card p-4">
-                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Porter 5 Forces</h3>
-                    <p className="text-sm text-muted-foreground">경쟁 강도, 공급자/구매자 교섭력, 대체재, 진입 장벽 분석</p>
-                  </div>
-                ) : null}
-              </div>
+              <StrategyFrameworkPanel
+                instanceKey={frameworkPanelKey}
+                swot={swot}
+                jtbd={jtbd}
+                porter={porter5}
+                opportunityBreakdown={breakdown}
+                strategicDecisionLayer={km.strategic_decision_layer}
+                strategyEvaluation={km.strategy_evaluation}
+                className="p-4 sm:p-5"
+              />
             )}
           </ProductStrategySection>
         )}
@@ -609,7 +551,12 @@ export function AnalysisResultSections({
   }
 
   return (
-    <div className="space-y-12 animate-in fade-in duration-300">
+    <motion.div
+      className="space-y-12"
+      initial={{ opacity: 0, y: 32 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.52, ease: motionConfig.sectionEntrance.ease }}
+    >
       {/* Hero: Key Insight + Quick Actions (default layout only) */}
       {!isPmAnalytics && !sectionOnly && (keyInsight || loading) && (
         <div
@@ -817,190 +764,16 @@ export function AnalysisResultSections({
             ))}
           </div>
         ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* SWOT Analysis */}
-          {swot && (swot.strengths?.length || swot.weaknesses?.length || swot.opportunities?.length || swot.threats?.length) ? (
-            <div className="rounded-xl border border-border/60 bg-card p-4">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">SWOT</h3>
-              <div className="space-y-3 text-sm">
-                {swot.strengths?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mb-1">강점</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {swot.strengths.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-emerald-500 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {swot.weaknesses?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">약점</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {swot.weaknesses.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-amber-500 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {swot.opportunities?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 mb-1">기회</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {swot.opportunities.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-blue-500 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {swot.threats?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mb-1">위협</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {swot.threats.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-rose-500 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {/* JTBD */}
-          {jtbd && (jtbd.main_jobs?.length || jtbd.pains?.length || jtbd.gains?.length) ? (
-            <div className="rounded-xl border border-border/60 bg-card p-4">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Jobs-To-Be-Done</h3>
-              <div className="space-y-3 text-sm">
-                {jtbd.main_jobs?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-primary mb-1">핵심 작업</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {jtbd.main_jobs.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {jtbd.pains?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">페인포인트</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {jtbd.pains.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-muted-foreground shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {jtbd.gains?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">기대 이득</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {jtbd.gains.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Porter 5 Forces */}
-          {porter5 && (porter5.rivalry?.length || porter5.supplier_power?.length || porter5.buyer_power?.length || porter5.substitutes?.length || porter5.new_entrants?.length) ? (
-            <div className="rounded-xl border border-border/60 bg-card p-4">
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3">Porter 5 Forces</h3>
-              <div className="space-y-3 text-sm">
-                {porter5.rivalry?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">경쟁 강도</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {porter5.rivalry.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {porter5.supplier_power?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">공급자 교섭력</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {porter5.supplier_power.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {porter5.buyer_power?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">구매자 교섭력</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {porter5.buyer_power.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {porter5.substitutes?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">대체재 위협</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {porter5.substitutes.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {porter5.new_entrants?.length ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">신규 진입 위협</p>
-                    <ul className="list-none pl-0 space-y-1">
-                      {porter5.new_entrants.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-primary/70 shrink-0">•</span>
-                          <span className="text-foreground">{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </div>
+          <StrategyFrameworkPanel
+            instanceKey={frameworkPanelKey}
+            swot={swot}
+            jtbd={jtbd}
+            porter={porter5}
+            opportunityBreakdown={breakdown}
+            strategicDecisionLayer={km.strategic_decision_layer}
+            strategyEvaluation={km.strategy_evaluation}
+            className="p-4 sm:p-5"
+          />
         )}
       </ProductStrategySection>
       )}
@@ -1161,6 +934,6 @@ export function AnalysisResultSections({
       </ProductStrategySection>
       )}
 
-    </div>
+    </motion.div>
   )
 }

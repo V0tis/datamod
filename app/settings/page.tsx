@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 import { ChangePasswordForm } from '@/components/settings/change-password-form'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 
 type LicenseOrigin = 'USER' | 'NONE'
 
@@ -157,6 +158,12 @@ function SettingsPageInner() {
   const [savingStepAI, setSavingStepAI] = useState(false)
   const [geminiConnVerified, setGeminiConnVerified] = useState(false)
   const [groqConnVerified, setGroqConnVerified] = useState(false)
+  const [llmUsage, setLlmUsage] = useState<{
+    totalPromptTokens: number
+    totalCompletionTokens: number
+    totalTokens: number
+    callCount: number
+  } | null>(null)
 
   useEffect(() => {
     setGeminiConnVerified(false)
@@ -181,6 +188,30 @@ function SettingsPageInner() {
       return
     }
     setLoading(true)
+    void fetch('/api/settings/llm-usage', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: unknown) => {
+        if (
+          j &&
+          typeof j === 'object' &&
+          'callCount' in j &&
+          typeof (j as { callCount: unknown }).callCount === 'number'
+        ) {
+          const o = j as {
+            totalPromptTokens: number
+            totalCompletionTokens: number
+            totalTokens: number
+            callCount: number
+          }
+          setLlmUsage({
+            totalPromptTokens: o.totalPromptTokens ?? 0,
+            totalCompletionTokens: o.totalCompletionTokens ?? 0,
+            totalTokens: o.totalTokens ?? 0,
+            callCount: o.callCount,
+          })
+        }
+      })
+      .catch(() => setLlmUsage(null))
     fetch('/api/settings', { credentials: 'include' })
       .then((res) => {
         if (res.status === 401) {
@@ -857,6 +888,34 @@ function SettingsPageInner() {
                     <p className="text-sm text-muted-foreground">{serperConnected ? '연결됨' : '연결되지 않음'}</p>
                   </div>
                 </div>
+                {llmUsage != null && (
+                  <div className="sm:col-span-2 rounded-lg border border-border/80 bg-muted/20 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      분석 LLM 누적 사용량 (이 계정)
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      파이프라인 완료 시점에 기록됩니다. API가 반환한 토큰 수이며, 일부 호출은 추정치만 포함될 수 있습니다.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">총 토큰</p>
+                        <p className="font-semibold tabular-nums">{llmUsage.totalTokens.toLocaleString('ko-KR')}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">프롬프트</p>
+                        <p className="font-semibold tabular-nums">{llmUsage.totalPromptTokens.toLocaleString('ko-KR')}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">완성</p>
+                        <p className="font-semibold tabular-nums">{llmUsage.totalCompletionTokens.toLocaleString('ko-KR')}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">LLM 호출</p>
+                        <p className="font-semibold tabular-nums">{llmUsage.callCount.toLocaleString('ko-KR')}회</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1014,11 +1073,7 @@ function SettingsPageInner() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    }>
+    <Suspense fallback={<FullPageBrandLoader />}>
       <SettingsPageInner />
     </Suspense>
   )

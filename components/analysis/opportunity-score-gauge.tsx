@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { animate } from 'framer-motion'
 import { Info, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,8 +35,26 @@ export function OpportunityScoreGauge({
       : effective != null
         ? Math.min(100, Math.max(0, Math.round(effective)))
         : null
+
+  const [displayPct, setDisplayPct] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (pct == null) {
+      setDisplayPct(null)
+      return
+    }
+    setDisplayPct(0)
+    const controls = animate(0, pct, {
+      duration: 0.85,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (v) => setDisplayPct(Math.round(v)),
+    })
+    return () => controls.stop()
+  }, [pct])
+
   const circumference = 2 * Math.PI * 44
-  const offset = pct == null ? circumference : circumference - (pct / 100) * circumference
+  const ringPct = displayPct != null ? Math.min(100, Math.max(0, displayPct)) : null
+  const offset = ringPct == null ? circumference : circumference - (ringPct / 100) * circumference
   const showSkeleton = loading && effective == null
   const showProvisionalZero = !loading && !analysisFailed && effective == null
   const tooltipText =
@@ -58,16 +78,16 @@ export function OpportunityScoreGauge({
             strokeDasharray={circumference}
             strokeDashoffset={offset ?? circumference}
             className={cn(
-              'transition-[stroke-dashoffset] duration-700 ease-out',
+              'transition-[stroke-dashoffset] duration-150 ease-out',
               showSkeleton && 'opacity-30',
-              pct != null && !analysisFailed && pct >= 70 ? 'text-emerald-500' : pct != null && !analysisFailed && pct >= 40 ? 'text-sky-500' : pct != null ? 'text-amber-500' : 'text-slate-200 dark:text-zinc-700'
+              ringPct != null && !analysisFailed && ringPct >= 70 ? 'text-emerald-500' : ringPct != null && !analysisFailed && ringPct >= 40 ? 'text-sky-500' : ringPct != null ? 'text-amber-500' : 'text-slate-200 dark:text-zinc-700'
             )}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-1">
           {showSkeleton ? (
             <span className="h-9 w-14 rounded-md bg-slate-200/90 animate-pulse dark:bg-zinc-700/80" aria-hidden />
-          ) : pct != null ? (
+          ) : ringPct != null ? (
             <>
               <span
                 className={cn(
@@ -75,7 +95,7 @@ export function OpportunityScoreGauge({
                   analysisFailed && 'opacity-85'
                 )}
               >
-                {pct}
+                {displayPct ?? ringPct}
               </span>
               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">점</span>
             </>

@@ -138,6 +138,60 @@ export async function generateText(options: GenerateTextOptions): Promise<string
   return text ?? ''
 }
 
+export type GenerateTextWithUsageResult = {
+  text: string
+  model: string
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+  totalTokenCount?: number
+}
+
+/**
+ * Same as generateText but returns Gemini usageMetadata when available (SDK).
+ */
+export async function generateTextWithUsage(options: GenerateTextOptions): Promise<GenerateTextWithUsageResult> {
+  const {
+    apiKey,
+    prompt,
+    systemInstruction,
+    maxOutputTokens = 2048,
+    model = GEMINI_TAB_MODEL,
+    isRetryable,
+  } = options
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const modelConfig: {
+    model: string
+    systemInstruction?: string
+    generationConfig?: { maxOutputTokens: number }
+  } = { model, generationConfig: { maxOutputTokens } }
+  if (systemInstruction) modelConfig.systemInstruction = systemInstruction
+  const geminiModel = genAI.getGenerativeModel(modelConfig)
+  const result = await withExponentialBackoff(
+    async () => {
+      const r = await withTimeout(
+        geminiModel.generateContent(prompt),
+        GEMINI_TIMEOUT_MS
+      )
+      return r
+    },
+    { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
+  )
+  const text = result.response.text() ?? ''
+  type UsageMeta = {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+  }
+  const u = (result.response as { usageMetadata?: UsageMeta }).usageMetadata
+  return {
+    text,
+    model,
+    promptTokenCount: u?.promptTokenCount,
+    candidatesTokenCount: u?.candidatesTokenCount,
+    totalTokenCount: u?.totalTokenCount,
+  }
+}
+
 /** Model name for tab insight (logic/creative/fact) */
 export function getTabModel(): string {
   return GEMINI_TAB_MODEL

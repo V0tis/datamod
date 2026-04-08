@@ -20,6 +20,7 @@ import { NextActionsForPM } from '@/components/research/NextActionsForPM'
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import type { NewsItem } from '@/lib/stores/research-store'
+import { MarkdownBody } from '@/components/ui/markdown-body'
 
 export interface ResultPageStructuredSectionsProps {
   result: ResearchResponse | null
@@ -52,12 +53,12 @@ const SECTION_IDS = {
 } as const
 
 const sectionEntranceVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 32 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: motionConfig.sectionEntrance.duration,
+      duration: 0.55,
       ease: motionConfig.sectionEntrance.ease,
     },
   },
@@ -118,9 +119,7 @@ export function ResultPageStructuredSections({
               {effectiveResult?.key_metrics?.summary_insights != null && (effectiveResult?.key_metrics?.summary_insights ?? '') !== '' && (
                 <div className="rounded-xl border border-border/60 bg-card/50 p-4 sm:p-5">
                   <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">핵심 결론</h3>
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
-                    {String(effectiveResult?.key_metrics?.summary_insights ?? '')}
-                  </p>
+                  <MarkdownBody className="text-sm">{String(effectiveResult?.key_metrics?.summary_insights ?? '')}</MarkdownBody>
                 </div>
               )}
               <ResultSummaryCards

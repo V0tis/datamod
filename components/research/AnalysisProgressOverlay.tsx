@@ -14,6 +14,29 @@ import {
 } from '@/lib/analysis-activity-messages'
 import { cn } from '@/lib/utils'
 
+/** 분석 진행 문구를 한 글자씩 노출 (메시지가 바뀌면 처음부터 다시 타이핑) */
+export function useAnalysisTypewriter(fullText: string, active: boolean, msPerChar = 22) {
+  const [display, setDisplay] = useState(() => (active ? '' : fullText))
+
+  useEffect(() => {
+    if (!active) {
+      setDisplay(fullText)
+      return
+    }
+    setDisplay('')
+    if (!fullText) return
+    let i = 0
+    const id = window.setInterval(() => {
+      i += 1
+      setDisplay(fullText.slice(0, i))
+      if (i >= fullText.length) window.clearInterval(id)
+    }, msPerChar)
+    return () => window.clearInterval(id)
+  }, [fullText, active, msPerChar])
+
+  return display
+}
+
 export interface AnalysisProgressOverlayProps {
   /** Current step ID from streaming (e.g. trend_analysis, competition_analysis) */
   stepId?: string | null
@@ -23,10 +46,17 @@ export interface AnalysisProgressOverlayProps {
   isRunning?: boolean
   /** Keyword being analyzed */
   keyword?: string
+  /**
+   * 스트림 기반 구체 메시지(건수·타임스탬프 등). 있으면 우선 표시하고 타이핑 효과 적용.
+   * 없으면 단계별 동적 메시지(getDynamicStepMessage) 사용.
+   */
+  detailMessage?: string
   /** Variant: overlay = full loading card, inline = compact banner */
   variant?: 'overlay' | 'inline'
   /** Show Lottie animation (overlay only) */
   showAnimation?: boolean
+  /** 최종 정제 구간 — 진행률 95% 고정 후 마지막 단계에서 100% */
+  refiningPhase?: 1 | 2 | 3 | null
   className?: string
 }
 
@@ -44,8 +74,10 @@ export function AnalysisProgressOverlay({
   currentStep = 0,
   isRunning = true,
   keyword = '',
+  detailMessage,
   variant = 'overlay',
   showAnimation = true,
+  refiningPhase = null,
   className,
 }: AnalysisProgressOverlayProps) {
   const progressIndex = getProgressStepIndex(stepId, currentStep)
@@ -53,6 +85,8 @@ export function AnalysisProgressOverlay({
   const [dynamicMessage, setDynamicMessage] = useState(() =>
     getDynamicStepMessage(progressIndex)
   )
+  const useDetail = Boolean(detailMessage?.trim())
+  const typedDetail = useAnalysisTypewriter(detailMessage ?? '', isRunning && useDetail)
 
   useEffect(() => {
     if (!isRunning) return
@@ -60,7 +94,7 @@ export function AnalysisProgressOverlay({
   }, [progressIndex, isRunning])
 
   useEffect(() => {
-    if (!isRunning) return
+    if (!isRunning || useDetail) return
     const interval = setInterval(() => {
       const elapsedSec = (Date.now() - stepStartTime) / 1000
       if (elapsedSec >= LONG_STEP_THRESHOLD_SEC) {
@@ -70,13 +104,27 @@ export function AnalysisProgressOverlay({
       }
     }, 1500)
     return () => clearInterval(interval)
-  }, [isRunning, progressIndex, stepStartTime])
+  }, [isRunning, progressIndex, stepStartTime, useDetail])
 
-  const progressPercent = Math.min(
+  const subtitleLine =
+    isRunning && useDetail
+      ? typedDetail
+      : isRunning
+        ? dynamicMessage
+        : '잠시만 기다려 주세요.'
+
+  const naturalPercent = Math.min(
     100,
     ((progressIndex + 1) / PROGRESS_STEPS.length) * 100
   )
-  const remainingSeconds = getEstimatedRemainingSeconds(progressIndex)
+  const progressPercent =
+    refiningPhase === 1 || refiningPhase === 2
+      ? 95
+      : refiningPhase === 3
+        ? 100
+        : naturalPercent
+  const remainingSeconds =
+    refiningPhase != null ? 0 : getEstimatedRemainingSeconds(progressIndex)
 
   const content = (
     <div
@@ -102,18 +150,22 @@ export function AnalysisProgressOverlay({
         )}
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">
-            {isRunning ? 'AI 분석 진행 중' : '분석 준비 중'}
+            {isRunning
+              ? refiningPhase != null
+                ? '최종 정제 중'
+                : 'AI 분석 진행 중'
+              : '분석 준비 중'}
           </p>
           <AnimatePresence mode="wait">
             <motion.p
-              key={progressIndex}
+              key={`${progressIndex}-${useDetail ? detailMessage?.slice(0, 48) : 'dyn'}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
               className="text-sm text-muted-foreground mt-0.5"
             >
-              {isRunning ? dynamicMessage : '잠시만 기다려 주세요.'}
+              {subtitleLine}
             </motion.p>
           </AnimatePresence>
         </div>
@@ -131,7 +183,9 @@ export function AnalysisProgressOverlay({
               transition={{ duration: 0.2 }}
               className="font-medium text-muted-foreground"
             >
-              단계 {progressIndex + 1}/{PROGRESS_STEPS.length}
+              {refiningPhase != null
+                ? `정제 ${refiningPhase}/3`
+                : `단계 ${progressIndex + 1}/${PROGRESS_STEPS.length}`}
             </motion.span>
           </AnimatePresence>
           <motion.span
@@ -149,7 +203,11 @@ export function AnalysisProgressOverlay({
             className="h-full bg-primary rounded-full relative"
             initial={false}
             animate={{ width: `${Math.min(100, progressPercent)}%` }}
-            transition={{ type: 'tween', duration: 0.6, ease: 'easeInOut' }}
+            transition={{
+              type: 'tween',
+              duration: refiningPhase === 3 ? 0.55 : 0.6,
+              ease: refiningPhase === 3 ? 'easeOut' : 'easeInOut',
+            }}
             role="progressbar"
             aria-valuenow={Math.round(progressPercent)}
             aria-valuemin={0}

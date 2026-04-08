@@ -14,6 +14,7 @@ import type { AnalysisTask, AnalysisStatus } from '@/lib/analysis-types'
 import { jobStatusToTaskStatus } from '@/lib/analysis-types'
 import {
   type AnalysisMode,
+  type AnalysisProgressMeta,
   type StreamingState,
   DEFAULT_ANALYSIS_MODE,
   ANALYSIS_MODE_STEPS,
@@ -111,7 +112,7 @@ export interface ResearchResponse {
     market_summary?: string
     key_strategic_insights?: string[]
     /** Core Insight tab: structured insights with title, summary, impact, reason */
-    core_insights?: Array<{ title: string; summary: string; impact: string; reason: string; score?: number }>
+    core_insights?: Array<{ title: string; summary: string; impact: string; reason: string; score?: number; source_timestamp?: string }>
     competitive_landscape?: Array<{
       name?: string
       positioning?: string
@@ -156,6 +157,12 @@ export interface ResearchResponse {
       entry_strategy?: string
       entry_explanation?: string
     }
+    /** Porter 보강·전략 요약용 수치 (runResearch / 파서에서 채움) */
+    strategy_evaluation?: {
+      competition_risk?: number
+      growth_potential?: number
+      market_attractiveness?: number
+    }
     swot_analysis?: {
       strengths?: string[]
       weaknesses?: string[]
@@ -166,6 +173,9 @@ export interface ResearchResponse {
       main_jobs?: string[]
       pains?: string[]
       gains?: string[]
+      functional_jobs?: string[]
+      social_jobs?: string[]
+      emotional_jobs?: string[]
     }
     porter_5_forces?: {
       rivalry?: string[]
@@ -173,6 +183,13 @@ export interface ResearchResponse {
       buyer_power?: string[]
       substitutes?: string[]
       new_entrants?: string[]
+      scores?: {
+        new_entrants?: number
+        supplier_power?: number
+        buyer_power?: number
+        substitutes?: number
+        rivalry?: number
+      }
     }
   }
 }
@@ -468,7 +485,13 @@ interface ResearchStore extends ResearchState {
   /** Update streaming state (internal use) */
   setStreamingState: (state: StreamingState) => void
   /** Update step progress (internal use) */
-  setStepProgress: (currentStep: number, stepId: string, retryMessage?: string, currentArticleTitle?: string) => void
+  setStepProgress: (
+    currentStep: number,
+    stepId: string,
+    retryMessage?: string,
+    currentArticleTitle?: string,
+    progressMeta?: AnalysisProgressMeta
+  ) => void
   /** Set task data (internal use) */
   setTaskData: (taskId: string, data: unknown) => void
   /** Set analysis ID for polling */
@@ -586,11 +609,27 @@ export const useResearchStore = create<ResearchStore>()(
         set({ streamingState: state })
       },
 
-      setStepProgress: (currentStep: number, stepId: string, retryMessage?: string, currentArticleTitle?: string) => {
+      setStepProgress: (currentStep, stepId, retryMessage, currentArticleTitle, progressMeta) => {
         const mode = get().analysisMode
+        const prev = get().streamingState
+        const prevMeta =
+          (prev.status === 'streaming' || prev.status === 'running') && prev.progressMeta
+            ? prev.progressMeta
+            : undefined
+        const merged =
+          progressMeta != null
+            ? { ...prevMeta, ...progressMeta }
+            : prevMeta
         set({
           currentStep,
-          streamingState: createStreamingState(mode, currentStep, stepId, retryMessage, currentArticleTitle),
+          streamingState: createStreamingState(
+            mode,
+            currentStep,
+            stepId,
+            retryMessage,
+            currentArticleTitle,
+            merged
+          ),
         })
       },
 
@@ -1090,21 +1129,54 @@ export const useResearchStore = create<ResearchStore>()(
                   )
                 }
 
+                if (type === 'final_refining') {
+                  const ev = event as { phase?: number; message?: string }
+                  const phase =
+                    ev.phase === 1 || ev.phase === 2 || ev.phase === 3 ? ev.phase : 1
+                  const msg = typeof ev.message === 'string' ? ev.message : ''
+                  if (msg) appendActivity(msg)
+                  setStepProgress(7, 'final_refining', undefined, undefined, {
+                    refiningPhase: phase,
+                    refiningMessage: msg || undefined,
+                  })
+                }
+
                 // Handle task events (AI Analysis Console)
                 if (type === 'task') {
-                  const ev = event as { task?: string; status?: string; data?: unknown; error?: string; fallbackMessage?: string; retryMessage?: string; provider?: string | null; fallback_used?: boolean; primaryProviderError?: string; currentArticleTitle?: string }
+                  const ev = event as {
+                    task?: string
+                    status?: string
+                    data?: unknown
+                    error?: string
+                    fallbackMessage?: string
+                    retryMessage?: string
+                    provider?: string | null
+                    fallback_used?: boolean
+                    primaryProviderError?: string
+                    currentArticleTitle?: string
+                    progressMeta?: AnalysisProgressMeta
+                  }
                   const task = ev.task
                   const status = ev.status
-                  if (task && status === 'running') {
-                    appendActivity(
-                      getAnalysisActivityMessage(task, undefined, {
-                        currentArticleTitle: ev.currentArticleTitle,
-                      })
-                    )
-                  }
+                  const evPm = ev.progressMeta
                   if (task && task in stepMap) {
                     const stepIdx = stepMap[task]
-                    setStepProgress(stepIdx, task, ev.retryMessage, ev.currentArticleTitle)
+                    setStepProgress(stepIdx, task, ev.retryMessage, ev.currentArticleTitle, evPm)
+                    if (task && status === 'running') {
+                      appendActivity(
+                        getAnalysisActivityMessage(task, undefined, {
+                          currentArticleTitle: ev.currentArticleTitle,
+                          progressMeta: evPm,
+                        })
+                      )
+                    }
+                    if (task === 'signal_layer' && status === 'completed' && evPm?.newsCount != null) {
+                      appendActivity(
+                        getAnalysisActivityMessage('signal_layer', undefined, {
+                          progressMeta: evPm,
+                        })
+                      )
+                    }
                     if (status === 'completed') {
                       lastSuccessfulStep = stepIdx
                       if (ev.data != null) {
@@ -1320,6 +1392,18 @@ export const useResearchStore = create<ResearchStore>()(
           })
         } finally {
           currentAbortController = null
+          const ss = get().streamingState
+          if (ss.status === 'running' || ss.status === 'streaming') {
+            set({
+              streamingState: createErrorState(
+                '분석 연결이 비정상적으로 종료되었습니다. 다시 시도해 주세요.',
+                null
+              ),
+              status: 'error',
+              analysisStatus: 'failed',
+              error: '분석 연결이 비정상적으로 종료되었습니다. 다시 시도해 주세요.',
+            })
+          }
         }
       },
 

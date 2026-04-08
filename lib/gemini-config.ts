@@ -5,3 +5,6 @@
 export const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash'
 export const GEMINI_TAB_MODEL = process.env.GEMINI_TAB_MODEL?.trim() || GEMINI_MODEL
 export const GEMINI_CONSENSUS_MODEL = process.env.GEMINI_CONSENSUS_MODEL?.trim() || 'gemini-2.5-flash'
+/** 긴 입력(대략 8k 토큰 초과) 시 정확도 우선 — 설정과 무관하게 파이프라인에서 사용 */
+export const GEMINI_LONG_CONTEXT_MODEL =
+  process.env.GEMINI_LONG_CONTEXT_MODEL?.trim() || 'gemini-1.5-flash'

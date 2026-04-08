@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, memo } from 'react'
+import { useState, memo, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -128,6 +128,8 @@ export interface ResultPageHeroProps {
     /** true = Serper 웹 검색으로 분석됨 */
     serperUsed?: boolean
   } | null
+  /** 한 줄 메타 행 끝: AI 모델 토글 등 */
+  modelToggle?: ReactNode
   className?: string
 }
 
@@ -150,6 +152,7 @@ export const ResultPageHero = memo(function ResultPageHero({
   progressSlot,
   showScoreAndConclusion = true,
   analysisMeta,
+  modelToggle,
   className,
 }: ResultPageHeroProps) {
   const [scoreExplainOpen, setScoreExplainOpen] = useState(false)
@@ -161,6 +164,17 @@ export const ResultPageHero = memo(function ResultPageHero({
       ? Math.round(Math.min(100, Math.max(0, confidenceScore)))
       : null
 
+  const showDepth = Boolean(analysisMeta?.depth)
+  const showTime = Boolean(analysisMeta?.time)
+  const showToken = Boolean(analysisMeta?.token)
+  const showSerper = Boolean(analysisMeta?.serperUsed)
+  const hasMetaBits = showDepth || showTime || showToken || showSerper
+  const hasInfoRow = Boolean(statusText) || hasMetaBits || Boolean(modelToggle)
+
+  function MetaDivider() {
+    return <span className="h-3 w-px shrink-0 bg-border" aria-hidden />
+  }
+
   return (
     <header
       className={cn(
@@ -169,53 +183,63 @@ export const ResultPageHero = memo(function ResultPageHero({
       )}
       aria-label="분석 결과 요약"
     >
-      {/* Row 1: Title + Actions */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground tracking-tight break-words">
+      {/* Row 1: Title + 우측 액션 */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="break-words text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
             {loading && !title ? (
-              <span className="inline-block h-9 sm:h-10 w-48 rounded bg-muted animate-pulse" />
+              <span className="inline-block h-9 w-48 animate-pulse rounded bg-muted sm:h-10" />
             ) : (
               title
             )}
           </h1>
           {titleSub && (
-            <p className="mt-1 text-base sm:text-lg text-muted-foreground" aria-hidden>
+            <p className="mt-1 text-base text-muted-foreground sm:text-lg" aria-hidden>
               {titleSub}
             </p>
           )}
-          {statusText && (
-            <p className="mt-2 text-sm text-muted-foreground">{statusText}</p>
-          )}
-          {analysisMeta && (analysisMeta.depth ?? analysisMeta.time ?? analysisMeta.token ?? analysisMeta.serperUsed) && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {analysisMeta.depth && (
-                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  깊이: {analysisMeta.depth}
+          {hasInfoRow && (
+            <div className="mt-3 flex min-w-0 max-w-full flex-nowrap items-center gap-x-3 gap-y-1 overflow-x-auto pb-0.5 text-xs text-muted-foreground [-webkit-overflow-scrolling:touch]">
+              {statusText ? <span className="shrink-0 whitespace-nowrap">{statusText}</span> : null}
+              {statusText && hasMetaBits ? <MetaDivider /> : null}
+              {showDepth ? (
+                <span className="shrink-0 whitespace-nowrap">
+                  깊이 <span className="font-medium text-foreground">{analysisMeta?.depth}</span>
                 </span>
-              )}
-              {analysisMeta.time && (
-                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  예상 시간: {analysisMeta.time}
+              ) : null}
+              {showDepth && (showTime || showToken || showSerper) ? <MetaDivider /> : null}
+              {showTime ? (
+                <span className="shrink-0 whitespace-nowrap">
+                  예상 시간 <span className="font-medium text-foreground">{analysisMeta?.time}</span>
                 </span>
-              )}
-              {analysisMeta.token && (
-                <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  토큰: {analysisMeta.token}
+              ) : null}
+              {showTime && (showToken || showSerper) ? <MetaDivider /> : null}
+              {showToken ? (
+                <span className="shrink-0 whitespace-nowrap">
+                  토큰 <span className="font-medium text-foreground">{analysisMeta?.token}</span>
                 </span>
-              )}
-              {analysisMeta.serperUsed && (
-                <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                  Serper 웹 검색 분석
+              ) : null}
+              {showToken && showSerper ? <MetaDivider /> : null}
+              {showSerper ? (
+                <span className="shrink-0 whitespace-nowrap rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  Serper 웹 검색
                 </span>
-              )}
+              ) : null}
+              {modelToggle ? (
+                <>
+                  {(statusText || hasMetaBits) && <MetaDivider />}
+                  <div className="flex shrink-0 items-center">{modelToggle}</div>
+                </>
+              ) : null}
             </div>
           )}
           {loading && progressSlot && (
             <div className="mt-3 max-w-md">{progressSlot}</div>
           )}
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        {actions && (
+          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">{actions}</div>
+        )}
       </div>
 
       {/* AI 분석 타임라인 – 마지막 업데이트 하단, 핵심 인사이트 위 */}

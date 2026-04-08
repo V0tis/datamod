@@ -98,6 +98,11 @@ export function ResultTimelineSection({
           currentStep={timelineStep}
           allCompleted={!hasError && (streamDone || (displayResult != null && !loading))}
           streamingStepId={streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState.stepId : undefined}
+          streamingProgressMeta={
+            streamingState.status === 'running' || streamingState.status === 'streaming'
+              ? streamingState.progressMeta ?? null
+              : null
+          }
           currentArticleTitle={(streamingState as { currentArticleTitle?: string }).currentArticleTitle}
           retryMessage={'retryMessage' in streamingState ? (streamingState as { retryMessage?: string }).retryMessage : undefined}
           taskData={taskData}

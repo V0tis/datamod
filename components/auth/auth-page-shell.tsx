@@ -31,10 +31,10 @@ export function AuthPageShell({
           <Link
             href="/"
             className="inline-flex items-center justify-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            aria-label="홈으로 이동"
+            aria-label="rin-ai 홈(대시보드)으로 이동"
           >
-            <RinLogo size={28} className="shrink-0" />
-            <span className="text-xl font-semibold tracking-tight text-foreground">RIN-AI</span>
+            <RinLogo className="h-8 w-8 shrink-0 text-foreground" />
+            <span className="text-xl font-semibold tracking-tight text-foreground">rin-ai</span>
           </Link>
           <p className="text-sm font-medium text-foreground">{subtitle}</p>
           {tagline ? (

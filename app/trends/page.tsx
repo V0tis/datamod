@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { normalizeTrendItems, type TrendItem, type TrendsResponse } from '@/lib/trends-types'
 import { CountryChips, COUNTRY_CHIP_CODES, COUNTRY_LABELS, type CountryChipCode } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
+import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 
 function showTrendsErrorToast(err: unknown): void {
   const e = err as Error & { failedCountryCode?: string; attemptedUrls?: string[] }
@@ -320,11 +321,7 @@ function TrendsPageInner() {
 
 export default function TrendsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    }>
+    <Suspense fallback={<FullPageBrandLoader />}>
       <TrendsPageInner />
     </Suspense>
   )

@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
+import { MarkdownBody } from '@/components/ui/markdown-body'
 
 function competitionToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
   if (v === 'low') return '낮음'
@@ -135,7 +136,7 @@ export function StrategicDecisionLayer({
               </div>
               <p className="text-base font-bold text-foreground leading-snug mb-1">{card.value}</p>
               {card.explanation && (
-                <p className="text-xs text-muted-foreground leading-relaxed">{card.explanation}</p>
+                <MarkdownBody className="text-xs text-muted-foreground">{card.explanation}</MarkdownBody>
               )}
             </div>
           )
@@ -183,9 +184,7 @@ export function StrategicDecisionLayer({
                   {card.value}
                 </p>
                 {card.explanation && (
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {card.explanation}
-                  </p>
+                  <MarkdownBody className="text-xs text-muted-foreground">{card.explanation}</MarkdownBody>
                 )}
               </div>
             )

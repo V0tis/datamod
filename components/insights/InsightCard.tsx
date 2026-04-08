@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, ExternalLink, Trash2, Loader2, BarChart3, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { textToBullets } from '@/lib/text-to-bullets'
 import { cn } from '@/lib/utils'
+import { InsightCardMarkdown } from '@/components/insights/insight-card-markdown'
 import type { SavedInsight } from '@/lib/insights-types'
 
 export type ImportanceLevel = 'low' | 'medium' | 'high'
@@ -40,6 +40,35 @@ const IMPORTANCE_LABELS: Record<ImportanceLevel, string> = {
   high: '높음',
   medium: '보통',
   low: '낮음',
+}
+
+function buildStrategyMarkdown(
+  opportunity: string,
+  threat: string,
+  actionItems: string[]
+): string {
+  const parts: string[] = []
+  const o = opportunity.trim()
+  const t = threat.trim()
+  if (o) parts.push(`**기회**\n\n${o}`)
+  if (t) parts.push(`**위협**\n\n${t}`)
+  const items = actionItems
+    .filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+    .map((a) => `- ${a.trim()}`)
+  if (items.length > 0) {
+    parts.push(`**실행 과제**\n\n${items.join('\n')}`)
+  }
+  return parts.join('\n\n')
+}
+
+function InsightSectionBadge({ label }: { label: string }) {
+  return (
+    <div className="mb-2">
+      <span className="inline-flex rounded-lg bg-sky-100 px-2.5 py-1 text-xs font-semibold tracking-wide text-sky-900 shadow-sm dark:bg-sky-950/55 dark:text-sky-100">
+        {label}
+      </span>
+    </div>
+  )
 }
 
 export interface InsightCardProps {
@@ -83,32 +112,19 @@ export function InsightCard({
   const importance = getImportanceFromScore(score)
   const styles = IMPORTANCE_STYLES[importance]
 
-  const mainBody = summary
-    ? summary
-    : explanation
-      ? explanation
-      : opportunity || threat
-        ? [opportunity && `기회: ${opportunity}`, threat && `위협: ${threat}`].filter(Boolean).join('\n')
-        : '저장된 인사이트'
+  const strategyMd = useMemo(
+    () => buildStrategyMarkdown(opportunity, threat, actionItems),
+    [opportunity, threat, actionItems]
+  )
 
-  const needsSummaryToggle = mainBody.length > 220
+  const hasSummary = summary.length > 0
+  const hasBackground = explanation.length > 0
+  const hasStrategy = strategyMd.length > 0
+  const hasAnyBody = hasSummary || hasBackground || hasStrategy
 
-  const detailBullets: string[] = []
-  const addUnique = (items: string[]) => {
-    items.forEach((t) => {
-      const trimmed = t.trim()
-      if (trimmed && !detailBullets.some((b) => b.slice(0, 40) === trimmed.slice(0, 40))) {
-        detailBullets.push(trimmed)
-      }
-    })
-  }
-  if (summary) addUnique(textToBullets(summary, 5))
-  if (explanation) addUnique(textToBullets(explanation, 4))
-  actionItems.forEach((a) => typeof a === 'string' && a.trim() && addUnique([a.trim()]))
-  if (opportunity) addUnique([`기회: ${opportunity}`])
-  if (threat) addUnique([`위협: ${threat}`])
-
-  const hasDetail = detailBullets.length > 0 || item.note
+  const combinedCharCount = summary.length + explanation.length + strategyMd.length
+  /** 긴 본문만 접기 + 더보기 (핵심 전략까지는 max-height로 기본 노출 확대) */
+  const needsMoreToggle = combinedCharCount > 640
 
   const tagItems: { key: string; label: string }[] = [
     { key: 'kw', label: item.snapshot?.keyword ? `#${item.snapshot.keyword}` : '' },
@@ -120,15 +136,17 @@ export function InsightCard({
     tagItems.push({ key: 'qs', label: `신호 · ${item.snapshot.qualityScore.label}` })
   }
 
+  const hasMemo = Boolean(item.note?.trim())
+
   return (
     <article
       className={cn(
-        'rin-pro-card flex h-full flex-col overflow-hidden border-l-4 transition-shadow hover:shadow-md',
+        'rin-pro-card flex h-full min-h-[22rem] flex-col overflow-hidden border-l-4 transition-shadow hover:shadow-md',
         styles.border,
         selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA] dark:ring-offset-zinc-950'
       )}
     >
-      <div className={cn('flex flex-1 flex-col p-4 sm:p-5', hasDetail && 'pb-0')}>
+      <div className={cn('flex flex-1 flex-col p-4 sm:p-5', hasMemo && 'pb-0')}>
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           {onToggleSelect && (
             <label className="flex shrink-0 cursor-pointer items-start pt-1">
@@ -161,7 +179,7 @@ export function InsightCard({
                     {IMPORTANCE_LABELS[importance]}
                   </span>
                 </div>
-                <p className="text-xs tabular-nums text-muted-foreground">
+                <p className="text-xs tabular-nums tracking-tight text-muted-foreground">
                   <span className="font-medium text-foreground/80">{item.snapshot?.keyword ?? '—'}</span>
                   <span className="mx-1.5 text-border">|</span>
                   {countryLabel}
@@ -190,29 +208,68 @@ export function InsightCard({
           </div>
         </div>
 
-        <div className={cn('space-y-3', onToggleSelect ? 'mt-4 pl-0 sm:pl-[calc(1rem+2.5rem+1rem)]' : 'mt-3')}>
-          <div>
-            <p
-              className={cn(
-                'text-sm leading-relaxed text-foreground/90',
-                !summaryExpanded && needsSummaryToggle && 'line-clamp-4'
+        <div
+          className={cn(
+            'tracking-tight text-foreground',
+            onToggleSelect ? 'mt-4 pl-0 sm:pl-[calc(1rem+2.5rem+1rem)]' : 'mt-4'
+          )}
+        >
+          <div
+            className={cn(
+              'relative min-h-[16rem] text-[15px] leading-relaxed',
+              !summaryExpanded && needsMoreToggle && 'max-h-[38rem] overflow-hidden'
+            )}
+          >
+            <div className="space-y-0">
+              {hasSummary && (
+                <section className="mb-4">
+                  <InsightSectionBadge label="요약" />
+                  <InsightCardMarkdown>{summary}</InsightCardMarkdown>
+                </section>
               )}
-            >
-              {mainBody}
-            </p>
-            {needsSummaryToggle && (
-              <button
-                type="button"
-                onClick={() => setSummaryExpanded((v) => !v)}
-                className="mt-1.5 text-xs font-semibold text-[#2AC1BC] hover:underline"
-              >
-                {summaryExpanded ? '접기' : '더보기'}
-              </button>
+
+              {hasBackground && (
+                <section className="mb-4">
+                  <InsightSectionBadge label="배경" />
+                  <InsightCardMarkdown>{explanation}</InsightCardMarkdown>
+                </section>
+              )}
+
+              {hasStrategy && (
+                <section className="mb-4">
+                  <InsightSectionBadge label="전략" />
+                  <InsightCardMarkdown>{strategyMd}</InsightCardMarkdown>
+                </section>
+              )}
+
+              {!hasAnyBody && (
+                <section className="mb-4">
+                  <InsightSectionBadge label="요약" />
+                  <p className="text-sm leading-relaxed text-muted-foreground">저장된 인사이트</p>
+                </section>
+              )}
+            </div>
+
+            {!summaryExpanded && needsMoreToggle && (
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent dark:from-card"
+                aria-hidden
+              />
             )}
           </div>
 
+          {needsMoreToggle && (
+            <button
+              type="button"
+              onClick={() => setSummaryExpanded((v) => !v)}
+              className="mt-2 text-xs font-semibold text-[#2AC1BC] hover:underline"
+            >
+              {summaryExpanded ? '접기' : '더보기'}
+            </button>
+          )}
+
           {score != null && (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
               시장 신호 <span className="font-medium text-foreground">{score}/100</span>
               {item.snapshot?.qualityScore?.label && (
                 <span className="ml-1">· {item.snapshot.qualityScore.label}</span>
@@ -220,8 +277,8 @@ export function InsightCard({
             </p>
           )}
 
-          {hasDetail && (
-            <Collapsible open={open} onOpenChange={setOpen}>
+          {hasMemo && (
+            <Collapsible open={open} onOpenChange={setOpen} className="mt-4">
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
@@ -230,34 +287,15 @@ export function InsightCard({
                   <ChevronDown
                     className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
                   />
-                  {open ? '상세 접기' : '상세 보기'}
+                  {open ? '메모 접기' : '메모 보기'}
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <div
-                  className={cn(
-                    'mt-4 space-y-3 rounded-lg border-t border-border/60 px-4 py-3 pt-4',
-                    styles.bg
-                  )}
-                >
-                  {detailBullets.length > 0 && (
-                    <ul className="list-none space-y-2 pl-0">
-                      {detailBullets.slice(0, 8).map((bullet, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-foreground">
-                          <span className="shrink-0 text-primary">•</span>
-                          <span>{bullet}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {item.note && (
-                    <div className="border-t border-border/40 pt-2">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        메모
-                      </p>
-                      <p className="text-sm text-foreground">{item.note}</p>
-                    </div>
-                  )}
+                <div className={cn('mt-3 rounded-lg border border-border/60 px-3 py-3', styles.bg)}>
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    메모
+                  </p>
+                  <p className="text-sm leading-relaxed text-foreground">{item.note}</p>
                 </div>
               </CollapsibleContent>
             </Collapsible>

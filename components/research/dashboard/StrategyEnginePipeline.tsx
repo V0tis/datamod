@@ -8,6 +8,7 @@ import { getAnalysisErrorMessage } from '@/lib/analysis-error-messages'
 import { getProviderDisplayName, getProviderStatusKo } from '@/lib/ai/provider-display'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
 
 /** AI Analysis Timeline - 8 steps: 5파이프라인 + 리스크평가 + 기회점수산출 + 완료 */
 const PIPELINE_STAGES = [
@@ -41,6 +42,7 @@ const STREAM_TO_INDEX: Record<string, number> = {
   post_processing_key_metrics: 7,
   post_processing_creative: 7,
   post_processing_saving: 7,
+  final_refining: 7,
   done: 8,
 }
 
@@ -91,6 +93,8 @@ export interface StrategyEnginePipelineProps {
   aiPrimaryModel?: 'gemini' | 'groq'
   /** reportId - 변경 시 타임라인 상태 초기화 (stale error 방지) */
   resultId?: string | null
+  /** 스트리밍 중 진행 메타(최종 정제 문구 등) */
+  streamingProgressMeta?: AnalysisProgressMeta | null
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -345,6 +349,7 @@ export function StrategyEnginePipeline({
   embedded = false,
   aiPrimaryModel = 'gemini',
   resultId,
+  streamingProgressMeta = null,
   className,
 }: StrategyEnginePipelineProps) {
   const [expanded, setExpanded] = useState(!allCompleted)
@@ -407,7 +412,11 @@ export function StrategyEnginePipeline({
         typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
       )
         return 'completed'
-      const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
+      const isPostProcessing =
+        streamingStepId &&
+        (streamingStepId.startsWith('post_processing_') ||
+          streamingStepId === 'post_processing' ||
+          streamingStepId === 'final_refining')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
     if (i === 7) {
@@ -416,7 +425,11 @@ export function StrategyEnginePipeline({
         typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
       )
         return 'completed'
-      const isPostProcessing = streamingStepId && (streamingStepId.startsWith('post_processing_') || streamingStepId === 'post_processing')
+      const isPostProcessing =
+        streamingStepId &&
+        (streamingStepId.startsWith('post_processing_') ||
+          streamingStepId === 'post_processing' ||
+          streamingStepId === 'final_refining')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
     if (i === 8) return allCompleted ? 'completed' : 'pending'
@@ -534,7 +547,12 @@ export function StrategyEnginePipeline({
                   </p>
                   {getStatus(currentIdx) === 'running' && (
                     <p className={cn('text-muted-foreground mt-1', !embedded ? 'text-sm' : 'text-xs')}>
-                      {getAnalysisActivityMessage(streamingStepId ?? currentStage?.id ?? 'done', currentIdx, { short: true, elapsedMs: stepElapsedMs, currentArticleTitle })}
+                      {getAnalysisActivityMessage(streamingStepId ?? currentStage?.id ?? 'done', currentIdx, {
+                        short: true,
+                        elapsedMs: stepElapsedMs,
+                        currentArticleTitle,
+                        progressMeta: streamingProgressMeta ?? undefined,
+                      })}
                     </p>
                   )}
                   {getStatus(currentIdx) === 'completed' && allCompleted && (
@@ -682,7 +700,12 @@ export function StrategyEnginePipeline({
                           <p className="text-xs text-muted-foreground">
                             {retryMessage && i === effectiveIndex
                               ? retryMessage
-                              : getAnalysisActivityMessage(i === effectiveIndex ? (streamingStepId ?? stage.id) : stage.id, i, { short: true, elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined, currentArticleTitle: i === effectiveIndex ? currentArticleTitle : undefined })}
+                              : getAnalysisActivityMessage(i === effectiveIndex ? (streamingStepId ?? stage.id) : stage.id, i, {
+                                  short: true,
+                                  elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined,
+                                  currentArticleTitle: i === effectiveIndex ? currentArticleTitle : undefined,
+                                  progressMeta: i === effectiveIndex ? streamingProgressMeta ?? undefined : undefined,
+                                })}
                           </p>
                         )}
                       </div>

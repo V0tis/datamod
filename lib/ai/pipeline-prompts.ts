@@ -112,12 +112,13 @@ export const INSIGHT_EXTRACTION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
    - "impact": 매출·점유·진입 타이밍·단가·규제 등 DATA가 허용하는 파급을 구체적으로.
    - "reason": 이번 주·스프린트 안에서 PM이 할 수 있는 판단·실험·검증 행동으로 연결.
    - "score": 선택, 1~10.
+   - "source_timestamp": 선택, ISO 8601 문자열. DATA·뉴스 인용 시점이 명확하면 그 기준 시각을 넣는다. 생략 시 서버가 분석 완료 시각을 사용한다.
 
 2. "key_insights", "opportunity_signals", "risk_signals" 배열을 DATA에서 채운다.
 
 Format: {
   "core_insights": [
-    { "title": "제목", "summary": "요약", "impact": "비즈니스 영향", "reason": "의사결정·실행 연결" }
+    { "title": "제목", "summary": "요약", "impact": "비즈니스 영향", "reason": "의사결정·실행 연결", "source_timestamp": "2026-04-08T03:00:00.000Z" }
   ],
   "key_insights": ["문자열"],
   "opportunity_signals": [
@@ -225,12 +226,33 @@ Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·
     "entry_strategy": "진입 전략 요약",
     "entry_explanation": "한 줄"
   },
-  "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] }
+  "swot_analysis": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
+  "jtbd": {
+    "functional_jobs": ["업무·효율 관점에서 사용자가 달성하려는 핵심 과제"],
+    "social_jobs": ["타인·조직·규범과의 관계에서의 니즈"],
+    "emotional_jobs": ["정서·불안·만족과 관련된 근본 동기"]
+  },
+  "porter_5_forces": {
+    "new_entrants": ["진입 위협 근거 한 줄"],
+    "supplier_power": ["공급자 교섭력 근거"],
+    "buyer_power": ["구매자 교섭력 근거"],
+    "substitutes": ["대체재·대안 근거"],
+    "rivalry": ["기존 경쟁 강도 근거"],
+    "scores": {
+      "new_entrants": 3,
+      "supplier_power": 3,
+      "buyer_power": 3,
+      "substitutes": 3,
+      "rivalry": 3
+    }
+  }
 }
 - steps는 **최대 6개**까지. 핵심 실행 순서만.
 - priority_action은 **하나**만 (최우선 1건).
 - strategic_decision_layer·swot_analysis 각 필드 값은 짧게 (항목당 1줄 권장).
-Required: goal, priority_action (action 필수), steps(1개 이상 권장, 최대 6). strategic_decision_layer·swot_analysis는 DATA가 있으면 채운다. All text in Korean.`
+- jtbd: functional_jobs·social_jobs·emotional_jobs 각 **2~4개** 짧은 구(한국어). pains/main_jobs와 중복되지 않게 역할을 나눈다.
+- porter_5_forces: 각 힘마다 근거 배열 1~2문장. scores의 각 값은 **1~5 정수**(5=해당 힘이 매우 강함/산업 수익 압박 큼).
+Required: goal, priority_action (action 필수), steps(1개 이상 권장, 최대 6). strategic_decision_layer·swot_analysis·jtbd·porter_5_forces는 DATA가 있으면 채운다. All text in Korean.`
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -249,7 +271,7 @@ export function buildPMActionPlanPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `위 DATA로 슬림 스키마를 채운다: goal, steps(최대 6), priority_action, strategic_decision_layer, swot_analysis. 각 step·priority_action은 측정 가능한 다음 행동(누가·무엇을·언제)에 가깝게. 중복 액션 문장은 피한다.`,
+    task: `위 DATA로 슬림 스키마를 채운다: goal, steps(최대 6), priority_action, strategic_decision_layer, swot_analysis, jtbd(기능적/사회적/정서적 jobs), porter_5_forces(근거 배열 + scores 1~5). 전략·기회·리스크·경쟁 문맥을 SWOT·포터·JTBD에 **일관되게** 반영한다. 각 step·priority_action은 측정 가능한 다음 행동에 가깝게.`,
     suffix: `응답은 유효 JSON 객체 하나만. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Info } from 'lucide-react'
 import Link from 'next/link'
 import { AuthPageShell } from '@/components/auth/auth-page-shell'
+import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 
 const loginRequiredReason = 'login_required'
 
@@ -148,13 +149,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
-          로딩 중…
-        </div>
-      }
-    >
+    <Suspense fallback={<FullPageBrandLoader message="로딩 중…" />}>
       <LoginForm />
     </Suspense>
   )

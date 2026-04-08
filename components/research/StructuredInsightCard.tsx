@@ -6,11 +6,15 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { motionConfig } from '@/lib/motion-config'
+import { InsightDataFreshness } from '@/components/insights/InsightDataFreshness'
+import { MarkdownBody } from '@/components/ui/markdown-body'
 
 export interface StructuredInsight {
   title: string
   /** Short summary (1–2 sentences) */
   summary: string
+  /** 분석·수집 기준 시각 (ISO) — 신선도 배지 */
+  sourceTimestamp?: string
   /** Impact: why this insight matters */
   impact?: string
   /** Reason / implication for product or PM action */
@@ -43,23 +47,6 @@ function extractKeyMetrics(text: string): string[] {
     if (m) metrics.push(...m)
   }
   return [...new Set(metrics)].slice(0, 4)
-}
-
-/** Render text with key metrics highlighted */
-function TextWithHighlights({ text, keyMetrics }: { text: string; keyMetrics?: string[] }) {
-  if (!keyMetrics?.length) return <>{text}</>
-  const escaped = keyMetrics.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
-  const re = new RegExp(`(${escaped})`, 'g')
-  const parts = text.split(re).map((seg, i) =>
-    keyMetrics.includes(seg) ? (
-      <mark key={i} className="bg-primary/20 text-primary font-semibold rounded px-0.5">
-        {seg}
-      </mark>
-    ) : (
-      seg
-    )
-  )
-  return <>{parts}</>
 }
 
 /**
@@ -96,24 +83,38 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
       )}
     >
       <div className="p-5 sm:p-5 md:p-6 lg:p-7">
-        {!titleSameAsContents && (
-          <h4 className="text-sm font-semibold text-foreground leading-snug mb-1.5 line-clamp-1">
-            {displayTitle}
-          </h4>
+        {(!titleSameAsContents || insight.sourceTimestamp) && (
+          <div className="flex justify-between items-start gap-2 mb-1.5">
+            <div className="min-w-0 flex-1">
+              {!titleSameAsContents && (
+                <h4 className="text-sm font-semibold text-foreground leading-snug line-clamp-1">
+                  {displayTitle}
+                </h4>
+              )}
+            </div>
+            {insight.sourceTimestamp ? (
+              <InsightDataFreshness iso={insight.sourceTimestamp} className="shrink-0 max-w-[11rem] text-right leading-tight" />
+            ) : null}
+          </div>
         )}
-        <p className={cn('text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3', titleSameAsContents && 'text-foreground')}>
-          <TextWithHighlights text={displaySummary} keyMetrics={metrics.length ? metrics : undefined} />
-        </p>
+        <div
+          className={cn(
+            'line-clamp-3 [&_.rin-doc]:text-xs sm:[&_.rin-doc]:text-sm [&_.rin-doc]:text-muted-foreground',
+            titleSameAsContents && '[&_.rin-doc]:text-foreground'
+          )}
+        >
+          <MarkdownBody className="text-xs sm:text-sm">{displaySummary}</MarkdownBody>
+        </div>
         {showImpact && (
           <div className="mt-2 space-y-1.5">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">영향</p>
-            <p className="text-xs text-foreground leading-relaxed">{displayImpact}</p>
+            <MarkdownBody className="text-xs">{displayImpact}</MarkdownBody>
           </div>
         )}
         {showReason && (
           <div className="mt-2 space-y-1.5">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">근거 / 시사점</p>
-            <p className="text-xs text-foreground leading-relaxed">{displayReason}</p>
+            <MarkdownBody className="text-xs">{displayReason}</MarkdownBody>
           </div>
         )}
         {metrics.length > 0 && (
@@ -154,19 +155,19 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           {hasLongSummary && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">인사이트 요약</p>
-              <p className="text-sm text-foreground leading-relaxed">{insight.summary}</p>
+              <MarkdownBody className="text-sm">{insight.summary}</MarkdownBody>
             </div>
           )}
           {showImpact && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">영향</p>
-              <p className="text-sm text-foreground leading-relaxed"><TextWithHighlights text={impact} keyMetrics={metrics} /></p>
+              <MarkdownBody className="text-sm">{impact}</MarkdownBody>
             </div>
           )}
           {showReason && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">근거 / 시사점</p>
-              <p className="text-sm text-foreground leading-relaxed"><TextWithHighlights text={reason} keyMetrics={metrics} /></p>
+              <MarkdownBody className="text-sm">{reason}</MarkdownBody>
             </div>
           )}
         </div>

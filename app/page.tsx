@@ -6,10 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, X, Sparkles, BarChart3, Clock, Search } from 'lucide-react'
+import { Loader2, X, Sparkles, BarChart3, Search, Play, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
-import { AnalysisProgressOverlay } from '@/components/research/AnalysisProgressOverlay'
+import { AnalysisProgressOverlay, useAnalysisTypewriter } from '@/components/research/AnalysisProgressOverlay'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
@@ -21,6 +21,8 @@ import { TimeAgo } from '@/components/time-ago'
 import { CountryChips, COUNTRY_CHIP_CODES, type CountryChipCode } from '@/components/country-chips'
 import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
+import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
+import { RinLogo } from '@/components/rin-logo'
 import type { SavedInsight } from '@/lib/insights-types'
 import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
 import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
@@ -407,6 +409,33 @@ function RinAISearchInner() {
   }, [showAnalysisUI])
   const stepElapsedMs = showAnalysisUI ? tickTime - stepStartTime : 0
 
+  const refiningPhaseDashboard =
+    streamingState.status === 'running' || streamingState.status === 'streaming'
+      ? streamingState.progressMeta?.refiningPhase
+      : undefined
+
+  const analysisProgressLine = useMemo(() => {
+    if (streamingState.status !== 'running' && streamingState.status !== 'streaming') return ''
+    return getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, {
+      elapsedMs: stepElapsedMs,
+      currentArticleTitle: streamingState.currentArticleTitle,
+      progressMeta: streamingState.progressMeta,
+    })
+  }, [streamingState, stepElapsedMs])
+
+  const dashboardProgressPercent = useMemo(() => {
+    if (refiningPhaseDashboard === 1 || refiningPhaseDashboard === 2) return 95
+    if (refiningPhaseDashboard === 3) return 100
+    return Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)
+  }, [refiningPhaseDashboard, progressStepIndex])
+
+  const bannerAnalysisTyping = useAnalysisTypewriter(
+    analysisProgressLine,
+    showAnalysisUI &&
+      (streamingState.status === 'running' || streamingState.status === 'streaming') &&
+      Boolean(analysisProgressLine)
+  )
+
   const displayName = useMemo(() => {
     if (!user) return 'PM'
     const meta = user.user_metadata as { full_name?: string } | undefined
@@ -422,6 +451,10 @@ function RinAISearchInner() {
     if (showAnalysisUI) {
       const state = streamingState
       if (state.status === 'running' || state.status === 'streaming') {
+        const rp = state.progressMeta?.refiningPhase
+        if (rp === 1 || rp === 2 || rp === 3) {
+          return `최종 정제 중… (${rp}/3)`
+        }
         return `분석 중... (${progressStepIndex + 1}/${PROGRESS_STEPS.length})`
       }
       return '분석 중...'
@@ -430,11 +463,7 @@ function RinAISearchInner() {
   }
 
   if (user === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    )
+    return <FullPageBrandLoader />
   }
   if (user === null) {
     return <LandingPage />
@@ -446,8 +475,9 @@ function RinAISearchInner() {
     <div className={cn(dashboardPageBg, 'relative min-h-screen')}>
       {navigatingFromTrend && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" aria-label="이동 중">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <div className="flex flex-col items-center gap-4">
+            <RinLogo className="h-8 w-8 text-foreground" />
+            <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
             <p className="text-sm text-muted-foreground">분석 페이지로 이동 중...</p>
           </div>
         </div>
@@ -466,6 +496,12 @@ function RinAISearchInner() {
               currentStep={'currentStep' in streamingState ? streamingState.currentStep : 0}
               isRunning={streamingState.status === 'running' || streamingState.status === 'streaming'}
               keyword={currentAnalysisKeyword || query}
+              detailMessage={analysisProgressLine || undefined}
+              refiningPhase={
+                streamingState.status === 'running' || streamingState.status === 'streaming'
+                  ? streamingState.progressMeta?.refiningPhase ?? null
+                  : null
+              }
               showAnimation
             />
           </motion.div>
@@ -515,7 +551,7 @@ function RinAISearchInner() {
                   id="dashboard-analysis"
                   compact
                   className="shadow-md ring-1 ring-slate-200/80 dark:ring-zinc-700/90 bg-gradient-to-b from-slate-50/95 via-white to-white dark:from-zinc-900/85 dark:via-zinc-950 dark:to-zinc-950 sm:rounded-2xl"
-                  icon={<Search className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden />}
+                  icon={<Search size={20} className="text-sky-600 dark:text-sky-400" aria-hidden />}
                   title="시장 키워드"
                   description="검색창에 키워드를 입력하고 바로 시장 분석을 시작하세요."
                   footer={
@@ -533,7 +569,7 @@ function RinAISearchInner() {
                         showAnalysisUI && 'opacity-70'
                       )}
                     >
-                      <Sparkles className="mr-3 h-5 w-5 shrink-0 text-primary/60" />
+                      <Sparkles size={20} className="mr-2 shrink-0 text-primary/60" aria-hidden />
                       <Input
                         ref={searchInputRef}
                         type="search"
@@ -554,8 +590,9 @@ function RinAISearchInner() {
                             type="submit"
                             disabled={!query.trim()}
                             size="sm"
-                            className="h-10 rounded-xl bg-[#2AC1BC] px-6 text-sm font-bold text-white hover:bg-[#26b0ab]"
+                            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2AC1BC] px-6 text-sm font-bold text-white hover:bg-[#26b0ab]"
                           >
+                            <Play size={20} className="shrink-0" fill="currentColor" aria-hidden />
                             분석 시작
                           </Button>
                         )}
@@ -616,24 +653,31 @@ function RinAISearchInner() {
                   {showAnalysisUI && streamingState.status !== 'idle' && (
                     <div className="rounded-xl border border-[#E5E7EB] bg-sky-50 px-4 py-3 dark:border-zinc-700 dark:bg-sky-950/30">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                        <Loader2 size={20} className="shrink-0 animate-spin text-primary" aria-hidden />
                         <p className="min-w-0 flex-1 text-sm font-medium text-foreground">
                           {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                            ? getAnalysisActivityMessage(streamingState.stepId, streamingState.currentStep, {
-                            elapsedMs: stepElapsedMs,
-                            currentArticleTitle: (streamingState as { currentArticleTitle?: string }).currentArticleTitle,
-                          })
+                            ? bannerAnalysisTyping
                             : getButtonLabel()}
                         </p>
                         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                          {(streamingState.status === 'running' || streamingState.status === 'streaming') && typeof streamingState.currentStep === 'number'
-                            ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
-                            : ''}
+                          {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                          (refiningPhaseDashboard === 1 || refiningPhaseDashboard === 2 || refiningPhaseDashboard === 3)
+                            ? `정제 ${refiningPhaseDashboard}/3`
+                            : (streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                                typeof streamingState.currentStep === 'number'
+                              ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
+                              : ''}
                         </span>
                       </div>
                       {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
                         <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted/60">
-                          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.min(100, ((progressStepIndex + 1) / PROGRESS_STEPS.length) * 100)}%` }} />
+                          <div
+                            className={cn(
+                              'h-full rounded-full bg-primary',
+                              refiningPhaseDashboard === 3 ? 'transition-all duration-[550ms] ease-out' : 'transition-all duration-500'
+                            )}
+                            style={{ width: `${dashboardProgressPercent}%` }}
+                          />
                         </div>
                       )}
                     </div>
@@ -808,7 +852,11 @@ function RinAISearchInner() {
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex min-w-0 flex-1 items-start gap-2">
-                                    <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-zinc-500" aria-hidden />
+                                    {analyzing ? (
+                                      <Loader2 size={20} className="mt-0.5 shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
+                                    ) : (
+                                      <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                                    )}
                                     <span className="truncate text-sm font-semibold text-neutral-900 dark:text-zinc-100">{r.keyword}</span>
                                   </div>
                                   {r.opportunity_score != null && !analyzing && (
@@ -817,8 +865,8 @@ function RinAISearchInner() {
                                     </span>
                                   )}
                                   {analyzing && (
-                                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                      <Loader2 size={16} className="animate-spin" aria-hidden />
                                       {stepNum}/{PROGRESS_STEPS.length}
                                     </span>
                                   )}
@@ -861,11 +909,7 @@ function RinAISearchInner() {
 
 export default function RinAISearch() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    }>
+    <Suspense fallback={<FullPageBrandLoader />}>
       <RinAISearchInner />
     </Suspense>
   )

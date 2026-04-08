@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { LineChart, Sparkles } from 'lucide-react'
+import { LineChart, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dashboardCardClass, dashboardMint } from '@/components/dashboard/dashboard-tokens'
@@ -55,12 +55,12 @@ export function DashboardInsightStrip({
         <Button
           type="button"
           size="sm"
-          className="border-0 font-semibold text-white shadow-sm hover:opacity-95"
+          className="inline-flex items-center gap-2 border-0 font-semibold text-white shadow-sm hover:opacity-95"
           style={{ backgroundColor: dashboardMint }}
           onClick={onStartAnalysis}
           disabled={startDisabled || loading}
         >
-          <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+          <Play size={20} className="shrink-0" fill="currentColor" aria-hidden />
           분석 시작
         </Button>
         {data.strategyHref ? (

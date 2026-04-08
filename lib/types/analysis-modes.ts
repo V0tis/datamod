@@ -144,10 +144,37 @@ export function getStepIndex(mode: AnalysisMode, stepId: string): number {
  * Explicit streaming state machine for analysis progress.
  * This replaces the implicit status derived from job polling.
  */
+/** runResearch 스트림에서 전달되는 진행 상세(건수·시각·출처) */
+export type AnalysisProgressMeta = {
+  newsCount?: number
+  collectedAt?: string
+  dataPointCount?: number
+  sourceLabel?: string
+  /** 최종 정제 구간( final_refining ) — 1~3 */
+  refiningPhase?: 1 | 2 | 3
+  refiningMessage?: string
+}
+
 export type StreamingState =
   | { status: 'idle' }
-  | { status: 'running'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string; currentArticleTitle?: string }
-  | { status: 'streaming'; currentStep: number; totalSteps: number; stepId: string; retryMessage?: string; currentArticleTitle?: string }
+  | {
+      status: 'running'
+      currentStep: number
+      totalSteps: number
+      stepId: string
+      retryMessage?: string
+      currentArticleTitle?: string
+      progressMeta?: AnalysisProgressMeta
+    }
+  | {
+      status: 'streaming'
+      currentStep: number
+      totalSteps: number
+      stepId: string
+      retryMessage?: string
+      currentArticleTitle?: string
+      progressMeta?: AnalysisProgressMeta
+    }
   | { status: 'completed'; reportId: string | null }
   | { status: 'error'; message: string; lastSuccessfulStep: number | null }
 
@@ -175,7 +202,8 @@ export function createStreamingState(
   currentStep: number,
   stepId: string,
   retryMessage?: string,
-  currentArticleTitle?: string
+  currentArticleTitle?: string,
+  progressMeta?: AnalysisProgressMeta
 ): StreamingState {
   return {
     status: 'streaming',
@@ -184,6 +212,7 @@ export function createStreamingState(
     stepId,
     ...(retryMessage ? { retryMessage } : {}),
     ...(currentArticleTitle ? { currentArticleTitle } : {}),
+    ...(progressMeta && Object.keys(progressMeta).length > 0 ? { progressMeta } : {}),
   }
 }
 

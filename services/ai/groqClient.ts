@@ -23,6 +23,14 @@ export type CompleteChatResult = {
   quotaError?: boolean
   /** Fallback message when AI fails (for UI display) */
   fallbackMessage?: string
+  /** OpenAI-compatible usage when present */
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
+  /** Resolved model id for logging */
+  model?: string
 }
 
 /**
@@ -55,6 +63,7 @@ export async function completeChat(
         let data: {
           choices?: Array<{ message?: { content?: string } }>
           error?: { message?: string }
+          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
         }
         try {
           data = (await res.json()) as typeof data
@@ -80,7 +89,11 @@ export async function completeChat(
     if (!text) {
       return { text: null, fallbackMessage: AI_FALLBACK_MESSAGES.GENERIC }
     }
-    return { text }
+    return {
+      text,
+      model,
+      usage: data?.usage,
+    }
   } catch (e) {
     const err = e as { status?: number; message?: string }
     const is429 = err?.status === 429

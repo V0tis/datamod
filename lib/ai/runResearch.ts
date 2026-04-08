@@ -7,7 +7,10 @@ import Parser from 'rss-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { BASE_MARKDOWN_PROMPT } from './base-prompt'
-import { generateText, runTabAnalysis, completeChat } from './unified-ai-service'
+import { runTabAnalysis } from './unified-ai-service'
+import { runPipelineGeminiGroqText, type LlmRecordingContext } from '@/lib/ai/pipeline-text-completion'
+import { generateTextWithUsage } from '@/services/ai/geminiClient'
+import { recordLlmUsage } from '@/lib/llm-usage-record'
 import {
   TASK_TRENDS_SYSTEM,
   buildTaskTrendsPromptParts,
@@ -35,11 +38,13 @@ import {
 } from './pipeline-prompts'
 import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
-import { is429OrQuotaError, isFallbackTriggerError, getFallbackErrorReason, sleep, getExponentialDelayMs } from './retry-with-backoff'
+import { is429OrQuotaError, sleep } from './retry-with-backoff'
 import { computeOpportunityScore } from './opportunity-score-formula'
 import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
+import { enrichPorter5Forces, type Porter5ForcesShape } from '@/lib/strategy-framework-mapper'
 import { hasNonKoreanContent, ensureKoreanText } from '@/lib/ai/language-validate'
+import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
 
 const AI_BASE_DELAY_MS = 1000
 const AI_MAX_RETRIES = 2
@@ -59,7 +64,6 @@ function toUserFriendlyError(err: unknown, fallback: string): string {
   if (is429OrQuotaError(err)) return RATE_LIMIT_GRACEFUL_MESSAGE
   return err instanceof Error ? err.message : fallback
 }
-import { trackUsage } from '@/lib/usage'
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 import {
   loadPipelineResumeState,
@@ -150,12 +154,28 @@ export type PostProcessingStepId = 'key_metrics' | 'creative' | 'saving'
 
 export type ResearchStreamEvent =
   | { type: 'analysis_started'; analysisId: string }
-  | { type: 'task'; task: AnalysisTaskId | 'article_extraction' | 'article_summary'; status: 'running' | 'completed' | 'failed'; data?: TaskCompletedPayload[AnalysisTaskId]; error?: string; fallbackMessage?: string; retryMessage?: string; retryAttempt?: number; provider?: AnalysisStepProvider | null; fallback_used?: boolean; primaryProviderError?: string; currentArticleTitle?: string }
+  | {
+      type: 'task'
+      task: AnalysisTaskId | 'article_extraction' | 'article_summary'
+      status: 'running' | 'completed' | 'failed'
+      data?: TaskCompletedPayload[AnalysisTaskId]
+      error?: string
+      fallbackMessage?: string
+      retryMessage?: string
+      retryAttempt?: number
+      provider?: AnalysisStepProvider | null
+      fallback_used?: boolean
+      primaryProviderError?: string
+      currentArticleTitle?: string
+      progressMeta?: AnalysisProgressMeta
+    }
   | { type: 'news'; items: NewsItem[] }
   | { type: 'pass1'; summary: string; temperature: number; insights: string[] }
   | { type: 'pass2'; structured: StructuredAnalysisFields }
   | { type: 'post_processing'; stepId: PostProcessingStepId }
   | { type: 'creative'; groqText: string | null; geminiText: string | null }
+  /** LLM·저장 완료 후 클라이언트로 done 전 1.5초 구간 — 최종 정제 UX */
+  | { type: 'final_refining'; phase: 1 | 2 | 3; message: string }
   | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
@@ -301,7 +321,8 @@ async function runTrendTask(
   articles: ArticleForAnalysis[],
   primaryProvider: AIPrimaryModel,
   webContext?: string,
-  prePromptArticleContentChars?: number
+  prePromptArticleContentChars?: number,
+  llmCtx?: LlmRecordingContext
 ): Promise<TrendTaskResult> {
   const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
   if (!hasData) {
@@ -318,51 +339,21 @@ async function runTrendTask(
   if (!prompt.trim()) {
     throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
   }
-  let text!: string
-  let usedFallback = false
-  let primaryProviderError: string | undefined
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_TRENDS_SYSTEM, maxOutputTokens: 800, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_TRENDS_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 800 })
-  const primaryIsGemini = primaryProvider === 'gemini'
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    try {
-      if (primaryIsGemini) {
-        text = (await tryGemini()) ?? ''
-      } else if (groqKey) {
-        const groqRes = await tryGroq()
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-        text = groqRes.text
-      } else throw new Error('Groq key not available')
-      break
-    } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-      } else if (isFallbackTriggerError(err)) {
-        primaryProviderError = getFallbackErrorReason(err)
-        try {
-          if (primaryIsGemini && groqKey) {
-            const groqRes = await tryGroq()
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            text = groqRes.text
-          } else if (!primaryIsGemini && geminiKey) {
-            const gemRes = await tryGemini()
-            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-          } else throw err
-          usedFallback = true
-          break
-        } catch {
-          throw err
-        }
-      } else {
-        throw err
-      }
-    }
-  }
-  // Track usage when Gemini was used (primary or fallback)
-  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
-  if (usedGemini) await trackUsage('gemini')
+  const completion = await runPipelineGeminiGroqText({
+    step: 'trend_analysis',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: TASK_TRENDS_SYSTEM,
+    prompt,
+    maxOutputTokens: 800,
+    groqMaxTokens: 800,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
   const fallbackTrend = {
     market_score: 50 as number,
     summary: '',
@@ -401,7 +392,8 @@ Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } i
 /** Summarize articles with AI (batch). Fallback: use title or content slice. */
 async function summarizeArticlesWithAI(
   articles: ArticleWithContent[],
-  geminiKey: string
+  geminiKey: string,
+  llmCtx?: LlmRecordingContext
 ): Promise<ArticleForAnalysis[]> {
   if (articles.length === 0) return []
   const prompt = `Summarize each article in 2-3 sentences (Korean). Focus on facts and market relevance.
@@ -416,7 +408,7 @@ ${articles
 Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
 
   try {
-    const text = await generateText({
+    const gen = await generateTextWithUsage({
       apiKey: geminiKey,
       prompt,
       systemInstruction: ARTICLE_SUMMARY_SYSTEM,
@@ -424,6 +416,19 @@ Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
       model: GEMINI_MODEL,
       isRetryable: () => false,
     })
+    if (llmCtx) {
+      await recordLlmUsage(llmCtx.supabase, {
+        userId: llmCtx.userId,
+        analysisId: llmCtx.analysisId,
+        stepName: 'article_summary',
+        provider: 'gemini',
+        model: gen.model,
+        promptTokens: gen.promptTokenCount,
+        completionTokens: gen.candidatesTokenCount,
+        totalTokens: gen.totalTokenCount,
+      })
+    }
+    const text = gen.text
     const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
     const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
     return articles.map((a, i) => ({
@@ -459,7 +464,8 @@ async function runCompetitionTask(
   primaryProvider: AIPrimaryModel,
   webContext?: string,
   competitorWebContext?: string,
-  prePromptArticleContentChars?: number
+  prePromptArticleContentChars?: number,
+  llmCtx?: LlmRecordingContext
 ): Promise<CompetitionTaskResult> {
   const hasData =
     (competitorWebContext?.trim().length ?? 0) > 0 ||
@@ -480,50 +486,21 @@ async function runCompetitionTask(
     sections,
     originalSourceChars: prePromptArticleContentChars,
   })
-  let text!: string
-  let usedFallback = false
-  let primaryProviderError: string | undefined
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: TASK_COMPETITION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: TASK_COMPETITION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
-  const primaryIsGemini = primaryProvider === 'gemini'
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    try {
-      if (primaryIsGemini) {
-        text = (await tryGemini()) ?? ''
-      } else if (groqKey) {
-        const groqRes = await tryGroq()
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-        text = groqRes.text
-      } else throw new Error('Groq key not available')
-      break
-    } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-      } else if (isFallbackTriggerError(err)) {
-        primaryProviderError = getFallbackErrorReason(err)
-        try {
-          if (primaryIsGemini && groqKey) {
-            const groqRes = await tryGroq()
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            text = groqRes.text
-          } else if (!primaryIsGemini && geminiKey) {
-            const gemRes = await tryGemini()
-            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-          } else throw err
-          usedFallback = true
-          break
-        } catch {
-          throw err
-        }
-      } else {
-        throw err
-      }
-    }
-  }
-  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
-  if (usedGemini) await trackUsage('gemini')
+  const completion = await runPipelineGeminiGroqText({
+    step: 'competition_analysis',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: TASK_COMPETITION_SYSTEM,
+    prompt,
+    maxOutputTokens: 1200,
+    groqMaxTokens: 1200,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
   const fallbackCompetition: CompetitionTaskResult['competitionData'] = {
     competitive_landscape: [],
     market_structure: undefined,
@@ -593,6 +570,8 @@ export type CoreInsightItem = {
   impact: string
   reason: string
   score?: number
+  /** 데이터·분석 기준 시각 (ISO). 미입력 시 파이프라인 완료 시각으로 채움 */
+  source_timestamp?: string
 }
 
 type InsightExtractionResult = {
@@ -608,12 +587,18 @@ function normalizeCoreInsight(raw: Record<string, unknown>): CoreInsightItem | n
   const impact = typeof raw.impact === 'string' ? raw.impact.trim() : ''
   const reason = typeof raw.reason === 'string' ? raw.reason.trim() : ''
   if (!summary) return null
+  let source_timestamp: string | undefined
+  if (typeof raw.source_timestamp === 'string' && raw.source_timestamp.trim()) {
+    const parsed = new Date(raw.source_timestamp.trim())
+    if (!Number.isNaN(parsed.getTime())) source_timestamp = parsed.toISOString()
+  }
   return {
     title: title || summary.slice(0, 15).trim() + (summary.length > 15 ? '…' : ''),
     summary,
     impact: impact || '시장·제품 의사결정에 참고할 수 있는 요인입니다.',
     reason: reason || '분석 데이터를 바탕으로 도출된 인사이트입니다.',
     score: typeof raw.score === 'number' ? Math.min(10, Math.max(1, Math.round(raw.score))) : undefined,
+    ...(source_timestamp ? { source_timestamp } : {}),
   }
 }
 
@@ -684,56 +669,28 @@ async function runInsightExtractionTask(
   marketOverview: string,
   competitionSummary: string,
   primaryProvider: AIPrimaryModel,
-  fallbackContext: { trendSignals: string[]; marketScore: number }
+  fallbackContext: { trendSignals: string[]; marketScore: number },
+  llmCtx?: LlmRecordingContext
 ): Promise<{ data: InsightExtractionResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary)
   if (!prompt?.trim()) {
     throw new Error('인사이트 추출에 필요한 데이터가 없습니다. 트렌드·경쟁 분석 결과를 확인해 주세요.')
   }
-  let text!: string
-  let usedFallback = false
-  let primaryProviderError: string | undefined
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: INSIGHT_EXTRACTION_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: INSIGHT_EXTRACTION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
-  const primaryIsGemini = primaryProvider === 'gemini'
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    try {
-      if (primaryIsGemini) {
-        text = (await tryGemini()) ?? ''
-      } else if (groqKey) {
-        const groqRes = await tryGroq()
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-        text = groqRes.text
-      } else throw new Error('Groq key not available')
-      break
-    } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-      } else if (isFallbackTriggerError(err)) {
-        primaryProviderError = getFallbackErrorReason(err)
-        try {
-          if (primaryIsGemini && groqKey) {
-            const groqRes = await tryGroq()
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            text = groqRes.text
-          } else if (!primaryIsGemini && geminiKey) {
-            const gemRes = await tryGemini()
-            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-          } else throw err
-          usedFallback = true
-          break
-        } catch {
-          throw err
-        }
-      } else {
-        throw err
-      }
-    }
-  }
-  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
-  if (usedGemini) await trackUsage('gemini')
+  const completion = await runPipelineGeminiGroqText({
+    step: 'insight_extraction',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: INSIGHT_EXTRACTION_SYSTEM,
+    prompt,
+    maxOutputTokens: 1200,
+    groqMaxTokens: 1200,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
   const fallbackInsight: InsightExtractionResult = {
     key_insights: [],
     opportunity_signals: [],
@@ -767,6 +724,12 @@ async function runInsightExtractionTask(
     )
   }
 
+  const insightAsOf = new Date().toISOString()
+  core_insights = core_insights.map((c) => ({
+    ...c,
+    source_timestamp: c.source_timestamp ?? insightAsOf,
+  }))
+
   return {
     data: { key_insights, opportunity_signals, risk_signals, core_insights },
     usedFallback,
@@ -790,56 +753,28 @@ async function runStrategicRecommendationTask(
   marketOverview: string,
   competitionSummary: string,
   extractedInsights: InsightExtractionResult,
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  llmCtx?: LlmRecordingContext
 ): Promise<{ data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildStrategicRecommendationPrompt(keyword, marketOverview, competitionSummary, extractedInsights)
   if (!prompt?.trim()) {
     throw new Error('전략 제안에 필요한 데이터가 없습니다. 시장 개요·경쟁 분석 결과를 확인해 주세요.')
   }
-  let text!: string
-  let usedFallback = false
-  let primaryProviderError: string | undefined
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM, maxOutputTokens: 1000, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGIC_RECOMMENDATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1000 })
-  const primaryIsGemini = primaryProvider === 'gemini'
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-    try {
-      if (primaryIsGemini) {
-        text = (await tryGemini()) ?? ''
-      } else if (groqKey) {
-        const groqRes = await tryGroq()
-        if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-        text = groqRes.text
-      } else throw new Error('Groq key not available')
-      break
-    } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-      } else if (isFallbackTriggerError(err)) {
-        primaryProviderError = getFallbackErrorReason(err)
-        try {
-          if (primaryIsGemini && groqKey) {
-            const groqRes = await tryGroq()
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-            text = groqRes.text
-          } else if (!primaryIsGemini && geminiKey) {
-            const gemRes = await tryGemini()
-            text = (typeof gemRes === 'string' ? gemRes : '') ?? ''
-          } else throw err
-          usedFallback = true
-          break
-        } catch {
-          throw err
-        }
-      } else {
-        throw err
-      }
-    }
-  }
-  const usedGemini = primaryIsGemini ? !usedFallback : usedFallback
-  if (usedGemini) await trackUsage('gemini')
+  const completion = await runPipelineGeminiGroqText({
+    step: 'strategy_generation',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM,
+    prompt,
+    maxOutputTokens: 1000,
+    groqMaxTokens: 1000,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
   const fallbackOpp = flattenOpportunitySignalsForPrompt(extractedInsights.opportunity_signals)
   const fallbackRisk = flattenRiskSignalsForPrompt(extractedInsights.risk_signals)
   const fallbackStrategy: StrategicRecommendationResult = {
@@ -877,7 +812,8 @@ async function runPMActionPlanTask(
   strategySummary: string,
   opportunitiesSummary: string,
   risksSummary: string,
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  llmCtx?: LlmRecordingContext
 ): Promise<{
   executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -897,7 +833,15 @@ async function runPMActionPlanTask(
       entry_explanation?: string
     }
     swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
-    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
+    jtbd?: {
+      main_jobs?: string[]
+      pains?: string[]
+      gains?: string[]
+      functional_jobs?: string[]
+      social_jobs?: string[]
+      emotional_jobs?: string[]
+    }
+    porter_5_forces?: Porter5ForcesShape
     next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
   usedFallback: boolean
@@ -907,40 +851,26 @@ async function runPMActionPlanTask(
   if (!prompt?.trim()) {
     throw new Error('PM 액션 플랜에 필요한 데이터가 없습니다. 전략·기회·리스크 데이터를 확인해 주세요.')
   }
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: PM_ACTION_PLAN_SYSTEM, maxOutputTokens: 1200, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: PM_ACTION_PLAN_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 1200 })
-  const primaryIsGemini = primaryProvider === 'gemini'
+  let usedFallback = false
+  let primaryProviderError: string | undefined
   const getText = async (): Promise<string> => {
-    for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
-      try {
-        if (primaryIsGemini) return (await tryGemini()) ?? ''
-        if (groqKey) {
-          const groqRes = await tryGroq()
-          if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
-          return groqRes.text
-        }
-        throw new Error('Groq key not available')
-      } catch (err) {
-        if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
-          await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
-        } else if (isFallbackTriggerError(err)) {
-          try {
-            if (primaryIsGemini && groqKey) {
-              const groqRes = await tryGroq()
-              if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
-              return groqRes.text
-            }
-            if (!primaryIsGemini && geminiKey) return (await tryGemini()) ?? ''
-          } catch {
-            throw err
-          }
-          throw err
-        } else throw err
-      }
+    const r = await runPipelineGeminiGroqText({
+      step: 'execution_layer',
+      geminiKey,
+      groqKey,
+      primaryProvider,
+      systemInstruction: PM_ACTION_PLAN_SYSTEM,
+      prompt,
+      maxOutputTokens: 2000,
+      groqMaxTokens: 2000,
+      geminiModel: GEMINI_MODEL,
+      ctx: llmCtx,
+    })
+    if (r.usedFallback) {
+      usedFallback = true
+      primaryProviderError = r.primaryProviderError
     }
-    return ''
+    return r.text
   }
   let text = await getText()
   if (hasNonKoreanContent(text)) {
@@ -952,9 +882,6 @@ async function runPMActionPlanTask(
       text = await ensureKoreanText(text)
     }
   }
-  const usedFallback = false
-  const primaryProviderError: string | undefined = undefined
-  if (primaryIsGemini) await trackUsage('gemini')
   type ParsedShape = {
     priority_action?: { action?: string; reasoning?: string; expected_outcome?: string }
     product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
@@ -978,7 +905,15 @@ async function runPMActionPlanTask(
       entry_explanation?: string
     }
     swot_analysis?: { strengths?: unknown[]; weaknesses?: unknown[]; opportunities?: unknown[]; threats?: unknown[] }
-    jtbd?: { main_jobs?: unknown[]; pains?: unknown[]; gains?: unknown[] }
+    jtbd?: {
+      main_jobs?: unknown[]
+      pains?: unknown[]
+      gains?: unknown[]
+      functional_jobs?: unknown[]
+      social_jobs?: unknown[]
+      emotional_jobs?: unknown[]
+    }
+    porter_5_forces?: Record<string, unknown>
     next_actions_pm?: Array<{ action?: string; why?: string; how_to_execute?: string; priority?: string; estimated_effort?: string }>
   }
   const fallbackPm: ParsedShape = {
@@ -1094,13 +1029,78 @@ async function runPMActionPlanTask(
         threats: toStrArr(parsed.swot_analysis.threats),
       }
     : undefined
-  const jtbdRaw = parsed?.jtbd && typeof parsed.jtbd === 'object'
+  const clampPorterScore = (v: unknown): number | undefined => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(String(v), 10) : NaN
+    if (!Number.isFinite(n)) return undefined
+    return Math.min(5, Math.max(1, Math.round(n)))
+  }
+  const parsePorterFromParsed = (): Porter5ForcesShape | undefined => {
+    const raw = parsed?.porter_5_forces
+    if (!raw || typeof raw !== 'object') return undefined
+    const o = raw as Record<string, unknown>
+    const rivalry = toStrArr(o.rivalry)
+    const supplier_power = toStrArr(o.supplier_power)
+    const buyer_power = toStrArr(o.buyer_power)
+    const substitutes = toStrArr(o.substitutes)
+    const new_entrants = toStrArr(o.new_entrants)
+    const sc = o.scores && typeof o.scores === 'object' ? (o.scores as Record<string, unknown>) : null
+    const scores =
+      sc != null
+        ? {
+            new_entrants: clampPorterScore(sc.new_entrants),
+            supplier_power: clampPorterScore(sc.supplier_power),
+            buyer_power: clampPorterScore(sc.buyer_power),
+            substitutes: clampPorterScore(sc.substitutes),
+            rivalry: clampPorterScore(sc.rivalry),
+          }
+        : undefined
+    const scoresClean = scores
+      ? (Object.fromEntries(Object.entries(scores).filter(([, v]) => v != null)) as Porter5ForcesShape['scores'])
+      : undefined
+    const hasBullets =
+      rivalry.length +
+        supplier_power.length +
+        buyer_power.length +
+        substitutes.length +
+        new_entrants.length >
+      0
+    const hasScores = scoresClean && Object.keys(scoresClean).length > 0
+    if (!hasBullets && !hasScores) return undefined
+    return {
+      rivalry: rivalry.length ? rivalry : undefined,
+      supplier_power: supplier_power.length ? supplier_power : undefined,
+      buyer_power: buyer_power.length ? buyer_power : undefined,
+      substitutes: substitutes.length ? substitutes : undefined,
+      new_entrants: new_entrants.length ? new_entrants : undefined,
+      scores: scoresClean && Object.keys(scoresClean).length > 0 ? scoresClean : undefined,
+    }
+  }
+  const porterParsed = parsePorterFromParsed()
+
+  const jtbdObj = parsed?.jtbd && typeof parsed.jtbd === 'object' ? parsed.jtbd : null
+  const jtbdRaw = jtbdObj
     ? {
-        main_jobs: toStrArr(parsed.jtbd.main_jobs),
-        pains: toStrArr(parsed.jtbd.pains),
-        gains: toStrArr(parsed.jtbd.gains),
+        main_jobs: toStrArr(jtbdObj.main_jobs),
+        pains: toStrArr(jtbdObj.pains),
+        gains: toStrArr(jtbdObj.gains),
+        functional_jobs: toStrArr(jtbdObj.functional_jobs),
+        social_jobs: toStrArr(jtbdObj.social_jobs),
+        emotional_jobs: toStrArr(jtbdObj.emotional_jobs),
       }
     : undefined
+  const jtbdFiltered =
+    jtbdRaw &&
+    (
+      jtbdRaw.main_jobs.length +
+        jtbdRaw.pains.length +
+        jtbdRaw.gains.length +
+        jtbdRaw.functional_jobs.length +
+        jtbdRaw.social_jobs.length +
+        jtbdRaw.emotional_jobs.length >
+      0
+    )
+      ? jtbdRaw
+      : undefined
   return {
     executionData: {
       product_actions: actions,
@@ -1122,7 +1122,8 @@ async function runPMActionPlanTask(
           })
         : undefined,
       swot_analysis: swot,
-      jtbd: jtbdRaw,
+      jtbd: jtbdFiltered,
+      porter_5_forces: porterParsed,
       next_actions_pm: napm.length > 0 ? napm : undefined,
     },
     usedFallback,
@@ -1158,7 +1159,8 @@ async function runStrategyEvaluationTask(
   strategyData: { strategy_summary: string; opportunities: string[]; risks: string[] },
   competitionSummary: string,
   executionData: { product_actions: Array<{ action: string }> },
-  primaryProvider: AIPrimaryModel
+  primaryProvider: AIPrimaryModel,
+  llmCtx?: LlmRecordingContext
 ): Promise<StrategyEvaluationResult> {
   const prompt = buildStrategyEvaluationPrompt(
     keyword,
@@ -1171,21 +1173,21 @@ async function runStrategyEvaluationTask(
   if (!prompt?.trim()) {
     throw new Error('전략 평가에 필요한 데이터가 없습니다.')
   }
-  let text!: string
-  const tryGemini = () =>
-    generateText({ apiKey: geminiKey, prompt, systemInstruction: STRATEGY_EVALUATION_SYSTEM, maxOutputTokens: 450, model: GEMINI_MODEL, isRetryable: () => false })
-  const tryGroq = () =>
-    completeChat({ apiKey: groqKey!, messages: [{ role: 'system', content: STRATEGY_EVALUATION_SYSTEM }, { role: 'user', content: prompt }], maxTokens: 450 })
-  const primaryIsGemini = primaryProvider === 'gemini'
+  let text: string
   try {
-    if (primaryIsGemini) {
-      text = (await tryGemini()) ?? ''
-    } else if (groqKey) {
-      const groqRes = await tryGroq()
-      text = groqRes?.text ?? ''
-    } else {
-      text = (await tryGemini()) ?? ''
-    }
+    const completion = await runPipelineGeminiGroqText({
+      step: 'risk_opportunity',
+      geminiKey,
+      groqKey,
+      primaryProvider,
+      systemInstruction: STRATEGY_EVALUATION_SYSTEM,
+      prompt,
+      maxOutputTokens: 450,
+      groqMaxTokens: 450,
+      geminiModel: GEMINI_MODEL,
+      ctx: llmCtx,
+    })
+    text = completion.text
   } catch (err) {
     throw new Error('전략 평가 중 오류가 발생했습니다. ' + (err instanceof Error ? err.message : String(err)))
   }
@@ -1593,6 +1595,7 @@ export async function* runResearch(
 
   const pipelineStartMs = Date.now()
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
+  const llmCtx: LlmRecordingContext = { supabase, userId, analysisId }
 
   let resumeState: PipelineResumeState | null = null
   if (wantsPartialRerun && !forceReanalyze) {
@@ -1771,6 +1774,10 @@ export async function* runResearch(
       data: signalData,
       provider: null,
       fallback_used: false,
+      progressMeta: {
+        newsCount: news.length,
+        collectedAt: new Date().toISOString(),
+      },
     }
     yield { type: 'news', items: news }
   } catch (err) {
@@ -1835,7 +1842,7 @@ export async function* runResearch(
         currentArticleTitle: articlesWithContent[0].title.slice(0, 60),
       }
     }
-    articlesForAnalysis = await summarizeArticlesWithAI(articlesWithContent, geminiKey)
+    articlesForAnalysis = await summarizeArticlesWithAI(articlesWithContent, geminiKey, llmCtx)
     console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
   } catch (err) {
     console.warn('[article_summary] fallback to content', err)
@@ -1875,7 +1882,19 @@ export async function* runResearch(
 
   log('trend_analysis', 'running')
   await upsertAnalysisTask('trend_analysis', 'running', { provider: marketProvider, fallback_used: false })
-  yield { type: 'task', task: 'trend_analysis', status: 'running', provider: marketProvider, fallback_used: false }
+  const textPointCount = Math.max(1, articlesForAnalysis.length)
+  const trendSourceLabel = 'Google News·RSS 수집·요약'
+  yield {
+    type: 'task',
+    task: 'trend_analysis',
+    status: 'running',
+    provider: marketProvider,
+    fallback_used: false,
+    progressMeta: {
+      dataPointCount: textPointCount,
+      sourceLabel: trendSourceLabel,
+    },
+  }
 
   const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
 
@@ -1887,7 +1906,8 @@ export async function* runResearch(
       articlesForAnalysis,
       marketProvider,
       webContext,
-      articleRawContentTotalChars
+      articleRawContentTotalChars,
+      llmCtx
     ),
   ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>)
 
@@ -1914,7 +1934,8 @@ export async function* runResearch(
       competitorProvider,
       webContext,
       competitorWebContext || undefined,
-      articleRawContentTotalChars
+      articleRawContentTotalChars,
+      llmCtx
     ),
   ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>)
 
@@ -2011,10 +2032,18 @@ export async function* runResearch(
       {
         trendSignals: trendData.positive_signals,
         marketScore: trendData.market_score,
-      }
+      },
+      llmCtx
     )
     insightData = insightResult.data
-    const insightProvider = primaryProvider === 'gemini' ? (insightResult.usedFallback ? 'groq' : 'gemini') : (insightResult.usedFallback ? 'gemini' : 'groq')
+    const insightProvider =
+      insightProviderResolved === 'gemini'
+        ? insightResult.usedFallback
+          ? 'groq'
+          : 'gemini'
+        : insightResult.usedFallback
+          ? 'gemini'
+          : 'groq'
     await upsertAnalysisTask('insight_extraction', 'completed', {
       outputData: insightData,
       provider: insightProvider,
@@ -2029,6 +2058,13 @@ export async function* runResearch(
     await upsertAnalysisTask('insight_extraction', 'failed', { errorMessage: msg, provider: insightProviderResolved, fallback_used: false })
     yield { type: 'task', task: 'insight_extraction', status: 'failed', error: msg, fallbackMessage: msg, provider: insightProviderResolved, fallback_used: false }
     yield { type: 'error', message: msg, step: 'insight_extraction' }
+    const fallbackInsights = buildFallbackCoreInsights(
+      keyword,
+      trendData.positive_signals,
+      trendData.market_score,
+      competitionSummary
+    )
+    const insightAsOfErr = new Date().toISOString()
     insightData = {
       key_insights: trendData.positive_signals,
       opportunity_signals: trendData.positive_signals.map((s) => ({
@@ -2036,12 +2072,10 @@ export async function* runResearch(
         impact_level: 'Medium' as const,
       })),
       risk_signals: [],
-      core_insights: buildFallbackCoreInsights(
-        keyword,
-        trendData.positive_signals,
-        trendData.market_score,
-        competitionSummary
-      ),
+      core_insights: fallbackInsights.map((c) => ({
+        ...c,
+        source_timestamp: c.source_timestamp ?? insightAsOfErr,
+      })),
     }
   }
   } // end else (insight extraction path)
@@ -2073,7 +2107,8 @@ export async function* runResearch(
       marketOverview,
       competitionSummary,
       insightData,
-      effectiveStrategyProvider
+      effectiveStrategyProvider,
+      llmCtx
     )
     strategyData = stratResult.data
     const stratProvider = effectiveStrategyProvider === 'gemini' ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
@@ -2143,8 +2178,15 @@ export async function* runResearch(
     }
     chart_insights?: { search_trend?: { insight?: string; takeaway?: string }; market_size?: { insight?: string; takeaway?: string }; adoption_rate?: { insight?: string; takeaway?: string }; score_distribution?: { insight?: string; takeaway?: string } }
     swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
-    jtbd?: { main_jobs?: string[]; pains?: string[]; gains?: string[] }
-    porter_5_forces?: { rivalry?: string[]; supplier_power?: string[]; buyer_power?: string[]; substitutes?: string[]; new_entrants?: string[] }
+    jtbd?: {
+      main_jobs?: string[]
+      pains?: string[]
+      gains?: string[]
+      functional_jobs?: string[]
+      social_jobs?: string[]
+      emotional_jobs?: string[]
+    }
+    porter_5_forces?: Porter5ForcesShape
     next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
   const actionProviderResolved = resolveAIForStep(effectiveStepSettings, 'action')
@@ -2158,24 +2200,10 @@ export async function* runResearch(
       strategyData.strategy_summary,
       opportunitiesSummary,
       risksSummary,
-      actionProviderResolved
+      actionProviderResolved,
+      llmCtx
     )
-    executionData = {
-      ...pmResult.executionData,
-      chart_insights: undefined as {
-        search_trend?: { insight?: string; takeaway?: string }
-        market_size?: { insight?: string; takeaway?: string }
-        adoption_rate?: { insight?: string; takeaway?: string }
-        score_distribution?: { insight?: string; takeaway?: string }
-      } | undefined,
-      porter_5_forces: undefined as {
-        rivalry?: string[]
-        supplier_power?: string[]
-        buyer_power?: string[]
-        substitutes?: string[]
-        new_entrants?: string[]
-      } | undefined,
-    }
+    executionData = { ...pmResult.executionData }
 
     const executionProvider = actionProviderResolved === 'gemini' ? (pmResult.usedFallback ? 'groq' : 'gemini') : (pmResult.usedFallback ? 'gemini' : 'groq')
     await upsertAnalysisTask('execution_layer', 'completed', {
@@ -2277,7 +2305,8 @@ export async function* runResearch(
       strategyData,
       competitionSummary,
       executionData,
-      effectiveRiskProvider
+      effectiveRiskProvider,
+      llmCtx
     )
     await upsertAnalysisTask('risk_opportunity', 'completed', { outputData: strategyEvaluation })
     yield { type: 'task', task: 'risk_opportunity', status: 'completed', data: strategyEvaluation }
@@ -2379,6 +2408,14 @@ export async function* runResearch(
   structured.opportunity_score = opportunityScoreData.opportunity_score
   structured.opportunity_score_breakdown = opportunityScoreData.breakdown
   structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
+
+  structured.porter_5_forces = enrichPorter5Forces(
+    structured.porter_5_forces,
+    structured.opportunity_score_breakdown,
+    structured.strategic_decision_layer,
+    structured.strategy_evaluation
+  )
+  sanitizeDeep(structured.porter_5_forces)
 
   if (checkAborted(signal)) {
     yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'execution_layer' }
@@ -2559,5 +2596,23 @@ export async function* runResearch(
   }
 
   console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured, serperUsed })
+
+  const FINAL_REFINING_MESSAGES = [
+    '추출된 데이터의 중복 및 노이즈를 제거하고 있습니다...',
+    '2026년 4월 시장 상황에 맞춰 전략적 우선순위를 재계산 중입니다...',
+    'PM을 위한 최종 분석 리포트 생성을 완료했습니다.',
+  ] as const
+  /** 총 2초 구간을 세 메시지로 나눔 */
+  const REFINING_SEGMENT_MS = [667, 667, 666] as const
+  for (let i = 0; i < FINAL_REFINING_MESSAGES.length; i++) {
+    if (checkAborted(signal)) return
+    yield {
+      type: 'final_refining',
+      phase: (i + 1) as 1 | 2 | 3,
+      message: FINAL_REFINING_MESSAGES[i],
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, REFINING_SEGMENT_MS[i] ?? 666))
+  }
+
   yield { type: 'done', reportId, sourceLinks: news, analysis_depth: depthForDb, serper_used: serperUsed }
 }

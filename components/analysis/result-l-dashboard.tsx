@@ -17,8 +17,15 @@ import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluat
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
+import { AnalysisPhaseRerunIcons } from '@/components/research/analysis-phase-rerun-icons'
 
 type TabValue = 'insight' | 'action'
+
+type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
+  countryCode?: string
+  aiPrimaryModel?: 'gemini' | 'groq'
+  phaseRerunDisabled?: boolean
+}
 
 /**
  * L자형 분석 대시보드: 좌측 요약·긴급 과제, 우측 Insight(요약+차트+심층) / Action(실행 테이블) 2탭.
@@ -33,7 +40,10 @@ export function ResultLDashboard({
   loading = false,
   keyword = '',
   analysisFailed = false,
-}: ResultPageStructuredSectionsProps) {
+  countryCode = 'KR',
+  aiPrimaryModel,
+  phaseRerunDisabled = false,
+}: ResultLDashboardProps) {
   const effectiveResult = displayResult ?? result
   const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
   const [tab, setTab] = useState<TabValue>('insight')
@@ -93,25 +103,36 @@ export function ResultLDashboard({
           />
 
           <div className="min-w-0 space-y-4">
-            <TabsList
-              className={cn(
-                'sticky top-14 z-20 flex h-auto w-full flex-wrap justify-stretch gap-1 rounded-xl border border-[#E8EAED] bg-white p-1.5 shadow-sm',
-                'dark:border-zinc-700 dark:bg-zinc-900 lg:top-20'
-              )}
-            >
-              <TabsTrigger
-                value="insight"
-                className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <TabsList
+                className={cn(
+                  'sticky top-14 z-20 flex h-auto w-full min-w-0 flex-1 flex-wrap justify-stretch gap-1 rounded-xl border border-[#E8EAED] bg-white p-1.5 shadow-sm',
+                  'dark:border-zinc-700 dark:bg-zinc-900 lg:top-20 sm:max-w-[min(100%,28rem)]'
+                )}
               >
-                Insight
-              </TabsTrigger>
-              <TabsTrigger
-                value="action"
-                className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
-              >
-                Action
-              </TabsTrigger>
-            </TabsList>
+                <TabsTrigger
+                  value="insight"
+                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
+                >
+                  Insight
+                </TabsTrigger>
+                <TabsTrigger
+                  value="action"
+                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
+                >
+                  Action
+                </TabsTrigger>
+              </TabsList>
+              {keyword.trim() ? (
+                <AnalysisPhaseRerunIcons
+                  keyword={keyword}
+                  countryCode={countryCode}
+                  aiPrimaryModel={aiPrimaryModel}
+                  disabled={phaseRerunDisabled}
+                  className="shrink-0"
+                />
+              ) : null}
+            </div>
 
             <TabsContent value="insight" className="mt-0 space-y-6 focus-visible:outline-none" id="tab-insight">
               <div className="rounded-xl border border-[#E8EAED] bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">

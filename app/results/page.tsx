@@ -11,7 +11,6 @@ import { RinAnimation } from '@/components/common/RinAnimation'
 import { useResearchStore, type NewsItem, type ResearchResponse } from '@/lib/stores/research-store'
 import { type AnalysisMode, type StreamingState, createIdleState } from '@/lib/types/analysis-modes'
 import { useCurrentTask } from '@/hooks/use-current-task'
-import { exportAnalysisToPdf } from '@/lib/pdf-export'
 import { X, ExternalLink, Newspaper, Loader2, RefreshCw, Bookmark, Cpu, Database, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TimeAgo } from '@/components/time-ago'
@@ -29,7 +28,7 @@ import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { AnalysisEngineSection } from '@/components/research/AnalysisEngineSection'
 import { DataSourcesSection, type DataSourceSignal } from '@/components/research/DataSourcesSection'
 import { ResultSectionErrorBoundary } from '@/components/research/ResultSectionErrorBoundary'
-import { ResultShareActions } from '@/components/research/ResultShareActions'
+import { ResultHeroSecondaryActions } from '@/components/research/result-hero-secondary-actions'
 import { AnalysisModeSelector } from '@/components/research/analysis-mode-selector'
 import { ResultPageHero } from '@/components/research/ResultPageHero'
 import { NextExplorationSection } from '@/components/research/NextExplorationSection'
@@ -40,7 +39,6 @@ import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluat
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultLDashboard } from '@/components/analysis/result-l-dashboard'
 import { AnalysisActivityFeed } from '@/components/research/analysis-activity-feed'
-import { AnalysisPhaseRerunBar } from '@/components/research/analysis-phase-rerun-bar'
 import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
@@ -247,6 +245,7 @@ function ResultsContent() {
   const [saveInsightName, setSaveInsightName] = useState('')
   const [saveInsightNote, setSaveInsightNote] = useState('')
   const [saveInsightSaving, setSaveInsightSaving] = useState(false)
+  const [insightSavedFlashKey, setInsightSavedFlashKey] = useState(0)
   const [engineModalOpen, setEngineModalOpen] = useState(false)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [heroStableOppScore, setHeroStableOppScore] = useState<number | null>(null)
@@ -1066,6 +1065,7 @@ function ResultsContent() {
         return
       }
       toast.success('인사이트로 저장했습니다.')
+      setInsightSavedFlashKey((k) => k + 1)
       setSaveInsightOpen(false)
     } catch (err) {
       showErrorToast(err, { fallbackMessage: '저장에 실패했습니다.' })
@@ -1185,10 +1185,33 @@ function ResultsContent() {
               (canonicalStatus as string) === 'queued' || (canonicalStatus as string) === 'analyzing' || (polledStatus as string) === 'running'
                 ? undefined
                 : canonicalStatus === 'completed' && displayResult?.updated_at
-                  ? <>마지막 업데이트: <TimeAgo isoString={displayResult?.updated_at ?? ''} /></>
+                  ? <>마지막 업데이트 <TimeAgo isoString={displayResult?.updated_at ?? ''} /></>
                   : canonicalStatus === 'failed'
                     ? '분석 실패'
                     : undefined
+            }
+            modelToggle={
+              <div className="flex items-center gap-1.5" role="group" aria-label="AI 우선 분석">
+                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">AI 우선</span>
+                <div className="flex gap-0.5 rounded-md bg-muted/60 p-0.5 dark:bg-muted/40">
+                  {(['gemini', 'groq'] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => handleAiPrimaryChange(v)}
+                      disabled={loading || analysisPipelineBusy}
+                      className={cn(
+                        'rounded px-2 py-0.5 text-[11px] font-semibold transition-colors',
+                        aiPrimaryModel === v
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
+                      )}
+                    >
+                      {v === 'gemini' ? 'Gemini' : 'Groq'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             }
             loading={loading && !displayResult}
             progressSlot={undefined}
@@ -1241,93 +1264,52 @@ function ResultsContent() {
               </div>
             }
             actions={
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2" role="group" aria-label="AI 우선 분석">
-                  <span className="text-[11px] font-medium text-muted-foreground">AI 우선:</span>
-                  <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/50">
-                    {(['gemini', 'groq'] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => handleAiPrimaryChange(v)}
-                        disabled={loading || analysisPipelineBusy}
-                        className={cn(
-                          'px-2.5 py-1 text-xs font-medium rounded transition-colors',
-                          aiPrimaryModel === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                        )}
-                      >
-                        {v === 'gemini' ? 'Gemini' : 'Groq'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <ResultShareActions
-                  reportId={displayResult?.reportId ?? null}
-                  summaryText={[
-                    currentKeyword ? `# ${currentKeyword} 시장 분석 요약` : '',
-                    insightData?.strategicSummary?.summary ?? displayResult?.key_metrics?.summary_insights ?? (displayResult?.key_metrics?.keyConclusions ?? displayResult?.keyConclusions)?.[0] ?? '',
-                    reportSummary,
-                    (displayResult?.key_metrics?.opportunity_score ?? null) != null
-                      ? `\n기회 점수: ${displayResult?.key_metrics?.opportunity_score ?? 0}/100`
-                      : '',
-                  ].filter(Boolean).join('\n\n')}
-                  onDownloadPdf={() =>
-                    exportAnalysisToPdf(
-                      currentKeyword ?? '',
-                      displayResult ?? null,
-                      taskData ?? {},
-                      { countryCode: countryFromUrl }
-                    )
-                  }
+              <>
+                <ResultHeroSecondaryActions
                   disabled={loading}
+                  currentKeyword={currentKeyword ?? ''}
+                  displayResult={displayResult}
+                  taskData={taskData}
+                  countryCode={countryFromUrl}
+                  onSaveInsight={handleSaveInsightOpen}
+                  insightSavedFlashKey={insightSavedFlashKey}
+                  insightSaving={saveInsightSaving && saveInsightOpen}
                 />
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSaveInsightOpen}
-                  disabled={loading}
-                  className="gap-1.5 text-xs"
-                >
-                  <Bookmark className="h-3.5 w-3.5" />
-                  인사이트 저장
-                </Button>
-                <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={() => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
+                    startStreamingResearch(currentKeyword ?? '', {
+                      country_code: countryFromUrl,
+                      ai_primary_model: aiPrimaryModel,
+                      force_reanalyze: true,
+                    })
                   }}
                   disabled={loading || analysisPipelineBusy}
                   title={
                     loading || analysisPipelineBusy
                       ? '분석이 진행 중일 때는 사용할 수 없습니다. 완료되거나 실패한 뒤 다시 시도하세요.'
-                      : undefined
+                      : '처음부터 전체 파이프라인을 다시 실행합니다.'
                   }
-                  className="gap-1.5 text-xs"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
                 >
                   {analysisPipelineBusy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
                   )}
-                  다시 분석하기
+                  전체 다시 분석
                 </Button>
-              </div>
+              </>
             }
             className="mb-3 border-b border-border/60 pb-3"
           />
         )}
 
         {showAnalysisShell && !needsRunAction && currentKeyword && (
-          <div className="space-y-3 mb-4">
-            <AnalysisPhaseRerunBar
-              keyword={currentKeyword ?? ''}
-              countryCode={countryFromUrl}
-              aiPrimaryModel={aiPrimaryModel}
-              disabled={loading || analysisPipelineBusy}
-            />
+          <div className="mb-4 space-y-3">
             <AnalysisActivityFeed />
           </div>
         )}
@@ -1399,6 +1381,9 @@ function ResultsContent() {
                 loading={loading && !hasAnalysisStarted}
                 keyword={currentKeyword ?? ''}
                 analysisFailed={hasFailure && !!displayResult?.reportId}
+                countryCode={countryFromUrl}
+                aiPrimaryModel={aiPrimaryModel}
+                phaseRerunDisabled={loading || analysisPipelineBusy}
               />
             </ResultSectionErrorBoundary>
             {/* AI 분석 엔진 — 상세는 모달 (페이지 스크롤 유지) */}

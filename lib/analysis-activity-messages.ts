@@ -3,6 +3,8 @@
  * 7-step progress UX: 데이터 수집 → 시장 리서치 → 경쟁사 분석 → 인사이트 추출 → 전략 추천 → PM 액션 플랜 → 리스크 및 기회 평가.
  */
 
+import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
+
 const STREAM_TO_INDEX: Record<string, number> = {
   signal_layer: 0,
   news: 0,
@@ -23,6 +25,7 @@ const STREAM_TO_INDEX: Record<string, number> = {
   post_processing_key_metrics: 7,
   post_processing_creative: 7,
   post_processing_saving: 7,
+  final_refining: 7,
 }
 
 /** 7-step progress for loading UX - user-facing analysis stages */
@@ -59,6 +62,17 @@ const POST_PROCESSING_MESSAGES: Record<string, string> = {
   post_processing_key_metrics: '기회 점수·차트 산출 중...',
   post_processing_creative: 'AI 인사이트 생성 중...',
   post_processing_saving: '결과 저장 중...',
+}
+
+function formatCollectedTimestamp(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`
 }
 
 /** Activity messages per analysis step - shown during loading (한국어) */
@@ -147,7 +161,12 @@ export function getDynamicStepMessage(
 export function getAnalysisActivityMessage(
   stepId?: string | null,
   currentStep?: number,
-  options?: { short?: boolean; elapsedMs?: number; currentArticleTitle?: string }
+  options?: {
+    short?: boolean
+    elapsedMs?: number
+    currentArticleTitle?: string
+    progressMeta?: AnalysisProgressMeta
+  }
 ): string {
   const stepIdx =
     stepId && STREAM_TO_INDEX[stepId] != null
@@ -156,20 +175,45 @@ export function getAnalysisActivityMessage(
         ? currentStep
         : 0
   const progressIndex = PIPELINE_TO_PROGRESS_INDEX[Math.min(stepIdx, 6)] ?? Math.min(stepIdx, PROGRESS_STEPS.length - 1)
+  const meta = options?.progressMeta
 
   if (stepId === 'article_extraction') {
-    const base = '기사 읽는 중'
+    const base = '기사 본문 추출 중'
     return options?.currentArticleTitle ? `${base}: ${options.currentArticleTitle}` : base
   }
   if (stepId === 'article_summary') {
-    const base = '기사 요약중'
+    const base = '기사 요약 중'
     return options?.currentArticleTitle ? `${base}: ${options.currentArticleTitle}` : base
   }
-  if (stepId === 'signal_layer' || stepId === 'news') {
-    return '뉴스 수집중'
+  if (stepId === 'final_refining') {
+    const line = meta?.refiningMessage?.trim()
+    if (line) {
+      if (options?.short && line.length > 52) return `${line.slice(0, 50)}…`
+      return line
+    }
+    return options?.short ? '최종 정제 중…' : '결과를 정제하는 중입니다...'
   }
-  if (stepId === 'trend_analysis' || stepId === 'competition_analysis') {
-    return '시장 분석중'
+  if (stepId === 'signal_layer' || stepId === 'news') {
+    if (meta?.newsCount != null && meta.collectedAt) {
+      const ts = formatCollectedTimestamp(meta.collectedAt)
+      return `${ts} 기준, 최신 뉴스 ${meta.newsCount}건을 수집하여 분석을 시작합니다.`
+    }
+    if (meta?.newsCount != null) {
+      return `최신 뉴스 ${meta.newsCount}건을 수집하여 분석을 시작합니다.`
+    }
+    return '뉴스 수집 중...'
+  }
+  if (stepId === 'trend_analysis') {
+    if (meta?.dataPointCount != null && meta.sourceLabel) {
+      return `${meta.sourceLabel}에서 수집된 ${meta.dataPointCount}개의 텍스트 포인트를 바탕으로 시장 온도를 체크 중입니다.`
+    }
+    if (meta?.dataPointCount != null) {
+      return `수집된 ${meta.dataPointCount}개의 텍스트 포인트를 바탕으로 시장 온도를 체크 중입니다.`
+    }
+    return '시장 데이터 분석 중...'
+  }
+  if (stepId === 'competition_analysis') {
+    return '시장 분석 중...'
   }
 
   if (options?.elapsedMs != null && options.elapsedMs >= LONG_STEP_THRESHOLD_SEC * 1000) {

@@ -5,7 +5,14 @@ import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
-type CoreInsightItem = { title?: string; summary?: string; impact?: string; reason?: string; score?: number }
+type CoreInsightItem = {
+  title?: string
+  summary?: string
+  impact?: string
+  reason?: string
+  score?: number
+  source_timestamp?: string
+}
 
 /** Extract key metrics (numbers, scores) from text */
 function extractKeyMetrics(text: string): string[] {
@@ -20,24 +27,34 @@ function extractKeyMetrics(text: string): string[] {
 }
 
 /** Map pipeline core_insights to StructuredInsight (no fallback "—") */
-function coreInsightToStructured(item: CoreInsightItem): StructuredInsight {
+function coreInsightToStructured(item: CoreInsightItem, fallbackAsOf?: string): StructuredInsight {
   const title = (item.title ?? '').trim() || (item.summary ?? '').trim().slice(0, 15) + '…'
   const summary = (item.summary ?? '').trim() || '분석 인사이트'
   const impact = (item.impact ?? '').trim() || '시장·제품 의사결정에 참고할 수 있는 요인입니다.'
   const reason = (item.reason ?? '').trim() || '분석 데이터를 바탕으로 도출된 인사이트입니다.'
+  const sourceTimestamp = (item.source_timestamp ?? fallbackAsOf)?.trim()
   return {
     title,
     summary,
     impact,
     reason,
+    ...(sourceTimestamp ? { sourceTimestamp } : {}),
     keyMetrics: extractKeyMetrics(summary + impact + reason).length > 0 ? extractKeyMetrics(summary + impact + reason) : undefined,
   }
 }
 
 /** Derive structured insight from a raw insight string (fallback when no core_insights) */
-function toStructuredInsight(text: string): StructuredInsight {
+function toStructuredInsight(text: string, fallbackAsOf?: string): StructuredInsight {
   const t = text.trim()
-  if (!t) return { title: '분석 요약', summary: '데이터 수집 완료. 상세 인사이트는 재분석 후 확인할 수 있습니다.', impact: '추가 분석이 필요합니다.', reason: '트렌드·경쟁 데이터를 반영한 요약입니다.' }
+  if (!t) {
+    return {
+      title: '분석 요약',
+      summary: '데이터 수집 완료. 상세 인사이트는 재분석 후 확인할 수 있습니다.',
+      impact: '추가 분석이 필요합니다.',
+      reason: '트렌드·경쟁 데이터를 반영한 요약입니다.',
+      ...(fallbackAsOf?.trim() ? { sourceTimestamp: fallbackAsOf.trim() } : {}),
+    }
+  }
 
   let title = ''
   let summary = t
@@ -79,7 +96,14 @@ function toStructuredInsight(text: string): StructuredInsight {
   const impact = '시장·제품 전략 수립에 참고할 수 있는 인사이트입니다.'
   const reason = '트렌드 및 경쟁 분석 결과를 바탕으로 도출되었습니다.'
 
-  return { title, summary, impact, reason, keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined }
+  return {
+    title,
+    summary,
+    impact,
+    reason,
+    ...(fallbackAsOf?.trim() ? { sourceTimestamp: fallbackAsOf.trim() } : {}),
+    keyMetrics: keyMetrics.length > 0 ? keyMetrics : undefined,
+  }
 }
 
 type TaskOutput = Record<string, unknown>
@@ -197,6 +221,7 @@ export function KeyMarketInsightsCard({
 
   // Prefer pipeline core_insights (title/summary/impact/reason) when available
   const coreInsightsRaw = (km.core_insights ?? getTaskOutput('insight_extraction', taskData, analysisTasks)?.core_insights) as CoreInsightItem[] | undefined
+  const reportAsOf = result?.updated_at?.trim()
   const coreInsightsList = Array.isArray(coreInsightsRaw) && coreInsightsRaw.length > 0
     ? coreInsightsRaw
         .filter((i): i is CoreInsightItem => {
@@ -205,11 +230,11 @@ export function KeyMarketInsightsCard({
           return typeof s === 'string' && s.trim().length > 0
         })
         .slice(0, 8)
-        .map((i) => coreInsightToStructured(i))
+        .map((i) => coreInsightToStructured(i, reportAsOf))
     : []
 
   const structuredInsights =
-    coreInsightsList.length > 0 ? coreInsightsList : bulletInsights.map(toStructuredInsight)
+    coreInsightsList.length > 0 ? coreInsightsList : bulletInsights.map((t) => toStructuredInsight(t, reportAsOf))
 
   const [revealedCount, setRevealedCount] = useState(0)
   const prevKey = useRef('')

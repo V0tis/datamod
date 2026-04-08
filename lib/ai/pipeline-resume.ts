@@ -48,6 +48,7 @@ export type InsightDataShape = {
     impact: string
     reason: string
     score?: number
+    source_timestamp?: string
   }>
 }
 
@@ -172,7 +173,12 @@ function parseInsightData(payload: unknown): InsightDataShape | null {
       const reason =
         typeof o.reason === 'string' ? o.reason.trim() : '분석 데이터를 바탕으로 도출된 인사이트입니다.'
       const score = typeof o.score === 'number' ? o.score : undefined
-      return { title, summary, impact, reason, score }
+      let source_timestamp: string | undefined
+      if (typeof o.source_timestamp === 'string' && o.source_timestamp.trim()) {
+        const d = new Date(o.source_timestamp.trim())
+        if (!Number.isNaN(d.getTime())) source_timestamp = d.toISOString()
+      }
+      return { title, summary, impact, reason, score, ...(source_timestamp ? { source_timestamp } : {}) }
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
 

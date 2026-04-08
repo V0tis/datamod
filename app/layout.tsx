@@ -15,6 +15,10 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 export const metadata: Metadata = {
   title: "Rin-AI",
   description: "이메일 인증 기반 시장 리서치",
+  icons: {
+    icon: [{ url: "/assets/logo_rin_ai.svg", type: "image/svg+xml" }],
+    apple: "/assets/logo_rin_ai.svg",
+  },
 };
 
 export default function RootLayout({
