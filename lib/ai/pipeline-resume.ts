@@ -193,7 +193,8 @@ function parseInsightData(payload: unknown): InsightDataShape | null {
   }
 }
 
-async function fetchTaskMap(
+/** 완료된 단계만 포함한 analysis_tasks 맵 (단계 재시도·복구용) */
+export async function fetchTaskMap(
   supabase: SupabaseClient,
   analysisId: string
 ): Promise<Record<string, { status: string; output_data: unknown }>> {

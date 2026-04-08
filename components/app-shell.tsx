@@ -76,10 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className={cn(
           'min-h-screen w-full',
           /* <md: 햄버거만, md~lg: 아이콘 레일 72px, lg+: 전체 사이드바 220px */
-          isResultsPage ? 'pt-14' : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[220px]'
+          isResultsPage ? 'pt-14' : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[calc(220px+1.5rem)]'
         )}
       >
-        <main className="min-h-screen bg-muted/25 overflow-auto">
+        <main className="min-h-screen bg-muted/25 overflow-auto px-2 sm:px-4 lg:px-8 xl:px-10">
           <ErrorBoundary>
             <PageTransition>{children}</PageTransition>
           </ErrorBoundary>

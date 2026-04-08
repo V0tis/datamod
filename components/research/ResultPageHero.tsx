@@ -2,6 +2,7 @@
 
 import { useState, memo, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 export type MarketOutlook = 'high' | 'medium' | 'low'
@@ -130,6 +131,8 @@ export interface ResultPageHeroProps {
   } | null
   /** 한 줄 메타 행 끝: AI 모델 토글 등 */
   modelToggle?: ReactNode
+  /** 타이틀 옆 배지: 현재 분석에 사용된 우선 모델 */
+  currentAnalysisModel?: 'gemini' | 'groq' | null
   className?: string
 }
 
@@ -153,6 +156,7 @@ export const ResultPageHero = memo(function ResultPageHero({
   showScoreAndConclusion = true,
   analysisMeta,
   modelToggle,
+  currentAnalysisModel,
   className,
 }: ResultPageHeroProps) {
   const [scoreExplainOpen, setScoreExplainOpen] = useState(false)
@@ -186,13 +190,23 @@ export const ResultPageHero = memo(function ResultPageHero({
       {/* Row 1: Title + 우측 액션 */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="break-words text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
-            {loading && !title ? (
-              <span className="inline-block h-9 w-48 animate-pulse rounded bg-muted sm:h-10" />
-            ) : (
-              title
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="break-words text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+              {loading && !title ? (
+                <span className="inline-block h-9 w-48 animate-pulse rounded bg-muted sm:h-10" />
+              ) : (
+                title
+              )}
+            </h1>
+            {currentAnalysisModel && !loading && (
+              <Badge
+                variant="secondary"
+                className="shrink-0 border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary"
+              >
+                분석 모델 · {currentAnalysisModel === 'gemini' ? 'Gemini' : 'Groq'}
+              </Badge>
             )}
-          </h1>
+          </div>
           {titleSub && (
             <p className="mt-1 text-base text-muted-foreground sm:text-lg" aria-hidden>
               {titleSub}
@@ -238,7 +252,7 @@ export const ResultPageHero = memo(function ResultPageHero({
           )}
         </div>
         {actions && (
-          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">{actions}</div>
+          <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-3">{actions}</div>
         )}
       </div>
 

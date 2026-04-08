@@ -105,7 +105,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Pretendard', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Pretendard', 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   --font-mono: ui-monospace, monospace;
   --color-rin-primary: #2ac1bc;
   --color-rin-bg: #ffffff;
@@ -201,7 +201,7 @@
     font-size: 15px;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
     font-size: 1rem;
     line-height: 1.5;
   }

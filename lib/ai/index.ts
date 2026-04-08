@@ -41,6 +41,7 @@ export type {
 export type {
   ResearchStreamEvent,
   RunResearchParams,
+  RetryPipelineStepId,
   NewsItem,
   Pass1Result,
   Pass2Result,

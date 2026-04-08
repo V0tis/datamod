@@ -195,6 +195,9 @@ export function MarketGrowthCharts({
                   fillOpacity={0.45}
                   strokeWidth={2}
                   dot={{ r: 3, fill: CHART_MINT }}
+                  isAnimationActive
+                  animationDuration={900}
+                  animationEasing="ease-out"
                 />
               </RadarChart>
             </ResponsiveContainer>
@@ -222,6 +225,9 @@ export function MarketGrowthCharts({
                   strokeWidth={2}
                   dot={{ fill: CHART_MINT, r: 3 }}
                   activeDot={{ r: 5, fill: CHART_MINT }}
+                  isAnimationActive
+                  animationDuration={1000}
+                  animationEasing="ease-out"
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -240,7 +246,15 @@ export function MarketGrowthCharts({
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
                   cursor={false}
                 />
-                <Bar dataKey="size" fill={CHART_MINT} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                <Bar
+                  dataKey="size"
+                  fill={CHART_MINT}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={48}
+                  isAnimationActive
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -270,6 +284,9 @@ export function MarketGrowthCharts({
                   stroke={CHART_GRAY_FILL}
                   strokeWidth={1.5}
                   fill="url(#market-growth-adoption-grad)"
+                  isAnimationActive
+                  animationDuration={1000}
+                  animationEasing="ease-out"
                 />
               </AreaChart>
             </ResponsiveContainer>

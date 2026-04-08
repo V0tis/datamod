@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import {
   Radar,
   RadarChart,
@@ -75,7 +76,12 @@ export function OverviewOpportunityRiskChart({
       {showSkeleton ? (
         <SectionContentSkeleton variant="chart" className="rounded-lg border-0 bg-transparent" />
       ) : (
-        <div className="aspect-square w-full min-h-[200px] max-h-[320px] sm:min-h-[220px] sm:max-h-[360px]">
+        <motion.div
+          className="aspect-square w-full min-h-[200px] max-h-[320px] sm:min-h-[220px] sm:max-h-[360px]"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="78%" data={radarData}>
               <PolarGrid stroke={CHART_GRAY_GRID} />
@@ -93,10 +99,13 @@ export function OverviewOpportunityRiskChart({
                 fillOpacity={0.4}
                 strokeWidth={2}
                 dot={{ r: 2, fill: CHART_MINT }}
+                isAnimationActive
+                animationDuration={900}
+                animationEasing="ease-out"
               />
             </RadarChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
       )}
     </div>
   )

@@ -11,8 +11,11 @@ export interface ResultPageSectionProps {
   description: string
   icon?: React.ReactNode
   children: React.ReactNode
-  /** When true, section starts expanded */
+  /** When true, section starts expanded (비제어 모드일 때만) */
   defaultOpen?: boolean
+  /** 제어 모드: 열림 상태 */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   className?: string
 }
 
@@ -27,9 +30,17 @@ export function ResultPageSection({
   icon,
   children,
   defaultOpen = false,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   className,
 }: ResultPageSectionProps) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
+  const controlled = openProp !== undefined
+  const open = controlled ? openProp : uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    onOpenChangeProp?.(next)
+    if (!controlled) setUncontrolledOpen(next)
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -51,7 +62,7 @@ export function ResultPageSection({
                 {icon && <span className="shrink-0 text-primary">{icon}</span>}
                 {title}
               </h2>
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
+              <div className="text-sm text-muted-foreground mt-1">{description}</div>
             </div>
             <span
               className={cn(

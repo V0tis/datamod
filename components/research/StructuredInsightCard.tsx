@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { motionConfig } from '@/lib/motion-config'
 import { InsightDataFreshness } from '@/components/insights/InsightDataFreshness'
 import { MarkdownBody } from '@/components/ui/markdown-body'
 
@@ -72,13 +71,27 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
   return (
     <motion.div
       layout={false}
-      whileHover={{
-        y: motionConfig.cardHover.y,
-        transition: motionConfig.cardHover.transition,
-      }}
+      role={hasDetail ? 'button' : undefined}
+      tabIndex={hasDetail ? 0 : undefined}
+      onClick={
+        hasDetail
+          ? () => setExpanded((e) => !e)
+          : undefined
+      }
+      onKeyDown={
+        hasDetail
+          ? (ev) => {
+              if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault()
+                setExpanded((e) => !e)
+              }
+            }
+          : undefined
+      }
       className={cn(
-        'rounded-xl border border-border/60 bg-card shadow-sm',
-        'hover:border-primary/30 hover:bg-primary/[0.02] hover:shadow-md',
+        'rounded-xl border border-slate-100 bg-white shadow-sm transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-900',
+        'hover:-translate-y-1 hover:border-slate-200 hover:shadow-md dark:hover:border-zinc-700',
+        hasDetail && 'cursor-pointer',
         className
       )}
     >
@@ -87,7 +100,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           <div className="flex justify-between items-start gap-2 mb-1.5">
             <div className="min-w-0 flex-1">
               {!titleSameAsContents && (
-                <h4 className="text-sm font-semibold text-foreground leading-snug line-clamp-1">
+                <h4 className="text-base font-semibold text-slate-900 leading-snug line-clamp-1 dark:text-zinc-50">
                   {displayTitle}
                 </h4>
               )}
@@ -99,22 +112,22 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
         )}
         <div
           className={cn(
-            'line-clamp-3 [&_.rin-doc]:text-xs sm:[&_.rin-doc]:text-sm [&_.rin-doc]:text-muted-foreground',
-            titleSameAsContents && '[&_.rin-doc]:text-foreground'
+            'line-clamp-3 [&_.rin-doc]:text-sm [&_.rin-doc]:text-slate-600 dark:[&_.rin-doc]:text-zinc-400',
+            titleSameAsContents && '[&_.rin-doc]:text-slate-800 dark:[&_.rin-doc]:text-zinc-100'
           )}
         >
-          <MarkdownBody className="text-xs sm:text-sm">{displaySummary}</MarkdownBody>
+          <MarkdownBody className="text-sm leading-relaxed">{displaySummary}</MarkdownBody>
         </div>
         {showImpact && (
           <div className="mt-2 space-y-1.5">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">영향</p>
-            <MarkdownBody className="text-xs">{displayImpact}</MarkdownBody>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">영향</div>
+            <MarkdownBody className="text-sm text-slate-600 dark:text-zinc-400">{displayImpact}</MarkdownBody>
           </div>
         )}
         {showReason && (
           <div className="mt-2 space-y-1.5">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">근거 / 시사점</p>
-            <MarkdownBody className="text-xs">{displayReason}</MarkdownBody>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">근거 / 시사점</div>
+            <MarkdownBody className="text-sm text-slate-600 dark:text-zinc-400">{displayReason}</MarkdownBody>
           </div>
         )}
         {metrics.length > 0 && (
@@ -122,7 +135,7 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
             {metrics.map((m, i) => (
               <span
                 key={i}
-                className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[11px] font-semibold"
+                className="inline-flex items-center rounded-md border border-emerald-100/90 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200"
               >
                 {m}
               </span>
@@ -133,8 +146,11 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           <Button
             variant="ghost"
             size="sm"
-            className="mt-2 h-7 text-xs text-primary hover:bg-primary/10 -ml-1"
-            onClick={() => setExpanded((e) => !e)}
+            className="mt-2 h-7 -ml-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded((v) => !v)
+            }}
             aria-expanded={expanded}
           >
             {expanded ? (
@@ -151,22 +167,25 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
       </div>
 
       {expanded && hasDetail && (
-        <div className="border-t border-border/60 px-5 sm:px-6 lg:px-7 py-4 space-y-3 bg-muted/20">
+        <div
+          className="space-y-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7 dark:border-zinc-800 dark:bg-zinc-900/40"
+          onClick={(e) => e.stopPropagation()}
+        >
           {hasLongSummary && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">인사이트 요약</p>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">인사이트 요약</div>
               <MarkdownBody className="text-sm">{insight.summary}</MarkdownBody>
             </div>
           )}
           {showImpact && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">영향</p>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">영향</div>
               <MarkdownBody className="text-sm">{impact}</MarkdownBody>
             </div>
           )}
           {showReason && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">근거 / 시사점</p>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">근거 / 시사점</div>
               <MarkdownBody className="text-sm">{reason}</MarkdownBody>
             </div>
           )}

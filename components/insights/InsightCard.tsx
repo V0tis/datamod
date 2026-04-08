@@ -179,13 +179,13 @@ export function InsightCard({
                     {IMPORTANCE_LABELS[importance]}
                   </span>
                 </div>
-                <p className="text-xs tabular-nums tracking-tight text-muted-foreground">
+                <div className="text-xs tabular-nums tracking-tight text-muted-foreground">
                   <span className="font-medium text-foreground/80">{item.snapshot?.keyword ?? '—'}</span>
                   <span className="mx-1.5 text-border">|</span>
                   {countryLabel}
                   <span className="mx-1.5 text-border">|</span>
                   {dateLine}
-                </p>
+                </div>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-1.5">
                 <Button
@@ -245,7 +245,7 @@ export function InsightCard({
               {!hasAnyBody && (
                 <section className="mb-4">
                   <InsightSectionBadge label="요약" />
-                  <p className="text-sm leading-relaxed text-muted-foreground">저장된 인사이트</p>
+                  <div className="text-sm leading-relaxed text-muted-foreground">저장된 인사이트</div>
                 </section>
               )}
             </div>
@@ -269,12 +269,12 @@ export function InsightCard({
           )}
 
           {score != null && (
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
               시장 신호 <span className="font-medium text-foreground">{score}/100</span>
               {item.snapshot?.qualityScore?.label && (
                 <span className="ml-1">· {item.snapshot.qualityScore.label}</span>
               )}
-            </p>
+            </div>
           )}
 
           {hasMemo && (
@@ -292,10 +292,10 @@ export function InsightCard({
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className={cn('mt-3 rounded-lg border border-border/60 px-3 py-3', styles.bg)}>
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     메모
-                  </p>
-                  <p className="text-sm leading-relaxed text-foreground">{item.note}</p>
+                  </div>
+                  <div className="text-sm leading-relaxed text-foreground">{item.note}</div>
                 </div>
               </CollapsibleContent>
             </Collapsible>

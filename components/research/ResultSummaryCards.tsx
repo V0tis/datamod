@@ -56,12 +56,12 @@ function SummaryCard({
       className={cn(
         'rounded-xl p-5 shadow-sm transition-colors',
         variant === 'saas'
-          ? 'border border-[#E5E7EB] bg-white hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600'
+          ? 'border border-slate-100 bg-white shadow-sm hover:border-slate-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700'
           : 'border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent hover:border-primary/40 hover:from-primary/12'
       )}
     >
       <div className="flex items-center gap-2 mb-3">
-        <Icon className="h-5 w-5 text-primary shrink-0" aria-hidden />
+        <Icon className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           {card.label}
         </span>
@@ -74,9 +74,9 @@ function SummaryCard({
           />
         </div>
       ) : (
-        <p className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
+        <div className={cn('text-base font-bold text-foreground leading-snug', isLong && !expanded && 'line-clamp-2')}>
           {displayValue}
-        </p>
+        </div>
       )}
       {showReason &&
         (explanationMarkdown ? (
@@ -84,13 +84,13 @@ function SummaryCard({
             <CompactMarkdown source={card.explanation!} />
           </div>
         ) : (
-          <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">{card.explanation}</p>
+          <div className="mt-1.5 text-[11px] text-muted-foreground leading-snug">{card.explanation}</div>
         ))}
       {isLong && (
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="mt-1 text-xs text-primary hover:text-primary/80 font-medium"
+          className="mt-1 text-xs font-medium text-emerald-800 hover:text-emerald-900 dark:text-emerald-300"
         >
           {expanded ? '접기' : '더보기'}
         </button>

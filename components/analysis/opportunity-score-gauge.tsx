@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { animate } from 'framer-motion'
+import { animate, motion } from 'framer-motion'
 import { Info, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -63,7 +63,12 @@ export function OpportunityScoreGauge({
     (analysisFailed && stableScore != null ? ' (일부 단계 오류로 이전 유효 점수를 표시합니다.)' : '')
 
   return (
-    <div className={cn('flex flex-col items-center gap-2', className)}>
+    <motion.div
+      className={cn('flex flex-col items-center gap-2', className)}
+      initial={{ opacity: 0.88, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
+    >
       <div className="relative h-[120px] w-[120px]">
         <svg className="-rotate-90 transform" width="120" height="120" viewBox="0 0 120 120" aria-hidden>
           <circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100 dark:text-zinc-800" />
@@ -129,6 +134,6 @@ export function OpportunityScoreGauge({
           {rationaleSummary.trim()}
         </p>
       ) : null}
-    </div>
+    </motion.div>
   )
 }

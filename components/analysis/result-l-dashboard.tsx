@@ -18,6 +18,7 @@ import { AnalysisResultSections } from '@/components/research/AnalysisResultSect
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { AnalysisPhaseRerunIcons } from '@/components/research/analysis-phase-rerun-icons'
+import { MotionReveal } from '@/components/common/MotionReveal'
 
 type TabValue = 'insight' | 'action'
 
@@ -76,7 +77,7 @@ export function ResultLDashboard({
 
   if (!hasResultData) {
     return (
-      <div className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-6 py-12 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
         결과 요약 데이터가 없습니다. 분석이 완료되면 L자형 리포트가 표시됩니다.
       </div>
     )
@@ -89,36 +90,48 @@ export function ResultLDashboard({
       aria-label="분석 결과 대시보드"
     >
       <Tabs value={tab} onValueChange={(v) => goTab(v as TabValue)} className="w-full">
-        <div className="mx-auto flex w-full flex-col gap-6 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start lg:gap-8">
-          <ResultLeftRail
-            effectiveResult={effectiveResult ?? null}
-            taskData={taskData}
-            analysisTasks={analysisTasks ?? undefined}
-            loading={loading}
-            onNavigateTab={(t) => goTab(t === 'action' ? 'action' : 'insight')}
-            stableOpportunityScore={stableOppScore}
-            analysisFailed={analysisFailed}
-            scoreRationaleSummary={scoreRationale}
-            conclusionFull={conclusionFull}
-          />
+        <div className="mx-auto flex w-full flex-col gap-8 lg:grid lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start lg:gap-10 xl:gap-12">
+          <MotionReveal
+            key={`rail-${reportId ?? 'x'}`}
+            staticLayout={loading}
+            className="min-w-0"
+            delay={0}
+          >
+            <ResultLeftRail
+              effectiveResult={effectiveResult ?? null}
+              taskData={taskData}
+              analysisTasks={analysisTasks ?? undefined}
+              loading={loading}
+              onNavigateTab={(t) => goTab(t === 'action' ? 'action' : 'insight')}
+              stableOpportunityScore={stableOppScore}
+              analysisFailed={analysisFailed}
+              scoreRationaleSummary={scoreRationale}
+              conclusionFull={conclusionFull}
+            />
+          </MotionReveal>
 
-          <div className="min-w-0 space-y-4">
+          <MotionReveal
+            key={`main-${reportId ?? 'x'}`}
+            staticLayout={loading}
+            className="min-w-0 space-y-8"
+            delay={0.06}
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <TabsList
                 className={cn(
-                  'sticky top-14 z-20 flex h-auto w-full min-w-0 flex-1 flex-wrap justify-stretch gap-1 rounded-xl border border-[#E8EAED] bg-white p-1.5 shadow-sm',
+                  'sticky top-14 z-20 flex h-auto w-full min-w-0 flex-1 flex-wrap justify-stretch gap-1 rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-sm',
                   'dark:border-zinc-700 dark:bg-zinc-900 lg:top-20 sm:max-w-[min(100%,28rem)]'
                 )}
               >
                 <TabsTrigger
                   value="insight"
-                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
+                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-semibold text-slate-600 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-900 data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-emerald-200/80 dark:text-zinc-400 dark:data-[state=active]:bg-emerald-950/50 dark:data-[state=active]:text-emerald-100 dark:data-[state=active]:ring-emerald-800/60"
                 >
                   Insight
                 </TabsTrigger>
                 <TabsTrigger
                   value="action"
-                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold data-[state=active]:bg-[#E8FAF9] data-[state=active]:text-[#222] data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-[#2AC1BC]/30 dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-50"
+                  className="flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-semibold text-slate-600 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-900 data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-emerald-200/80 dark:text-zinc-400 dark:data-[state=active]:bg-emerald-950/50 dark:data-[state=active]:text-emerald-100 dark:data-[state=active]:ring-emerald-800/60"
                 >
                   Action
                 </TabsTrigger>
@@ -134,13 +147,13 @@ export function ResultLDashboard({
               ) : null}
             </div>
 
-            <TabsContent value="insight" className="mt-0 space-y-6 focus-visible:outline-none" id="tab-insight">
-              <div className="rounded-xl border border-[#E8EAED] bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#E8EAED] pb-3 dark:border-zinc-800">
-                  <h3 className="text-sm font-bold text-[#222] dark:text-zinc-50">요약 · 기회 점수</h3>
+            <TabsContent value="insight" className="mt-0 space-y-8 focus-visible:outline-none" id="tab-insight">
+              <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 motion-safe:will-change-transform">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4 dark:border-zinc-800">
+                  <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">요약 · 기회 점수</h3>
                   <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
                 </div>
-                <div className="space-y-6">
+                <div className="space-y-8">
                   <OpportunityScoreBreakdown
                     score={effectiveResult?.key_metrics?.opportunity_score ?? null}
                     loading={loading}
@@ -148,7 +161,7 @@ export function ResultLDashboard({
                     analysisFailed={analysisFailed}
                     breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
                     useKoreanLabels
-                    className="border-[#E8EAED] bg-white dark:border-zinc-700 dark:bg-zinc-900"
+                    className="border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-900"
                   />
                   <OverviewOpportunityRiskChart result={effectiveResult ?? null} loading={loading} />
                   <ResultSummaryCards
@@ -163,7 +176,7 @@ export function ResultLDashboard({
                   <StrategyEvaluationSection result={effectiveResult ?? null} loading={loading} />
                 </div>
               </div>
-              <InsightSectionShell title="시장 트렌드 · 수요 신호" result={effectiveResult ?? null}>
+              <InsightSectionShell title="시장 트렌드 · 수요 신호" result={effectiveResult ?? null} loading={loading} animationIndex={0}>
                 <AnalysisResultSections
                   result={result}
                   taskData={taskData}
@@ -175,7 +188,7 @@ export function ResultLDashboard({
                   sectionOnly="market-trends"
                 />
               </InsightSectionShell>
-              <InsightSectionShell title="경쟁 환경 · 포지셔닝" result={effectiveResult ?? null}>
+              <InsightSectionShell title="경쟁 환경 · 포지셔닝" result={effectiveResult ?? null} loading={loading} animationIndex={1}>
                 <AnalysisResultSections
                   result={result}
                   taskData={taskData}
@@ -187,7 +200,7 @@ export function ResultLDashboard({
                   sectionOnly="competition"
                 />
               </InsightSectionShell>
-              <InsightSectionShell title="핵심 인사이트" result={effectiveResult ?? null}>
+              <InsightSectionShell title="핵심 인사이트" result={effectiveResult ?? null} loading={loading} animationIndex={2}>
                 <KeyMarketInsightsCard
                   result={effectiveResult ?? null}
                   taskData={taskData}
@@ -198,7 +211,7 @@ export function ResultLDashboard({
                   keyword={keyword}
                 />
               </InsightSectionShell>
-              <InsightSectionShell title="GTM · 시장 선점 시나리오" result={effectiveResult ?? null}>
+              <InsightSectionShell title="GTM · 시장 선점 시나리오" result={effectiveResult ?? null} loading={loading} animationIndex={3}>
                 <AnalysisResultSections
                   result={result}
                   taskData={taskData}
@@ -212,8 +225,8 @@ export function ResultLDashboard({
               </InsightSectionShell>
             </TabsContent>
 
-            <TabsContent value="action" className="mt-0 space-y-4 focus-visible:outline-none" id="tab-action">
-              <p className="text-xs text-slate-500 dark:text-zinc-400">
+            <TabsContent value="action" className="mt-0 space-y-6 focus-visible:outline-none" id="tab-action">
+              <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed">
                 상태는 이 브라우저에만 저장됩니다. 실행 과제를 배포·공유할 때는 별도 워크플로에 반영하세요.
               </p>
               <StrategyExecutionTable
@@ -224,7 +237,7 @@ export function ResultLDashboard({
                 keyword={keyword}
               />
             </TabsContent>
-          </div>
+          </MotionReveal>
         </div>
       </Tabs>
     </div>
@@ -235,18 +248,24 @@ function InsightSectionShell({
   title,
   result,
   children,
+  loading = false,
+  animationIndex = 0,
 }: {
   title: string
   result: ResearchResponse | null
   children: ReactNode
+  loading?: boolean
+  animationIndex?: number
 }) {
   return (
-    <section className="rounded-xl border border-[#E5E7EB] bg-white dark:border-zinc-700 dark:bg-zinc-900">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-zinc-800">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">{title}</h3>
-        <AnalysisSourceButton result={result} label="출처" />
-      </div>
-      <div className="p-4">{children}</div>
-    </section>
+    <MotionReveal staticLayout={loading} delay={0.08 + animationIndex * 0.05}>
+      <section className="rounded-xl border border-slate-100 bg-white shadow-sm transition-transform duration-200 hover:-translate-y-0.5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-zinc-800">
+          <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">{title}</h3>
+          <AnalysisSourceButton result={result} label="출처" />
+        </div>
+        <div className="p-5">{children}</div>
+      </section>
+    </MotionReveal>
   )
 }

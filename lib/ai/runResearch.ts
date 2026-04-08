@@ -67,6 +67,7 @@ function toUserFriendlyError(err: unknown, fallback: string): string {
 import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-cache'
 import {
   loadPipelineResumeState,
+  fetchTaskMap,
   type CompetitionDataShape,
   type TrendDataShape,
   type PipelineResumeState,
@@ -183,6 +184,13 @@ export type ResearchStreamEvent =
 
 export type AIPrimaryModel = 'gemini' | 'groq'
 
+/** `runResearch`의 `retryPipelineStep` — 단일 단계 재시도용 */
+export type RetryPipelineStepId =
+  | 'insight_extraction'
+  | 'strategy_generation'
+  | 'execution_layer'
+  | 'risk_opportunity'
+
 export type RunResearchParams = {
   /** 서버에서 만든 Supabase 클라이언트(세션). 서비스 롤 없이 RLS로 동작하려면 마이그레이션 049 필요 */
   supabase: SupabaseClient
@@ -208,6 +216,11 @@ export type RunResearchParams = {
    * 저장된 analysis_tasks가 없으면 전체 파이프라인으로 폴백합니다.
    */
   rerunFromPhase?: 1 | 2 | 3
+  /**
+   * 실패한 단계만 재호출 (인사이트·전략·실행·리스크 평가).
+   * 앞단(trend/competition/signal)은 저장된 태스크가 없으면 전체 재분석이 필요합니다.
+   */
+  retryPipelineStep?: RetryPipelineStepId
 }
 
 type RssItem = {
@@ -1540,20 +1553,611 @@ function toRecord(value: unknown): Record<string, string> {
   return {}
 }
 
-/**
- * Main research execution generator.
- * Yields streaming events for incremental UI updates.
- * Only persists to DB after all analysis succeeds.
- */
 const TIMEOUT_MESSAGE = '요청 시간이 초과되었습니다. 다시 시도해 주세요.'
 
 function checkAborted(signal: AbortSignal | undefined): boolean {
   return !!signal?.aborted
 }
 
+function parseStrategyTaskOutput(raw: unknown): StrategicRecommendationResult | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const opportunities = Array.isArray(o.opportunities)
+    ? o.opportunities.filter((x): x is string => typeof x === 'string')
+    : []
+  const risks = Array.isArray(o.risks) ? o.risks.filter((x): x is string => typeof x === 'string') : []
+  const strategy_summary = typeof o.strategy_summary === 'string' ? o.strategy_summary.trim() : ''
+  if (!strategy_summary && opportunities.length === 0 && risks.length === 0) return null
+  return {
+    opportunities,
+    risks,
+    strategy_summary: strategy_summary || ' ',
+    market_summary: typeof o.market_summary === 'string' ? o.market_summary.trim() : undefined,
+    key_strategic_insights: Array.isArray(o.key_strategic_insights)
+      ? o.key_strategic_insights.filter((x): x is string => typeof x === 'string').slice(0, 5)
+      : undefined,
+  }
+}
+
+function newsItemsFromSignalTaskOutput(raw: unknown): NewsItem[] {
+  if (!raw || typeof raw !== 'object') return []
+  const activity = (raw as { news_activity?: unknown }).news_activity
+  if (!Array.isArray(activity)) return []
+  const out: NewsItem[] = []
+  for (const n of activity) {
+    if (!n || typeof n !== 'object') continue
+    const o = n as { title?: string; url?: string; publisher?: string }
+    const title = typeof o.title === 'string' ? o.title : ''
+    const url = typeof o.url === 'string' ? o.url : ''
+    if (!title || !url) continue
+    const item: NewsItem = { title, url }
+    if (typeof o.publisher === 'string' && o.publisher) item.publisher = o.publisher
+    out.push(item)
+  }
+  return out
+}
+
+/**
+ * 단일 파이프라인 단계만 재실행: DB에 저장된 이전 단계 출력을 컨텍스트로 사용합니다.
+ */
+async function* runResearchRetrySingleStep(
+  params: RunResearchParams & { retryPipelineStep: RetryPipelineStepId }
+): AsyncGenerator<ResearchStreamEvent> {
+  const {
+    supabase,
+    keyword,
+    countryCode,
+    userId,
+    geminiKey,
+    groqKey,
+    mode: depthMode = 'standard',
+    primaryProvider: primaryProviderParam,
+    stepAISettings: stepSettings,
+    signal,
+    retryPipelineStep,
+  } = params
+
+  const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
+  const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
+  const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
+    ? { ...stepSettings, ai_primary_model: (stepSettings.ai_primary_model === 'groq' ? 'groq' : 'gemini') }
+    : { ai_primary_model: primaryProvider }
+
+  const cacheKey = buildCacheKeyParts(userId, keyword, countryCode)
+  const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
+  const llmCtx: LlmRecordingContext = { supabase, userId, analysisId }
+  const depthForDb = depthMode === 'quick' ? 'fast' : depthMode
+
+  const retryUpsertTask = async (
+    step: AnalysisTaskId,
+    status: 'pending' | 'running' | 'completed' | 'failed',
+    opts?: {
+      outputData?: unknown
+      errorMessage?: string
+      provider?: AnalysisStepProvider | null
+      fallback_used?: boolean
+      primary_provider_error?: string | null
+    }
+  ) => {
+    const now = new Date().toISOString()
+    const row: Record<string, unknown> = {
+      analysis_id: analysisId,
+      step_name: step,
+      status,
+      started_at: status === 'running' || status === 'completed' || status === 'failed' ? now : null,
+      completed_at: status === 'completed' || status === 'failed' ? now : null,
+      output_data: opts?.outputData ?? null,
+      error_message: opts?.errorMessage ?? null,
+      provider: opts?.provider ?? null,
+      fallback_used: opts?.fallback_used ?? false,
+      updated_at: now,
+    }
+    if (opts?.primary_provider_error != null) {
+      row.primary_provider_error = opts.primary_provider_error
+    }
+    await supabase.from('analysis_tasks').upsert(row, { onConflict: 'analysis_id,step_name' })
+  }
+
+  const updateProgressRow = async (step: number | null, status: 'analyzing' | 'completed' | 'failed') => {
+    const depthStored = depthForDb
+    await supabase.from('research_history').upsert(
+      {
+        user_id: cacheKey.userId,
+        keyword: cacheKey.keyword,
+        country_code: cacheKey.countryCode,
+        analysis_status: status,
+        progress_step: status === 'completed' ? null : step,
+        analysis_depth: depthStored,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,keyword,country_code' }
+    )
+  }
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'init' }
+    return
+  }
+
+  const { data: histRow } = await supabase
+    .from('research_history')
+    .select('report_id, key_metrics, analysis_depth')
+    .eq('user_id', cacheKey.userId)
+    .eq('keyword', cacheKey.keyword)
+    .eq('country_code', cacheKey.countryCode)
+    .maybeSingle()
+
+  const reportId = histRow?.report_id
+  if (!reportId) {
+    yield { type: 'error', message: '저장된 분석 결과가 없어 이 단계만 다시 실행할 수 없습니다.', step: 'retry' }
+    return
+  }
+
+  const existingKm = (
+    histRow?.key_metrics && typeof histRow.key_metrics === 'object' ? (histRow.key_metrics as Record<string, unknown>) : {}
+  ) as Record<string, unknown>
+  const analysisDepthRow =
+    histRow?.analysis_depth === 'fast' || histRow?.analysis_depth === 'standard' || histRow?.analysis_depth === 'deep'
+      ? histRow.analysis_depth
+      : depthForDb
+
+  yield { type: 'analysis_started', analysisId }
+  await updateProgressRow(4, 'analyzing')
+
+  const tasksMap = await fetchTaskMap(supabase, analysisId)
+  const signalOut = tasksMap.signal_layer?.output_data
+  const sourceLinks = newsItemsFromSignalTaskOutput(signalOut)
+
+  async function* emitStepFailure(msg: string): AsyncGenerator<ResearchStreamEvent> {
+    await retryUpsertTask(retryPipelineStep, 'failed', { errorMessage: msg })
+    yield {
+      type: 'task',
+      task: retryPipelineStep,
+      status: 'failed',
+      error: msg,
+      fallbackMessage: msg,
+    }
+    await updateProgressRow(4, 'failed')
+    yield { type: 'error', message: msg, step: retryPipelineStep }
+  }
+
+  try {
+    if (retryPipelineStep === 'insight_extraction') {
+      const resume = await loadPipelineResumeState(supabase, analysisId, 2)
+      if (!resume || resume.kind !== 'before_insight') {
+        yield* emitStepFailure('인사이트 재실행에 필요한 시장·경쟁 단계 데이터가 없습니다. 상단의 전체 다시 분석을 이용해 주세요.')
+        return
+      }
+      const insightProviderResolved = resolveAIForStep(effectiveStepSettings, 'insight')
+      await retryUpsertTask('insight_extraction', 'running', { provider: insightProviderResolved, fallback_used: false })
+      yield {
+        type: 'task',
+        task: 'insight_extraction',
+        status: 'running',
+        provider: insightProviderResolved,
+        fallback_used: false,
+      }
+
+      const insightResult = await runInsightExtractionTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        resume.marketOverview,
+        resume.competitionSummary,
+        insightProviderResolved,
+        { trendSignals: resume.trendData.positive_signals, marketScore: resume.trendData.market_score },
+        llmCtx
+      )
+      const insightData = insightResult.data
+      const insightProvider =
+        insightProviderResolved === 'gemini'
+          ? insightResult.usedFallback
+            ? 'groq'
+            : 'gemini'
+          : insightResult.usedFallback
+            ? 'gemini'
+            : 'groq'
+      await retryUpsertTask('insight_extraction', 'completed', {
+        outputData: insightData,
+        provider: insightProvider,
+        fallback_used: insightResult.usedFallback,
+        primary_provider_error: insightResult.usedFallback ? insightResult.primaryProviderError ?? null : null,
+      })
+      yield {
+        type: 'task',
+        task: 'insight_extraction',
+        status: 'completed',
+        data: insightData,
+        provider: insightProvider,
+        fallback_used: insightResult.usedFallback,
+      }
+
+      const merged: Record<string, unknown> = { ...existingKm }
+      merged.core_insights = insightData.core_insights
+      merged.risk_signals = insightData.risk_signals
+      if (insightData.key_insights.length) merged.facts = insightData.key_insights
+      sanitizeDeep(merged)
+
+      await supabase.from('research_history').upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          report_id: reportId,
+          key_metrics: merged,
+          analysis_status: 'completed',
+          progress_step: null,
+          analysis_depth: analysisDepthRow,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+    } else if (retryPipelineStep === 'strategy_generation') {
+      const resume = await loadPipelineResumeState(supabase, analysisId, 3)
+      if (!resume || resume.kind !== 'before_strategy') {
+        yield* emitStepFailure('전략 재실행에 필요한 인사이트 단계 데이터가 없습니다. 전체 다시 분석을 이용해 주세요.')
+        return
+      }
+      const insightData = resume.insightData as InsightExtractionResult
+      const strategyProvider = resolveAIForStep(effectiveStepSettings, 'strategy')
+      const hasStrategyProviderKey = strategyProvider === 'groq' ? !!groqKey : !!geminiKey
+      const effectiveStrategyProvider = hasStrategyProviderKey ? strategyProvider : groqKey ? 'groq' : 'gemini'
+
+      await retryUpsertTask('strategy_generation', 'running', { provider: effectiveStrategyProvider, fallback_used: false })
+      yield {
+        type: 'task',
+        task: 'strategy_generation',
+        status: 'running',
+        provider: effectiveStrategyProvider,
+        fallback_used: false,
+      }
+
+      const stratResult = await runStrategicRecommendationTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        resume.marketOverview,
+        resume.competitionSummary,
+        insightData,
+        effectiveStrategyProvider,
+        llmCtx
+      )
+      const strategyData = stratResult.data
+      const stratProvider =
+        effectiveStrategyProvider === 'gemini'
+          ? stratResult.usedFallback
+            ? 'groq'
+            : 'gemini'
+          : stratResult.usedFallback
+            ? 'gemini'
+            : 'groq'
+      await retryUpsertTask('strategy_generation', 'completed', {
+        outputData: strategyData,
+        provider: stratProvider,
+        fallback_used: stratResult.usedFallback,
+        primary_provider_error: stratResult.usedFallback ? stratResult.primaryProviderError ?? null : null,
+      })
+      yield {
+        type: 'task',
+        task: 'strategy_generation',
+        status: 'completed',
+        data: strategyData,
+        provider: stratProvider,
+        fallback_used: stratResult.usedFallback,
+      }
+
+      const merged: Record<string, unknown> = { ...existingKm }
+      merged.summary_insights = strategyData.strategy_summary
+      merged.market_summary = strategyData.market_summary
+      merged.key_strategic_insights = strategyData.key_strategic_insights
+      merged.opportunity_areas = strategyData.opportunities.length ? strategyData.opportunities : merged.opportunity_areas
+      const pos = Array.isArray(merged.positive_signals) ? (merged.positive_signals as string[]) : []
+      const neu = Array.isArray(merged.neutral_signals) ? (merged.neutral_signals as string[]) : []
+      const trendScore = typeof merged.market_temperature_score === 'number' ? merged.market_temperature_score : resume.trendData.market_score
+      const compCount = Array.isArray(merged.competitive_landscape)
+        ? (merged.competitive_landscape as unknown[]).length
+        : resume.competitionData.competitive_landscape.length
+      const pmPlanRetry = merged.pm_action_plan
+      const productActionsFallback = Array.isArray(pmPlanRetry) ? pmPlanRetry.length : 0
+      const oppScore = computeOpportunityScore({
+        market_score: trendScore,
+        positive_signals_count: pos.length,
+        neutral_signals_count: neu.length,
+        competitor_count: compCount,
+        opportunities_count: strategyData.opportunities.length,
+        risks_count: strategyData.risks.length,
+        product_actions_count: productActionsFallback,
+      })
+      merged.opportunity_score = oppScore.opportunity_score
+      merged.opportunity_score_breakdown = oppScore.breakdown
+      merged.opportunity_score_reasoning = oppScore.score_reasoning
+      sanitizeDeep(merged)
+
+      await supabase.from('research_history').upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          report_id: reportId,
+          key_metrics: merged,
+          analysis_status: 'completed',
+          progress_step: null,
+          analysis_depth: analysisDepthRow,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+    } else if (retryPipelineStep === 'execution_layer') {
+      const stratRaw = tasksMap['strategy_generation']?.output_data
+      const strategyData = parseStrategyTaskOutput(stratRaw)
+      if (!strategyData) {
+        yield* emitStepFailure('전략 단계 결과가 없어 실행 단계만 재실행할 수 없습니다. 전체 다시 분석을 이용해 주세요.')
+        return
+      }
+      const actionProviderResolved = resolveAIForStep(effectiveStepSettings, 'action')
+      const opportunitiesSummary = strategyData.opportunities.join('. ')
+      const risksSummary = strategyData.risks.join('. ')
+
+      await retryUpsertTask('execution_layer', 'running', { provider: actionProviderResolved, fallback_used: false })
+      yield {
+        type: 'task',
+        task: 'execution_layer',
+        status: 'running',
+        provider: actionProviderResolved,
+        fallback_used: false,
+      }
+
+      const pmResult = await runPMActionPlanTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        strategyData.strategy_summary,
+        opportunitiesSummary,
+        risksSummary,
+        actionProviderResolved,
+        llmCtx
+      )
+      const executionData = { ...pmResult.executionData }
+      const executionProvider =
+        actionProviderResolved === 'gemini'
+          ? pmResult.usedFallback
+            ? 'groq'
+            : 'gemini'
+          : pmResult.usedFallback
+            ? 'gemini'
+            : 'groq'
+      await retryUpsertTask('execution_layer', 'completed', {
+        outputData: executionData,
+        provider: executionProvider,
+        fallback_used: pmResult.usedFallback,
+        primary_provider_error: pmResult.usedFallback ? pmResult.primaryProviderError ?? null : null,
+      })
+      yield {
+        type: 'task',
+        task: 'execution_layer',
+        status: 'completed',
+        data: executionData,
+        provider: executionProvider,
+        fallback_used: pmResult.usedFallback,
+      }
+
+      const merged: Record<string, unknown> = { ...existingKm }
+      const execWide = executionData as Record<string, unknown> & typeof executionData
+      merged.pm_action_plan = executionData.pm_action_plan
+      merged.strategic_decision_layer = executionData.strategic_decision_layer
+      merged.chart_insights = execWide.chart_insights
+      merged.swot_analysis = execWide.swot_analysis
+      merged.jtbd = execWide.jtbd
+      merged.next_actions_pm = executionData.next_actions_pm
+      merged.recommended_product_strategy = {
+        summary: strategyData.strategy_summary,
+        product_idea: executionData.product_idea,
+        target_customer: executionData.target_customer,
+        monetization: executionData.monetization,
+      }
+      const pos = Array.isArray(merged.positive_signals) ? (merged.positive_signals as string[]) : []
+      const neu = Array.isArray(merged.neutral_signals) ? (merged.neutral_signals as string[]) : []
+      const trendScore = typeof merged.market_temperature_score === 'number' ? merged.market_temperature_score : 50
+      const compCount = Array.isArray(merged.competitive_landscape)
+        ? (merged.competitive_landscape as unknown[]).length
+        : 0
+      const oppScore = computeOpportunityScore({
+        market_score: trendScore,
+        positive_signals_count: pos.length,
+        neutral_signals_count: neu.length,
+        competitor_count: compCount,
+        opportunities_count: strategyData.opportunities.length,
+        risks_count: strategyData.risks.length,
+        product_actions_count: executionData.product_actions.length,
+      })
+      merged.opportunity_score = oppScore.opportunity_score
+      merged.opportunity_score_breakdown = oppScore.breakdown
+      merged.opportunity_score_reasoning = oppScore.score_reasoning
+      const stratEval = merged.strategy_evaluation as
+        | {
+            competition_risk?: number
+            growth_potential?: number
+            market_attractiveness?: number
+          }
+        | undefined
+      merged.porter_5_forces = enrichPorter5Forces(
+        execWide.porter_5_forces as Porter5ForcesShape | undefined,
+        oppScore.breakdown,
+        executionData.strategic_decision_layer,
+        stratEval
+          ? {
+              competition_risk: stratEval.competition_risk,
+              growth_potential: stratEval.growth_potential,
+              market_attractiveness: stratEval.market_attractiveness,
+            }
+          : null
+      )
+      sanitizeDeep(merged)
+
+      await supabase.from('research_history').upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          report_id: reportId,
+          key_metrics: merged,
+          analysis_status: 'completed',
+          progress_step: null,
+          analysis_depth: analysisDepthRow,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+    } else if (retryPipelineStep === 'risk_opportunity') {
+      const stratRaw = tasksMap['strategy_generation']?.output_data
+      const execRaw = tasksMap['execution_layer']?.output_data
+      const strategyData = parseStrategyTaskOutput(stratRaw)
+      if (!strategyData) {
+        yield* emitStepFailure('전략 단계 결과가 없습니다. 전체 다시 분석을 이용해 주세요.')
+        return
+      }
+      if (!execRaw || typeof execRaw !== 'object') {
+        yield* emitStepFailure('실행(PM 액션) 단계가 완료된 뒤에 리스크 평가를 다시 시도할 수 있습니다.')
+        return
+      }
+      const ex = execRaw as {
+        product_actions?: Array<{ action: string; priority?: string; reasoning?: string }>
+      }
+      const product_actions = Array.isArray(ex.product_actions)
+        ? ex.product_actions.filter((a) => a && typeof a.action === 'string')
+        : []
+      const resume = await loadPipelineResumeState(supabase, analysisId, 3)
+      const competitionSummary =
+        resume?.kind === 'before_strategy'
+          ? resume.competitionSummary
+          : Array.isArray(existingKm.competitive_landscape)
+            ? (existingKm.competitive_landscape as Array<{ name?: string; positioning?: string }>)
+                .map((c) => (c?.positioning ? `${c.name}: ${c.positioning}` : c.name))
+                .filter((s): s is string => typeof s === 'string' && s.length > 0)
+                .join('. ')
+            : ''
+
+      const riskProvider = resolveAIForStep(effectiveStepSettings, 'risk')
+      const hasRiskProviderKey = riskProvider === 'groq' ? !!groqKey : !!geminiKey
+      const effectiveRiskProvider = hasRiskProviderKey ? riskProvider : groqKey ? 'groq' : 'gemini'
+
+      await retryUpsertTask('risk_opportunity', 'running', { provider: effectiveRiskProvider, fallback_used: false })
+      yield {
+        type: 'task',
+        task: 'risk_opportunity',
+        status: 'running',
+        provider: effectiveRiskProvider,
+        fallback_used: false,
+      }
+
+      const strategyEvaluation = await runStrategyEvaluationTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        strategyData,
+        competitionSummary || ' ',
+        { product_actions },
+        effectiveRiskProvider,
+        llmCtx
+      )
+
+      await retryUpsertTask('risk_opportunity', 'completed', { outputData: strategyEvaluation, provider: effectiveRiskProvider, fallback_used: false })
+      yield {
+        type: 'task',
+        task: 'risk_opportunity',
+        status: 'completed',
+        data: strategyEvaluation,
+        provider: effectiveRiskProvider,
+        fallback_used: false,
+      }
+
+      const merged: Record<string, unknown> = { ...existingKm }
+      merged.strategy_evaluation = {
+        market_attractiveness: strategyEvaluation.market_attractiveness,
+        market_attractiveness_label: strategyEvaluation.market_attractiveness_label,
+        market_attractiveness_reason: strategyEvaluation.market_attractiveness_reason,
+        competition_risk: strategyEvaluation.competition_risk,
+        competition_risk_label: strategyEvaluation.competition_risk_label,
+        competition_risk_reason: strategyEvaluation.competition_risk_reason,
+        execution_difficulty: strategyEvaluation.execution_difficulty,
+        execution_difficulty_label: strategyEvaluation.execution_difficulty_label,
+        execution_difficulty_reason: strategyEvaluation.execution_difficulty_reason,
+        growth_potential: strategyEvaluation.growth_potential,
+        growth_potential_label: strategyEvaluation.growth_potential_label,
+        growth_potential_reason: strategyEvaluation.growth_potential_reason,
+      }
+      sanitizeDeep(merged)
+
+      await supabase.from('research_history').upsert(
+        {
+          user_id: cacheKey.userId,
+          keyword: cacheKey.keyword,
+          country_code: cacheKey.countryCode,
+          report_id: reportId,
+          key_metrics: merged,
+          analysis_status: 'completed',
+          progress_step: null,
+          analysis_depth: analysisDepthRow,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,keyword,country_code' }
+      )
+    }
+  } catch (err) {
+    const msg = toUserFriendlyError(err, '단계 재실행 중 오류가 발생했습니다.')
+    await retryUpsertTask(retryPipelineStep, 'failed', { errorMessage: msg })
+    yield {
+      type: 'task',
+      task: retryPipelineStep,
+      status: 'failed',
+      error: msg,
+      fallbackMessage: msg,
+    }
+    await updateProgressRow(4, 'failed')
+    yield { type: 'error', message: msg, step: retryPipelineStep }
+    return
+  }
+
+  await updateProgressRow(null, 'completed')
+
+  const FINAL_REFINING_MESSAGES = [
+    '해당 단계 결과를 반영해 지표를 갱신하고 있습니다...',
+    '저장된 컨텍스트와 새 결과를 일치시키는 중입니다...',
+    '단계 재실행이 완료되었습니다.',
+  ] as const
+  const REFINING_SEGMENT_MS = [500, 500, 400] as const
+  for (let i = 0; i < FINAL_REFINING_MESSAGES.length; i++) {
+    if (checkAborted(signal)) return
+    yield {
+      type: 'final_refining',
+      phase: (i + 1) as 1 | 2 | 3,
+      message: FINAL_REFINING_MESSAGES[i],
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, REFINING_SEGMENT_MS[i] ?? 500))
+  }
+
+  yield {
+    type: 'done',
+    reportId,
+    sourceLinks,
+    analysis_depth: analysisDepthRow,
+    serper_used: false,
+  }
+}
+
+/**
+ * Main research execution generator.
+ * Yields streaming events for incremental UI updates.
+ * Only persists to DB after all analysis succeeds.
+ */
 export async function* runResearch(
   params: RunResearchParams
 ): AsyncGenerator<ResearchStreamEvent> {
+  if (params.retryPipelineStep) {
+    yield* runResearchRetrySingleStep(params as RunResearchParams & { retryPipelineStep: RetryPipelineStepId })
+    return
+  }
+
   const {
     supabase,
     keyword,

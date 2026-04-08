@@ -1134,6 +1134,7 @@ function ResultsContent() {
         {showAnalysisShell && !needsRunAction && (
           <ResultPageHero
             title={heroTitle}
+            currentAnalysisModel={aiPrimaryModel}
             analysisMeta={
               displayResult?.reportId
                 ? (() => {
@@ -1255,10 +1256,33 @@ function ResultsContent() {
                   })()}
                   globalErrorMessage={displayError ?? polledError ?? undefined}
                   loading={loading}
-                  onRetryStep={() => {
+                  onRetryStep={(failedStepTaskId) => {
                     setPolledStatus(null)
                     setPolledError(null)
-                    startStreamingResearch(currentKeyword ?? '', { country_code: countryFromUrl, ai_primary_model: aiPrimaryModel, force_reanalyze: true })
+                    const stepRetry = failedStepTaskId as
+                      | 'insight_extraction'
+                      | 'strategy_generation'
+                      | 'execution_layer'
+                      | 'risk_opportunity'
+                      | undefined
+                    const canRetryStep =
+                      stepRetry === 'insight_extraction' ||
+                      stepRetry === 'strategy_generation' ||
+                      stepRetry === 'execution_layer' ||
+                      stepRetry === 'risk_opportunity'
+                    if (canRetryStep) {
+                      void startStreamingResearch(currentKeyword ?? '', {
+                        country_code: countryFromUrl,
+                        ai_primary_model: aiPrimaryModel,
+                        retry_pipeline_step: stepRetry,
+                      })
+                    } else {
+                      void startStreamingResearch(currentKeyword ?? '', {
+                        country_code: countryFromUrl,
+                        ai_primary_model: aiPrimaryModel,
+                        force_reanalyze: true,
+                      })
+                    }
                   }}
                 />
               </div>
@@ -1310,7 +1334,19 @@ function ResultsContent() {
 
         {showAnalysisShell && !needsRunAction && currentKeyword && (
           <div className="mb-4 space-y-3">
-            <AnalysisActivityFeed />
+            <AnalysisActivityFeed
+              primaryAiModel={aiPrimaryModel}
+              onRetry={
+                currentKeyword && !loading && !analysisPipelineBusy
+                  ? () =>
+                      startStreamingResearch(currentKeyword, {
+                        country_code: countryFromUrl,
+                        ai_primary_model: aiPrimaryModel,
+                        force_reanalyze: true,
+                      })
+                  : undefined
+              }
+            />
           </div>
         )}
 
@@ -1369,7 +1405,7 @@ function ResultsContent() {
             />
           </div>
         ) : (
-          <div role="region" aria-label="AI 리포트" className="space-y-6">
+          <div role="region" aria-label="AI 리포트" className="space-y-8">
             <ResultSectionErrorBoundary sectionName="structured-sections">
               <ResultLDashboard
                 result={effectiveResultForCards ?? displayResult}
@@ -1388,16 +1424,36 @@ function ResultsContent() {
             </ResultSectionErrorBoundary>
             {/* AI 분석 엔진 — 상세는 모달 (페이지 스크롤 유지) */}
             {(displayResult != null || (analysisTasks?.length ?? 0) > 0) && (
-              <section id="section-engine" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
+              <section
+                id="section-engine"
+                role="button"
+                tabIndex={0}
+                aria-label="AI 분석 엔진 상세 열기"
+                onClick={() => setEngineModalOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setEngineModalOpen(true)
+                  }
+                }}
+                className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
-                      <Cpu className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                    <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg dark:text-zinc-50">
+                      <Cpu className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
                       AI 분석 엔진
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1">단계별 파이프라인과 실행 상태를 모달에서 확인합니다.</p>
+                    <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 dark:text-zinc-400">단계별 파이프라인과 실행 상태를 모달에서 확인합니다.</p>
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setEngineModalOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-2 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden
+                  >
                     <Maximize2 className="h-4 w-4" aria-hidden />
                     자세히 보기
                   </Button>
@@ -1410,16 +1466,36 @@ function ResultsContent() {
 
         {/* 상세 (데이터 출처 · 뉴스) — 모달로 표시 */}
         {currentKeyword && (
-          <section id="section-detail" className="scroll-mt-24 rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm mt-6">
+          <section
+            id="section-detail"
+            role="button"
+            tabIndex={0}
+            aria-label="데이터 출처·뉴스 상세 열기"
+            onClick={() => setDetailModalOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setDetailModalOpen(true)
+              }
+            }}
+            className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900"
+          >
             <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
               <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
-                  <Database className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg dark:text-zinc-50">
+                  <Database className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
                   상세 (데이터 출처 · 뉴스)
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">출처·뉴스 전체는 모달에서 동일 너비로 표시됩니다.</p>
+                <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 dark:text-zinc-400">출처·뉴스 전체는 모달에서 동일 너비로 표시됩니다.</p>
               </div>
-              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setDetailModalOpen(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-2 pointer-events-none"
+                tabIndex={-1}
+                aria-hidden
+              >
                 <Maximize2 className="h-4 w-4" aria-hidden />
                 자세히 보기
               </Button>

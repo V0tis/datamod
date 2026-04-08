@@ -513,9 +513,9 @@ export function AnalysisResultSections({
             {opportunityReason && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
-                <p className="text-sm text-foreground leading-relaxed">
+                <div className="text-sm text-foreground leading-relaxed">
                   <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
-                </p>
+                </div>
               </div>
             )}
             {(strategicActions.length > 0 || allActionItems.length > 0 || mvpIdeas.length > 0) && (
@@ -553,7 +553,7 @@ export function AnalysisResultSections({
   return (
     <motion.div
       className="space-y-12"
-      initial={{ opacity: 0, y: 32 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.52, ease: motionConfig.sectionEntrance.ease }}
     >
@@ -841,9 +841,9 @@ export function AnalysisResultSections({
             {opportunityReason && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
-                <p className="text-sm text-foreground leading-relaxed">
+                <div className="text-sm text-foreground leading-relaxed">
                   <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
-                </p>
+                </div>
               </div>
             )}
             {isPmAnalytics && (strategicActions.length > 0 || allActionItems.length > 0 || mvpIdeas.length > 0) && (

@@ -34,6 +34,12 @@ export function MarkdownBody({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          /** 블록 마크다운이 중첩될 때 <p><div/> 같은 잘못된 HTML·hydration mismatch 방지 */
+          p: ({ node: _n, children, className, ...props }) => (
+            <div className={cn('mb-4 last:mb-0 leading-relaxed', className)} {...props}>
+              {children}
+            </div>
+          ),
           a: ({ href, children: c, ...props }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
               {c}

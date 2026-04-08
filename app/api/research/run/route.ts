@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getGeminiKeyForRequest, getGroqKeyForRequest, getSerperKeyForRequest, getStepAISettingsForRequest } from '@/lib/research-keys'
-import { runResearch, type ResearchStreamEvent } from '@/lib/ai'
+import { runResearch, type ResearchStreamEvent, type RetryPipelineStepId } from '@/lib/ai'
 import { logger } from '@/lib/logger'
 
 import { RESEARCH_RUN_DEADLINE_MS } from '@/lib/api/route-timeouts'
@@ -64,6 +64,8 @@ export async function POST(req: Request) {
       force_reanalyze?: boolean
       /** 2: 인사이트부터, 3: 전략·실행부터 (저장된 태스크 필요) */
       rerun_from_phase?: number
+      /** 실패한 AI 단계만 재실행 */
+      retry_pipeline_step?: string
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
@@ -85,6 +87,15 @@ export async function POST(req: Request) {
     const rawPhase = body?.rerun_from_phase
     const rerunFromPhase =
       rawPhase === 1 || rawPhase === 2 || rawPhase === 3 ? (rawPhase as 1 | 2 | 3) : undefined
+
+    const rawRetry = body?.retry_pipeline_step
+    const retryPipelineStep: RetryPipelineStepId | undefined =
+      rawRetry === 'insight_extraction' ||
+      rawRetry === 'strategy_generation' ||
+      rawRetry === 'execution_layer' ||
+      rawRetry === 'risk_opportunity'
+        ? rawRetry
+        : undefined
 
     if (!keyword) {
       return NextResponse.json(
@@ -225,6 +236,7 @@ export async function POST(req: Request) {
             signal: combinedController.signal,
             forceReanalyze,
             rerunFromPhase,
+            retryPipelineStep,
           })
 
           try {

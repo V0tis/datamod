@@ -23,7 +23,7 @@ export interface ResultTimelineSectionProps {
   errorStepIndex?: number
   globalErrorMessage?: string
   loading?: boolean
-  onRetryStep?: () => void
+  onRetryStep?: (failedStepTaskId?: string) => void
   /** Max height + scroll for compact view */
   maxHeight?: string
   /** Hero 내장 시 카드 중첩 제거, 기회 점수 그리드와 UI 통일 */

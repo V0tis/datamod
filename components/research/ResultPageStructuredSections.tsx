@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { motionConfig } from '@/lib/motion-config'
 import {
@@ -31,6 +32,8 @@ export interface ResultPageStructuredSectionsProps {
     status: string
     output_data: unknown
   }> | null
+  /** 스트리밍 중인데 아직 task 행이 없을 때 펼칠 섹션 (예: streamingState.stepId) */
+  livePipelineStepId?: string | null
   consensusData?: {
     sentiment?: { score?: number; trend?: 'rising' | 'stable' | 'falling'; ratio?: unknown }
     strategicSummary?: { summary?: string; opportunity?: string; actionItems?: string[] }
@@ -74,6 +77,28 @@ const containerVariants = {
   },
 }
 
+/** 현재 파이프라인에서 실행 중인 단계 → 접힌 섹션 중 자동으로 펼칠 ID */
+function mapPipelineStepToSectionId(step: string | undefined): string | null {
+  if (!step) return null
+  const m: Record<string, string> = {
+    signal_layer: SECTION_IDS.resultSummary,
+    article_extraction: SECTION_IDS.resultSummary,
+    article_summary: SECTION_IDS.resultSummary,
+    trend_analysis: SECTION_IDS.marketTrends,
+    competition_analysis: SECTION_IDS.competitorLandscape,
+    insight_extraction: SECTION_IDS.keyInsights,
+    strategy_generation: SECTION_IDS.strategicRecommendations,
+    execution_layer: SECTION_IDS.actionPlan,
+    risk_opportunity: SECTION_IDS.strategicRecommendations,
+    post_processing: SECTION_IDS.resultSummary,
+    post_processing_key_metrics: SECTION_IDS.resultSummary,
+    post_processing_creative: SECTION_IDS.resultSummary,
+    post_processing_saving: SECTION_IDS.resultSummary,
+    final_refining: SECTION_IDS.resultSummary,
+  }
+  return m[step] ?? null
+}
+
 /**
  * Structured result page with 6 collapsible sections for clear information hierarchy.
  * Users can quickly scan titles and expand sections of interest.
@@ -87,9 +112,30 @@ export function ResultPageStructuredSections({
   newsList = [],
   loading = false,
   keyword = '',
+  livePipelineStepId = null,
 }: ResultPageStructuredSectionsProps) {
   const effectiveResult = displayResult ?? result
   const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
+
+  const runningTaskName = analysisTasks?.find(
+    (t) => t.status === 'running' || t.status === 'processing'
+  )?.step_name
+  const autoExpandSectionId = useMemo(() => {
+    const step = runningTaskName ?? (loading ? livePipelineStepId ?? undefined : undefined)
+    return mapPipelineStepToSectionId(step)
+  }, [runningTaskName, loading, livePipelineStepId])
+
+  const [manualOpenId, setManualOpenId] = useState<string | null>(null)
+  useEffect(() => {
+    setManualOpenId(null)
+  }, [runningTaskName, livePipelineStepId])
+
+  const effectiveOpenId = manualOpenId ?? autoExpandSectionId
+
+  const sectionProps = (id: string) => ({
+    open: effectiveOpenId === id,
+    onOpenChange: (next: boolean) => setManualOpenId(next ? id : null),
+  })
 
   return (
     <motion.div
@@ -106,7 +152,8 @@ export function ResultPageStructuredSections({
           title="결과 요약"
           description="기회 점수, 핵심 결론, 요약을 한눈에 확인하세요."
           icon={<BarChart3 className="h-5 w-5" />}
-          defaultOpen
+          defaultOpen={false}
+          {...sectionProps(SECTION_IDS.resultSummary)}
         >
           {hasResultData ? (
             <div className="space-y-6">
@@ -144,6 +191,8 @@ export function ResultPageStructuredSections({
         title="시장 개요"
         description="전략적 의사결정과 시장 관점을 확인하세요."
         icon={<BarChart3 className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.marketSummary)}
       >
         <div className="space-y-6">
           <StrategicDecisionLayer
@@ -162,6 +211,8 @@ export function ResultPageStructuredSections({
         title="핵심 인사이트"
         description="시장 매력도 해석, 주요 기회, 핵심 리스크, 전략적 시사점을 한눈에 파악하세요."
         icon={<Lightbulb className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.keyInsights)}
       >
         <KeyMarketInsightsCard
           result={effectiveResult}
@@ -181,6 +232,8 @@ export function ResultPageStructuredSections({
         title="시장 트렌드"
         description="성장 신호, 트렌드 동향, 시장 온도 분석입니다."
         icon={<TrendingUp className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.marketTrends)}
       >
         <AnalysisResultSections
           result={result}
@@ -201,6 +254,8 @@ export function ResultPageStructuredSections({
         title="경쟁 환경"
         description="주요 경쟁사, 포지셔닝, 시장 구조를 파악하세요."
         icon={<Users className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.competitorLandscape)}
       >
         <AnalysisResultSections
           result={result}
@@ -221,6 +276,8 @@ export function ResultPageStructuredSections({
         title="전략 제안"
         description="리스크, 기회, SWOT, 제품 전략을 종합한 추천입니다."
         icon={<Target className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.strategicRecommendations)}
       >
         <div className="space-y-6">
           <StrategyEvaluationSection result={effectiveResult} loading={loading} />
@@ -244,6 +301,8 @@ export function ResultPageStructuredSections({
         title="액션 플랜"
         description="PM이 바로 실행할 수 있는 우선순위 액션 목록입니다."
         icon={<CheckSquare className="h-5 w-5" />}
+        defaultOpen={false}
+        {...sectionProps(SECTION_IDS.actionPlan)}
       >
         <NextActionsForPM result={effectiveResult} taskData={taskData} analysisTasks={analysisTasks} loading={loading} embedded />
       </ResultPageSection>

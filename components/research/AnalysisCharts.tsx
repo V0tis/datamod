@@ -64,7 +64,14 @@ export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<
             contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
             cursor={false}
           />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
+          <Bar
+            dataKey="value"
+            radius={[0, 4, 4, 0]}
+            maxBarSize={24}
+            isAnimationActive
+            animationDuration={850}
+            animationEasing="ease-out"
+          >
             {data.map((_, i) => (
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
             ))}
@@ -102,7 +109,14 @@ export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, class
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
               cursor={false}
             />
-            <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
+            <Bar
+              dataKey="value"
+              radius={[0, 4, 4, 0]}
+              maxBarSize={24}
+              isAnimationActive
+              animationDuration={850}
+              animationEasing="ease-out"
+            >
               {data.map((_, i) => (
                 <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
               ))}

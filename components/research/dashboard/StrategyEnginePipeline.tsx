@@ -80,7 +80,8 @@ export interface StrategyEnginePipelineProps {
     primary_provider_error?: string | null
   }> | null
   newsList?: Array<{ title?: string; url?: string; publisher?: string }>
-  onRetryStep?: () => void
+  /** 실패한 단계의 `taskId`를 넘기면 해당 단계만 재시도, 생략 시 상위에서 전체 재분석 등 처리 */
+  onRetryStep?: (failedStepTaskId?: string) => void
   /** Global analysis failure - timeline stays visible, this step shows error */
   hasError?: boolean
   /** Step index (0–4) where global error occurred */
@@ -352,13 +353,18 @@ export function StrategyEnginePipeline({
   streamingProgressMeta = null,
   className,
 }: StrategyEnginePipelineProps) {
-  const [expanded, setExpanded] = useState(!allCompleted)
+  /** 진입 시 접힘. 파이프라인에 실행 중인 단계가 있을 때만 자동 펼침 */
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [resultId])
+
+  /** 전체 타임라인은 진입 시 접힘 유지. 사용자가 '전체 타임라인 보기'를 눌렀을 때만 펼침 (분석 중에도 자동 펼침 없음). */
+
   useEffect(() => {
     if (allCompleted) setExpanded(false)
   }, [allCompleted])
-  useEffect(() => {
-    if (resultId != null) setExpanded(!allCompleted)
-  }, [resultId])
   type TaskItem = NonNullable<typeof analysisTasks> extends (infer U)[] ? U : never
   const taskMap = (analysisTasks ?? []).reduce(
     (acc, t) => { acc[t.step_name] = t; return acc },
@@ -569,11 +575,18 @@ export function StrategyEnginePipeline({
                     const rawError = (taskMap[tk] as { error_message?: string } | null)?.error_message ?? globalErrorMessage ?? '오류 발생'
                     const { description } = getAnalysisErrorMessage(rawError)
                     return (
-                      <div className="mt-1 flex items-center gap-2 flex-wrap" role="alert">
-                        <span className="text-xs text-destructive truncate">{description}</span>
+                      <div className="mt-2 space-y-1.5" role="alert">
+                        <p className="text-xs font-medium text-destructive">일시적인 네트워크 오류입니다</p>
+                        {description ? (
+                          <p className="text-[11px] text-muted-foreground line-clamp-2">{description}</p>
+                        ) : null}
                         {onRetryStep && (
-                          <button type="button" onClick={onRetryStep} className="text-xs text-primary hover:underline shrink-0">
-                            다시 분석
+                          <button
+                            type="button"
+                            onClick={() => onRetryStep(tk || undefined)}
+                            className="text-xs font-semibold text-primary hover:underline"
+                          >
+                            해당 단계 재실행
                           </button>
                         )}
                       </div>
@@ -599,10 +612,13 @@ export function StrategyEnginePipeline({
             const showInsightPanel = hasInsight && (status === 'completed' || status === 'running')
             const task = taskMap[taskKey] ?? null
 
+            const isError = status === 'failed'
+
             return (
               <div key={stage.id} className="relative">
                 {/* Node */}
                 <div
+                  data-error={isError ? 'true' : undefined}
                   className={cn(
                     'flex items-center gap-3 rounded-lg border-2 px-4 py-3 transition-all duration-300',
                     status === 'completed' &&
@@ -611,8 +627,8 @@ export function StrategyEnginePipeline({
                       'border-primary bg-primary/10 shadow-md ring-2 ring-primary/20',
                     status === 'pending' &&
                       'border-border/60 bg-muted/20 opacity-60',
-                    status === 'failed' &&
-                      'border-destructive ring-2 ring-destructive/20 bg-destructive/10',
+                    isError &&
+                      'border-destructive ring-2 ring-destructive/25 bg-destructive/[0.08]',
                   )}
                 >
                   <div
@@ -716,7 +732,10 @@ export function StrategyEnginePipeline({
                       const isQuota = errVariant === 'quota'
                       return (
                         <div className="mt-2 space-y-2" role="alert">
-                          <p className="text-sm text-muted-foreground">{description}</p>
+                          <p className="text-sm font-medium text-foreground">일시적인 네트워크 오류입니다</p>
+                          {description ? (
+                            <p className="text-xs text-muted-foreground">{description}</p>
+                          ) : null}
                           {recoveryHint && <p className="text-xs text-muted-foreground">{recoveryHint}</p>}
                           {possibleCauses && possibleCauses.length > 0 && (
                             <div>
@@ -730,9 +749,14 @@ export function StrategyEnginePipeline({
                           )}
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             {onRetryStep && (
-                              <Button variant="outline" size="sm" onClick={onRetryStep} className="gap-1.5 h-8 text-xs">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => onRetryStep(taskKey || undefined)}
+                                className="gap-1.5 h-9 text-xs font-semibold"
+                              >
                                 <RefreshCw className="h-3.5 w-3.5" />
-                                다시 분석
+                                해당 단계 재실행
                               </Button>
                             )}
                             <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 text-xs">

@@ -7,11 +7,15 @@ import { cn } from '@/lib/utils'
 
 /** 카드·좁은 영역용: h2/h3를 본문 크기에 맞추고 리스트는 compact */
 export const COMPACT_MARKDOWN_COMPONENTS: Partial<Components> = {
-  p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-snug">{children}</p>,
-  h1: ({ children }) => <p className="mb-1 text-sm font-semibold leading-snug">{children}</p>,
-  h2: ({ children }) => <p className="mb-1 text-sm font-semibold leading-snug">{children}</p>,
-  h3: ({ children }) => <p className="mb-1 text-xs font-semibold leading-snug">{children}</p>,
-  h4: ({ children }) => <p className="mb-1 text-xs font-semibold leading-snug">{children}</p>,
+  p: ({ node: _n, children, className, ...props }) => (
+    <div className={cn('mb-1.5 last:mb-0 leading-snug', className)} {...props}>
+      {children}
+    </div>
+  ),
+  h1: ({ children }) => <div className="mb-1 text-sm font-semibold leading-snug">{children}</div>,
+  h2: ({ children }) => <div className="mb-1 text-sm font-semibold leading-snug">{children}</div>,
+  h3: ({ children }) => <div className="mb-1 text-xs font-semibold leading-snug">{children}</div>,
+  h4: ({ children }) => <div className="mb-1 text-xs font-semibold leading-snug">{children}</div>,
   ul: ({ children }) => <ul className="my-1 list-inside list-disc space-y-0.5 pl-0">{children}</ul>,
   ol: ({ children }) => <ol className="my-1 list-inside list-decimal space-y-0.5 pl-0">{children}</ol>,
   li: ({ children }) => <li className="leading-snug">{children}</li>,

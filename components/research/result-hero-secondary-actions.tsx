@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { FileDown, Bookmark, Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { exportAnalysisToPdf } from '@/lib/pdf-export'
 import type { ResearchResponse } from '@/lib/stores/research-store'
@@ -23,7 +24,7 @@ export interface ResultHeroSecondaryActionsProps {
 }
 
 /**
- * PDF 저장 + 인사이트 저장 — secondary 그룹, 저장 중/완료 피드백
+ * PDF · 인사이트 저장 — 큰 아이콘 버튼 그룹(툴팁으로 보조 설명)
  */
 export function ResultHeroSecondaryActions({
   disabled = false,
@@ -72,65 +73,71 @@ export function ResultHeroSecondaryActions({
     }
   }
 
+  const iconBtnClass =
+    'h-11 w-11 shrink-0 rounded-xl border border-border/80 bg-background shadow-sm hover:bg-muted/80 dark:border-border/60 dark:hover:bg-muted/40'
+
   return (
-    <div
-      className={cn(
-        'inline-flex flex-wrap items-center gap-1 rounded-lg border border-border/70 bg-muted/25 p-1 shadow-sm dark:bg-muted/15',
-        className
-      )}
-      role="group"
-      aria-label="리포트 저장"
-    >
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onClick={() => void handlePdf()}
-        disabled={disabled || pdfPhase === 'loading'}
-        className="h-8 gap-1.5 border-0 bg-secondary/90 text-xs shadow-none hover:bg-secondary"
-      >
-        {pdfPhase === 'loading' ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            저장 중…
-          </>
-        ) : pdfPhase === 'done' ? (
-          <>
-            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
-            저장됨
-          </>
-        ) : (
-          <>
-            <FileDown className="h-3.5 w-3.5" aria-hidden />
-            PDF 저장
-          </>
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={cn(
+          'inline-flex items-center gap-1 rounded-2xl border border-border/70 bg-muted/20 p-1.5 shadow-sm dark:bg-muted/15',
+          className
         )}
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onClick={onSaveInsight}
-        disabled={disabled || insightSaving}
-        className="h-8 gap-1.5 border-0 bg-secondary/90 text-xs shadow-none hover:bg-secondary"
+        role="group"
+        aria-label="리포트 저장"
       >
-        {insightSaving ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            저장 중…
-          </>
-        ) : insightPhase === 'saved' ? (
-          <>
-            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
-            저장됨
-          </>
-        ) : (
-          <>
-            <Bookmark className="h-3.5 w-3.5" aria-hidden />
-            인사이트 저장
-          </>
-        )}
-      </Button>
-    </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => void handlePdf()}
+              disabled={disabled || pdfPhase === 'loading'}
+              className={cn(iconBtnClass, pdfPhase === 'done' && 'border-emerald-500/40 bg-emerald-500/10')}
+              aria-label="PDF로 저장"
+            >
+              {pdfPhase === 'loading' ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+              ) : pdfPhase === 'done' ? (
+                <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              ) : (
+                <FileDown className="h-5 w-5 text-foreground" aria-hidden />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="font-medium">PDF 저장</p>
+            <p className="text-xs text-muted-foreground">컨설팅 스타일 리포트를 파일로 받습니다.</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onSaveInsight}
+              disabled={disabled || insightSaving}
+              className={cn(iconBtnClass, insightPhase === 'saved' && 'border-emerald-500/40 bg-emerald-500/10')}
+              aria-label="인사이트 저장"
+            >
+              {insightSaving ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+              ) : insightPhase === 'saved' ? (
+                <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              ) : (
+                <Bookmark className="h-5 w-5 text-foreground" aria-hidden />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="font-medium">인사이트 저장</p>
+            <p className="text-xs text-muted-foreground">내 인사이트 보드에 이 분석을 남깁니다.</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
   )
 }

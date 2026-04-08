@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { repairMultilingualText } from '@/lib/text-encoding-repair'
 import { cn } from '@/lib/utils'
 
-type MdProps = { children?: ReactNode; className?: string }
+type MdProps = { children?: ReactNode; className?: string; node?: unknown }
 
 /**
  * InsightCard 본문 전용: ## → 제목 스타일, 리스트는 disc로 렌더(문법 기호 노출 없음).
@@ -47,10 +47,10 @@ export function InsightCardMarkdown({
               {c}
             </h3>
           ),
-          p: ({ children: c, className: cl, ...rest }: MdProps) => (
-            <p className={cn('mb-3 text-foreground/95 last:mb-0', cl)} {...rest}>
+          p: ({ node: _n, children: c, className: cl, ...rest }: MdProps) => (
+            <div className={cn('mb-3 text-foreground/95 last:mb-0', cl)} {...rest}>
               {c}
-            </p>
+            </div>
           ),
           ul: ({ children: c, className: cl, ...rest }: MdProps) => (
             <ul className={cn('my-2 list-disc space-y-1.5 pl-5 marker:text-sky-600/80 dark:marker:text-sky-400/80', cl)} {...rest}>

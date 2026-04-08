@@ -266,9 +266,11 @@ export function KeyMarketInsightsCard({
   if (!hasContent && !loading) return null
 
   return (
-    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5 sm:p-6 md:p-7">
+    <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 md:p-7 dark:border-zinc-800 dark:bg-zinc-900/50">
       {showStreamingComplete && (
-        <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-4">분석 완료</p>
+        <div className="mb-4 inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+          분석 완료
+        </div>
       )}
       {loading && !hasEarlyData ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-5">
@@ -280,7 +282,7 @@ export function KeyMarketInsightsCard({
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3 lg:gap-8">
           {structuredInsights.slice(0, revealedCount).map((insight, i) => (
             <StructuredInsightCard
               key={i}

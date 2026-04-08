@@ -340,7 +340,7 @@ interface ResearchState {
     primary_provider_error?: string | null
   }> | null
   /** 최근 스트리밍 활동 로그 (실시간 피드백용, 최대 40행 유지) */
-  streamingActivityLog: Array<{ ts: number; message: string }>
+  streamingActivityLog: Array<{ ts: number; message: string; kind?: 'error'; type?: 'error' }>
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -476,6 +476,8 @@ interface ResearchStore extends ResearchState {
       force_reanalyze?: boolean
       /** 2: 인사이트부터, 3: 전략부터. 1은 전체 재분석과 동일 → force_reanalyze 사용 */
       rerun_from_phase?: 1 | 2 | 3
+      /** 실패한 단계만 API 재호출 (인사이트·전략·실행·리스크) */
+      retry_pipeline_step?: 'insight_extraction' | 'strategy_generation' | 'execution_layer' | 'risk_opportunity'
     }
   ) => Promise<void>
   /** Abort current analysis in progress */
@@ -872,6 +874,7 @@ export const useResearchStore = create<ResearchStore>()(
           ai_primary_model?: 'gemini' | 'groq'
           force_reanalyze?: boolean
           rerun_from_phase?: 1 | 2 | 3
+          retry_pipeline_step?: 'insight_extraction' | 'strategy_generation' | 'execution_layer' | 'risk_opportunity'
         }
       ) => {
         const k = keyword?.trim()
@@ -902,7 +905,8 @@ export const useResearchStore = create<ResearchStore>()(
             options?.force_reanalyze === true ||
             options?.rerun_from_phase === 1 ||
             options?.rerun_from_phase === 2 ||
-            options?.rerun_from_phase === 3
+            options?.rerun_from_phase === 3 ||
+            !!options?.retry_pipeline_step
           if (allowBreakStaleClientLock) {
             if (currentAbortController) {
               currentAbortController.abort()
@@ -937,9 +941,23 @@ export const useResearchStore = create<ResearchStore>()(
             : 'standard'
         const mode = options?.mode ?? modeFromStorage ?? get().analysisMode
         const steps = ANALYSIS_MODE_STEPS[mode]
+        const retryPipelineStep = options?.retry_pipeline_step
+        const RETRY_STEP_INDEX: Record<
+          'insight_extraction' | 'strategy_generation' | 'execution_layer' | 'risk_opportunity',
+          number
+        > = {
+          insight_extraction: 3,
+          strategy_generation: 4,
+          execution_layer: 5,
+          risk_opportunity: 6,
+        }
+        const startStepIdx = retryPipelineStep ? RETRY_STEP_INDEX[retryPipelineStep] : 0
+        const startStepId = retryPipelineStep ?? steps[0]?.id ?? 'signal_layer'
+        const preserveForStepRetry = !!retryPipelineStep
+        const snap = get()
 
         // Preserve last successful report for recovery
-        const prevResult = get().result
+        const prevResult = snap.result
         if (prevResult?.reportId) {
           set({ lastSuccessfulReport: prevResult })
         }
@@ -949,26 +967,33 @@ export const useResearchStore = create<ResearchStore>()(
           status: 'loading',
           analysisStatus: 'analyzing',
           analysisMode: mode,
-          streamingState: createRunningState(mode, 0, steps[0]?.id ?? 'signal_layer'),
-          currentStep: 0,
+          streamingState: createRunningState(mode, startStepIdx, startStepId),
+          currentStep: startStepIdx,
           totalSteps: getStepCount(mode),
-          newsList: [],
-          result: null,
-          summarySection: null,
-          marketTemperatureSection: null,
-          recommendedActionsSection: null,
-          insightsSection: null,
+          newsList: preserveForStepRetry ? snap.newsList : [],
+          result: preserveForStepRetry ? snap.result : null,
+          summarySection: preserveForStepRetry ? snap.summarySection : null,
+          marketTemperatureSection: preserveForStepRetry ? snap.marketTemperatureSection : null,
+          recommendedActionsSection: preserveForStepRetry ? snap.recommendedActionsSection : null,
+          insightsSection: preserveForStepRetry ? snap.insightsSection : null,
           error: null,
           insights: null,
-          taskData: {},
-          analysisId: null,
-          analysisTasks: null,
+          taskData: preserveForStepRetry ? snap.taskData : {},
+          analysisId: preserveForStepRetry ? snap.analysisId : null,
+          analysisTasks: preserveForStepRetry ? snap.analysisTasks : null,
           streamingActivityLog: [],
         })
 
-        const appendActivity = (message: string) => {
+        const appendActivity = (message: string, kind?: 'error') => {
           set((state) => ({
-            streamingActivityLog: [...state.streamingActivityLog.slice(-39), { ts: Date.now(), message }],
+            streamingActivityLog: [
+              ...state.streamingActivityLog.slice(-39),
+              {
+                ts: Date.now(),
+                message,
+                ...(kind === 'error' ? { kind: 'error' as const, type: 'error' as const } : {}),
+              },
+            ],
           }))
         }
 
@@ -977,12 +1002,14 @@ export const useResearchStore = create<ResearchStore>()(
           if (checkRes.ok) {
             const checkData = (await checkRes.json()) as { canSearch?: boolean }
             if (checkData.canSearch === false) {
+              const apiKeyMsg = '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.'
+              appendActivity(apiKeyMsg, 'error')
               toast.error('설정 → API KEY에서 필요한 키를 입력해 주세요. (Gemini 우선이면 Gemini, Groq 우선이면 Groq)')
               set({
                 status: 'error',
                 analysisStatus: 'failed',
                 streamingState: createErrorState('API 키가 설정되지 않았습니다.', null),
-                error: '설정에서 API 키를 등록한 뒤 분석을 사용할 수 있습니다.',
+                error: apiKeyMsg,
               })
               return
             }
@@ -1004,6 +1031,7 @@ export const useResearchStore = create<ResearchStore>()(
                 options?.rerun_from_phase === 2 || options?.rerun_from_phase === 3
                   ? options.rerun_from_phase
                   : undefined,
+              retry_pipeline_step: options?.retry_pipeline_step,
             }),
             credentials: 'same-origin',
             signal,
@@ -1012,6 +1040,7 @@ export const useResearchStore = create<ResearchStore>()(
           if (!res.ok) {
             const errData = (await res.json().catch(() => ({}))) as { error?: string }
             const msg = errData.error ?? '분석 요청에 실패했어요.'
+            appendActivity(msg, 'error')
             set({
               status: 'error',
               analysisStatus: 'failed',
@@ -1024,6 +1053,7 @@ export const useResearchStore = create<ResearchStore>()(
 
           const reader = res.body?.getReader()
           if (!reader) {
+            appendActivity('스트림을 읽을 수 없습니다.', 'error')
             set({
               status: 'error',
               analysisStatus: 'failed',
@@ -1200,6 +1230,7 @@ export const useResearchStore = create<ResearchStore>()(
                         provider: ev.provider ?? null,
                         fallback_used: ev.fallback_used ?? false,
                       })
+                      appendActivity(`${task}: ${ev.fallbackMessage ?? ev.error ?? '단계 실패'}`, 'error')
                     }
                   }
                 }
@@ -1279,6 +1310,7 @@ export const useResearchStore = create<ResearchStore>()(
                   break
                 } else if (type === 'error') {
                   const errMsg = event.message ?? '분석 중 오류가 발생했습니다.'
+                  appendActivity(errMsg, 'error')
                   set({
                     streamingState: createErrorState(errMsg, lastSuccessfulStep),
                     status: 'error',
@@ -1291,6 +1323,7 @@ export const useResearchStore = create<ResearchStore>()(
                 }
               } catch {
                 const errMsg = '잘못된 응답 형식입니다.'
+                appendActivity(errMsg, 'error')
                 set({
                   streamingState: createErrorState(errMsg, lastSuccessfulStep),
                   status: 'error',

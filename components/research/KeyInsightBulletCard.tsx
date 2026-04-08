@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Lightbulb, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { motionConfig } from '@/lib/motion-config'
 
 export interface KeyInsightBulletCardProps {
   /** Insight text */
@@ -29,19 +28,25 @@ export function KeyInsightBulletCard({
   return (
     <motion.div
       layout={false}
-      whileHover={{
-        y: motionConfig.cardHover.y,
-        transition: motionConfig.cardHover.transition,
+      role={isLong ? 'button' : undefined}
+      tabIndex={isLong ? 0 : undefined}
+      onClick={() => isLong && setExpanded((e) => !e)}
+      onKeyDown={(ev) => {
+        if (!isLong) return
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault()
+          setExpanded((e) => !e)
+        }
       }}
       className={cn(
-        'rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 flex gap-3',
-        'hover:border-primary/30 hover:shadow-md',
+        'flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4 shadow-sm transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-900/80',
+        isLong && 'cursor-pointer hover:-translate-y-1 hover:border-slate-200 hover:shadow-md dark:hover:border-zinc-700',
         className
       )}
     >
       {index != null && (
         <div
-          className="shrink-0 w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
           aria-hidden
         >
           {index}
@@ -50,7 +55,7 @@ export function KeyInsightBulletCard({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            'text-sm font-medium text-foreground leading-snug',
+            'text-sm font-medium leading-snug text-slate-800 dark:text-zinc-100',
             !expanded && 'line-clamp-3'
           )}
         >
@@ -60,8 +65,11 @@ export function KeyInsightBulletCard({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-2 h-6 text-xs text-primary hover:bg-primary/10 -ml-1"
-            onClick={() => setExpanded((e) => !e)}
+            className="-ml-1 mt-2 h-6 text-xs font-medium text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded((v) => !v)
+            }}
             aria-expanded={expanded}
           >
             {expanded ? (
@@ -72,7 +80,7 @@ export function KeyInsightBulletCard({
           </Button>
         )}
       </div>
-      <Lightbulb className="w-4 h-4 shrink-0 text-primary/60 mt-0.5" aria-hidden />
+      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-zinc-500" aria-hidden />
     </motion.div>
   )
 }
