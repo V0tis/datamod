@@ -79,14 +79,24 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
             type="button"
             onClick={() => onChange(code)}
             title={COUNTRY_LABELS[code] ?? code}
+            aria-pressed={value === code}
+            aria-label={`${COUNTRY_LABELS[code] ?? code} 선택`}
             className={cn(
-              'shrink-0 rounded-md p-1 transition-all duration-150 inline-flex items-center justify-center',
+              'shrink-0 rounded-lg p-1.5 transition-all duration-200 inline-flex items-center justify-center outline-none',
+              'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
               value === code
-                ? 'bg-primary/10 ring-1 ring-primary/40'
-                : 'hover:bg-muted/80'
+                ? 'bg-primary/15 shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.06] dark:bg-primary/25 dark:ring-primary/90'
+                : 'hover:bg-muted/80 opacity-85 hover:opacity-100 hover:scale-[1.02]'
             )}
           >
-            <CountryFlagIcon code={code} size="chip" className={cn(value !== code && 'opacity-50 hover:opacity-80')} />
+            <CountryFlagIcon
+              code={code}
+              size="chip"
+              className={cn(
+                'transition-opacity',
+                value === code ? 'opacity-100' : 'opacity-55 hover:opacity-90'
+              )}
+            />
           </button>
         ))}
       </div>

@@ -11,10 +11,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu, Search } from 'lucide-react'
+import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu, Copy, HelpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 import { ChangePasswordForm } from '@/components/settings/change-password-form'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 type LicenseOrigin = 'USER' | 'NONE'
 
@@ -78,9 +79,26 @@ const ANALYSIS_OPTIONS: { value: AnalysisDepth; label: string }[] = [
   { value: 'deep', label: '심층 분석' },
 ]
 
-const AI_PRIMARY_OPTIONS: { value: 'gemini' | 'groq'; label: string }[] = [
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'groq', label: 'Groq' },
+const AI_PRIMARY_OPTIONS: {
+  value: 'gemini' | 'groq'
+  label: string
+  tagline: string
+  tooltip: string
+}[] = [
+  {
+    value: 'gemini',
+    label: 'Gemini',
+    tagline: '긴 문맥·멀티모달',
+    tooltip:
+      'Google Gemini. 긴 컨텍스트로 뉴스·보고서 등 대량 자료를 한 번에 다루기 좋고, 한국어 품질이 안정적입니다. 시장·인사이트 분석에 적합합니다.',
+  },
+  {
+    value: 'groq',
+    label: 'Groq',
+    tagline: '초저지연·빠른 응답',
+    tooltip:
+      'Groq LPU 기반으로 응답 지연이 매우 짧습니다. 짧은 루프·반복 호출이 많은 단계에서 유리하며, 빠른 피드백이 필요할 때 유용합니다.',
+  },
 ]
 
 const SETTINGS_TAB_PARAM = 'tab'
@@ -137,6 +155,16 @@ function SettingsPageInner() {
     ai_action_model: null, ai_risk_model: null, ai_creative_model: null, ai_consensus_model: null,
   })
   const [savingStepAI, setSavingStepAI] = useState(false)
+  const [geminiConnVerified, setGeminiConnVerified] = useState(false)
+  const [groqConnVerified, setGroqConnVerified] = useState(false)
+
+  useEffect(() => {
+    setGeminiConnVerified(false)
+  }, [geminiApiKey])
+
+  useEffect(() => {
+    setGroqConnVerified(false)
+  }, [groqApiKey])
 
   useEffect(() => {
     const supabase = createClient()
@@ -276,6 +304,8 @@ function SettingsPageInner() {
         setGeminiApiKey('')
       }
       toast.success('Gemini API 키가 저장되었습니다.')
+      setSaveSuccessGemini(true)
+      setTimeout(() => setSaveSuccessGemini(false), 3000)
     } finally {
       setSavingGemini(false)
     }
@@ -375,19 +405,39 @@ function SettingsPageInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, apiKey: key }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (data.ok) {
+      const json = await res.json().catch(() => ({}))
+      if (json.ok) {
+        if (provider === 'gemini') setGeminiConnVerified(true)
+        else setGroqConnVerified(true)
         toast.success(`${provider === 'gemini' ? 'Gemini' : 'Groq'} 연결에 성공했습니다.`)
       } else {
-        toast.error(data?.error ?? '연결에 실패했습니다.')
+        if (provider === 'gemini') setGeminiConnVerified(false)
+        else setGroqConnVerified(false)
+        toast.error(json?.error ?? '연결에 실패했습니다.')
       }
     } catch {
+      if (provider === 'gemini') setGeminiConnVerified(false)
+      else setGroqConnVerified(false)
       toast.error('연결 확인 중 오류가 발생했습니다.')
     } finally {
       if (provider === 'gemini') setTestingGemini(false)
       else setTestingGroq(false)
     }
   }, [geminiApiKey, groqApiKey])
+
+  const copyApiKeyToClipboard = useCallback(async (raw: string, label: string) => {
+    const v = raw.trim()
+    if (!v || v === MASKED_PLACEHOLDER) {
+      toast.error('복사할 수 있는 키가 없습니다. 키를 입력하거나 편집한 뒤 다시 시도해 주세요.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(v)
+      toast.success(`${label} 키가 클립보드에 복사되었습니다.`)
+    } catch {
+      toast.error('클립보드 복사에 실패했습니다.')
+    }
+  }, [])
 
   const getKeyState = (provider: 'gemini' | 'groq') => {
     if (provider === 'gemini') {
@@ -461,6 +511,7 @@ function SettingsPageInner() {
   }
 
   return (
+    <TooltipProvider delayDuration={280}>
     <div className="rin-page">
       <div className="mx-auto w-full max-w-5xl">
       <header className="rin-page-header">
@@ -470,30 +521,30 @@ function SettingsPageInner() {
         </p>
       </header>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full rin-section">
-        <TabsList className="w-full max-w-lg grid grid-cols-3 h-9 rounded-lg bg-muted/50 p-1">
-          <TabsTrigger value="profile" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <User className="h-4 w-4" />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full rin-section gap-0">
+        <TabsList className="w-full max-w-lg grid grid-cols-3 min-h-10 sm:h-10 rounded-lg bg-muted/50 p-1 gap-1">
+          <TabsTrigger value="profile" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
             내 정보
           </TabsTrigger>
-          <TabsTrigger value="license" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <KeyRound className="h-4 w-4" />
+          <TabsTrigger value="license" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <KeyRound className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
             라이선스
           </TabsTrigger>
-          <TabsTrigger value="ai-config" className="rounded-md gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Cpu className="h-4 w-4" />
-            AI 분석 설정
+          <TabsTrigger value="ai-config" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Cpu className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="truncate">AI 분석 설정</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="m-0 mt-6">
+        <TabsContent value="profile" className="m-0 mt-4 sm:mt-6">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">내 정보</CardTitle>
               <CardDescription>로그인 이메일과 비밀번호를 한곳에서 확인·변경합니다.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-0">
-              <div className="max-w-md space-y-2">
+            <CardContent className="flex flex-col gap-6 sm:gap-8 pb-6 sm:pb-8">
+              <div className="max-w-md space-y-2 min-w-0">
                 <Label htmlFor="email">이메일</Label>
                 <Input
                   id="email"
@@ -508,7 +559,7 @@ function SettingsPageInner() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="license" className="m-0 mt-6 rin-section">
+        <TabsContent value="license" className="m-0 mt-4 sm:mt-6 rin-section">
           {/* 1. AI Provider Settings */}
           <Card className="border border-border bg-card shadow-sm rounded-xl">
             <CardHeader>
@@ -533,49 +584,76 @@ function SettingsPageInner() {
                   </a>
                 </div>
                 <form onSubmit={handleSaveGemini} className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Input
-                      type={getKeyState('gemini').show && getKeyState('gemini').canReveal ? 'text' : 'password'}
-                      placeholder={getKeyState('gemini').placeholder}
-                      value={getKeyState('gemini').value}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      onFocus={() => getKeyState('gemini').hasUser && !geminiApiKey && getKeyState('gemini').setEditing(true)}
-                      onBlur={() => getKeyState('gemini').setEditing(false)}
-                      className="pr-10 bg-muted/50 focus:bg-background"
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => getKeyState('gemini').canReveal && setShowGeminiKey(!showGeminiKey)}
-                      title={getKeyState('gemini').canReveal ? (showGeminiKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                      className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('gemini').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                      aria-label={showGeminiKey ? '숨기기' : '보기'}
-                    >
-                      {showGeminiKey && getKeyState('gemini').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={savingGemini} className="shrink-0">
-                      {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="default"
-                      disabled={testingGemini || (!geminiApiKey || geminiApiKey === MASKED_PLACEHOLDER)}
-                      onClick={() => handleTestConnection('gemini')}
-                      title="연결 테스트"
-                    >
-                      {testingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-                      연결 테스트
-                    </Button>
-                    {saveSuccessGemini && (
-                      <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                        <CheckCircle2 className="h-4 w-4" /> 저장됨
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Input
+                          type={getKeyState('gemini').show && getKeyState('gemini').canReveal ? 'text' : 'password'}
+                          placeholder={getKeyState('gemini').placeholder}
+                          value={getKeyState('gemini').value}
+                          onChange={(e) => setGeminiApiKey(e.target.value)}
+                          onFocus={() => getKeyState('gemini').hasUser && !geminiApiKey && getKeyState('gemini').setEditing(true)}
+                          onBlur={() => getKeyState('gemini').setEditing(false)}
+                          className="pr-10 bg-muted/50 focus:bg-background"
+                          autoComplete="off"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => getKeyState('gemini').canReveal && setShowGeminiKey(!showGeminiKey)}
+                          title={getKeyState('gemini').canReveal ? (showGeminiKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('gemini').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                          aria-label={showGeminiKey ? '숨기기' : '보기'}
+                        >
+                          {showGeminiKey && getKeyState('gemini').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 w-full gap-1.5 sm:w-auto"
+                        onClick={() => copyApiKeyToClipboard(geminiApiKey, 'Gemini API')}
+                      >
+                        <Copy className="h-4 w-4" />
+                        복사
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="submit" disabled={savingGemini} className="shrink-0">
+                        {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={geminiConnVerified ? 'default' : 'outline'}
+                        size="default"
+                        className={cn(
+                          geminiConnVerified &&
+                            'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:ring-emerald-500/40 dark:bg-emerald-600 dark:hover:bg-emerald-600'
+                        )}
+                        disabled={
+                          testingGemini ||
+                          geminiConnVerified ||
+                          !geminiApiKey ||
+                          geminiApiKey === MASKED_PLACEHOLDER
+                        }
+                        onClick={() => handleTestConnection('gemini')}
+                        title={geminiConnVerified ? '연결됨' : '연결 테스트'}
+                      >
+                        {testingGemini ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : geminiConnVerified ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <Wifi className="h-4 w-4" />
+                        )}
+                        {geminiConnVerified ? '연결됨' : '연결 테스트'}
+                      </Button>
+                      {saveSuccessGemini && (
+                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+                          <CheckCircle2 className="h-4 w-4" /> 저장됨
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </form>
               </div>
@@ -597,49 +675,76 @@ function SettingsPageInner() {
                   </a>
                 </div>
                 <form onSubmit={handleSaveGroq} className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Input
-                      type={getKeyState('groq').show && getKeyState('groq').canReveal ? 'text' : 'password'}
-                      placeholder={getKeyState('groq').placeholder}
-                      value={getKeyState('groq').value}
-                      onChange={(e) => setGroqApiKey(e.target.value)}
-                      onFocus={() => getKeyState('groq').hasUser && !groqApiKey && getKeyState('groq').setEditing(true)}
-                      onBlur={() => getKeyState('groq').setEditing(false)}
-                      className="pr-10 bg-muted/50 focus:bg-background"
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => getKeyState('groq').canReveal && setShowGroqKey(!showGroqKey)}
-                      title={getKeyState('groq').canReveal ? (showGroqKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                      className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('groq').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                      aria-label={showGroqKey ? '숨기기' : '보기'}
-                    >
-                      {showGroqKey && getKeyState('groq').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <Button type="submit" disabled={savingGroq}>
-                      {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="default"
-                      disabled={testingGroq || (!groqApiKey || groqApiKey === MASKED_PLACEHOLDER)}
-                      onClick={() => handleTestConnection('groq')}
-                      title="연결 테스트"
-                    >
-                      {testingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-                      연결 테스트
-                    </Button>
-                    {saveSuccessGroq && (
-                      <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                        <CheckCircle2 className="h-4 w-4" /> 저장됨
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Input
+                          type={getKeyState('groq').show && getKeyState('groq').canReveal ? 'text' : 'password'}
+                          placeholder={getKeyState('groq').placeholder}
+                          value={getKeyState('groq').value}
+                          onChange={(e) => setGroqApiKey(e.target.value)}
+                          onFocus={() => getKeyState('groq').hasUser && !groqApiKey && getKeyState('groq').setEditing(true)}
+                          onBlur={() => getKeyState('groq').setEditing(false)}
+                          className="pr-10 bg-muted/50 focus:bg-background"
+                          autoComplete="off"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => getKeyState('groq').canReveal && setShowGroqKey(!showGroqKey)}
+                          title={getKeyState('groq').canReveal ? (showGroqKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('groq').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                          aria-label={showGroqKey ? '숨기기' : '보기'}
+                        >
+                          {showGroqKey && getKeyState('groq').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 w-full gap-1.5 sm:w-auto"
+                        onClick={() => copyApiKeyToClipboard(groqApiKey, 'Groq API')}
+                      >
+                        <Copy className="h-4 w-4" />
+                        복사
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="submit" disabled={savingGroq}>
+                        {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={groqConnVerified ? 'default' : 'outline'}
+                        size="default"
+                        className={cn(
+                          groqConnVerified &&
+                            'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:ring-emerald-500/40 dark:bg-emerald-600 dark:hover:bg-emerald-600'
+                        )}
+                        disabled={
+                          testingGroq ||
+                          groqConnVerified ||
+                          !groqApiKey ||
+                          groqApiKey === MASKED_PLACEHOLDER
+                        }
+                        onClick={() => handleTestConnection('groq')}
+                        title={groqConnVerified ? '연결됨' : '연결 테스트'}
+                      >
+                        {testingGroq ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : groqConnVerified ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <Wifi className="h-4 w-4" />
+                        )}
+                        {groqConnVerified ? '연결됨' : '연결 테스트'}
+                      </Button>
+                      {saveSuccessGroq && (
+                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
+                          <CheckCircle2 className="h-4 w-4" /> 저장됨
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </form>
               </div>
@@ -661,29 +766,41 @@ function SettingsPageInner() {
                   </a>
                 </div>
                 <form onSubmit={handleSaveSerper} className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <Input
-                        type={getSerperKeyState().show && getSerperKeyState().canReveal ? 'text' : 'password'}
-                        placeholder={getSerperKeyState().placeholder}
-                        value={getSerperKeyState().value}
-                        onChange={(e) => setSerperApiKey(e.target.value)}
-                        onFocus={() => getSerperKeyState().hasUser && !serperApiKey && setEditingSerper(true)}
-                        onBlur={() => setEditingSerper(false)}
-                        className="pr-10 bg-muted/50 focus:bg-background"
-                        autoComplete="off"
-                      />
-                      <button
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Input
+                          type={getSerperKeyState().show && getSerperKeyState().canReveal ? 'text' : 'password'}
+                          placeholder={getSerperKeyState().placeholder}
+                          value={getSerperKeyState().value}
+                          onChange={(e) => setSerperApiKey(e.target.value)}
+                          onFocus={() => getSerperKeyState().hasUser && !serperApiKey && setEditingSerper(true)}
+                          onBlur={() => setEditingSerper(false)}
+                          className="pr-10 bg-muted/50 focus:bg-background"
+                          autoComplete="off"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => getSerperKeyState().canReveal && setShowSerperKey(!showSerperKey)}
+                          title={getSerperKeyState().canReveal ? (showSerperKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
+                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getSerperKeyState().canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
+                          aria-label={showSerperKey ? '숨기기' : '보기'}
+                        >
+                          {showSerperKey && getSerperKeyState().canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <Button
                         type="button"
-                        onClick={() => getSerperKeyState().canReveal && setShowSerperKey(!showSerperKey)}
-                        title={getSerperKeyState().canReveal ? (showSerperKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                        className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getSerperKeyState().canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                        aria-label={showSerperKey ? '숨기기' : '보기'}
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 w-full gap-1.5 sm:w-auto"
+                        onClick={() => copyApiKeyToClipboard(serperApiKey, 'Serper API')}
                       >
-                        {showSerperKey && getSerperKeyState().canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                        <Copy className="h-4 w-4" />
+                        복사
+                      </Button>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button type="submit" disabled={savingSerper}>
                         {savingSerper ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
                       </Button>
@@ -746,27 +863,27 @@ function SettingsPageInner() {
         </TabsContent>
 
         {/* AI 분석 설정 탭 */}
-        <TabsContent value="ai-config" className="m-0 mt-6 space-y-6">
+        <TabsContent value="ai-config" className="m-0 mt-4 sm:mt-6 space-y-4 sm:space-y-6">
           {/* 기본 분석 설정 (License에서 이동) */}
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">기본 분석 설정</CardTitle>
               <CardDescription>분석 깊이와 기본 AI 모델을 선택합니다. 단계별 설정이 없으면 기본 모델이 사용됩니다.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
+            <CardContent className="space-y-6 sm:space-y-8">
+              <div className="min-w-0">
                 <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
                 <p className="text-xs text-muted-foreground mb-3">
                   빠른 분석은 결과를 신속히 제공하고, 심층 분석은 더 많은 소스와 상세 인사이트를 생성합니다.
                 </p>
-                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-fit">
+                <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-full sm:w-fit min-w-0">
                   {ANALYSIS_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
                       onClick={() => handleAnalysisDepthChange(opt.value)}
                       className={cn(
-                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        'px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-10',
                         analysisDepth === opt.value
                           ? 'bg-background text-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -785,33 +902,53 @@ function SettingsPageInner() {
                   )
                 })()}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label className="text-sm font-medium mb-2 block">AI 우선 분석 모델 (기본값)</Label>
                 <p className="text-xs text-muted-foreground mb-3">
                   단계별 설정이 없는 분석 단계에서 사용됩니다. 실패할 경우 다른 AI 모델이 자동으로 대체 실행됩니다.
                 </p>
-                <div className="flex flex-col gap-2">
-                  {AI_PRIMARY_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors',
-                        aiPrimaryModel === opt.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/30 hover:bg-muted/30'
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="ai-primary-model-config"
-                        value={opt.value}
-                        checked={aiPrimaryModel === opt.value}
-                        onChange={() => handleAiPrimaryChange(opt.value)}
-                        className="h-4 w-4 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm font-medium">{opt.label}</span>
-                    </label>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  {AI_PRIMARY_OPTIONS.map((opt) => {
+                    const selected = aiPrimaryModel === opt.value
+                    return (
+                      <Tooltip key={opt.value}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleAiPrimaryChange(opt.value)}
+                            aria-pressed={selected}
+                            className={cn(
+                              'group relative text-left rounded-xl border-2 p-4 sm:p-5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[5.5rem]',
+                              selected
+                                ? 'border-primary bg-gradient-to-br from-primary/12 via-primary/[0.06] to-transparent shadow-sm ring-1 ring-primary/15'
+                                : 'border-border bg-card hover:border-primary/35 hover:bg-muted/35'
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-base font-semibold tracking-tight">{opt.label}</span>
+                                  {selected && (
+                                    <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                      선택
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{opt.tagline}</p>
+                              </div>
+                              <HelpCircle
+                                className="h-4 w-4 shrink-0 text-muted-foreground/70 group-hover:text-primary transition-colors"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="leading-relaxed max-w-[min(20rem,calc(100vw-2rem))]">
+                          {opt.tooltip}
+                        </TooltipContent>
+                      </Tooltip>
+                    )
+                  })}
                 </div>
               </div>
             </CardContent>
@@ -823,16 +960,19 @@ function SettingsPageInner() {
               <CardTitle className="text-lg">단계별 AI 모델 설정</CardTitle>
               <CardDescription>각 분석 단계마다 사용할 AI 모델을 개별적으로 선택할 수 있습니다. &quot;기본값&quot;을 선택하면 위의 우선 분석 모델이 사용됩니다.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-1">
+            <CardContent className="space-y-0">
               {STEP_AI_FIELDS.map((field) => {
                 const current = stepAIModels[field.key]
                 return (
-                  <div key={field.key} className="flex items-center justify-between gap-4 py-3 border-b border-border/40 last:border-0">
-                    <div className="min-w-0">
+                  <div
+                    key={field.key}
+                    className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 py-4 sm:py-3.5 border-b border-border/40 last:border-0"
+                  >
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground">{field.label}</p>
-                      <p className="text-xs text-muted-foreground">{field.desc}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{field.desc}</p>
                     </div>
-                    <div className="flex gap-1 p-0.5 rounded-lg bg-muted/50 shrink-0">
+                    <div className="flex flex-wrap gap-1 p-0.5 rounded-lg bg-muted/50 shrink-0 w-full sm:w-auto justify-stretch sm:justify-end">
                       {([
                         { value: null, label: '기본값' },
                         { value: 'gemini' as const, label: 'Gemini' },
@@ -843,7 +983,7 @@ function SettingsPageInner() {
                           type="button"
                           onClick={() => handleStepAIChange(field.key, opt.value)}
                           className={cn(
-                            'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                            'min-h-9 min-w-0 flex-1 sm:flex-initial px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
                             current === opt.value
                               ? 'bg-background text-foreground shadow-sm'
                               : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -868,6 +1008,7 @@ function SettingsPageInner() {
       </Tabs>
       </div>
     </div>
+    </TooltipProvider>
   )
 }
 

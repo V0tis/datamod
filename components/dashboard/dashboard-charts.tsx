@@ -19,6 +19,36 @@ import { cn } from '@/lib/utils'
 const tickStyle = { fontSize: 10, fill: '#6b7280' }
 const gridStroke = '#E5E7EB'
 
+/** X축 카테고리: -45° + 말줄임(전체 문자열은 SVG title로 표시) */
+function CategoryXAxisTick({
+  x = 0,
+  y = 0,
+  payload,
+}: {
+  x?: number
+  y?: number
+  payload?: { value?: string }
+}) {
+  const raw = String(payload?.value ?? '')
+  const maxChars = 12
+  const display = raw.length > maxChars ? `${raw.slice(0, maxChars)}…` : raw
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        textAnchor="end"
+        fill="currentColor"
+        fontSize={10}
+        transform="rotate(-45)"
+        className="fill-slate-500 dark:fill-zinc-400"
+        dy={12}
+      >
+        <title>{raw}</title>
+        {display}
+      </text>
+    </g>
+  )
+}
+
 function shortLabel(s: string, n = 6) {
   const t = s.trim()
   return t.length <= n ? t : `${t.slice(0, n)}…`
@@ -87,9 +117,14 @@ export function DashboardChartsBlock({
         ) : (
           <div className={chartFrameClass}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendLineData} margin={{ top: 4, right: 8, left: -12, bottom: 4 }}>
+              <LineChart data={trendLineData} margin={{ top: 8, right: 8, left: -12, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-                <XAxis dataKey="name" tick={tickStyle} interval={0} angle={-25} textAnchor="end" height={48} />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  tick={<CategoryXAxisTick />}
+                  height={56}
+                />
                 <YAxis tick={tickStyle} width={36} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={{
@@ -137,9 +172,9 @@ export function DashboardChartsBlock({
         ) : (
           <div className={chartFrameClass}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={compareData} margin={{ top: 4, right: 8, left: -12, bottom: 4 }}>
+              <BarChart data={compareData} margin={{ top: 8, right: 8, left: -12, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-                <XAxis dataKey="name" tick={tickStyle} interval={0} angle={-20} textAnchor="end" height={44} />
+                <XAxis dataKey="name" interval={0} tick={<CategoryXAxisTick />} height={52} />
                 <YAxis tick={tickStyle} width={32} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={{

@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Search, Bookmark, Download, Trash2, Loader2 } from 'lucide-react'
+import { Search, Download, Trash2, Loader2 } from 'lucide-react'
 import { COUNTRY_LABELS } from '@/components/country-chips'
 import { InsightCard } from '@/components/insights/InsightCard'
+import { SavedInsightsEmptyIllustration } from '@/components/insights/saved-insights-empty-illustration'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { SavedInsight } from '@/lib/insights-types'
@@ -301,15 +302,15 @@ export default function InsightsPage() {
       )}
 
       {list.length === 0 ? (
-        <div className="rin-empty-container">
+        <div className="rin-empty-container flex flex-col items-center">
+          <SavedInsightsEmptyIllustration className="mb-2 h-40 w-48 max-w-full" />
           <EmptyState
-            title="저장한 인사이트가 없습니다"
-            description="결과 페이지에서 북마크한 인사이트가 여기에 모입니다. 시장 분석을 시작하고 유의미한 인사이트를 저장해 보세요."
-            icon={<Bookmark className="h-12 w-12 text-primary/70" strokeWidth={1.5} />}
+            title="아직 저장된 인사이트가 없습니다"
+            description="결과 페이지에서 인사이트를 저장하면 이곳에 모아 다시 열람할 수 있습니다. 시장 분석을 실행한 뒤 마음에 드는 요약을 저장해 보세요."
             action={
               <Link href="/">
                 <Button variant="default" size="lg" className="gap-2">
-                  <Search className="w-4 h-4" />
+                  <Search className="h-4 w-4" />
                   시장 분석 시작하기
                 </Button>
               </Link>
@@ -333,14 +334,14 @@ export default function InsightsPage() {
           </Button>
         </div>
       ) : (
-        <ul className="m-0 max-w-full min-w-0 list-none space-y-3 p-0">
+        <ul className="m-0 grid max-w-full min-w-0 list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
           {filteredList.map((item) => {
             const keyword = item.snapshot?.keyword ?? ''
             const country = item.snapshot?.countryCode ?? 'KR'
             const resultsHref = `/results?keyword=${encodeURIComponent(keyword)}&country=${encodeURIComponent(country)}`
             const countryLabel = COUNTRY_LABELS[country] ?? country
             return (
-              <li key={item.id}>
+              <li key={item.id} className="min-w-0">
                 <InsightCard
                   item={item}
                   resultsHref={resultsHref}

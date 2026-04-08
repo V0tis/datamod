@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Search, Loader2, ChevronDown, Trash2, Copy, Eye, BarChart3 } from 'lucide-react'
 import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
-import { COUNTRY_LABELS } from '@/components/country-chips'
+import { COUNTRY_CHIP_CODES, COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
@@ -47,6 +48,7 @@ type ScoreFilterOption = 'all' | 'high' | 'medium' | 'low'
 type MarketTypeFilterOption = 'all' | string
 type SortOption = 'newest' | 'oldest'
 type StatusFilterOption = 'all' | 'completed' | 'failed'
+type CountryFilterOption = 'all' | string
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'newest', label: '최신순' },
@@ -101,6 +103,36 @@ function getOpportunityScore(r: ResearchRecord): number | null {
   return r.opportunity_score ?? r.market_temperature_score ?? null
 }
 
+function AnalysisStatusBadge({ status }: { status: string | undefined }) {
+  const s = status ?? 'completed'
+  if (s === 'completed') {
+    return (
+      <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">
+        {STATUS_LABELS.completed}
+      </Badge>
+    )
+  }
+  if (s === 'failed') {
+    return (
+      <Badge variant="outline" className="border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+        {STATUS_LABELS.failed}
+      </Badge>
+    )
+  }
+  if (s === 'analyzing' || s === 'queued') {
+    return (
+      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        {STATUS_LABELS[s]}
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="secondary" className="font-semibold">
+      {STATUS_LABELS[s] ?? s}
+    </Badge>
+  )
+}
+
 export default function HistoryPage() {
   const router = useRouter()
   const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
@@ -116,6 +148,9 @@ export default function HistoryPage() {
   const [marketTypeFilter, setMarketTypeFilter] = useState<MarketTypeFilterOption>('all')
   const [sortOrder, setSortOrder] = useState<SortOption>('newest')
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all')
+  const [countryFilter, setCountryFilter] = useState<CountryFilterOption>('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const filteredRecords = useMemo(() => {
     let result = records
@@ -158,6 +193,10 @@ export default function HistoryPage() {
       result = result.filter((r) => (r.analysis_status ?? 'completed') === statusFilter)
     }
 
+    if (countryFilter !== 'all') {
+      result = result.filter((r) => (r.country_code ?? 'KR') === countryFilter)
+    }
+
     const sorted = [...result]
     sorted.sort((a, b) => {
       const da = new Date(a.updated_at ?? a.date ?? 0).getTime()
@@ -165,7 +204,25 @@ export default function HistoryPage() {
       return sortOrder === 'newest' ? db - da : da - db
     })
     return sorted
-  }, [records, searchQuery, periodFilter, scoreFilter, marketTypeFilter, statusFilter, sortOrder])
+  }, [records, searchQuery, periodFilter, scoreFilter, marketTypeFilter, statusFilter, sortOrder, countryFilter])
+
+  const filteredIdList = useMemo(() => filteredRecords.map((r) => r.id), [filteredRecords])
+  const allFilteredSelected =
+    filteredIdList.length > 0 && filteredIdList.every((id) => selectedIds.has(id))
+
+  useEffect(() => {
+    const valid = new Set(records.map((r) => r.id))
+    setSelectedIds((prev) => {
+      let changed = false
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (valid.has(id)) next.add(id)
+        else changed = true
+      })
+      if (next.size !== prev.size) changed = true
+      return changed ? next : prev
+    })
+  }, [records])
 
   const marketTypes = useMemo(() => {
     const set = new Set<string>()
@@ -205,10 +262,56 @@ export default function HistoryPage() {
     }
   }, [fetchList])
 
-  const goToReport = (record: ResearchRecord) => {
-    const href = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
-    router.push(href)
-  }
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAllFiltered = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allFilteredSelected) {
+        filteredIdList.forEach((id) => next.delete(id))
+      } else {
+        filteredIdList.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }, [allFilteredSelected, filteredIdList])
+
+  const deleteBulkSelected = useCallback(async () => {
+    const ids = [...selectedIds].filter((id) => records.some((r) => r.id === id))
+    if (ids.length === 0) return
+    if (!confirm(`선택한 ${ids.length}건의 분석 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.`)) return
+    setBulkDeleting(true)
+    try {
+      const res = await fetch('/api/research/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (res.status === 204) {
+        setRecords((prev) => prev.filter((r) => !ids.includes(r.id)))
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          ids.forEach((id) => next.delete(id))
+          return next
+        })
+        toast.success(`${ids.length}건을 삭제했습니다.`)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error((data as { error?: string }).error ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }, [records, selectedIds])
 
   const deleteRecord = useCallback(async (id: string) => {
     setDeletingId(id)
@@ -220,6 +323,11 @@ export default function HistoryPage() {
       })
       if (res.status === 204) {
         setRecords((prev) => prev.filter((r) => r.id !== id))
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
         toast.success('삭제되었습니다.')
       } else {
         const data = await res.json().catch(() => ({}))
@@ -382,16 +490,37 @@ export default function HistoryPage() {
       )}
 
       <div className="rin-pro-card mb-6 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="키워드 검색"
-            className="h-11 rounded-xl border-[#E8EAED] bg-[#F8F9FA] pl-10 text-sm placeholder:text-muted-foreground"
-            aria-label="검색"
-          />
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="키워드 검색"
+              className="h-11 rounded-xl border-[#E8EAED] bg-[#F8F9FA] pl-10 text-sm placeholder:text-muted-foreground"
+              aria-label="키워드 검색"
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">국가</span>
+            <div className="relative min-w-[140px]">
+              <select
+                value={countryFilter}
+                onChange={(e) => setCountryFilter(e.target.value as CountryFilterOption)}
+                className="h-11 w-full rounded-xl border border-[#E8EAED] bg-[#F8F9FA] px-3 pr-9 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#2AC1BC]/30"
+                aria-label="국가 필터"
+              >
+                <option value="all">전체</option>
+                {COUNTRY_CHIP_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {COUNTRY_LABELS[code] ?? code}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">기간</span>
@@ -481,6 +610,36 @@ export default function HistoryPage() {
           검색·필터 결과가 없습니다.
         </p>
       ) : (
+        <>
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border/80 bg-muted/25 px-4 py-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={allFilteredSelected}
+              onChange={toggleSelectAllFiltered}
+              className="h-4 w-4 rounded border-[#E8EAED] text-[#2AC1BC] focus:ring-[#2AC1BC]"
+              aria-label="현재 목록 전체 선택"
+            />
+            <span className="text-muted-foreground">전체 선택</span>
+            <span className="text-xs tabular-nums text-muted-foreground">({filteredRecords.length}건)</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedIds.size > 0 && (
+              <span className="text-xs font-semibold text-muted-foreground">{selectedIds.size}개 선택됨</span>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 border-red-300 font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+              disabled={selectedIds.size === 0 || bulkDeleting}
+              onClick={deleteBulkSelected}
+            >
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              선택 삭제
+            </Button>
+          </div>
+        </div>
         <ul className="space-y-3 list-none p-0 m-0">
           {filteredRecords.map((record) => {
             const resultsHref = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
@@ -490,10 +649,20 @@ export default function HistoryPage() {
               <li key={record.id}>
                 <article
                   className={cn(
-                    'rin-pro-card flex flex-col gap-4 p-4 transition-shadow hover:shadow-md sm:flex-row sm:items-center sm:justify-between sm:gap-6',
+                    'rin-pro-card flex flex-row gap-3 p-4 transition-shadow hover:shadow-md sm:gap-4',
                     (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'opacity-80'
                   )}
                 >
+                  <label className="flex shrink-0 cursor-pointer items-start pt-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(record.id)}
+                      onChange={() => toggleSelect(record.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-[#E8EAED] text-[#2AC1BC] focus:ring-[#2AC1BC]"
+                      aria-label={`${record.keyword} 선택`}
+                    />
+                  </label>
+                  <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-bold tracking-tight text-foreground">{record.keyword}</h3>
@@ -526,16 +695,7 @@ export default function HistoryPage() {
                     ) : (
                       <span className="text-sm font-medium text-muted-foreground">점수 —</span>
                     )}
-                    <span
-                      className={cn(
-                        'rounded-full px-2.5 py-1 text-xs font-bold',
-                        record.analysis_status === 'completed' && 'bg-[#E8FAF9] text-[#0f766e]',
-                        record.analysis_status === 'failed' && 'bg-red-50 text-[#FF5F5F]',
-                        (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'bg-amber-50 text-amber-800'
-                      )}
-                    >
-                      {STATUS_LABELS[record.analysis_status ?? 'completed'] ?? '완료'}
-                    </span>
+                    <AnalysisStatusBadge status={record.analysis_status} />
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Link href={resultsHref}>
                         <Button
@@ -568,16 +728,18 @@ export default function HistoryPage() {
                       </Button>
                     </div>
                   </div>
+                  </div>
                 </article>
               </li>
             )
           })}
         </ul>
+        </>
       )}
 
       {filteredRecords.length > 0 && (
         <p className="text-sm text-muted-foreground mt-8">
-          {searchQuery || periodFilter !== 'all' || scoreFilter !== 'all' || marketTypeFilter !== 'all' || statusFilter !== 'all'
+          {searchQuery || periodFilter !== 'all' || scoreFilter !== 'all' || marketTypeFilter !== 'all' || statusFilter !== 'all' || countryFilter !== 'all'
             ? `검색·필터 결과 ${filteredRecords.length}건`
             : `총 ${records.length}건`}
         </p>

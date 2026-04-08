@@ -35,6 +35,7 @@ import { DashboardKpiStrip } from '@/components/dashboard/dashboard-kpi-strip'
 import { DashboardMonitorTop3 } from '@/components/dashboard/dashboard-monitor-top3'
 import { DashboardInsightStrip } from '@/components/dashboard/dashboard-insight-strip'
 import { DashboardTrendsRecentTabs } from '@/components/dashboard/dashboard-trends-recent-tabs'
+import { DashboardRecentAnalysisEmpty } from '@/components/dashboard/dashboard-recent-empty'
 import { useDashboardSignalCounts } from '@/hooks/use-dashboard-data'
 
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
@@ -513,7 +514,7 @@ function RinAISearchInner() {
                 <DashboardCardShell
                   id="dashboard-analysis"
                   compact
-                  className="shadow-sm sm:rounded-2xl"
+                  className="shadow-md ring-1 ring-slate-200/80 dark:ring-zinc-700/90 bg-gradient-to-b from-slate-50/95 via-white to-white dark:from-zinc-900/85 dark:via-zinc-950 dark:to-zinc-950 sm:rounded-2xl"
                   icon={<Search className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden />}
                   title="시장 키워드"
                   description="검색창에 키워드를 입력하고 바로 시장 분석을 시작하세요."
@@ -831,12 +832,11 @@ function RinAISearchInner() {
                             )
                           })
                         ) : (
-                          <div className={cn(itemCardClass, 'py-8 text-center')}>
-                            <p className="text-sm text-slate-600 dark:text-zinc-400">기록 없음</p>
-                            <Button type="button" size="sm" className="mt-3" onClick={scrollToSearchAndFocus} disabled={showAnalysisUI}>
-                              분석 시작
-                            </Button>
-                          </div>
+                          <DashboardRecentAnalysisEmpty
+                            onStartAnalysis={scrollToSearchAndFocus}
+                            disabled={showAnalysisUI}
+                            className="rounded-xl border border-dashed border-[#E5E7EB] bg-slate-50/50 dark:border-zinc-700 dark:bg-zinc-900/40"
+                          />
                         )}
                       </div>
                       {recentReports.length > 0 ? (

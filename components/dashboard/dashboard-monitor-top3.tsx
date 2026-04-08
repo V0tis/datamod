@@ -6,8 +6,18 @@ import { BookOpen, ChevronRight, Target, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dashboardCardClass } from '@/components/dashboard/dashboard-tokens'
 import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import { MiniSparkline } from '@/components/dashboard/mini-sparkline'
 
 type Country = string
+
+function seedFromKeyword(keyword: string, salt: number) {
+  let h = salt
+  for (let i = 0; i < keyword.length; i++) {
+    h = (h << 5) - h + keyword.charCodeAt(i)
+    h |= 0
+  }
+  return Math.abs(h)
+}
 
 export function DashboardMonitorTop3({
   opportunities,
@@ -58,6 +68,12 @@ export function DashboardMonitorTop3({
                 <span className="hidden sm:inline">· {row.analysis_count}건</span>
               </div>
             </div>
+            <MiniSparkline
+              seed={seedFromKeyword(row.keyword, 11)}
+              tone="emerald"
+              endValue={row.opportunity_score}
+              className="h-9 w-[52px] sm:w-[72px] shrink-0 opacity-95"
+            />
             <span className="shrink-0 text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
               {row.opportunity_score}
             </span>
@@ -92,6 +108,12 @@ export function DashboardMonitorTop3({
                 {riskInsightTag(row.risk_score)}
               </span>
             </div>
+            <MiniSparkline
+              seed={seedFromKeyword(row.keyword, 29)}
+              tone="red"
+              endValue={row.risk_score}
+              className="h-9 w-[52px] sm:w-[72px] shrink-0 opacity-95"
+            />
             <span className="shrink-0 text-base font-bold tabular-nums text-red-600 dark:text-red-400">{row.risk_score}</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-zinc-600" aria-hidden />
           </Link>

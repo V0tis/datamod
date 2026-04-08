@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ExternalLink, Trash2, Loader2, BarChart3 } from 'lucide-react'
+import { ChevronDown, ExternalLink, Trash2, Loader2, BarChart3, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -53,10 +53,6 @@ export interface InsightCardProps {
   formattedDate?: string
 }
 
-/**
- * Insight card with title, short summary, detailed explanation (expandable),
- * importance level, bullet points, and highlight colors.
- */
 function formatSavedDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
@@ -74,6 +70,7 @@ export function InsightCard({
   formattedDate,
 }: InsightCardProps) {
   const [open, setOpen] = useState(false)
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
   const dateLine = formattedDate ?? formatSavedDate(item.created_at)
 
   const summary = (item.snapshot?.summary ?? item.snapshot?.strategicSummary?.summary ?? '').trim()
@@ -86,11 +83,15 @@ export function InsightCard({
   const importance = getImportanceFromScore(score)
   const styles = IMPORTANCE_STYLES[importance]
 
-  const shortSummary = summary
-    ? summary.slice(0, 120) + (summary.length > 120 ? '…' : '')
+  const mainBody = summary
+    ? summary
     : explanation
-      ? explanation.slice(0, 120) + (explanation.length > 120 ? '…' : '')
-      : opportunity || threat || '저장된 인사이트'
+      ? explanation
+      : opportunity || threat
+        ? [opportunity && `기회: ${opportunity}`, threat && `위협: ${threat}`].filter(Boolean).join('\n')
+        : '저장된 인사이트'
+
+  const needsSummaryToggle = mainBody.length > 220
 
   const detailBullets: string[] = []
   const addUnique = (items: string[]) => {
@@ -109,15 +110,25 @@ export function InsightCard({
 
   const hasDetail = detailBullets.length > 0 || item.note
 
+  const tagItems: { key: string; label: string }[] = [
+    { key: 'kw', label: item.snapshot?.keyword ? `#${item.snapshot.keyword}` : '' },
+    { key: 'mkt', label: countryLabel ? `시장 · ${countryLabel}` : '' },
+    { key: 'imp', label: `중요도 · ${IMPORTANCE_LABELS[importance]}` },
+  ].filter((t) => t.label.length > 0)
+
+  if (item.snapshot?.qualityScore?.label) {
+    tagItems.push({ key: 'qs', label: `신호 · ${item.snapshot.qualityScore.label}` })
+  }
+
   return (
     <article
       className={cn(
-        'rin-pro-card overflow-hidden border-l-4 transition-shadow hover:shadow-md',
+        'rin-pro-card flex h-full flex-col overflow-hidden border-l-4 transition-shadow hover:shadow-md',
         styles.border,
-        selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA]'
+        selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA] dark:ring-offset-zinc-950'
       )}
     >
-      <div className={cn('p-4 sm:p-5', hasDetail && 'pb-0')}>
+      <div className={cn('flex flex-1 flex-col p-4 sm:p-5', hasDetail && 'pb-0')}>
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           {onToggleSelect && (
             <label className="flex shrink-0 cursor-pointer items-start pt-1">
@@ -136,21 +147,21 @@ export function InsightCard({
           >
             <BarChart3 className="h-5 w-5" strokeWidth={2} />
           </div>
-          <div className="min-w-0 flex-1 flex flex-col gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <h3 className="text-base font-bold text-[#222] break-words">{item.name}</h3>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <h3 className="break-words text-base font-bold text-[#222] dark:text-zinc-50">{item.name}</h3>
                   <span
                     className={cn(
-                      'text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0',
+                      'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
                       styles.badge
                     )}
                   >
                     {IMPORTANCE_LABELS[importance]}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground tabular-nums">
+                <p className="text-xs tabular-nums text-muted-foreground">
                   <span className="font-medium text-foreground/80">{item.snapshot?.keyword ?? '—'}</span>
                   <span className="mx-1.5 text-border">|</span>
                   {countryLabel}
@@ -158,30 +169,21 @@ export function InsightCard({
                   {dateLine}
                 </p>
               </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-1.5 sm:shrink-0">
-                <Button
-                  size="sm"
-                  className="h-9 w-full rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab] gap-1 sm:w-auto"
-                  asChild
-                >
-                  <Link href={resultsHref}>
-                    <ExternalLink className="h-4 w-4" />
-                    분석으로 이동
-                  </Link>
-                </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-1.5">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 w-full text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50 sm:w-auto"
+                  className="h-9 w-full border-[#FF5F5F]/40 text-[#FF5F5F] hover:bg-red-50 sm:w-auto"
                   onClick={() => onDelete(item.id)}
                   disabled={deletingId === item.id}
                   aria-label="인사이트 삭제"
                 >
                   {deletingId === item.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   )}
+                  삭제
                 </Button>
               </div>
             </div>
@@ -189,8 +191,25 @@ export function InsightCard({
         </div>
 
         <div className={cn('space-y-3', onToggleSelect ? 'mt-4 pl-0 sm:pl-[calc(1rem+2.5rem+1rem)]' : 'mt-3')}>
-
-          <p className="text-sm text-foreground/90 leading-relaxed">{shortSummary}</p>
+          <div>
+            <p
+              className={cn(
+                'text-sm leading-relaxed text-foreground/90',
+                !summaryExpanded && needsSummaryToggle && 'line-clamp-4'
+              )}
+            >
+              {mainBody}
+            </p>
+            {needsSummaryToggle && (
+              <button
+                type="button"
+                onClick={() => setSummaryExpanded((v) => !v)}
+                className="mt-1.5 text-xs font-semibold text-[#2AC1BC] hover:underline"
+              >
+                {summaryExpanded ? '접기' : '더보기'}
+              </button>
+            )}
+          </div>
 
           {score != null && (
             <p className="text-xs text-muted-foreground">
@@ -206,34 +225,34 @@ export function InsightCard({
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline -ml-1"
+                  className="-ml-1 flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                 >
                   <ChevronDown
-                    className={cn('w-3.5 h-3.5 transition-transform duration-200', open && 'rotate-180')}
+                    className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
                   />
-                  {open ? '접기' : '상세 보기'}
+                  {open ? '상세 접기' : '상세 보기'}
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div
                   className={cn(
-                    'mt-4 pt-4 border-t border-border/60 rounded-lg px-4 py-3 space-y-3',
+                    'mt-4 space-y-3 rounded-lg border-t border-border/60 px-4 py-3 pt-4',
                     styles.bg
                   )}
                 >
                   {detailBullets.length > 0 && (
-                    <ul className="space-y-2 list-none pl-0">
+                    <ul className="list-none space-y-2 pl-0">
                       {detailBullets.slice(0, 8).map((bullet, i) => (
                         <li key={i} className="flex gap-2 text-sm text-foreground">
-                          <span className="text-primary shrink-0">•</span>
+                          <span className="shrink-0 text-primary">•</span>
                           <span>{bullet}</span>
                         </li>
                       ))}
                     </ul>
                   )}
                   {item.note && (
-                    <div className="pt-2 border-t border-border/40">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    <div className="border-t border-border/40 pt-2">
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                         메모
                       </p>
                       <p className="text-sm text-foreground">{item.note}</p>
@@ -244,6 +263,31 @@ export function InsightCard({
             </Collapsible>
           )}
         </div>
+      </div>
+
+      <div className="mt-auto border-t border-border/70 bg-slate-50/50 px-4 py-4 dark:bg-zinc-900/40 sm:px-5">
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {tagItems.map((t) => (
+            <span
+              key={t.key}
+              className="inline-flex max-w-full items-center rounded-md border border-[#E8EAED] bg-white px-2 py-1 text-[11px] font-medium text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+            >
+              <span className="truncate">{t.label}</span>
+            </span>
+          ))}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-10 w-full gap-2 border-[#2AC1BC]/50 font-semibold text-[#0f766e] hover:bg-[#E8FAF9] dark:text-emerald-300 dark:hover:bg-emerald-950/40 sm:w-auto"
+          asChild
+        >
+          <Link href={resultsHref}>
+            <FileText className="h-4 w-4 shrink-0" />
+            원본 리포트 보기
+            <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          </Link>
+        </Button>
       </div>
     </article>
   )
