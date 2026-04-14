@@ -33,7 +33,7 @@ export function DashboardHeroBaemin({
             </span>
             님.
             <span className="mt-1 block text-base font-semibold text-slate-800 sm:mt-2 sm:text-lg dark:text-zinc-200">
-              오늘 RIN-AI가 포착한 핵심 시장 시그널입니다.
+              오늘 Datamod가 포착한 핵심 시장 시그널입니다.
             </span>
           </h1>
           <p className="max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-zinc-400">

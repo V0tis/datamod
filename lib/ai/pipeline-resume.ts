@@ -261,3 +261,104 @@ export async function loadPipelineResumeState(
     competitionSummary,
   }
 }
+
+export type ClientPipelineTaskSnapshotRow = {
+  step_name: string
+  status: string
+  output_data?: unknown
+}
+
+/** 단일 단계 재실행 시 서버 DB에 없을 수 있는 클라이언트 보관 output을 병합 */
+export function mergeServerTaskMapWithClientSnapshot(
+  server: Record<string, { status: string; output_data: unknown }>,
+  clientRows: ClientPipelineTaskSnapshotRow[] | null | undefined
+): Record<string, { status: string; output_data: unknown }> {
+  if (!clientRows?.length) return server
+  const out: Record<string, { status: string; output_data: unknown }> = { ...server }
+  for (const row of clientRows) {
+    if (row.status !== 'completed' || row.output_data == null || typeof row.output_data !== 'object') continue
+    const prev = out[row.step_name]
+    const hasPayload =
+      prev?.output_data != null &&
+      typeof prev.output_data === 'object' &&
+      Object.keys(prev.output_data as object).length > 0
+    if (!hasPayload) {
+      out[row.step_name] = { status: 'completed', output_data: row.output_data }
+    }
+  }
+  return out
+}
+
+/** 클라이언트 스냅샷으로 보강된 단계를 DB에 기록해 이후 loadPipelineResumeState가 동작하게 함 */
+export async function persistMergedTasksMissingOnServer(
+  supabase: SupabaseClient,
+  analysisId: string,
+  serverBefore: Record<string, { status: string; output_data: unknown }>,
+  merged: Record<string, { status: string; output_data: unknown }>
+): Promise<void> {
+  const now = new Date().toISOString()
+  for (const [stepName, row] of Object.entries(merged)) {
+    if (row.status !== 'completed' || row.output_data == null) continue
+    const had = serverBefore[stepName]?.output_data
+    const hadPayload =
+      had != null && typeof had === 'object' && Object.keys(had as object).length > 0
+    if (hadPayload) continue
+    await supabase.from('analysis_tasks').upsert(
+      {
+        analysis_id: analysisId,
+        step_name: stepName,
+        status: 'completed',
+        started_at: now,
+        completed_at: now,
+        output_data: row.output_data,
+        error_message: null,
+        updated_at: now,
+      },
+      { onConflict: 'analysis_id,step_name' }
+    )
+  }
+}
+
+const STEP_LABELS_KO: Record<string, string> = {
+  signal_layer: '데이터 수집',
+  trend_analysis: '시장 분석',
+  competition_analysis: '경쟁 분석',
+  insight_extraction: '인사이트',
+  strategy_generation: '전략',
+  execution_layer: 'PM 액션',
+  risk_opportunity: '리스크·기회 평가',
+}
+
+/**
+ * 단계 재실행 전 필수 선행 태스크가 analysis_tasks(또는 병합 맵)에 있는지 검증.
+ */
+export function validateRetryPipelinePrerequisites(
+  step: 'insight_extraction' | 'strategy_generation' | 'execution_layer' | 'risk_opportunity',
+  tasksMap: Record<string, { status: string; output_data?: unknown }>
+): { ok: true } | { ok: false; message: string; missing: string[] } {
+  const required: Record<typeof step, string[]> = {
+    insight_extraction: ['trend_analysis', 'competition_analysis'],
+    strategy_generation: ['trend_analysis', 'competition_analysis', 'insight_extraction'],
+    execution_layer: ['strategy_generation'],
+    risk_opportunity: ['strategy_generation', 'execution_layer'],
+  }
+  const need = required[step]
+  const missing: string[] = []
+  for (const name of need) {
+    const row = tasksMap[name]
+    const od = row?.output_data
+    const ok =
+      row?.status === 'completed' &&
+      od != null &&
+      typeof od === 'object' &&
+      Object.keys(od as object).length > 0
+    if (!ok) missing.push(name)
+  }
+  if (missing.length === 0) return { ok: true }
+  const detail = missing.map((m) => STEP_LABELS_KO[m] ?? m).join(', ')
+  return {
+    ok: false,
+    missing,
+    message: `이 단계를 다시 실행하려면 다음 단계의 저장된 결과가 필요합니다: ${detail}. 전체 다시 분석을 실행하거나, 분석 완료 후 다시 시도해 주세요.`,
+  }
+}

@@ -11,8 +11,15 @@ export const RIN_LOADING_MESSAGES = [
   '잠시만 기다려 주세요.',
 ] as const
 
+/** @deprecated 브랜드명 호환 — `DATAMOD_LOADING_MESSAGES` 사용 권장 */
+export const DATAMOD_LOADING_MESSAGES = RIN_LOADING_MESSAGES
+
 export function getRandomRinMessage(): string {
   return RIN_LOADING_MESSAGES[Math.floor(Math.random() * RIN_LOADING_MESSAGES.length)]
+}
+
+export function getRandomDatamodMessage(): string {
+  return getRandomRinMessage()
 }
 
 type RinAnimationVariant = 'loading' | 'logo'

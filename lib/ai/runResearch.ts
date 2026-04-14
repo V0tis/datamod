@@ -68,6 +68,10 @@ import { buildCacheKeyParts, isCacheValid, logCacheEvent } from '@/lib/research-
 import {
   loadPipelineResumeState,
   fetchTaskMap,
+  mergeServerTaskMapWithClientSnapshot,
+  persistMergedTasksMissingOnServer,
+  validateRetryPipelinePrerequisites,
+  type ClientPipelineTaskSnapshotRow,
   type CompetitionDataShape,
   type TrendDataShape,
   type PipelineResumeState,
@@ -177,7 +181,7 @@ export type ResearchStreamEvent =
   | { type: 'creative'; groqText: string | null; geminiText: string | null }
   /** LLM·저장 완료 후 클라이언트로 done 전 1.5초 구간 — 최종 정제 UX */
   | { type: 'final_refining'; phase: 1 | 2 | 3; message: string }
-  | { type: 'done'; reportId: string; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
+  | { type: 'done'; reportId: string | null; sourceLinks: NewsItem[]; analysis_depth?: 'fast' | 'standard' | 'deep'; serper_used?: boolean }
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
   | { type: 'pipeline_resume'; phase: 2 | 3; skippedSteps: string[]; message: string }
@@ -221,6 +225,11 @@ export type RunResearchParams = {
    * 앞단(trend/competition/signal)은 저장된 태스크가 없으면 전체 재분석이 필요합니다.
    */
   retryPipelineStep?: RetryPipelineStepId
+  /**
+   * DB에 아직 없을 때 클라이언트가 보관한 완료 단계 output (세션/UI 복구용).
+   * 서버에서 analysis_tasks로 upsert 후 재실행 컨텍스트를 채운다.
+   */
+  clientPipelineTaskSnapshot?: ClientPipelineTaskSnapshotRow[] | null
 }
 
 type RssItem = {
@@ -1597,6 +1606,47 @@ function newsItemsFromSignalTaskOutput(raw: unknown): NewsItem[] {
   return out
 }
 
+/** report_id가 없을 때 단계 재실행용 stub 리포트·research_history 행을 만든다. */
+async function ensureReportIdForPipelineRetry(
+  supabase: SupabaseClient,
+  userId: string,
+  keyword: string,
+  countryCode: string,
+  keyMetricsSeed: Record<string, unknown>,
+  analysisDepth: 'fast' | 'standard' | 'deep'
+): Promise<string | null> {
+  const { data: report, error } = await supabase
+    .from('reports')
+    .insert({
+      user_id: userId,
+      keyword,
+      content: { pipeline_partial: true, note: 'step_retry_stub' },
+      source_links: [],
+      ai_responses: {},
+    })
+    .select('id')
+    .single()
+  if (error || !report?.id) {
+    console.warn('[ensureReportIdForPipelineRetry] reports insert failed', error?.message)
+    return null
+  }
+  await supabase.from('research_history').upsert(
+    {
+      user_id: userId,
+      keyword,
+      country_code: countryCode,
+      report_id: report.id,
+      key_metrics: keyMetricsSeed,
+      analysis_status: 'analyzing',
+      progress_step: null,
+      analysis_depth: analysisDepth,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,keyword,country_code' }
+  )
+  return report.id
+}
+
 /**
  * 단일 파이프라인 단계만 재실행: DB에 저장된 이전 단계 출력을 컨텍스트로 사용합니다.
  */
@@ -1687,12 +1737,7 @@ async function* runResearchRetrySingleStep(
     .eq('country_code', cacheKey.countryCode)
     .maybeSingle()
 
-  const reportId = histRow?.report_id
-  if (!reportId) {
-    yield { type: 'error', message: '저장된 분석 결과가 없어 이 단계만 다시 실행할 수 없습니다.', step: 'retry' }
-    return
-  }
-
+  let reportId = histRow?.report_id ?? null
   const existingKm = (
     histRow?.key_metrics && typeof histRow.key_metrics === 'object' ? (histRow.key_metrics as Record<string, unknown>) : {}
   ) as Record<string, unknown>
@@ -1701,10 +1746,34 @@ async function* runResearchRetrySingleStep(
       ? histRow.analysis_depth
       : depthForDb
 
+  const serverTasksMap = await fetchTaskMap(supabase, analysisId)
+  const mergedForRetry = mergeServerTaskMapWithClientSnapshot(
+    serverTasksMap,
+    params.clientPipelineTaskSnapshot ?? null
+  )
+  await persistMergedTasksMissingOnServer(supabase, analysisId, serverTasksMap, mergedForRetry)
+  const tasksMap = await fetchTaskMap(supabase, analysisId)
+
+  const prereq = validateRetryPipelinePrerequisites(retryPipelineStep, tasksMap)
+  if (!prereq.ok) {
+    yield { type: 'error', message: prereq.message, step: 'retry' }
+    return
+  }
+
+  if (!reportId) {
+    const ensured = await ensureReportIdForPipelineRetry(
+      supabase,
+      userId,
+      keyword,
+      countryCode,
+      existingKm,
+      analysisDepthRow
+    )
+    if (ensured) reportId = ensured
+  }
+
   yield { type: 'analysis_started', analysisId }
   await updateProgressRow(4, 'analyzing')
-
-  const tasksMap = await fetchTaskMap(supabase, analysisId)
   const signalOut = tasksMap.signal_layer?.output_data
   const sourceLinks = newsItemsFromSignalTaskOutput(signalOut)
 

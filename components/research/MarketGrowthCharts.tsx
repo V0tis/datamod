@@ -20,33 +20,17 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
+import { OpportunityChartSourceDialog } from '@/components/analysis/opportunity-chart-source-dialog'
+import { RadarAngleEllipsisTick } from '@/components/analysis/radar-angle-tick'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
+import { breakdownToRadarDisplayRows } from '@/lib/chart/opportunity-radar-display'
 import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT, CHART_MINT_SOFT } from '@/lib/chart-theme'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 
 const CHART_GRAY_FILL = '#94a3b8'
 
-const RADAR_LABELS: Record<string, string> = {
-  market_growth: '시장 성장',
-  trend_momentum: '트렌드 모멘텀',
-  competition_density: '경쟁 밀도',
-  competition_pressure: '경쟁 압력',
-  funding_signals: '투자 신호',
-  risk_factors: '리스크 요인',
-  user_demand: '수요',
-  product_differentiation: '차별화',
-  market_timing: '시장 타이밍',
-}
-
-function breakdownToRadarRows(breakdown: Record<string, number | undefined>): { subject: string; score: number; fullMark: number }[] {
-  return Object.entries(breakdown)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({
-      subject: RADAR_LABELS[k] ?? k,
-      score: Math.min(100, Math.max(0, v as number)),
-      fullMark: 100,
-    }))
-    .slice(0, 8)
+function chartInsightNarrative(insight?: string | null, takeaway?: string | null): string {
+  return [insight?.trim(), takeaway?.trim()].filter(Boolean).join('\n\n')
 }
 
 /** Normalize market_growth to -20..+20 scale (handles both formula and legacy 0-100) */
@@ -123,6 +107,8 @@ export interface MarketGrowthChartsProps {
   marketTemperatureScore?: number | null
   keyword?: string
   chartInsights?: ChartInsights
+  /** 기회 점수 산출 요약 (모달 근거) */
+  opportunityScoreReasoning?: string | null
   className?: string
   /** 기회 점수·트렌드가 아직 없을 때 방사형 차트 영역만 스켈레톤 */
   radarSkeleton?: boolean
@@ -137,6 +123,7 @@ export function MarketGrowthCharts({
   growthSignalsCount = 0,
   marketTemperatureScore,
   chartInsights,
+  opportunityScoreReasoning,
   className,
   radarSkeleton = false,
 }: MarketGrowthChartsProps) {
@@ -150,7 +137,7 @@ export function MarketGrowthCharts({
   const sizeData = buildMarketSizeData(score)
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
 
-  let radarRows = breakdownToRadarRows(effectiveBreakdown as Record<string, number | undefined>)
+  let radarRows = breakdownToRadarDisplayRows(effectiveBreakdown as Record<string, number | undefined>)
   if (radarRows.length < 4) {
     radarRows = [
       { subject: '시장 성장', score: Math.round(score * 0.85), fullMark: 100 },
@@ -176,12 +163,32 @@ export function MarketGrowthCharts({
           insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
           takeaway={ma?.takeaway}
           className="border border-border/60 bg-card/50"
+          headerActions={
+            <OpportunityChartSourceDialog
+              reasoning={
+                [opportunityScoreReasoning?.trim(), chartInsightNarrative(ma?.insight, ma?.takeaway)]
+                  .filter(Boolean)
+                  .join('\n\n') || undefined
+              }
+              breakdown={effectiveBreakdown as Record<string, number | undefined>}
+              variant="breakdown"
+            />
+          }
         >
-          <div className="aspect-square w-full min-h-[220px] max-h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="72%" data={radarRows}>
+          <div className="aspect-square w-full min-h-[240px] max-h-[420px] px-2 pb-2">
+            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={260} debounce={32}>
+              <RadarChart
+                cx="50%"
+                cy="50%"
+                outerRadius="58%"
+                margin={{ top: 40, right: 44, bottom: 40, left: 44 }}
+                data={radarRows}
+              >
                 <PolarGrid stroke={CHART_GRAY_GRID} />
-                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                <PolarAngleAxis
+                  dataKey="subject"
+                  tick={(p) => <RadarAngleEllipsisTick {...p} fill={CHART_GRAY_AXIS} />}
+                />
                 <PolarRadiusAxis angle={45} domain={[0, 100]} tick={{ fontSize: 9, fill: CHART_GRAY_AXIS }} />
                 <Tooltip
                   formatter={(v: number) => [`${v}/100`, '점수']}
@@ -206,7 +213,18 @@ export function MarketGrowthCharts({
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
-        <ChartWithInsight title="검색 트렌드 성장" insight={st?.insight} takeaway={st?.takeaway}>
+        <ChartWithInsight
+          title="검색 트렌드 성장"
+          insight={st?.insight}
+          takeaway={st?.takeaway}
+          headerActions={
+            <OpportunityChartSourceDialog
+              title="검색 트렌드 — 데이터 출처"
+              variant="chart_insight"
+              reasoning={chartInsightNarrative(st?.insight, st?.takeaway)}
+            />
+          }
+        >
           <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -234,7 +252,18 @@ export function MarketGrowthCharts({
           </div>
         </ChartWithInsight>
 
-        <ChartWithInsight title="시장 규모 전망" insight={ms?.insight} takeaway={ms?.takeaway}>
+        <ChartWithInsight
+          title="시장 규모 전망"
+          insight={ms?.insight}
+          takeaway={ms?.takeaway}
+          headerActions={
+            <OpportunityChartSourceDialog
+              title="시장 규모 전망 — 데이터 출처"
+              variant="chart_insight"
+              reasoning={chartInsightNarrative(ms?.insight, ms?.takeaway)}
+            />
+          }
+        >
           <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -260,7 +289,18 @@ export function MarketGrowthCharts({
           </div>
         </ChartWithInsight>
 
-        <ChartWithInsight title="시장 도입 추이" insight={ar?.insight} takeaway={ar?.takeaway}>
+        <ChartWithInsight
+          title="시장 도입 추이"
+          insight={ar?.insight}
+          takeaway={ar?.takeaway}
+          headerActions={
+            <OpportunityChartSourceDialog
+              title="시장 도입 추이 — 데이터 출처"
+              variant="chart_insight"
+              reasoning={chartInsightNarrative(ar?.insight, ar?.takeaway)}
+            />
+          }
+        >
           <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>

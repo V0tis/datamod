@@ -13,7 +13,7 @@ import { ResearchStoreRehydrate } from "@/components/research-store-rehydrate";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
-  title: "Rin-AI",
+  title: "Datamod",
   description: "이메일 인증 기반 시장 리서치",
   icons: {
     icon: [{ url: "/assets/logo_rin_ai.svg", type: "image/svg+xml" }],

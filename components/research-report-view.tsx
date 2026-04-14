@@ -117,7 +117,7 @@ export function ResearchReportView({
         <h1 className={embedded ? 'text-xl font-bold font-serif' : 'text-3xl font-bold font-serif'}>
           &quot;{keyword}&quot; 리서치 리포트
         </h1>
-        <Badge variant="outline" className="text-sm">Verified by Rin-AI</Badge>
+        <Badge variant="outline" className="text-sm">Verified by Datamod</Badge>
       </header>
 
       <motion.div
@@ -211,7 +211,7 @@ export function ResearchReportView({
           </Button>
           <Link href="/">
             <Button variant="outline" size="sm">
-              Rin-AI 홈으로
+              Datamod 홈으로
             </Button>
           </Link>
         </div>

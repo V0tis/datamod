@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
+import { DatamodWordmark } from '@/components/datamod-wordmark'
 import { cn } from '@/lib/utils'
 import { motionConfig } from '@/lib/motion-config'
 import { useLogout } from '@/components/providers/logout-provider'
@@ -62,10 +63,10 @@ export function AppSidebar() {
         <Link
           href="/"
           className="flex items-center gap-2 text-white transition-opacity hover:opacity-90"
-          aria-label="rin-ai 홈(대시보드)으로 이동"
+          aria-label="Datamod 홈(대시보드)으로 이동"
         >
           <RinLogo className="h-8 w-8 shrink-0 text-white" />
-          <span className="text-sm font-semibold tracking-tight">rin-ai</span>
+          <DatamodWordmark className="text-sm" textClassName="text-white" />
         </Link>
       </div>
 
@@ -160,10 +161,10 @@ export function AppSidebar() {
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90"
-          aria-label="rin-ai 홈(대시보드)으로 이동"
+          aria-label="Datamod 홈(대시보드)으로 이동"
         >
           <RinLogo className="h-8 w-8 shrink-0 text-neutral-900 dark:text-zinc-100" />
-          <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-zinc-100">rin-ai</span>
+          <DatamodWordmark className="text-sm" textClassName="text-neutral-900 dark:text-zinc-100" />
         </Link>
         <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex-initial" aria-label="메인 메뉴">
           {navItems.map((item) => {
@@ -238,7 +239,7 @@ export function AppSidebar() {
         href="/"
         className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10"
         title="대시보드"
-        aria-label="rin-ai 홈(대시보드)으로 이동"
+        aria-label="Datamod 홈(대시보드)으로 이동"
       >
         <RinLogo className="h-8 w-8 shrink-0 text-white" />
       </Link>

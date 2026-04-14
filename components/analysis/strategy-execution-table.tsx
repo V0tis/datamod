@@ -105,7 +105,7 @@ function ClampedTableMarkdownCell({
 
 function storageKey(reportId: string | null | undefined, keyword: string): string {
   const k = keyword.trim().slice(0, 80) || 'draft'
-  return `rin-strategy-status:${reportId ?? 'local'}:${k}`
+  return `datamod-strategy-status:${reportId ?? 'local'}:${k}`
 }
 
 export function StrategyExecutionTable({

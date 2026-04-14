@@ -335,6 +335,7 @@ export function AnalysisResultSections({
             growthSignalsCount={growthSignals.length}
             marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
             chartInsights={km.chart_insights}
+            opportunityScoreReasoning={typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined}
             keyword={keyword}
             radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
           />
@@ -609,6 +610,7 @@ export function AnalysisResultSections({
               growthSignalsCount={growthSignals.length}
               marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
               chartInsights={km.chart_insights}
+              opportunityScoreReasoning={typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined}
               keyword={keyword}
               radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
             />

@@ -98,7 +98,7 @@ export default function AuthCallbackPage() {
               이메일 인증이 완료되었습니다.
             </h1>
             <p className="text-sm text-muted-foreground">
-              rin-ai 서비스를 이용하실 수 있어요.
+              Datamod 서비스를 이용하실 수 있어요.
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function AuthCallbackPage() {
         >
           <Link href="/" className="inline-flex items-center justify-center gap-2">
             <RinLogo size={24} className="shrink-0" />
-            rin-ai 시작하기
+            Datamod 시작하기
           </Link>
         </Button>
       </div>

@@ -12,7 +12,7 @@ type Props = {
   taskData?: Partial<Record<string, unknown>>
   analysisTasks?: Array<{ step_name: string; output_data: unknown }> | null
   loading: boolean
-  onNavigateTab: (tab: 'insight' | 'action') => void
+  onNavigateToReportSection: (sectionId: string) => void
   stableOpportunityScore?: number | null
   analysisFailed?: boolean
   scoreRationaleSummary?: string | null
@@ -24,7 +24,7 @@ export function ResultLeftRail({
   taskData,
   analysisTasks,
   loading,
-  onNavigateTab,
+  onNavigateToReportSection,
   stableOpportunityScore = null,
   analysisFailed = false,
   scoreRationaleSummary = null,
@@ -63,7 +63,7 @@ export function ResultLeftRail({
         result={effectiveResult}
         taskData={taskData}
         analysisTasks={analysisTasks}
-        onNavigateTab={onNavigateTab}
+        onNavigateToReportSection={onNavigateToReportSection}
       />
     </aside>
   )

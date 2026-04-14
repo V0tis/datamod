@@ -66,6 +66,8 @@ export async function POST(req: Request) {
       rerun_from_phase?: number
       /** 실패한 AI 단계만 재실행 */
       retry_pipeline_step?: string
+      /** 클라이언트 세션에 보관된 완료 단계 output (DB 미동기화 시 복구) */
+      pipeline_task_snapshot?: Array<{ step_name?: string; status?: string; output_data?: unknown }>
     }
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const countryCode =
@@ -96,6 +98,16 @@ export async function POST(req: Request) {
       rawRetry === 'risk_opportunity'
         ? rawRetry
         : undefined
+
+    const clientPipelineTaskSnapshot = Array.isArray(body.pipeline_task_snapshot)
+      ? body.pipeline_task_snapshot.filter(
+          (r): r is { step_name: string; status: string; output_data: unknown } =>
+            typeof r?.step_name === 'string' &&
+            typeof r?.status === 'string' &&
+            r.output_data != null &&
+            typeof r.output_data === 'object'
+        )
+      : undefined
 
     if (!keyword) {
       return NextResponse.json(
@@ -237,6 +249,10 @@ export async function POST(req: Request) {
             forceReanalyze,
             rerunFromPhase,
             retryPipelineStep,
+            clientPipelineTaskSnapshot:
+              clientPipelineTaskSnapshot && clientPipelineTaskSnapshot.length > 0
+                ? clientPipelineTaskSnapshot
+                : undefined,
           })
 
           try {

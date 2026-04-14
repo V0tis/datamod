@@ -5,7 +5,7 @@
 ## Directory Overview
 
 ```
-rin-ai/
+datamod/
 ├── app/                    # Next.js App Router (pages, layouts, API routes)
 ├── components/             # React UI components
 ├── hooks/                  # React hooks (useCurrentTask, useResultPageState, etc.)

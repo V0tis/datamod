@@ -5,7 +5,7 @@
 /* 다크 모드: Tailwind dark 전략은 'class'. html에 .dark 클래스 적용 시 다크 모드 (next-themes와 동일) */
 @custom-variant dark (&:is(.dark *));
 
-/* RIN-AI: B2B+B2C 리브랜드 — 배경 #F8F9FA, 포지티브 #2AC1BC, 리스크 #FF5F5F, 본문 #222 */
+/* Datamod: B2B+B2C — 배경 #F8F9FA, 포지티브 #2AC1BC, 리스크 #FF5F5F, 본문 #222 */
 :root {
   --rin-primary: #2ac1bc;
   --rin-bg: #ffffff;

@@ -10,10 +10,10 @@ type Props = {
   result: ResearchResponse | null
   taskData?: Partial<Record<string, unknown>>
   analysisTasks?: Array<{ step_name: string; output_data: unknown }> | null
-  onNavigateTab: (tab: 'insight' | 'action') => void
+  onNavigateToReportSection: (sectionId: string) => void
 }
 
-export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab }: Props) {
+export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToReportSection }: Props) {
   const actions = extractNextActionItems(result, taskData, analysisTasks, { maxItems: 20 })
   const highCount = actions.filter((a) => a.priority === 'high').length
   const totalStrategic = actions.length
@@ -31,7 +31,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab
       hint: highCount > 0 ? '우선 실행이 필요한 GTM·출시 과제입니다.' : '실행 대기 중인 전략 과제를 확인하세요.',
       icon: ClipboardList,
       cta: '실행 테이블로',
-      tab: 'action' as const,
+      sectionId: 'report-action',
     },
     {
       key: 'risk',
@@ -39,8 +39,8 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab
       label: '리스크 대응',
       hint: riskCount > 0 ? '의사결정·규제·경쟁 리스크에 대한 점검 항목입니다.' : '리스크 시그널이 충분히 수집되지 않았습니다.',
       icon: AlertTriangle,
-      cta: '액션 탭',
-      tab: 'action' as const,
+      cta: '액션 플랜으로',
+      sectionId: 'report-action',
     },
     {
       key: 'monitor',
@@ -48,8 +48,8 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab
       label: '모니터링 포인트',
       hint: monitorCount > 0 ? '시장·지표 추적이 필요한 체크포인트입니다.' : '모니터링 항목이 비어 있습니다.',
       icon: Radar,
-      cta: '인사이트 탭',
-      tab: 'insight' as const,
+      cta: '인사이트 섹션',
+      sectionId: 'report-insights',
     },
   ] as const
 
@@ -57,7 +57,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab
     <div className="space-y-3">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">긴급 액션</h3>
       <ul className="space-y-3">
-        {items.map(({ key, count, label, hint, icon: Icon, cta, tab }) => (
+        {items.map(({ key, count, label, hint, icon: Icon, cta, sectionId }) => (
           <li key={key} className={cn(analysisCardClass, 'p-4')}>
             <div className="flex items-start gap-3">
               <div className="flex shrink-0 flex-col items-center leading-none">
@@ -81,7 +81,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateTab
             </div>
             <button
               type="button"
-              onClick={() => onNavigateTab(tab)}
+              onClick={() => onNavigateToReportSection(sectionId)}
               className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-[#0EA5E9] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-sky-600"
             >
               {cta}

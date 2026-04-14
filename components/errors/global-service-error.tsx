@@ -14,7 +14,7 @@ export interface GlobalServiceErrorProps {
 }
 
 /**
- * 전역 복구 가능 오류 UI (설정 누락·네트워크 등). RIN-AI는 한국 PM 대상 — 카피는 한국어 기본.
+ * 전역 복구 가능 오류 UI (설정 누락·네트워크 등). Datamod는 한국 PM 대상 — 카피는 한국어 기본.
  */
 export function GlobalServiceError({
   title = '문제가 발생했습니다',

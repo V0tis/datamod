@@ -117,7 +117,7 @@ export default function InsightsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `rin-saved-insights-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `datamod-saved-insights-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
     toast.success('JSON 파일로 저장했습니다.')

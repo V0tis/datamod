@@ -32,7 +32,7 @@ export type OpportunityScoreOutput = {
  * Compute opportunity score from structured pipeline outputs.
  * Formula:
  * - market_growth: (market_score - 50) * 0.4, range -20..+20
- * - trend_momentum: min(positive*4 + neutral*2, 20)
+ * - trend_momentum: min(positive*4 + neutral*2 + small bonus when positives>=2, 22)
  * - funding_signals: min(opportunities*3 + actions*2, 15)
  * - competition_density: -min(competitors*3, 25)
  * - risk_factors: -min(risks*4, 25)
@@ -40,11 +40,15 @@ export type OpportunityScoreOutput = {
 export function computeOpportunityScore(
   input: OpportunityScoreInput
 ): OpportunityScoreOutput {
-  const market_growth = Math.round((input.market_score - 50) * 0.4)
+  const signalLift =
+    input.positive_signals_count >= 3 ? 3 : input.positive_signals_count >= 1 ? 1 : 0
+  const market_growth = Math.round(
+    Math.min(20, Math.max(-20, (input.market_score - 50) * 0.45 + signalLift))
+  )
   const trend_momentum = Math.round(
     Math.min(
-      input.positive_signals_count * 4 + input.neutral_signals_count * 2,
-      20
+      input.positive_signals_count * 4 + input.neutral_signals_count * 2 + (input.positive_signals_count >= 2 ? 2 : 0),
+      22
     )
   )
   const funding_signals = Math.round(

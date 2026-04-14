@@ -1,4 +1,4 @@
-# Repository Analysis: Rin-AI
+# Repository Analysis: Datamod
 
 **Scope:** Full codebase review from a PM and engineering perspective.  
 **Deliverable:** Analysis summary + proposed refactoring plan. No refactoring performed.

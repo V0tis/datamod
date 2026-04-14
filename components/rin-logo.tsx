@@ -34,7 +34,7 @@ export interface RinLogoProps {
 }
 
 /**
- * rin-ai 브랜드 마크 — 부모에 `text-foreground`, `text-white` 등으로 라이트·다크 대응 (fill=currentColor).
+ * Datamod 브랜드 마크 — 부모에 `text-foreground`, `text-white` 등으로 라이트·다크 대응 (fill=currentColor).
  */
 export function RinLogo({ className = '', size }: RinLogoProps) {
   if (size != null) {

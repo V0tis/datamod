@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Mail, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
+import { DatamodWordmark } from '@/components/datamod-wordmark'
 
 export default function VerifyPage() {
   return (
@@ -26,8 +27,9 @@ export default function VerifyPage() {
           <div className="text-center space-y-3">
             <div className="flex justify-center items-center gap-2">
               <RinLogo className="h-8 w-8 shrink-0 text-foreground" />
-              <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">rin-ai</h1>
+              <DatamodWordmark className="text-3xl sm:text-4xl" textClassName="text-foreground text-3xl sm:text-4xl" />
             </div>
+            <h1 className="sr-only">Datamod</h1>
           </div>
 
           <div className="bg-card rounded-3xl shadow-lg border border-border p-8 space-y-6">

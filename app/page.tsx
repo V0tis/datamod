@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, X, Sparkles, BarChart3, Search, Play, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
-import { getRandomRinMessage, RIN_LOADING_MESSAGES } from '@/components/common/RinAnimation'
+import { getRandomDatamodMessage, DATAMOD_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { AnalysisProgressOverlay, useAnalysisTypewriter } from '@/components/research/AnalysisProgressOverlay'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -66,15 +66,15 @@ function recentInsightLabel(score: number | null | undefined, analyzing: boolean
 const itemCardClass =
   'rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950'
 
-function RinAISearchInner() {
+function DatamodSearchInner() {
   const router = useRouter()
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
-  const [loadingMessage, setLoadingMessage] = useState<string>(() => RIN_LOADING_MESSAGES[0])
+  const [loadingMessage, setLoadingMessage] = useState<string>(() => DATAMOD_LOADING_MESSAGES[0])
   useEffect(() => {
-    setLoadingMessage(getRandomRinMessage())
+    setLoadingMessage(getRandomDatamodMessage())
   }, [])
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
@@ -194,10 +194,8 @@ function RinAISearchInner() {
   const decisionSummaryLoading =
     dashboardRecsLoading || (dashboardRecs.highOpportunity.length === 0 && trendsLoading)
 
-  const scrollToSearchAndFocus = useCallback(() => {
-    document.getElementById('dashboard-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    window.setTimeout(() => searchInputRef.current?.focus(), 300)
-  }, [])
+  /** 스크롤·포커스 강제 없음 — 읽기 위치 유지 정책 */
+  const scrollToSearchAndFocus = useCallback(() => {}, [])
 
   useEffect(() => {
     const supabase = createClient()
@@ -638,7 +636,7 @@ function RinAISearchInner() {
                           <button
                             key={k}
                             type="button"
-                            onClick={() => { setQuery(k); setError(null); searchInputRef.current?.focus() }}
+                            onClick={() => { setQuery(k); setError(null) }}
                             disabled={showAnalysisUI}
                             className="shrink-0 rounded-xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50/90 to-sky-50/80 px-4 py-2.5 text-left shadow-sm transition hover:border-cyan-300 disabled:opacity-40 dark:border-cyan-900/50 dark:from-cyan-950/40 dark:to-sky-950/30"
                           >
@@ -907,10 +905,10 @@ function RinAISearchInner() {
   )
 }
 
-export default function RinAISearch() {
+export default function DatamodSearch() {
   return (
     <Suspense fallback={<FullPageBrandLoader />}>
-      <RinAISearchInner />
+      <DatamodSearchInner />
     </Suspense>
   )
 }

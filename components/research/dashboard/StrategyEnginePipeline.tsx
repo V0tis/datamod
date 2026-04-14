@@ -10,7 +10,6 @@ import {
   filterLogsForStage,
   plainActivityPreview,
 } from '@/components/research/dashboard/PipelineStepActivityLog'
-import { streamTaskToStageIndex } from '@/lib/analysis/pipeline-activity-step'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getAnalysisErrorMessage } from '@/lib/analysis-error-messages'
 import { getProviderDisplayName, getProviderStatusKo } from '@/lib/ai/provider-display'
@@ -369,7 +368,6 @@ export function StrategyEnginePipeline({
   }, [resultId])
 
   const globalStripRef = useRef<HTMLDivElement>(null)
-  const stepRefs = useRef<Array<HTMLDivElement | null>>([])
 
   type TaskItem = NonNullable<typeof analysisTasks> extends (infer U)[] ? U : never
   const taskMap = (analysisTasks ?? []).reduce(
@@ -471,30 +469,6 @@ export function StrategyEnginePipeline({
     [streamingActivityLog]
   )
 
-  const logScrollKey = useMemo(() => {
-    const last = activityRows[activityRows.length - 1]
-    if (!last) return ''
-    return `${last.ts}-${last.stepId ?? ''}-${last.message.length}`
-  }, [activityRows])
-
-  useEffect(() => {
-    if (!logScrollKey) return
-    const last = activityRows[activityRows.length - 1]
-    if (!last) return
-    requestAnimationFrame(() => {
-      if (last.stepId === '__global__') {
-        globalStripRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        return
-      }
-      let target = 0
-      if (last.stepId) {
-        const idx = streamTaskToStageIndex(last.stepId)
-        if (idx !== null && idx >= 0) target = idx
-      }
-      stepRefs.current[target]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    })
-  }, [logScrollKey, activityRows])
-
   return (
     <div
       className={cn(
@@ -532,9 +506,6 @@ export function StrategyEnginePipeline({
 
             return (
               <div
-                ref={(el) => {
-                  stepRefs.current[i] = el
-                }}
                 key={stage.id}
                 className={cn(
                   'relative border-l-2 pl-5 pb-8 last:pb-2',

@@ -9,7 +9,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       attribute="class"
       defaultTheme="light"
       enableSystem={true}
-      storageKey="rin-theme"
+      storageKey="datamod-theme"
       disableTransitionOnChange
     >
       {children}

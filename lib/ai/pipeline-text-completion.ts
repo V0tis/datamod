@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { GEMINI_MODEL } from '@/lib/gemini-config'
+import { GEMINI_MODEL, GEMINI_LONG_CONTEXT_MODEL } from '@/lib/gemini-config'
 import { generateTextWithUsage } from '@/services/ai/geminiClient'
 import { completeChat as groqCompleteChat } from '@/services/ai/groqClient'
 import {
@@ -115,6 +115,8 @@ export async function runPipelineGeminiGroqText(options: {
   }
 
   const primaryIsGemini = primaryProvider === 'gemini'
+  /** PM 액션 플랜: Groq 재시도 없이 빠르게 Gemini Flash 폴백 */
+  const maxPrimaryRetries = step === 'execution_layer' && !primaryIsGemini ? 0 : AI_MAX_RETRIES
   let usedFallback = false
   let primaryProviderError: string | undefined
 
@@ -123,7 +125,7 @@ export async function runPipelineGeminiGroqText(options: {
     { role: 'user' as const, content: prompt },
   ]
 
-  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxPrimaryRetries; attempt++) {
     try {
       if (primaryIsGemini) {
         const r = await generateTextWithUsage({
@@ -161,7 +163,7 @@ export async function runPipelineGeminiGroqText(options: {
       })
       return { text, usedFallback: false }
     } catch (err) {
-      if (attempt < AI_MAX_RETRIES && is429OrQuotaError(err)) {
+      if (attempt < maxPrimaryRetries && is429OrQuotaError(err)) {
         await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
         continue
       }
@@ -185,12 +187,13 @@ export async function runPipelineGeminiGroqText(options: {
             return { text, usedFallback: true, primaryProviderError }
           }
           if (!primaryIsGemini) {
+            const geminiFallbackModel = step === 'execution_layer' ? GEMINI_LONG_CONTEXT_MODEL : geminiModel
             const r = await generateTextWithUsage({
               apiKey: geminiKey,
               prompt,
               systemInstruction,
               maxOutputTokens,
-              model: geminiModel,
+              model: geminiFallbackModel,
               isRetryable: () => false,
             })
             const textGem = r.text ?? ''

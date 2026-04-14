@@ -1,4 +1,4 @@
-# Rin-AI
+# Datamod
 
 키워드 기반 **시장 리서치 플랫폼**입니다.  
 최신 뉴스를 수집·분석해 리포트 요약, 감성/영향력 차트, 유저 반응 예측을 한 번에 제공합니다.
@@ -7,6 +7,7 @@
 - **AI**: Google Gemini 3 / Gemini 2.0 + Groq (Llama) 듀얼 엔진, Read-through 캐싱
 - **수집**: 구글 트렌드 RSS (국가별 트렌드), 뉴스·분석
 - **배포**: Vercel
+- **소스**: [github.com/V0tis/datamod](https://github.com/V0tis/datamod)
 
 ---
 
@@ -50,7 +51,7 @@ yarn dev
 
 **Vercel로 배포하면 누구나 URL로 접속할 수 있습니다.**
 
-1. [Vercel](https://vercel.com)에 로그인 후 **Add New → Project**에서 이 저장소(GitHub/GitLab)를 연결합니다.
+1. [Vercel](https://vercel.com)에 로그인 후 **Add New → Project**에서 저장소 [V0tis/datamod](https://github.com/V0tis/datamod)를 연결합니다.
 2. **Environment Variables**에 `.env.local`에 넣은 값들을 그대로 등록합니다. (Supabase, Resend, Gemini, Groq 등)
 3. **Deploy**를 누르면 빌드 후 `https://<프로젝트명>.vercel.app` 같은 URL이 생성됩니다.
 4. (선택) 커스텀 도메인은 Vercel 대시보드 → Project → Settings → Domains에서 설정할 수 있습니다.
@@ -77,7 +78,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 # Resend (이메일 OTP)
 RESEND_API_KEY=your_resend_key
-EMAIL_FROM="Rin-AI <onboarding@resend.dev>"
+EMAIL_FROM="Datamod <onboarding@resend.dev>"
 
 # 웹 검색 그라운딩 (Serper API) — 실제 사용됨
 # 설정 시: 트렌드 분석·경쟁사 검색 시 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달.

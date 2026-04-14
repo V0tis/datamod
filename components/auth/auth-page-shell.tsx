@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { RinLogo } from '@/components/rin-logo'
+import { DatamodWordmark } from '@/components/datamod-wordmark'
 import { cn } from '@/lib/utils'
 
 export function AuthPageShell({
@@ -31,10 +32,10 @@ export function AuthPageShell({
           <Link
             href="/"
             className="inline-flex items-center justify-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            aria-label="rin-ai 홈(대시보드)으로 이동"
+            aria-label="Datamod 홈(대시보드)으로 이동"
           >
             <RinLogo className="h-8 w-8 shrink-0 text-foreground" />
-            <span className="text-xl font-semibold tracking-tight text-foreground">rin-ai</span>
+            <DatamodWordmark className="text-xl text-foreground" textClassName="text-foreground" />
           </Link>
           <p className="text-sm font-medium text-foreground">{subtitle}</p>
           {tagline ? (

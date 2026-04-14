@@ -21,7 +21,6 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { computeAnalysisQualityScore } from '@/lib/analysis-quality-score'
-import { ResultTimelineSection } from '@/components/research/ResultTimelineSection'
 import { AIInsightGenerationSequence } from '@/components/research/AIInsightGenerationSequence'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
@@ -470,6 +469,28 @@ function ResultsContent() {
     (analysisTasks?.length ?? 0) > 0 ||
     streamingState.status === 'running' ||
     streamingState.status === 'streaming'
+
+  const timelinePipelineErrorStepIndex = useMemo(() => {
+    const STEP_ORDER: Record<string, number> = {
+      signal_layer: 0,
+      trend_analysis: 1,
+      competition_analysis: 2,
+      insight_extraction: 3,
+      strategy_generation: 4,
+      execution_layer: 5,
+      risk_opportunity: 6,
+      post_processing: 7,
+    }
+    const failedTask = (analysisTasks ?? []).find((t) => t.status === 'failed')
+    if (failedTask && STEP_ORDER[failedTask.step_name] != null) {
+      return STEP_ORDER[failedTask.step_name]
+    }
+    if (streamingState.status === 'error' && streamingState.lastSuccessfulStep != null) {
+      return streamingState.lastSuccessfulStep + 1
+    }
+    return polledProgressStep ?? 0
+  }, [analysisTasks, streamingState, polledProgressStep])
+
   const hasPartialData =
     displayResult?.reportId != null ||
     (analysisTasks ?? []).some((t) => t.status === 'completed' && t.output_data != null) ||
@@ -579,6 +600,16 @@ function ResultsContent() {
     streamingState.status === 'running' ||
     streamingState.status === 'streaming' ||
     streamingState.status === 'completed'
+
+  const liveAnalysisBanner =
+    showAnalysisShell &&
+    !needsRunAction &&
+    hasKeyword &&
+    (loading ||
+      (canonicalStatus as string) === 'analyzing' ||
+      (polledStatus as string) === 'running' ||
+      streamingState.status === 'running' ||
+      streamingState.status === 'streaming')
 
   /** reportId 변경 시 insight 초기화 */
   useEffect(() => {
@@ -1222,70 +1253,6 @@ function ResultsContent() {
               : displayResult && (canonicalStatus === 'completed' || polledStatus === 'completed') ? 'success'
               : 'idle'
             }
-            timelineSlot={
-              <div id="section-timeline" className="scroll-mt-24">
-                <ResultTimelineSection
-                  embedded
-                  aiPrimaryModel={aiPrimaryModel}
-                  resultId={displayResult?.reportId ?? null}
-                  keyword={currentKeyword ?? ''}
-                  streamingState={streamingState}
-                  polledProgressStep={polledStatus === 'running' ? Math.min(6, Math.max(0, polledProgressStep)) : undefined}
-                  polledStatus={polledStatus}
-                  taskData={taskData}
-                  analysisTasks={analysisTasks ?? null}
-                  newsList={newsList ?? []}
-                  result={displayResult}
-                  displayResult={displayResult}
-                  hasError={canonicalStatus === 'failed' || !!showPolledError}
-                  errorStepIndex={(() => {
-                    const STEP_ORDER: Record<string, number> = {
-                      signal_layer: 0, trend_analysis: 1, competition_analysis: 2,
-                      insight_extraction: 3, strategy_generation: 4, execution_layer: 5,
-                      risk_opportunity: 6, post_processing: 7,
-                    }
-                    const failedTask = (analysisTasks ?? []).find((t) => t.status === 'failed')
-                    if (failedTask && STEP_ORDER[failedTask.step_name] != null) {
-                      return STEP_ORDER[failedTask.step_name]
-                    }
-                    if (streamingState.status === 'error' && streamingState.lastSuccessfulStep != null) {
-                      return streamingState.lastSuccessfulStep + 1
-                    }
-                    return polledProgressStep ?? 0
-                  })()}
-                  globalErrorMessage={displayError ?? polledError ?? undefined}
-                  loading={loading}
-                  onRetryStep={(failedStepTaskId) => {
-                    setPolledStatus(null)
-                    setPolledError(null)
-                    const stepRetry = failedStepTaskId as
-                      | 'insight_extraction'
-                      | 'strategy_generation'
-                      | 'execution_layer'
-                      | 'risk_opportunity'
-                      | undefined
-                    const canRetryStep =
-                      stepRetry === 'insight_extraction' ||
-                      stepRetry === 'strategy_generation' ||
-                      stepRetry === 'execution_layer' ||
-                      stepRetry === 'risk_opportunity'
-                    if (canRetryStep) {
-                      void startStreamingResearch(currentKeyword ?? '', {
-                        country_code: countryFromUrl,
-                        ai_primary_model: aiPrimaryModel,
-                        retry_pipeline_step: stepRetry,
-                      })
-                    } else {
-                      void startStreamingResearch(currentKeyword ?? '', {
-                        country_code: countryFromUrl,
-                        ai_primary_model: aiPrimaryModel,
-                        force_reanalyze: true,
-                      })
-                    }
-                  }}
-                />
-              </div>
-            }
             actions={
               <>
                 <ResultHeroSecondaryActions
@@ -1401,6 +1368,14 @@ function ResultsContent() {
                 countryCode={countryFromUrl}
                 aiPrimaryModel={aiPrimaryModel}
                 phaseRerunDisabled={loading || analysisPipelineBusy}
+                streamingState={streamingState}
+                polledProgressStep={
+                  polledStatus === 'running' ? Math.min(7, Math.max(0, polledProgressStep)) : undefined
+                }
+                polledStatus={polledStatus}
+                pipelineHasError={hasFailure}
+                pipelineErrorStepIndex={timelinePipelineErrorStepIndex}
+                pipelineLoading={loading}
               />
             </ResultSectionErrorBoundary>
             {/* AI 분석 엔진 — 상세는 모달 (페이지 스크롤 유지) */}
@@ -1715,6 +1690,11 @@ function ResultsContent() {
         )}
         </div>
         </div>
+        {liveAnalysisBanner ? (
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/90 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center backdrop-blur-sm dark:bg-background/85">
+            <p className="text-xs text-muted-foreground">실시간 분석 진행 중…</p>
+          </div>
+        ) : null}
         </main>
         </div>
       </div>

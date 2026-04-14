@@ -17,6 +17,8 @@ export interface ChartWithInsightProps {
   /** Chart content (React node) */
   children: React.ReactNode
   className?: string
+  /** 제목 옆·아래 액션(예: 데이터 출처 버튼) */
+  headerActions?: React.ReactNode
 }
 
 /**
@@ -28,14 +30,18 @@ export function ChartWithInsight({
   takeaway,
   children,
   className,
+  headerActions,
 }: ChartWithInsightProps) {
   const hasInsight = Boolean(insight?.trim() || takeaway?.trim())
 
   return (
     <div className={cn('rounded-xl border border-border/60 bg-muted/5 p-4', className)}>
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-        {title}
-      </h4>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {title}
+        </h4>
+        {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
+      </div>
       <div className="mb-3">{children}</div>
       {hasInsight && (
         <div className="mt-3 pt-3 border-t border-border/60 space-y-2">

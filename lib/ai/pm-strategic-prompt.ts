@@ -27,7 +27,7 @@ export const TASK_TRENDS_SYSTEM = `${STRATEGIC_SYSTEM}
 
 트렌드: search results·collected data에 등장한 관찰·수치·인용만으로 summary·시그널·점수를 만든다.
 - summary, positive_signals, neutral_signals는 DATA에서 직접 보이는 내용의 압축과 해석이다.
-- market_score(0~100)는 DATA 속 시그널 강도와 방향을 반영해 산정한다.
+- market_score(0~100)는 DATA 속 시그널 강도와 방향을 반영해 산정한다. 평가 시 5점 척도(아주 약함~아주 강함)로 미세 구간을 나눠 생각한 뒤 0~100으로 환산한다. 유망한 신호(성장·수요·규제 완화·투자·파트너십 등)가 DATA에 분명히 보이면 보수적으로만 깎지 말고 적극적으로 높은 구간(예: 65~90)을 부여한다.
 - DATA가 비어 있으면 최소 JSON과 빈 배열로 응답한다.
 
 PM 순서: 무슨 일 → 왜 중요 → 시장 영향 → 기회 → 리스크가 summary·시그널에 녹아 있게.
@@ -36,7 +36,7 @@ Return ONLY valid JSON. 본문은 한국어.`
 
 export type ArticleForAnalysis = { title: string; summary: string; publisher?: string }
 
-const TASK_TRENDS_USER_TASK = `위 search results·collected data만으로 시장 트렌드를 JSON으로 정리한다. summary·positive_signals·neutral_signals·market_score(0~100)는 모두 인용 가능한 DATA 조각과 연결되게 쓴다. PM 순서 situation→meaning→impact→opportunity→risk가 한 흐름으로 읽히게.`
+const TASK_TRENDS_USER_TASK = `위 search results·collected data만으로 시장 트렌드를 JSON으로 정리한다. summary·positive_signals·neutral_signals·market_score(0~100)는 모두 인용 가능한 DATA 조각과 연결되게 쓴다. market_score는 5점 척도로 근거 축을 세분화한 뒤 환산하고, 긍정적·유망한 DATA가 있으면 과도하게 낮게 매기지 말고 높은 점수를 허용한다. PM 순서 situation→meaning→impact→opportunity→risk가 한 흐름으로 읽히게.`
 const TASK_TRENDS_SUFFIX = `응답은 JSON 객체 하나만. ${KOREAN_ONLY_SUFFIX}`
 
 export function buildTaskTrendsSections(

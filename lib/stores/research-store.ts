@@ -28,6 +28,7 @@ import {
 } from '@/lib/types/analysis-modes'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { normalizeActivityStepId } from '@/lib/analysis/pipeline-activity-step'
+import { writePipelineClientCache, readPipelineClientCache } from '@/lib/analysis/pipeline-client-cache'
 
 export interface NewsItem {
   title: string
@@ -1020,6 +1021,42 @@ export const useResearchStore = create<ResearchStore>()(
 
           await resetServerAnalyzingRow()
 
+          const buildPipelineTaskSnapshot = (): Array<{
+            step_name: string
+            status: string
+            output_data: unknown
+          }> => {
+            const snap = get()
+            const hasPayload = (o: unknown) =>
+              o != null && typeof o === 'object' && Object.keys(o as object).length > 0
+            const fromLive =
+              snap.analysisTasks
+                ?.filter((t) => t.status === 'completed' && hasPayload(t.output_data))
+                .map((t) => ({
+                  step_name: t.step_name,
+                  status: 'completed' as const,
+                  output_data: t.output_data,
+                })) ?? []
+            const cached = snap.analysisId ? readPipelineClientCache(snap.analysisId) : null
+            const byStep = new Map<string, { step_name: string; status: string; output_data: unknown }>()
+            for (const r of cached?.tasks ?? []) {
+              if (r.status === 'completed' && hasPayload(r.output_data)) {
+                byStep.set(r.step_name, {
+                  step_name: r.step_name,
+                  status: 'completed',
+                  output_data: r.output_data,
+                })
+              }
+            }
+            for (const r of fromLive) {
+              byStep.set(r.step_name, r)
+            }
+            return Array.from(byStep.values())
+          }
+
+          const pipelineTaskSnapshot =
+            options?.retry_pipeline_step ? buildPipelineTaskSnapshot() : undefined
+
           const res = await fetch('/api/research/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1035,6 +1072,9 @@ export const useResearchStore = create<ResearchStore>()(
                   ? options.rerun_from_phase
                   : undefined,
               retry_pipeline_step: options?.retry_pipeline_step,
+              ...(pipelineTaskSnapshot && pipelineTaskSnapshot.length > 0
+                ? { pipeline_task_snapshot: pipelineTaskSnapshot }
+                : {}),
             }),
             credentials: 'same-origin',
             signal,
@@ -1227,6 +1267,10 @@ export const useResearchStore = create<ResearchStore>()(
                         fallback_used: ev.fallback_used ?? false,
                         primary_provider_error: ev.primaryProviderError ?? null,
                       })
+                      const after = get()
+                      if (after.analysisId && after.analysisTasks) {
+                        writePipelineClientCache(after.analysisId, after.analysisTasks, after.taskData)
+                      }
                     } else if (status === 'running') {
                       get().mergeStreamingTaskIntoAnalysisTasks(task, 'running', {
                         provider: ev.provider ?? null,
@@ -1919,7 +1963,7 @@ export const useResearchStore = create<ResearchStore>()(
       },
 }),
     {
-      name: 'rin-research-store',
+      name: 'datamod-research-store',
       /** Next.js SSR: 첫 페인트는 서버와 동일한 기본 상태로 맞추고, 클라이언트 마운트 후 rehydrate */
       skipHydration: true,
       migrate: (persisted: unknown, version: number) => {

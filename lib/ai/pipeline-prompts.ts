@@ -208,9 +208,15 @@ export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 액션 플랜은 앞 단계 전략·기회·리스크 DATA에만 기대어 쓴다.
 토큰 절약을 위해 문장은 짧은 구와 불릿 수준으로. 값이 없는 키·빈 배열·빈 객체는 출력에서 생략한다.
 
+**필수 구조(실행 가능성):** \`pm_action_plan\` 배열에 **정확히 5개** 항목을 채운다. 각 항목은 구체적이고 실행 가능한(actionable) 전략이어야 하며, 다음 필드를 모두 채운다: action_title(한 줄 행동), description(무엇을·어떻게·기한/범위), expected_outcome(측정 가능한 결과), priority(high|medium|low), category(mvp_experiment|user_interview|feature_prioritization|go_to_market 중 하나).
+추상적 구호·중복 항목 금지. 각 액션은 PM이 이번 주 안에 착수할 수 있는 수준으로 쓴다.
+
 Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·불필요한 장문 필드는 생략):
 {
   "goal": "목표 한 문장 (필수)",
+  "pm_action_plan": [
+    { "action_title": "…", "description": "…", "expected_outcome": "…", "priority": "high", "category": "mvp_experiment" }
+  ],
   "steps": ["실행 단계1", "실행 단계2", "실행 단계3"],
   "priority_action": {
     "action": "가장 시급한 단일 액션",
@@ -248,11 +254,22 @@ Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·
   }
 }
 - steps는 **최대 6개**까지. 핵심 실행 순서만.
+- **pm_action_plan은 반드시 5개 항목**(위 actionable 규칙 준수).
 - priority_action은 **하나**만 (최우선 1건).
 - strategic_decision_layer·swot_analysis 각 필드 값은 짧게 (항목당 1줄 권장).
 - jtbd: functional_jobs·social_jobs·emotional_jobs 각 **2~4개** 짧은 구(한국어). pains/main_jobs와 중복되지 않게 역할을 나눈다.
-- porter_5_forces: 각 힘마다 근거 배열 1~2문장. scores의 각 값은 **1~5 정수**(5=해당 힘이 매우 강함/산업 수익 압박 큼).
-Required: goal, priority_action (action 필수), steps(1개 이상 권장, 최대 6). strategic_decision_layer·swot_analysis·jtbd·porter_5_forces는 DATA가 있으면 채운다. All text in Korean.`
+- porter_5_forces: 각 힘마다 근거 배열 1~2문장. scores의 각 값은 **1~5 정수**(5=해당 힘이 매우 강함/산업 수익 압박 큼). 점수는 **다른 힘과의 상대 비교로만 낮추지 말고**, DATA에 드러난 **절대적 산업 구조·규제·전환비용·대체 가능성** 등의 가치를 기준으로 평가한다. 근거가 분명하면 보수적으로 2~3에 몰아두지 말고 4~5를 과감히 부여할 수 있다.
+Required: goal, **pm_action_plan(정확히 5개)**, priority_action (action 필수), steps(1개 이상 권장, 최대 6). strategic_decision_layer·swot_analysis·jtbd·porter_5_forces는 DATA가 있으면 채운다. All text in Korean.`
+
+/** PM 액션 단계용: 긴 전략·기회·리스크 텍스트를 핵심 요약본으로 잘라 토큰·실패율을 낮춘다. */
+export function compressTextForPmActionInput(text: string, maxChars: number): string {
+  const t = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (t.length <= maxChars) return t
+  const cut = t.slice(0, maxChars)
+  const lastBreak = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('。'), cut.lastIndexOf('\n'))
+  const base = lastBreak > maxChars * 0.5 ? cut.slice(0, lastBreak + 1).trim() : cut.trim()
+  return `${base}…`
+}
 
 export function buildPMActionPlanPrompt(
   keyword: string,
@@ -260,10 +277,13 @@ export function buildPMActionPlanPrompt(
   opportunitiesSummary: string,
   risksSummary: string
 ): string {
+  const strat = compressTextForPmActionInput(strategySummary ?? '', 1400)
+  const opp = compressTextForPmActionInput(opportunitiesSummary ?? '', 700)
+  const risk = compressTextForPmActionInput(risksSummary ?? '', 700)
   const collectedData = [
-    strategySummary?.trim() && `strategy summary:\n${strategySummary.trim()}`,
-    opportunitiesSummary?.trim() && `opportunities:\n${opportunitiesSummary.trim()}`,
-    risksSummary?.trim() && `risks:\n${risksSummary.trim()}`,
+    strat && `strategy summary (핵심 요약본):\n${strat}`,
+    opp && `opportunities (핵심 요약본):\n${opp}`,
+    risk && `risks (핵심 요약본):\n${risk}`,
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -271,7 +291,7 @@ export function buildPMActionPlanPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `위 DATA로 슬림 스키마를 채운다: goal, steps(최대 6), priority_action, strategic_decision_layer, swot_analysis, jtbd(기능적/사회적/정서적 jobs), porter_5_forces(근거 배열 + scores 1~5). 전략·기회·리스크·경쟁 문맥을 SWOT·포터·JTBD에 **일관되게** 반영한다. 각 step·priority_action은 측정 가능한 다음 행동에 가깝게.`,
+    task: `위 DATA는 이미 압축된 핵심 요약본이다. 이 DATA만으로 슬림 스키마를 채운다: goal, **pm_action_plan 정확히 5개(actionable)**, steps(최대 6), priority_action, strategic_decision_layer, swot_analysis, jtbd, porter_5_forces. 전략·기회·리스크 문맥을 SWOT·포터·JTBD·5개 액션에 일관되게 반영한다.`,
     suffix: `응답은 유효 JSON 객체 하나만. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
