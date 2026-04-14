@@ -136,7 +136,9 @@ export function StrategicDecisionLayer({
               </div>
               <p className="text-base font-bold text-foreground leading-snug mb-1">{card.value}</p>
               {card.explanation && (
-                <MarkdownBody className="text-xs text-muted-foreground">{card.explanation}</MarkdownBody>
+                <MarkdownBody className="prose-base text-sm leading-relaxed text-muted-foreground">
+                  {card.explanation}
+                </MarkdownBody>
               )}
             </div>
           )
@@ -184,7 +186,9 @@ export function StrategicDecisionLayer({
                   {card.value}
                 </p>
                 {card.explanation && (
-                  <MarkdownBody className="text-xs text-muted-foreground">{card.explanation}</MarkdownBody>
+                  <MarkdownBody className="prose-base text-sm leading-relaxed text-muted-foreground">
+                    {card.explanation}
+                  </MarkdownBody>
                 )}
               </div>
             )

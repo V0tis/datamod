@@ -31,58 +31,73 @@ export function PipelineStepperSlim({
   return (
     <div
       className={cn(
-        'rounded-lg border border-slate-200/90 bg-slate-50/80 px-2 py-2 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50',
+        'rounded-lg border border-slate-100 bg-slate-50/90 px-2 py-2 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50',
         className
       )}
       role="navigation"
       aria-label={`분석 파이프라인 · ${keyword}`}
     >
-      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        분석 단계
-      </p>
-      <div className="flex gap-1 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
-        {PIPELINE_SLIM_LABELS.map((label, i) => {
-          const st = statuses[i] ?? 'pending'
-          const isHi = highlight === i
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => onStepClick?.(i)}
-              className={cn(
-                'flex min-w-[3.25rem] shrink-0 flex-col items-center gap-1 rounded-lg border px-2 py-1.5 text-center transition-colors',
-                onStepClick && 'cursor-pointer hover:bg-white/90 dark:hover:bg-zinc-900/90',
-                !onStepClick && 'cursor-default',
-                isHi && 'border-primary/50 bg-primary/10 ring-1 ring-primary/20',
-                !isHi && 'border-transparent bg-white/60 dark:bg-zinc-900/40',
-                st === 'failed' && 'border-red-300/80 bg-red-50/90 dark:border-red-900/50 dark:bg-red-950/40'
-              )}
-            >
-              <span className="flex h-5 w-5 items-center justify-center" aria-hidden>
-                {st === 'completed' && (
-                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
-                )}
-                {st === 'running' && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
-                {st === 'pending' && (
-                  <span className="block h-2 w-2 rounded-full bg-slate-300 dark:bg-zinc-600" />
-                )}
-                {st === 'failed' && <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />}
-              </span>
-              <span
+      <div className="border-b border-slate-200/70 pb-2 dark:border-zinc-700/80">
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">분석 단계</p>
+      </div>
+      <div className="border-b border-slate-200/60 pt-2 pb-1 dark:border-zinc-800">
+        <div className="flex gap-1 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+          {PIPELINE_SLIM_LABELS.map((label, i) => {
+            const st = statuses[i] ?? 'pending'
+            const isHi = highlight === i
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => onStepClick?.(i)}
                 className={cn(
-                  'max-w-[4.5rem] truncate text-[10px] font-semibold leading-tight',
-                  st === 'running' && 'text-foreground',
-                  st === 'completed' && 'text-slate-600 dark:text-zinc-400',
-                  st === 'pending' && 'text-muted-foreground',
-                  st === 'failed' && 'text-red-700 dark:text-red-300'
+                  'flex min-w-[3.25rem] shrink-0 flex-col items-center gap-1 rounded-lg border px-2 py-1.5 text-center transition-colors',
+                  onStepClick && 'cursor-pointer',
+                  !onStepClick && 'cursor-default',
+                  st === 'completed' &&
+                    'border border-emerald-200/90 bg-emerald-50 dark:border-emerald-900/45 dark:bg-emerald-950/35',
+                  st === 'running' &&
+                    cn(
+                      'border-2 border-red-500 bg-white shadow-sm dark:border-red-500 dark:bg-zinc-950',
+                      isHi && 'ring-1 ring-red-500/30'
+                    ),
+                  st === 'pending' &&
+                    'border border-slate-200/90 bg-slate-100/90 dark:border-zinc-700 dark:bg-zinc-800/55',
+                  st === 'failed' && 'border border-red-300 bg-red-50 dark:border-red-900/50 dark:bg-red-950/35',
+                  st === 'completed' && onStepClick && 'hover:bg-emerald-100/80 dark:hover:bg-emerald-950/50',
+                  st === 'pending' && onStepClick && 'hover:bg-slate-200/60 dark:hover:bg-zinc-800/80',
+                  st === 'running' && onStepClick && 'hover:bg-red-50 dark:hover:bg-red-950/25'
                 )}
               >
-                {label}
-              </span>
-            </button>
-          )
-        })}
+                <span className="flex h-5 w-5 items-center justify-center" aria-hidden>
+                  {st === 'completed' && (
+                    <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
+                  )}
+                  {st === 'running' && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-red-600 dark:text-red-400" />
+                  )}
+                  {st === 'pending' && (
+                    <span className="block h-2 w-2 rounded-full bg-slate-400 dark:bg-zinc-500" />
+                  )}
+                  {st === 'failed' && <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />}
+                </span>
+                <span
+                  className={cn(
+                    'max-w-[4.5rem] truncate text-[10px] font-semibold leading-tight',
+                    st === 'completed' && 'text-emerald-800 dark:text-emerald-200',
+                    st === 'running' && 'font-bold text-red-700 dark:text-red-300',
+                    st === 'pending' && 'font-medium text-slate-500 dark:text-zinc-400',
+                    st === 'failed' && 'text-red-800 dark:text-red-200'
+                  )}
+                >
+                  {label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
 }
+

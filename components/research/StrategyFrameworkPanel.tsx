@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Info } from 'lucide-react'
 import {
   PolarAngleAxis,
   PolarGrid,
@@ -24,6 +25,12 @@ import {
   type PorterFiveScores,
 } from '@/lib/strategy-framework-mapper'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+import {
+  Tooltip as InfoTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 type SwotShape = NonNullable<ResearchResponse['key_metrics']>['swot_analysis']
 type JtbdShape = NonNullable<ResearchResponse['key_metrics']>['jtbd']
@@ -33,38 +40,63 @@ const CHART_AXIS = 'hsl(var(--muted-foreground))'
 const CHART_FILL = 'hsl(199 89% 48%)'
 const CHART_STROKE = 'hsl(199 89% 40%)'
 
-/** 레이블 여유: 위젯 밖으로 텍스트가 나가지 않도록 Recharts margin 최소 40px */
-const PORTER_RADAR_MARGIN = { top: 40, right: 44, bottom: 40, left: 44 } as const
+/** 기본 패널: 반지름·11px 레이블에 맞춘 여백 */
+const PORTER_RADAR_MARGIN = { top: 44, right: 48, bottom: 44, left: 48 } as const
+/** 요약 카드: 레이더 반지름을 키워도 레이블이 카드 안에 들어가도록 margin 확대 */
+const PORTER_RADAR_MARGIN_SUMMARY = { top: 56, right: 64, bottom: 56, left: 64 } as const
 
-function PorterBars({ scores }: { scores: PorterFiveScores }) {
-  const rows = [
-    { name: '진입 위협', v: scores.new_entrants },
-    { name: '공급자', v: scores.supplier_power },
-    { name: '구매자', v: scores.buyer_power },
-    { name: '대체재', v: scores.substitutes },
-    { name: '경쟁', v: scores.rivalry },
-  ]
-  return (
-    <div className="mt-4 h-[200px] w-full min-w-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} layout="vertical" margin={{ left: 4, right: 8, top: 4, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
-          <XAxis type="number" domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tick={{ fontSize: 10, fill: CHART_AXIS }} />
-          <YAxis type="category" dataKey="name" width={56} tick={{ fontSize: 10, fill: CHART_AXIS }} />
-          <Tooltip
-            formatter={(v: number) => [`${v}/5`, '강도']}
-            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
-          />
-          <Bar dataKey="v" fill={CHART_FILL} radius={[0, 4, 4, 0]} maxBarSize={14} name="점수" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
+const PORTER_RADAR_INFO_TOOLTIP =
+  'Porter 5 Forces 레이더입니다. 점수는 AI 추정(1~5)과 기회 점수 breakdown, 경쟁 강도, 전략 평가를 합성합니다. 높을수록 해당 힘이 강합니다.'
 
 function clampPorterInt(v: number): number {
   const n = Math.round(Number.isFinite(v) ? v : 0)
   return Math.min(5, Math.max(0, n))
+}
+
+function PorterBars({ scores }: { scores: PorterFiveScores }) {
+  const rows = [
+    { name: '진입 위협', v: clampPorterInt(scores.new_entrants) },
+    { name: '공급자', v: clampPorterInt(scores.supplier_power) },
+    { name: '구매자', v: clampPorterInt(scores.buyer_power) },
+    { name: '대체재', v: clampPorterInt(scores.substitutes) },
+    { name: '경쟁', v: clampPorterInt(scores.rivalry) },
+  ]
+  /** 5점 만점 스케일 고정. 데이터 최댓값이 5 미만이어도 축은 0~5로 상대 비교 유지 */
+  const xMax = 5
+  const tickStep = 1
+  const ticks = Array.from({ length: xMax / tickStep + 1 }, (_, i) => i * tickStep)
+  return (
+    <div className="mt-4 h-[200px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%" debounce={32}>
+        <BarChart data={rows} layout="vertical" margin={{ left: 6, right: 12, top: 6, bottom: 6 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+          <XAxis
+            type="number"
+            domain={[0, xMax]}
+            ticks={ticks}
+            allowDecimals={false}
+            tick={{ fontSize: 11, fill: CHART_AXIS }}
+            tickLine={{ stroke: CHART_AXIS }}
+            axisLine={{ stroke: CHART_GRID }}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={58}
+            tick={{ fontSize: 11, fill: CHART_AXIS }}
+            tickLine={false}
+            axisLine={{ stroke: CHART_GRID }}
+          />
+          <Tooltip
+            formatter={(v: number) => [`${v}/${xMax}`, '강도']}
+            labelFormatter={() => 'Porter 5 Forces'}
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
+          />
+          <Bar dataKey="v" fill={CHART_FILL} radius={[0, 4, 4, 0]} maxBarSize={16} name="점수" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }
 
 /** 0이면 레이더가 중앙에 붙지 않도록 표시값만 최소 1로 올림(툴팁은 원점수). */
@@ -74,7 +106,13 @@ function porterRadarRow(subject: string, value: number) {
   return { subject, score: display, rawScore: raw, fullMark: 5 }
 }
 
-function PorterRadar({ scores }: { scores: PorterFiveScores }) {
+function PorterRadar({
+  scores,
+  variant = 'default',
+}: {
+  scores: PorterFiveScores
+  variant?: 'default' | 'summary'
+}) {
   const data = [
     porterRadarRow('진입 위협', scores.new_entrants),
     porterRadarRow('공급자', scores.supplier_power),
@@ -82,22 +120,42 @@ function PorterRadar({ scores }: { scores: PorterFiveScores }) {
     porterRadarRow('대체재', scores.substitutes),
     porterRadarRow('경쟁', scores.rivalry),
   ]
+  const isSummary = variant === 'summary'
+  const margin = isSummary ? PORTER_RADAR_MARGIN_SUMMARY : PORTER_RADAR_MARGIN
+  const labelFont = 11
   return (
-    <div className="mx-auto w-full max-w-[380px] min-h-[280px] min-w-[220px] px-2 py-3">
-      <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={280} debounce={32}>
+    <div
+      className={cn(
+        'mx-auto w-full max-w-[420px] min-w-0 min-h-[280px]',
+        isSummary ? 'min-h-[320px] px-2 py-2 sm:px-3' : 'min-w-[220px] px-2 py-3'
+      )}
+    >
+      <ResponsiveContainer width="100%" height="100%" minWidth={isSummary ? 200 : 220} minHeight={isSummary ? 320 : 280} debounce={32}>
         <RadarChart
           cx="50%"
           cy="50%"
-          outerRadius="58%"
-          margin={PORTER_RADAR_MARGIN}
+          outerRadius={isSummary ? '58%' : '60%'}
+          margin={margin}
           data={data}
         >
           <PolarGrid stroke={CHART_GRID} />
           <PolarAngleAxis
             dataKey="subject"
-            tick={(p) => <RadarAngleEllipsisTick {...p} fill={CHART_AXIS} maxLen={8} />}
+            tick={(p) => (
+              <RadarAngleEllipsisTick
+                {...p}
+                fill={CHART_AXIS}
+                maxLen={isSummary ? 8 : 8}
+                fontSize={labelFont}
+              />
+            )}
           />
-          <PolarRadiusAxis angle={30} domain={[0, 5]} tickCount={6} tick={{ fontSize: 9, fill: CHART_AXIS }} />
+          <PolarRadiusAxis
+            angle={30}
+            domain={[0, 5]}
+            tickCount={6}
+            tick={{ fontSize: 11, fill: CHART_AXIS }}
+          />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null
@@ -185,6 +243,8 @@ export type StrategyFrameworkPanelProps = {
   /** 리포트 전환 시 하위 트리 리셋용 */
   instanceKey?: string
   className?: string
+  /** 요약 영역: Porter 5 Forces 레이더만 표시 (SWOT/JTBD·서술 제외) */
+  summaryRadarOnly?: boolean
 }
 
 export function StrategyFrameworkPanel({
@@ -196,6 +256,7 @@ export function StrategyFrameworkPanel({
   strategyEvaluation,
   instanceKey = 'default',
   className,
+  summaryRadarOnly = false,
 }: StrategyFrameworkPanelProps) {
   const porterMerged = useMemo(
     () =>
@@ -217,8 +278,51 @@ export function StrategyFrameworkPanel({
     jtbdTriad.functional.length + jtbdTriad.social.length + jtbdTriad.emotional.length > 0
   const hasPorterChart = scores != null && Object.values(scores).every((n) => typeof n === 'number')
 
+  if (summaryRadarOnly) {
+    return (
+      <div
+        key={instanceKey}
+        className={cn(
+          'rounded-xl border border-slate-100 bg-card shadow-sm dark:border-zinc-800 dark:bg-zinc-900',
+          className
+        )}
+      >
+        <div className="border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-zinc-800">
+          <TooltipProvider delayDuration={200}>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">제품 전략 프레임워크</h3>
+              <InfoTooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Porter 5 Forces 레이더 설명"
+                  >
+                    <Info className="h-4 w-4" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                  {PORTER_RADAR_INFO_TOOLTIP}
+                </TooltipContent>
+              </InfoTooltip>
+            </div>
+          </TooltipProvider>
+        </div>
+        <div className="overflow-hidden p-3 sm:p-4">
+          {hasPorterChart && scores ? (
+            <PorterRadar scores={scores} variant="summary" />
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              전략 프레임워크 점수를 계산할 시장 지표가 아직 부족합니다. 아래 전략 섹션에서 상세 프레임워크를 확인하세요.
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div key={instanceKey} className={cn('rounded-xl border border-border/60 bg-card', className)}>
+    <div key={instanceKey} className={cn('rounded-xl border border-slate-100 bg-card dark:border-zinc-800', className)}>
       <div className="space-y-10 p-4 sm:p-5">
         <section id="report-framework-swot" className="scroll-mt-24">
           <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">SWOT</h4>
@@ -254,11 +358,26 @@ export function StrategyFrameworkPanel({
           )}
         </section>
 
-        <section id="report-framework-porter" className="scroll-mt-24 border-t border-border/50 pt-8">
-          <h4 className="mb-2 text-sm font-semibold tracking-tight text-foreground">Porter 5 Forces</h4>
-          <p className="text-xs text-muted-foreground">
-            점수는 AI 추정(1~5)과 기회 점수 breakdown·경쟁 강도·전략 평가를 합성합니다. 높을수록 해당 힘이 강합니다.
-          </p>
+        <section id="report-framework-porter" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
+          <TooltipProvider delayDuration={200}>
+            <div className="mb-3 flex items-center gap-2">
+              <h4 className="text-sm font-semibold tracking-tight text-foreground">Porter 5 Forces</h4>
+              <InfoTooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Porter 5 Forces 설명"
+                  >
+                    <Info className="h-4 w-4" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                  {PORTER_RADAR_INFO_TOOLTIP}
+                </TooltipContent>
+              </InfoTooltip>
+            </div>
+          </TooltipProvider>
           {hasPorterChart && scores ? (
             <>
               <PorterRadar scores={scores} />
@@ -270,23 +389,23 @@ export function StrategyFrameworkPanel({
           <PorterNarratives porter={porterMerged} />
         </section>
 
-        <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-border/50 pt-8">
+        <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
           <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">JTBD</h4>
           {!hasJtbd ? (
             <p className="text-sm text-muted-foreground">JTBD 데이터가 없습니다.</p>
           ) : (
             <div className="grid gap-6 sm:grid-cols-3">
-              <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+              <div className="rounded-lg border border-slate-100 bg-muted/10 p-3 dark:border-zinc-800">
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">기능적 (Functional)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">업무·효율·성과로 측정되는 핵심 과제</p>
                 <BulletList items={jtbdTriad.functional} bulletClass="text-sky-500" />
               </div>
-              <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+              <div className="rounded-lg border border-slate-100 bg-muted/10 p-3 dark:border-zinc-800">
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">사회적 (Social)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">타인·조직·규범과의 관계에서의 니즈</p>
                 <BulletList items={jtbdTriad.social} bulletClass="text-violet-500" />
               </div>
-              <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+              <div className="rounded-lg border border-slate-100 bg-muted/10 p-3 dark:border-zinc-800">
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:text-rose-300">정서적 (Emotional)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">불안 완화·자신감·만족 등 정서 동기</p>
                 <BulletList items={jtbdTriad.emotional} bulletClass="text-rose-500" />

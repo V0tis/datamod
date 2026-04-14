@@ -54,38 +54,40 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
   ] as const
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">긴급 액션</h3>
-      <ul className="space-y-3">
+    <div className="space-y-2">
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">긴급 액션</h3>
+      <ul className="space-y-2">
         {items.map(({ key, count, label, hint, icon: Icon, cta, sectionId }) => (
-          <li key={key} className={cn(analysisCardClass, 'p-4')}>
-            <div className="flex items-start gap-3">
+          <li key={key} className={cn(analysisCardClass, 'p-3')}>
+            <div className="flex items-start gap-2">
               <div className="flex shrink-0 flex-col items-center leading-none">
                 <span
                   className={cn(
-                    'text-2xl font-bold tabular-nums',
+                    'text-xl font-bold tabular-nums',
                     count > 0 ? 'text-slate-900 dark:text-zinc-50' : 'text-slate-300 dark:text-zinc-600'
                   )}
                 >
                   {count}
                 </span>
-                <span className="text-[11px] font-medium text-slate-400">건</span>
+                <span className="text-[10px] font-medium text-slate-400">건</span>
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-zinc-50">
-                  <Icon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
-                  {label}
+                <p className="flex items-start gap-1.5 text-[11px] font-semibold leading-snug text-slate-900 dark:text-zinc-50">
+                  <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+                  <span className="break-keep [word-break:keep-all]">{label}</span>
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">{hint}</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-zinc-400 [word-break:keep-all]">
+                  {hint}
+                </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => onNavigateToReportSection(sectionId)}
-              className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-[#0EA5E9] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-sky-600"
+              className="mt-2 flex w-full items-center justify-center gap-0.5 rounded-lg bg-[#0EA5E9] py-2 text-[11px] font-semibold text-white transition-colors hover:bg-sky-600"
             >
               {cta}
-              <ChevronRight className="h-4 w-4" aria-hidden />
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
             </button>
           </li>
         ))}

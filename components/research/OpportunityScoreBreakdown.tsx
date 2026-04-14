@@ -138,7 +138,7 @@ export function OpportunityScoreBreakdown({
           기회 점수 분해
         </h3>
       </div>
-      <p className="text-xs text-muted-foreground mb-5">
+      <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
         기본 50점에서 각 요인을 순차적으로 반영해 최종 점수가 산출됩니다.
       </p>
 
@@ -235,7 +235,7 @@ export function OpportunityScoreBreakdown({
               <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">점수가 낮은 이유</p>
-                <ul className="text-sm text-foreground list-disc list-inside space-y-0.5">
+                <ul className="list-inside list-disc space-y-1 text-base leading-relaxed text-foreground">
                   {explanationLines.map((line, i) => (
                     <li key={i}>{line}</li>
                   ))}

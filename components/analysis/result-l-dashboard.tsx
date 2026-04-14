@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
-import { ResultLeftRail } from '@/components/analysis/result-left-rail'
 import { analysisPageBg } from '@/components/analysis/analysis-card'
-import { OverviewOpportunityRiskChart } from '@/components/analysis/overview-opportunity-risk-chart'
+import { OpportunityScoreGauge } from '@/components/analysis/opportunity-score-gauge'
+import { UrgentTaskCards } from '@/components/analysis/urgent-task-cards'
 import { StrategyExecutionTable } from '@/components/analysis/strategy-execution-table'
 import { AnalysisSourceButton } from '@/components/analysis/analysis-source-button'
 import type { ResultPageStructuredSectionsProps } from '@/components/research/ResultPageStructuredSections'
@@ -15,6 +15,8 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
+import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
+import { MarkdownBody } from '@/components/ui/markdown-body'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { AnalysisPhaseRerunIcons } from '@/components/research/analysis-phase-rerun-icons'
 import { MotionReveal } from '@/components/common/MotionReveal'
@@ -199,6 +201,28 @@ export function ResultLDashboard({
   const conclusionFull =
     sanitizeForKoreanDisplay(km?.summary_insights)?.trim() || '핵심 전략 방향을 분석 완료 후 확인할 수 있습니다.'
 
+  const conclusionExcerpt = useMemo(() => {
+    const t = conclusionFull.replace(/\s+/g, ' ').trim()
+    if (t.length <= 360) return t
+    return `${t.slice(0, 360).trimEnd()}…`
+  }, [conclusionFull])
+
+  const frameworkExecOutput = useMemo(() => {
+    const execTask = analysisTasks?.find((t) => t.step_name === 'execution_layer')
+    const raw =
+      execTask?.output_data && typeof execTask.output_data === 'object'
+        ? execTask.output_data
+        : taskData?.execution_layer
+    return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+  }, [analysisTasks, taskData])
+
+  const kmF = effectiveResult?.key_metrics ?? {}
+  const swotF = kmF.swot_analysis ?? (frameworkExecOutput?.swot_analysis as typeof kmF.swot_analysis)
+  const jtbdF = kmF.jtbd ?? (frameworkExecOutput?.jtbd as typeof kmF.jtbd)
+  const porter5F = kmF.porter_5_forces ?? (frameworkExecOutput?.porter_5_forces as typeof kmF.porter_5_forces)
+  const breakdownF = kmF.opportunity_score_breakdown
+  const frameworkPanelKeyF = `${effectiveResult?.reportId ?? 'live'}:${keyword}`
+
   const trendDone = isStepComplete(analysisTasks, 'trend_analysis')
   const competitionDone = isStepComplete(analysisTasks, 'competition_analysis')
   const insightDone = isStepComplete(analysisTasks, 'insight_extraction')
@@ -214,7 +238,7 @@ export function ResultLDashboard({
 
   if (!hasResultData && !hasPipelineContext) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="rounded-xl border border-dashed border-slate-100 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
         결과 요약 데이터가 없습니다. 분석이 완료되면 L자형 리포트가 표시됩니다.
       </div>
     )
@@ -247,11 +271,11 @@ export function ResultLDashboard({
   return (
     <div
       id="analysis-live-region"
-      className={cn(analysisPageBg, 'rounded-xl px-2 py-4 sm:px-4 sm:py-6')}
+      className={cn(analysisPageBg, 'rounded-xl px-1 py-3 sm:px-2 sm:py-4')}
       role="region"
       aria-label="분석 결과 대시보드"
     >
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-none flex-col gap-6">
         {showPipeline && keyword.trim() && (
           <div className="z-30 py-0.5 lg:sticky lg:top-16">
             <PipelineStepperSlim
@@ -263,78 +287,122 @@ export function ResultLDashboard({
           </div>
         )}
 
-        <div className="flex flex-col gap-8 xl:flex-row xl:items-start">
-          <div className="shrink-0 xl:sticky xl:top-20 xl:w-52 xl:self-start">
-            <ReportScrollToc className="xl:shadow-md" />
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+          <div className="flex w-full shrink-0 flex-col gap-3 xl:sticky xl:top-24 xl:h-fit xl:w-[10.5rem] xl:max-w-[11rem] xl:self-start xl:pr-1">
+            <ReportScrollToc />
+            <UrgentTaskCards
+              result={effectiveResult ?? null}
+              taskData={taskData}
+              analysisTasks={analysisTasks ?? undefined}
+              onNavigateToReportSection={scrollToReportSection}
+            />
           </div>
 
           <div className="min-w-0 flex-1 space-y-8">
-            <div className="grid gap-8 lg:grid-cols-[minmax(260px,320px)_1fr] lg:items-start lg:gap-10">
-              <MotionReveal
-                key={`rail-${sectionKeyPrefix}`}
-                staticLayout={loading}
-                className="min-w-0"
-                delay={0}
-              >
-                <ResultLeftRail
-                  effectiveResult={effectiveResult ?? null}
-                  taskData={taskData}
-                  analysisTasks={analysisTasks ?? undefined}
-                  loading={loading}
-                  onNavigateToReportSection={scrollToReportSection}
-                  stableOpportunityScore={stableOppScore}
-                  analysisFailed={analysisFailed}
-                  scoreRationaleSummary={scoreRationale}
-                  conclusionFull={conclusionFull}
-                />
-              </MotionReveal>
+            <MotionReveal
+              key={`main-${sectionKeyPrefix}`}
+              staticLayout={loading}
+              className="min-w-0 space-y-10"
+              delay={0.06}
+            >
+              {keyword.trim() ? (
+                <div className="flex justify-end">
+                  <AnalysisPhaseRerunIcons
+                    keyword={keyword}
+                    countryCode={countryCode}
+                    aiPrimaryModel={aiPrimaryModel}
+                    disabled={phaseRerunDisabled}
+                    className="shrink-0"
+                  />
+                </div>
+              ) : null}
 
-              <MotionReveal
-                key={`main-${sectionKeyPrefix}`}
-                staticLayout={loading}
-                className="min-w-0 space-y-10"
-                delay={0.06}
+              <section
+                key={`${sectionKeyPrefix}-report-summary`}
+                id="report-summary"
+                className={sectionScrollClass}
               >
-                {keyword.trim() ? (
-                  <div className="flex justify-end">
-                    <AnalysisPhaseRerunIcons
-                      keyword={keyword}
-                      countryCode={countryCode}
-                      aiPrimaryModel={aiPrimaryModel}
-                      disabled={phaseRerunDisabled}
-                      className="shrink-0"
-                    />
-                  </div>
-                ) : null}
-
-                <section
-                  key={`${sectionKeyPrefix}-report-summary`}
-                  id="report-summary"
-                  className={sectionScrollClass}
-                >
-                  <MotionReveal staticLayout={loading} delay={0.04}>
-                    <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 motion-safe:will-change-transform">
-                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 pb-4 dark:border-zinc-800">
+                <MotionReveal staticLayout={loading} delay={0.04}>
+                  <div className="space-y-8 motion-safe:will-change-transform">
+                    <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           요약 · 기회 점수
                         </CardTitle>
                         <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
                       </CardHeader>
-                      <CardContent className="space-y-8 pb-6 pt-6">
+                      <CardContent className="space-y-6 px-3 pb-5 pt-4 sm:space-y-8 sm:px-4 sm:pb-6 sm:pt-5">
                         {skSummary ? (
                           <SectionContentSkeleton variant="mixed" className="py-2" />
                         ) : (
                           <>
-                            <OpportunityScoreBreakdown
-                              score={effectiveResult?.key_metrics?.opportunity_score ?? null}
-                              loading={loading}
-                              stableScore={stableOppScore}
-                              analysisFailed={analysisFailed}
-                              breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
-                              useKoreanLabels
-                              className="border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-900"
-                            />
-                            <OverviewOpportunityRiskChart result={effectiveResult ?? null} loading={loading} />
+                            {/* Hero: 최종 점수 + 핵심 결론 요약 */}
+                            <div className="w-full rounded-xl border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/80">
+                              <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:gap-10">
+                                <div className="flex shrink-0 flex-col items-center justify-center border-b border-slate-100 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10 dark:border-zinc-800">
+                                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                                    최종 점수 요약
+                                  </p>
+                                  <OpportunityScoreGauge
+                                    score={liveOppNum}
+                                    loading={loading && liveOppNum == null}
+                                    stableScore={stableOppScore}
+                                    analysisFailed={analysisFailed}
+                                    rationaleSummary={scoreRationale}
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                                    핵심 결론 요약
+                                  </p>
+                                  <p className="text-pretty text-base font-medium leading-relaxed text-slate-900 dark:text-zinc-50">
+                                    {conclusionExcerpt}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 전폭 핵심 결론 본문 */}
+                            <div
+                              className="w-full rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/35"
+                              aria-labelledby={`${sectionKeyPrefix}-conclusion-heading`}
+                            >
+                              <h3
+                                id={`${sectionKeyPrefix}-conclusion-heading`}
+                                className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                              >
+                                핵심 결론
+                              </h3>
+                              <MarkdownBody className="prose-base max-w-none leading-relaxed text-foreground">
+                                {conclusionFull}
+                              </MarkdownBody>
+                            </div>
+
+                            {/* 근거: 점수 분해 + 전략 프레임워크 레이더 */}
+                            <div className="grid w-full gap-6 lg:grid-cols-2 lg:items-start">
+                              <OpportunityScoreBreakdown
+                                score={effectiveResult?.key_metrics?.opportunity_score ?? null}
+                                loading={loading}
+                                stableScore={stableOppScore}
+                                analysisFailed={analysisFailed}
+                                breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
+                                useKoreanLabels
+                                className="h-full border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                              />
+                              <StrategyFrameworkPanel
+                                key={frameworkPanelKeyF}
+                                instanceKey={frameworkPanelKeyF}
+                                swot={swotF}
+                                jtbd={jtbdF}
+                                porter={porter5F}
+                                opportunityBreakdown={breakdownF ?? undefined}
+                                strategicDecisionLayer={kmF.strategic_decision_layer}
+                                strategyEvaluation={kmF.strategy_evaluation}
+                                summaryRadarOnly
+                                className="h-full"
+                              />
+                            </div>
+
                             <ResultSummaryCards
                               result={effectiveResult ?? null}
                               consensusData={consensusData}
@@ -347,8 +415,9 @@ export function ResultLDashboard({
                         )}
                       </CardContent>
                     </Card>
-                  </MotionReveal>
-                </section>
+                  </div>
+                </MotionReveal>
+              </section>
 
                 <InsightSectionShell
                   key={`${sectionKeyPrefix}-report-market`}
@@ -431,13 +500,13 @@ export function ResultLDashboard({
                 >
                   <MotionReveal staticLayout={loading} delay={0.06}>
                     <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 dark:border-zinc-800">
+                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           전략 · 프레임워크 · GTM · 평가
                         </CardTitle>
                         <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
                       </CardHeader>
-                      <CardContent className="space-y-8 pb-6 pt-6">
+                      <CardContent className="space-y-8 px-3 pb-5 pt-4 sm:px-4 sm:pb-6 sm:pt-5">
                         {skStrategic ? (
                           <SectionContentSkeleton variant="mixed" />
                         ) : (
@@ -479,15 +548,15 @@ export function ResultLDashboard({
                 >
                   <MotionReveal staticLayout={loading} delay={0.08}>
                     <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                      <CardHeader className="space-y-1 border-b border-slate-100 dark:border-zinc-800">
+                      <CardHeader className="space-y-1 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           액션 플랜
                         </CardTitle>
-                        <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed">
+                        <p className="text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
                           상태는 이 브라우저에만 저장됩니다. 실행 과제를 배포·공유할 때는 별도 워크플로에 반영하세요.
                         </p>
                       </CardHeader>
-                      <CardContent className="pb-6 pt-4">
+                      <CardContent className="px-3 pb-5 pt-4 sm:px-4 sm:pb-6">
                         {skAction ? (
                           <SectionContentSkeleton variant="list" />
                         ) : (
@@ -509,7 +578,6 @@ export function ResultLDashboard({
           </div>
         </div>
       </div>
-    </div>
   )
 }
 
@@ -532,11 +600,11 @@ function InsightSectionShell({
     <MotionReveal staticLayout={loading} delay={0.08 + animationIndex * 0.05}>
       <section id={id} className={cn(sectionScrollClass)}>
         <Card className="border-slate-100 bg-white p-0 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 dark:border-zinc-800 dark:bg-zinc-900">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 dark:border-zinc-800">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
             <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">{title}</CardTitle>
             <AnalysisSourceButton result={result} label="출처" />
           </CardHeader>
-          <CardContent className="pb-6 pt-6">{children}</CardContent>
+          <CardContent className="px-3 pb-5 pt-4 sm:px-4 sm:pb-6 sm:pt-5">{children}</CardContent>
         </Card>
       </section>
     </MotionReveal>
