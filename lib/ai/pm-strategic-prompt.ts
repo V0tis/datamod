@@ -92,9 +92,12 @@ export const TASK_COMPETITION_SYSTEM = `${STRATEGIC_SYSTEM}
 - DATA에 경쟁 주체가 없으면 competitive_landscape는 []로 두고, market_structure.summary·strategic_gaps·pm_planning_summary·strategic_action_plan은 DATA 범위 안에서만 최소한으로 채운다.
 - 언론사·매거진·블로그·뉴스 미디어 브랜드는 경쟁사 후보에서 제외한다(보도 주체로만 등장한 경우).
 
-【Strategic Gap】 strategic_gaps: 경쟁사 집단이 기능·가격 측면에서 아직 충분히 점유하지 못한 영역을 명시한다. 추측이 아니라 DATA에 근거한 문장·불릿으로만 쓴다.
+【Strategic Gap】 strategic_gaps: 시장·집단 차원의 기능·가격 공백(공통 요약). 행별 competitor_gap과 중복되면 안 된다(공통은 여기만).
 【정량 좌표】 각 경쟁사마다 market_presence(시장 점유·존재감 1~10), growth_score(성장성·모멘텀 1~10)를 산출하고, score_rationale에 "왜 이 점수인지" DATA 근거 2~3문장을 쓴다(버블 차트·로드맵 설득력).
-【차별화 대비】 competitor_gap = 경쟁사들이 공통으로 안 하거나 약한 영역. our_differentiation = KEYWORD(우리 제품)이 그 공백을 메울 수 있는 각도. 둘을 대비되게 쓴다. differentiation 필드는 비우거나 competitor_gap+our_differentiation 요약 한 줄로만 써도 된다.
+【차별화 — 반드시 경쟁사별 1:1】 competitive_landscape의 **각 원소마다** competitor_gap·our_differentiation·differentiation은 **그 행의 name에만 해당**하는 문장이어야 한다.
+- competitor_gap: "집단·시장 전체"가 아니라 **해당 경쟁사 제품/서비스**에서 부족하거나 유저가 불만을 가질 만한 **구체적 지점** 1문장(가능하면 해당 이름을 문장에 포함). 다른 행과 동일 문장·복붙 금지.
+- our_differentiation: KEYWORD(우리 제품)가 **위에서 짚은 그 경쟁사의 공백**을 어떻게 메우는지 **구체적**으로 1문장. 모든 행에 같은 문장을 반복하지 말 것.
+- differentiation: 선택. 있으면 해당 행 전용 한 줄 요약(다른 행과 동일하면 안 됨). 범용 마케팅 허구(예: "니즈 충족", "차별화된 경험 제공")만 있는 문장은 쓰지 말 것.
 【PM 근거】 pm_planning_summary: 이 JSON이 로드맵·OKR 수립에 왜 쓰이는지 PM 관점 2~4문장.
 【실행】 strategic_action_plan: roadmap_priorities(차기 제품 우선순위 3~5, rationale에 strategic_gaps·경쟁 공백 연결), okr_key_results(O 목표 후보 + 측정 가능한 KR 문장들).
 
@@ -110,9 +113,9 @@ Format (필드명·중괄호 유지): {
     "market_presence": number,
     "growth_score": number,
     "score_rationale": "시장 점유·성장성 점수 산정 근거 (DATA, 2~3문장)",
-    "competitor_gap": "경쟁사들이 집단적으로 놓치거나 약한 기능·가격 영역",
-    "our_differentiation": "KEYWORD가 그 공백을 메우는 차별화 포인트",
-    "differentiation": "선택: 위 둘의 한 줄 요약",
+    "competitor_gap": "이 name 경쟁사에만 해당하는 구체적 약점·불만 포인트 (DATA 근거)",
+    "our_differentiation": "KEYWORD 제품이 그 경쟁사 공백에 대응하는 구체적 대응 전략 (행마다 다르게)",
+    "differentiation": "선택: 이 행 전용 한 줄(다른 행과 중복 금지)",
     "strength": "강점 (1문장)",
     "weakness": "DATA 근거 공략·실험 가설"
   }],
@@ -132,7 +135,10 @@ Format (필드명·중괄호 유지): {
 - 5~8개까지. name, positioning, target_market, key_feature, pricing, market_presence, growth_score, score_rationale, competitor_gap, our_differentiation 필수(데이터로 채울 수 없으면 해당 항목은 DATA 한계를 한 문장으로 명시).
 Return ONLY valid JSON. 본문은 한국어.`
 
-const TASK_COMPETITION_USER_TASK = `위 DATA만으로 경쟁 JSON을 채운다. competitive_landscape에는 텍스트에 실제로 이름이 나온 회사·플랫폼만 넣는다. 없으면 []. 각 항목은 Competitor Landscape 테이블 컬럼(COMPETITOR·TARGET MARKET·KEY FEATURE·PRICING·DIFFERENTIATION에 대응)이 한 번에 읽히게 채운다. competitor_gap vs our_differentiation 대비를 선명히. strategic_gaps·pm_planning_summary·strategic_action_plan까지 포함해 비즈니스 전략 산출물로 완성한다.`
+const TASK_COMPETITION_USER_TASK = `위 DATA만으로 경쟁 JSON을 채운다. competitive_landscape에는 텍스트에 실제로 이름이 나온 회사·플랫폼만 넣는다. 없으면 [].
+각 행 i의 competitor_gap·our_differentiation·differentiation은 **반드시 그 행 name(i)에만** 대한 분석이어야 한다(다른 경쟁사 행과 문장을 복사·공유하지 말 것). 시장 전체 공통 서술은 strategic_gaps에만 둔다.
+DIFFERENTIATION 열에 들어갈 문장은 행마다 날카로운 인사이트로 다르게 쓰고, "이용자 니즈 충족" 등 모든 기업에 쓰이는 무의미한 상투구는 쓰지 않는다.
+strategic_gaps·pm_planning_summary·strategic_action_plan까지 포함해 비즈니스 전략 산출물로 완성한다.`
 
 export function buildTaskCompetitionSections(
   _keyword: string,

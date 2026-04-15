@@ -32,20 +32,26 @@ const COLUMNS = [
   { key: 'differentiation', label: 'DIFFERENTIATION' },
 ] as const
 
+/** 모델이 모든 행에 반복하는 범용 마케팅 문구 제거(행별 고유 인사이트만 남기기 위한 보조) */
+function scrubDifferentiationFluff(s: string): string {
+  const patterns = [
+    /이용자(?:의)?\s*니즈를\s*충족(?:시킬\s*수\s*있(?:습니다|다)|합니다)/gi,
+    /사용자(?:의)?\s*(?:요구|니즈)를\s*만족(?:시킵니다|시킬\s*수\s*있습니다)/gi,
+    /차별화(?:된)?\s*(?:경험|서비스)를\s*제공합니다/gi,
+    /시장(?:에서)?\s*경쟁\s*우위를\s*확보합니다/gi,
+  ]
+  let out = s.trim()
+  for (const re of patterns) out = out.replace(re, '').replace(/\s{2,}/g, ' ').trim()
+  out = out.replace(/^[,.\s:：]+|[,.\s:：]+$/g, '').trim()
+  return out || s.trim()
+}
+
 export function CompetitorLandscapeTable({
   competitors,
   loading = false,
   className,
 }: CompetitorLandscapeTableProps) {
   const filtered = competitors.filter((c) => c.name?.trim()).slice(0, 10)
-  const hasData = filtered.some(
-    (c) =>
-      c.target_market ||
-      c.key_feature ||
-      c.pricing ||
-      c.differentiation ||
-      c.positioning
-  )
 
   if (filtered.length === 0 && !loading) return null
 
@@ -63,7 +69,7 @@ export function CompetitorLandscapeTable({
           Competitor Landscape
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          경쟁사 비교: 타겟 시장, 핵심 기능, 가격, 차별화
+          행마다 해당 경쟁사 기준 경쟁 공백·우리 대응(또는 요약)
         </p>
       </div>
       {loading && filtered.length === 0 ? (
@@ -89,55 +95,60 @@ export function CompetitorLandscapeTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c, i) => (
-                <tr
-                  key={`${c.name}-${i}`}
-                  className="border-b border-border/40 hover:bg-muted/20 transition-colors"
-                >
-                  <td
-                    className={cn(
-                      'px-4 py-3 font-medium text-foreground align-top',
-                      'sticky left-0 bg-card z-[1] hover:bg-muted/20'
-                    )}
+              {filtered.map((c, i) => {
+                const gap = c.competitor_gap ? scrubDifferentiationFluff(c.competitor_gap) : ''
+                const ours = c.our_differentiation ? scrubDifferentiationFluff(c.our_differentiation) : ''
+                const diffOnly = c.differentiation ? scrubDifferentiationFluff(c.differentiation) : ''
+                return (
+                  <tr
+                    key={`competitor-row-${String(c.name ?? 'x')}-${i}`}
+                    className="border-b border-border/40 hover:bg-muted/20 transition-colors"
                   >
-                    {c.name ?? '—'}
-                    {c.positioning && (
-                      <span className="block text-xs text-muted-foreground font-normal mt-0.5">
-                        {c.positioning}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-foreground align-top max-w-[160px]">
-                    {c.target_market || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-foreground align-top max-w-[180px]">
-                    {c.key_feature || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-foreground align-top max-w-[120px]">
-                    {c.pricing || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-foreground align-top max-w-[min(360px,45vw)]">
-                    {c.competitor_gap || c.our_differentiation ? (
-                      <div className="space-y-2 text-xs leading-relaxed">
-                        {c.competitor_gap ? (
-                          <p>
-                            <span className="font-semibold text-rose-600/90 dark:text-rose-400">경쟁 공백 </span>
-                            <span className="text-foreground/90">{c.competitor_gap}</span>
-                          </p>
-                        ) : null}
-                        {c.our_differentiation ? (
-                          <p>
-                            <span className="font-semibold text-emerald-700/90 dark:text-emerald-400">우리 차별화 </span>
-                            <span className="text-foreground/90">{c.our_differentiation}</span>
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-xs">{c.differentiation || '—'}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    <td
+                      className={cn(
+                        'px-4 py-3 font-medium text-foreground align-top',
+                        'sticky left-0 bg-card z-[1] hover:bg-muted/20'
+                      )}
+                    >
+                      {c.name ?? '—'}
+                      {c.positioning && (
+                        <span className="block text-xs text-muted-foreground font-normal mt-0.5">
+                          {c.positioning}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-foreground align-top max-w-[160px]">
+                      {c.target_market || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-foreground align-top max-w-[180px]">
+                      {c.key_feature || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-foreground align-top max-w-[120px]">
+                      {c.pricing || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-foreground align-top max-w-[min(360px,45vw)]">
+                      {gap || ours ? (
+                        <div className="space-y-2 text-xs leading-relaxed">
+                          {gap ? (
+                            <p>
+                              <span className="font-semibold text-rose-600/90 dark:text-rose-400">경쟁 공백 </span>
+                              <span className="text-foreground/90">{gap}</span>
+                            </p>
+                          ) : null}
+                          {ours ? (
+                            <p>
+                              <span className="font-semibold text-emerald-700/90 dark:text-emerald-400">우리 대응 </span>
+                              <span className="text-foreground/90">{ours}</span>
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs">{diffOnly || '—'}</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

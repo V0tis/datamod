@@ -45,6 +45,8 @@ export type ChatCompletionInput = {
 export type ChatCompletionOutput = {
   text: string | null
   quotaError?: boolean
+  payloadTooLarge?: boolean
+  httpStatus?: number
   /** 사용자 표시용 fallback 메시지 (text가 null일 때) */
   fallbackMessage?: string
 }

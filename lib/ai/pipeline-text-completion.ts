@@ -15,6 +15,8 @@ import {
   getLongContextGeminiModel,
 } from '@/lib/ai/context-routing'
 import { recordLlmUsage } from '@/lib/llm-usage-record'
+import { summarizeUserPromptForPmActionGemini } from '@/lib/ai/pm-action-groq-recovery'
+import { compressTextForPmActionInput } from '@/lib/ai/pipeline-prompts'
 
 const AI_BASE_DELAY_MS = 1000
 const AI_MAX_RETRIES = 2
@@ -120,9 +122,9 @@ export async function runPipelineGeminiGroqText(options: {
   let usedFallback = false
   let primaryProviderError: string | undefined
 
-  const messages = [
+  const buildMessages = (userContent: string) => [
     { role: 'system' as const, content: systemInstruction },
-    { role: 'user' as const, content: prompt },
+    { role: 'user' as const, content: userContent },
   ]
 
   for (let attempt = 0; attempt <= maxPrimaryRetries; attempt++) {
@@ -149,7 +151,20 @@ export async function runPipelineGeminiGroqText(options: {
         return { text, usedFallback: false }
       }
       if (!groqKey) throw new Error('Groq key not available')
-      const groqRes = await groqCompleteChat(groqKey, messages, { maxTokens: groqMaxTokens })
+      let userContent = prompt
+      let groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
+      if (groqRes.payloadTooLarge && step === 'execution_layer') {
+        console.warn('[pipeline] Groq 413 on execution_layer: shrinking input, then retrying Groq')
+        userContent = geminiKey
+          ? await summarizeUserPromptForPmActionGemini(geminiKey, prompt)
+          : compressTextForPmActionInput(prompt, 8000)
+        groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
+      }
+      if (groqRes.payloadTooLarge && step === 'execution_layer') {
+        userContent = compressTextForPmActionInput(userContent, 6000)
+        console.warn('[pipeline] Groq still 413: hard-truncating user prompt to 6000 chars')
+        groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
+      }
       /** 빈 응답·쿼터는 폴백 트리거로 던져야 Gemini로 이어짐 (제네릭 'Groq failed'는 isFallbackTriggerError 미통과) */
       if (groqRes.quotaError) {
         const q = new Error('429 Groq rate limit or quota') as Error & { status?: number }
@@ -179,7 +194,7 @@ export async function runPipelineGeminiGroqText(options: {
         primaryProviderError = getFallbackErrorReason(err)
         try {
           if (primaryIsGemini && groqKey) {
-            const groqRes = await groqCompleteChat(groqKey, messages, { maxTokens: groqMaxTokens })
+            const groqRes = await groqCompleteChat(groqKey, buildMessages(prompt), { maxTokens: groqMaxTokens })
             if (groqRes.quotaError) {
               const q = new Error('429 Groq rate limit or quota') as Error & { status?: number }
               q.status = 429

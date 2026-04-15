@@ -21,6 +21,9 @@ export type CompleteChatOptions = {
 export type CompleteChatResult = {
   text: string | null
   quotaError?: boolean
+  /** 요청 본문이 컨텍스트 한도를 초과한 경우(Groq 413 등). 상위에서 입력 요약 후 재시도 가능 */
+  payloadTooLarge?: boolean
+  httpStatus?: number
   /** Fallback message when AI fails (for UI display) */
   fallbackMessage?: string
   /** OpenAI-compatible usage when present */
@@ -33,9 +36,16 @@ export type CompleteChatResult = {
   model?: string
 }
 
+function isGroqTransientError(e: unknown): boolean {
+  const s = (e as { status?: number })?.status
+  if (s === 429) return true
+  if (typeof s === 'number' && s >= 500 && s < 600) return true
+  return false
+}
+
 /**
  * Call Groq chat completions with timeout, retry (max 2), and safe parsing.
- * Returns parsed text or quotaError; does not throw for 429.
+ * 429·5xx는 지수 백오프로 재시도. 413은 재시도하지 않으며 payloadTooLarge로 반환.
  */
 export async function completeChat(
   apiKey: string,
@@ -70,20 +80,37 @@ export async function completeChat(
         } catch {
           throw new Error('Groq 응답 파싱 실패')
         }
+        const errMsg = data?.error?.message ?? ''
         if (res.status === 429) {
-          const err = new Error('Groq 429') as Error & { status?: number }
+          console.warn('[Groq] chat/completions rate limited', { model, message: errMsg })
+          const err = new Error(`Groq 429: ${errMsg || 'too many requests'}`) as Error & { status?: number }
           err.status = 429
+          throw err
+        }
+        if (res.status === 413) {
+          console.warn('[Groq] chat/completions payload too large', { model, message: errMsg })
+          const err = new Error(`Groq 413: ${errMsg || 'request entity too large'}`) as Error & { status?: number }
+          err.status = 413
+          throw err
+        }
+        if (!res.ok) {
+          console.warn('[Groq] chat/completions error', {
+            status: res.status,
+            model,
+            message: errMsg || res.statusText,
+          })
+          const err = new Error(`Groq ${res.status}: ${errMsg || res.statusText}`) as Error & { status?: number }
+          err.status = res.status
           throw err
         }
         return { res, data }
       },
-      { maxRetries: AI_MAX_RETRIES, baseDelayMs: 1000 }
+      {
+        maxRetries: AI_MAX_RETRIES,
+        baseDelayMs: 1000,
+        isRetryable: isGroqTransientError,
+      }
     )
-    if (!res.ok) {
-      return res.status === 429
-        ? { text: null, quotaError: true, fallbackMessage: AI_FALLBACK_MESSAGES.QUOTA }
-        : { text: null, fallbackMessage: AI_FALLBACK_MESSAGES.GENERIC }
-    }
     const raw = data?.choices?.[0]?.message?.content
     const text = typeof raw === 'string' ? raw.trim() : ''
     if (!text) {
@@ -96,13 +123,31 @@ export async function completeChat(
     }
   } catch (e) {
     const err = e as { status?: number; message?: string }
-    const is429 = err?.status === 429
+    const status = err?.status
+    const is413 = status === 413
+    const is429 = status === 429
     const isTimeout = /timeout|abort/i.test(String(err?.message ?? e))
+    if (is413) {
+      console.warn('[Groq] payload too large (413), caller may shrink prompt', {
+        model,
+        message: err?.message,
+      })
+      return {
+        text: null,
+        payloadTooLarge: true,
+        httpStatus: 413,
+        fallbackMessage: AI_FALLBACK_MESSAGES.GENERIC,
+      }
+    }
     const fallback = is429
       ? AI_FALLBACK_MESSAGES.QUOTA
       : isTimeout
         ? AI_FALLBACK_MESSAGES.TIMEOUT
         : AI_FALLBACK_MESSAGES.GENERIC
-    return { text: null, ...(is429 ? { quotaError: true } : {}), fallbackMessage: fallback }
+    return {
+      text: null,
+      ...(is429 ? { quotaError: true, httpStatus: 429 as const } : {}),
+      fallbackMessage: fallback,
+    }
   }
 }
