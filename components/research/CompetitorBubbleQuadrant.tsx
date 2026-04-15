@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { TooltipProps } from 'recharts'
 import {
   CartesianGrid,
@@ -19,6 +20,13 @@ import {
   type ScatterPayload,
   toScatterPayload,
 } from '@/lib/competitor-bubble-data'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
@@ -28,15 +36,25 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
     <div className="max-w-[280px] rounded-xl border border-border/70 bg-background/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-sm">
       <p className="text-sm font-semibold text-foreground">{row.name}</p>
       <p className="mt-1 tabular-nums text-muted-foreground">
-        시장 점유·존재감 {row.x.toFixed(1)} · 기술·성장성 {row.y.toFixed(1)}
+        시장 점유(가로) {row.x.toFixed(1)} · 성장성(세로) {row.y.toFixed(1)}
       </p>
-      <p className="mt-1 text-[10px] text-muted-foreground">버블 크기 ≈ 상대적 기업 규모 (데이터 기반 추정)</p>
-      {row.positioning ? (
-        <p className="mt-2 leading-relaxed text-foreground/90">{row.positioning}</p>
+      {row.inferred ? (
+        <p className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-500">일부 좌표는 데이터 보강 추정</p>
       ) : null}
+      {row.score_rationale ? (
+        <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed text-foreground/85">{row.score_rationale}</p>
+      ) : null}
+      <p className="mt-2 text-[10px] text-muted-foreground">클릭하면 근거 전문을 볼 수 있습니다.</p>
     </div>
   )
 }
+
+const QUADRANT = {
+  tl: '니치 · 고성장',
+  tr: '우위 · 고성장',
+  bl: '저존재 · 저성장',
+  br: '대형 · 성장 둔화',
+} as const
 
 export function CompetitorBubbleQuadrant({
   competitors,
@@ -45,86 +63,168 @@ export function CompetitorBubbleQuadrant({
   competitors: CompetitorScatterRow[]
   className?: string
 }) {
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState<ScatterPayload | null>(null)
   if (!competitors.length) return null
   const data = toScatterPayload(competitors)
 
   return (
-    <ChartWithInsight
-      title="경쟁사 버블 매트릭스"
-      insight="X축은 시장 점유·존재감(1–10), Y축은 기술력·성장성(1–10), 버블 크기는 상대적 기업 규모를 나타냅니다. 티어(리더·도전자 등)는 색으로 구분됩니다."
-      className={className}
-    >
-      <div className="rounded-2xl border border-slate-100 bg-muted/15 px-2 py-4 sm:px-4 dark:border-zinc-800">
-        <div className="h-[min(400px,58vw)] w-full min-h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 12, right: 16, left: 8, bottom: 44 }}>
-              <CartesianGrid stroke={CHART_GRAY_GRID} strokeDasharray="4 4" />
-              <XAxis
-                type="number"
-                dataKey="x"
-                domain={[1, 10]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
-                tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
-                tickLine={false}
-                axisLine={{ stroke: CHART_GRAY_AXIS, strokeOpacity: 0.5 }}
-                label={{
-                  value: '시장 점유율 · 존재감 (1–10)',
-                  position: 'bottom',
-                  offset: 28,
-                  fill: CHART_GRAY_AXIS,
-                  fontSize: 11,
-                }}
-              />
-              <YAxis
-                type="number"
-                dataKey="y"
-                domain={[1, 10]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
-                tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
-                tickLine={false}
-                axisLine={{ stroke: CHART_GRAY_AXIS, strokeOpacity: 0.5 }}
-                label={{
-                  value: '기술력 · 성장성 (1–10)',
-                  angle: -90,
-                  position: 'insideLeft',
-                  offset: 4,
-                  fill: CHART_GRAY_AXIS,
-                  fontSize: 11,
-                }}
-              />
-              <ReferenceLine x={5} stroke={CHART_GRAY_AXIS} strokeDasharray="5 5" strokeOpacity={0.55} />
-              <ReferenceLine y={5} stroke={CHART_GRAY_AXIS} strokeDasharray="5 5" strokeOpacity={0.55} />
-              <Tooltip cursor={{ strokeDasharray: '4 4' }} content={<BubbleTooltip />} />
-              <Scatter
-                name="경쟁사"
-                data={data}
-                fill={CHART_MINT}
-                isAnimationActive
-                animationDuration={600}
-                shape={(props: unknown) => {
-                  const p = props as Record<string, unknown>
-                  const cx = Number(p.cx ?? 0)
-                  const cy = Number(p.cy ?? 0)
-                  const payload = p.payload as ScatterPayload
-                  const r = Math.max(6, Math.min(22, ((payload?.size ?? 60) / 120) * 18 + 6))
-                  return (
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={r}
-                      fill={payload?.fill ?? CHART_MINT}
-                      fillOpacity={0.9}
-                      stroke="var(--background)"
-                      strokeWidth={2}
-                    />
-                  )
-                }}
-              />
-            </ScatterChart>
-          </ResponsiveContainer>
+    <>
+      <ChartWithInsight
+        title="경쟁사 버블 매트릭스"
+        insight="가로 시장 점유(1–10), 세로 성장성(1–10). 중앙 (5,5) 기준 4분면으로 포지션을 읽습니다. 버블을 클릭하면 좌표 산정 근거를 확인할 수 있습니다."
+        className={className}
+      >
+        <div className="rounded-2xl border border-slate-100 bg-muted/15 px-2 py-4 sm:px-4 dark:border-zinc-800">
+          <div className="relative h-[min(400px,58vw)] w-full min-h-[300px]">
+            <div
+              className="pointer-events-none absolute left-[14%] right-[10%] top-10 bottom-14 z-[5] text-[10px] font-medium text-muted-foreground/90"
+              aria-hidden
+            >
+              <span className="absolute left-0 top-0 max-w-[7rem] leading-snug">{QUADRANT.tl}</span>
+              <span className="absolute right-0 top-0 max-w-[7rem] text-right leading-snug">{QUADRANT.tr}</span>
+              <span className="absolute left-0 bottom-0 max-w-[7rem] leading-snug">{QUADRANT.bl}</span>
+              <span className="absolute right-0 bottom-0 max-w-[7rem] text-right leading-snug">{QUADRANT.br}</span>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 12, right: 16, left: 8, bottom: 44 }}>
+                <CartesianGrid stroke={CHART_GRAY_GRID} strokeDasharray="4 4" />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  domain={[1, 10]}
+                  ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                  tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
+                  tickLine={false}
+                  axisLine={{ stroke: CHART_GRAY_AXIS, strokeOpacity: 0.5 }}
+                  label={{
+                    value: '시장 점유 · 존재감 (1–10)',
+                    position: 'bottom',
+                    offset: 28,
+                    fill: CHART_GRAY_AXIS,
+                    fontSize: 11,
+                  }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="y"
+                  domain={[1, 10]}
+                  ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                  tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
+                  tickLine={false}
+                  axisLine={{ stroke: CHART_GRAY_AXIS, strokeOpacity: 0.5 }}
+                  label={{
+                    value: '성장성 (1–10)',
+                    angle: -90,
+                    position: 'insideLeft',
+                    offset: 4,
+                    fill: CHART_GRAY_AXIS,
+                    fontSize: 11,
+                  }}
+                />
+                <ReferenceLine
+                  x={5}
+                  stroke={CHART_GRAY_AXIS}
+                  strokeDasharray="5 5"
+                  strokeOpacity={0.65}
+                  strokeWidth={1.25}
+                />
+                <ReferenceLine
+                  y={5}
+                  stroke={CHART_GRAY_AXIS}
+                  strokeDasharray="5 5"
+                  strokeOpacity={0.65}
+                  strokeWidth={1.25}
+                />
+                <Tooltip cursor={{ strokeDasharray: '4 4' }} content={<BubbleTooltip />} />
+                <Scatter
+                  name="경쟁사"
+                  data={data}
+                  fill={CHART_MINT}
+                  isAnimationActive
+                  animationDuration={600}
+                  shape={(props: unknown) => {
+                    const p = props as Record<string, unknown>
+                    const cx = Number(p.cx ?? 0)
+                    const cy = Number(p.cy ?? 0)
+                    const payload = p.payload as ScatterPayload
+                    const r = Math.max(6, Math.min(22, ((payload?.size ?? 60) / 120) * 18 + 6))
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={r}
+                        fill={payload?.fill ?? CHART_MINT}
+                        fillOpacity={0.9}
+                        stroke="var(--background)"
+                        strokeWidth={2}
+                        className="cursor-pointer outline-none hover:opacity-100"
+                        onClick={() => {
+                          setSelected(payload)
+                          setOpen(true)
+                        }}
+                      />
+                    )
+                  }}
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+          <ChartSourceFooter className="px-1" />
         </div>
-        <ChartSourceFooter className="px-1" />
-      </div>
-    </ChartWithInsight>
+      </ChartWithInsight>
+
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v)
+          if (!v) setSelected(null)
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selected?.name ?? '경쟁사'}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="text-left space-y-3 pt-1">
+                <p className="tabular-nums text-sm text-muted-foreground">
+                  시장 점유(가로) <strong className="text-foreground">{selected?.x.toFixed(1)}</strong> · 성장성(세로){' '}
+                  <strong className="text-foreground">{selected?.y.toFixed(1)}</strong>
+                  <span className="block text-xs mt-1">
+                    기준선 5,5 기준{' '}
+                    {(selected?.x ?? 0) >= 5 && (selected?.y ?? 0) >= 5
+                      ? '고점유·고성장 우상단'
+                      : (selected?.x ?? 0) < 5 && (selected?.y ?? 0) >= 5
+                        ? '저점유·고성장 좌상단'
+                        : (selected?.x ?? 0) < 5 && (selected?.y ?? 0) < 5
+                          ? '저점유·저성장 좌하단'
+                          : '고점유·저성장 우하단'}{' '}
+                    구간에 위치합니다.
+                  </span>
+                </p>
+                {selected?.inferred ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    일부 축은 리서치 데이터 보강을 위해 추정되었습니다.
+                  </p>
+                ) : null}
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    좌표 산정 근거
+                  </p>
+                  <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                    {selected?.score_rationale?.trim() ||
+                      '모델이 별도 근거 문장을 반환하지 않았습니다. 시장 점유·성장성은 수집된 리서치 텍스트의 상대 비교로 산정되었을 수 있습니다.'}
+                  </p>
+                </div>
+                {selected?.positioning ? (
+                  <p className="text-xs text-muted-foreground leading-relaxed border-t border-border/50 pt-2">
+                    포지셔닝: {selected.positioning}
+                  </p>
+                ) : null}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

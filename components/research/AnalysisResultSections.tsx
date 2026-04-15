@@ -24,6 +24,7 @@ import { textToBullets } from '@/lib/text-to-bullets'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { StreamingBulletList, StreamingRiskList } from '@/components/research/StreamingInsightText'
 import { CompetitorBubbleQuadrant } from '@/components/research/CompetitorBubbleQuadrant'
+import { StrategicActionPlanSection } from '@/components/research/StrategicActionPlanSection'
 import { RiskSignalsSeverityList } from '@/components/research/RiskSignalsSeverityList'
 import { normalizeRiskSignalsFromParse } from '@/lib/ai/pipeline-prompts'
 import { MarkdownBody } from '@/components/ui/markdown-body'
@@ -237,8 +238,11 @@ export function AnalysisResultSections({
         key_feature?: string
         pricing?: string
         differentiation?: string
+        competitor_gap?: string
+        our_differentiation?: string
         strength?: string
         weakness?: string
+        score_rationale?: string
       }>)
     : Array.isArray(km.competitive_landscape)
       ? (km.competitive_landscape as Array<{
@@ -250,8 +254,23 @@ export function AnalysisResultSections({
           key_feature?: string
           pricing?: string
           differentiation?: string
+          competitor_gap?: string
+          our_differentiation?: string
+          score_rationale?: string
         }>)
       : []
+
+  const strategicGaps =
+    (competitionOutput?.strategic_gaps as
+      | { functional?: string[]; pricing?: string[]; summary?: string }
+      | undefined) ?? km.strategic_gaps
+  const pmPlanningSummary =
+    (typeof competitionOutput?.pm_planning_summary === 'string' ? competitionOutput.pm_planning_summary : undefined) ??
+    (typeof km.pm_planning_summary === 'string' ? km.pm_planning_summary : undefined)
+  const strategicActionPlan =
+    (competitionOutput?.strategic_action_plan as
+      | { roadmap_priorities?: Array<{ title: string; rationale?: string; priority_rank?: number }>; okr_key_results?: Array<{ objective?: string; key_results?: string[] }> }
+      | undefined) ?? km.strategic_action_plan
   const competitorTrendsBullets = textToBullets(result?.competitorTrends ?? '', 4)
   const marketStructureBullets = textToBullets(
     typeof competitionOutput?.market_structure === 'string' ? competitionOutput.market_structure : '',
@@ -770,7 +789,16 @@ export function AnalysisResultSections({
         icon={<Users className="h-5 w-5" />}
         status={isPmAnalytics ? getSectionStatus('competition_analysis', analysisTasks, loading) : undefined}
         loading={isPmAnalytics && loading}
-        streamingComplete={isPmAnalytics && !loading && (competitiveLandscape.length > 0 || competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0)}
+        streamingComplete={
+          isPmAnalytics &&
+          !loading &&
+          (competitiveLandscape.length > 0 ||
+            competitorTrendsBullets.length > 0 ||
+            marketStructureBullets.length > 0 ||
+            !!(strategicActionPlan?.roadmap_priorities?.length || strategicActionPlan?.okr_key_results?.length) ||
+            !!pmPlanningSummary?.trim() ||
+            !!(strategicGaps?.summary?.trim() || strategicGaps?.functional?.length || strategicGaps?.pricing?.length))
+        }
       >
         {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
           <SectionContentSkeleton variant="mixed" />
@@ -778,6 +806,44 @@ export function AnalysisResultSections({
           <div className="space-y-4">
             {competitiveLandscape.length > 0 && (
               <>
+                {(pmPlanningSummary?.trim() || strategicGaps?.summary?.trim() || (strategicGaps?.functional?.length ?? 0) > 0 || (strategicGaps?.pricing?.length ?? 0) > 0) && (
+                  <div className="space-y-3">
+                    {pmPlanningSummary?.trim() ? (
+                      <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5">
+                        <p className="text-[11px] font-medium text-primary uppercase tracking-wide mb-1">기획 근거 (로드맵·OKR)</p>
+                        <p className="text-sm text-foreground/95 leading-relaxed whitespace-pre-wrap">{pmPlanningSummary.trim()}</p>
+                      </div>
+                    ) : null}
+                    {(strategicGaps?.summary?.trim() || (strategicGaps?.functional?.length ?? 0) > 0 || (strategicGaps?.pricing?.length ?? 0) > 0) ? (
+                      <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Strategic Gap</p>
+                        {strategicGaps?.summary?.trim() ? (
+                          <p className="text-sm text-foreground/95 leading-relaxed mb-2">{strategicGaps.summary.trim()}</p>
+                        ) : null}
+                        {strategicGaps?.functional && strategicGaps.functional.length > 0 ? (
+                          <div className="mb-2">
+                            <p className="text-[10px] font-semibold text-foreground/80 mb-1">기능 공백</p>
+                            <ul className="list-disc list-inside text-xs text-foreground/90 space-y-0.5">
+                              {strategicGaps.functional.map((s, i) => (
+                                <li key={`f-${i}`}>{s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {strategicGaps?.pricing && strategicGaps.pricing.length > 0 ? (
+                          <div>
+                            <p className="text-[10px] font-semibold text-foreground/80 mb-1">가격·과금 공백</p>
+                            <ul className="list-disc list-inside text-xs text-foreground/90 space-y-0.5">
+                              {strategicGaps.pricing.map((s, i) => (
+                                <li key={`p-${i}`}>{s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 <CompetitorLandscapeTable
                   competitors={competitiveLandscape}
                   loading={loading}
@@ -801,6 +867,7 @@ export function AnalysisResultSections({
                 </div>
               </>
             )}
+            <StrategicActionPlanSection plan={strategicActionPlan} />
             {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>

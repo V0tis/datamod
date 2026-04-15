@@ -10,6 +10,10 @@ export type CompetitorTableEntry = {
   key_feature?: string
   pricing?: string
   differentiation?: string
+  /** 경쟁사 미집중 영역 */
+  competitor_gap?: string
+  /** 우리 차별화 */
+  our_differentiation?: string
   strength?: string
   weakness?: string
 }
@@ -21,11 +25,11 @@ export interface CompetitorLandscapeTableProps {
 }
 
 const COLUMNS = [
-  { key: 'name', label: 'Competitor', className: 'font-semibold' },
-  { key: 'target_market', label: 'Target Market' },
-  { key: 'key_feature', label: 'Key Feature' },
-  { key: 'pricing', label: 'Pricing' },
-  { key: 'differentiation', label: 'Differentiation' },
+  { key: 'name', label: 'COMPETITOR', className: 'font-semibold' },
+  { key: 'target_market', label: 'TARGET MARKET' },
+  { key: 'key_feature', label: 'KEY FEATURE' },
+  { key: 'pricing', label: 'PRICING' },
+  { key: 'differentiation', label: 'DIFFERENTIATION' },
 ] as const
 
 export function CompetitorLandscapeTable({
@@ -112,8 +116,25 @@ export function CompetitorLandscapeTable({
                   <td className="px-4 py-3 text-foreground align-top max-w-[120px]">
                     {c.pricing || '—'}
                   </td>
-                  <td className="px-4 py-3 text-foreground align-top max-w-[200px]">
-                    {c.differentiation || '—'}
+                  <td className="px-4 py-3 text-foreground align-top max-w-[min(360px,45vw)]">
+                    {c.competitor_gap || c.our_differentiation ? (
+                      <div className="space-y-2 text-xs leading-relaxed">
+                        {c.competitor_gap ? (
+                          <p>
+                            <span className="font-semibold text-rose-600/90 dark:text-rose-400">경쟁 공백 </span>
+                            <span className="text-foreground/90">{c.competitor_gap}</span>
+                          </p>
+                        ) : null}
+                        {c.our_differentiation ? (
+                          <p>
+                            <span className="font-semibold text-emerald-700/90 dark:text-emerald-400">우리 차별화 </span>
+                            <span className="text-foreground/90">{c.our_differentiation}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-xs">{c.differentiation || '—'}</span>
+                    )}
                   </td>
                 </tr>
               ))}

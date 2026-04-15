@@ -150,7 +150,15 @@ export async function runPipelineGeminiGroqText(options: {
       }
       if (!groqKey) throw new Error('Groq key not available')
       const groqRes = await groqCompleteChat(groqKey, messages, { maxTokens: groqMaxTokens })
-      if (!groqRes.text || groqRes.quotaError) throw new Error('Groq failed')
+      /** 빈 응답·쿼터는 폴백 트리거로 던져야 Gemini로 이어짐 (제네릭 'Groq failed'는 isFallbackTriggerError 미통과) */
+      if (groqRes.quotaError) {
+        const q = new Error('429 Groq rate limit or quota') as Error & { status?: number }
+        q.status = 429
+        throw q
+      }
+      if (!groqRes.text?.trim()) {
+        throw new Error('network error: Groq returned empty output')
+      }
       const text = groqRes.text
       await safeRecord(ctx, {
         stepName: step,
@@ -172,7 +180,14 @@ export async function runPipelineGeminiGroqText(options: {
         try {
           if (primaryIsGemini && groqKey) {
             const groqRes = await groqCompleteChat(groqKey, messages, { maxTokens: groqMaxTokens })
-            if (!groqRes.text || groqRes.quotaError) throw new Error('Groq fallback failed')
+            if (groqRes.quotaError) {
+              const q = new Error('429 Groq rate limit or quota') as Error & { status?: number }
+              q.status = 429
+              throw q
+            }
+            if (!groqRes.text?.trim()) {
+              throw new Error('network error: Groq fallback returned empty output')
+            }
             const text = groqRes.text
             usedFallback = true
             await safeRecord(ctx, {

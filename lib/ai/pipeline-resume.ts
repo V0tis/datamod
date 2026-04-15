@@ -28,14 +28,34 @@ export type CompetitionDataShape = {
     positioning?: string
     target_market?: string
     market_presence?: number
+    /** Y축 버블: 성장성(1–10). legacy 필드명 innovation_level과 동일 의미 */
     innovation_level?: number
     key_feature?: string
     pricing?: string
+    /** 레거시 한 필드 요약 */
     differentiation?: string
+    /** 경쟁사 집단이 놓친 기능·가격 공백 (DATA 근거) */
+    competitor_gap?: string
+    /** 우리(키워드 제품)가 취할 차별화 각도 */
+    our_differentiation?: string
     strength?: string
     weakness?: string
+    /** 시장 점유·성장성 좌표 산정 근거 (로드맵·OKR 근거용) */
+    score_rationale?: string
   }>
   market_structure?: string
+  /** 기능·가격 차원 Strategic Gap */
+  strategic_gaps?: {
+    functional?: string[]
+    pricing?: string[]
+    summary?: string
+  }
+  /** 로드맵·OKR에 바로 쓰는 PM 요약: 이 분석이 기획 근거가 되는 이유 */
+  pm_planning_summary?: string
+  strategic_action_plan?: {
+    roadmap_priorities?: Array<{ title: string; rationale?: string; priority_rank?: number }>
+    okr_key_results?: Array<{ objective?: string; key_results?: string[] }>
+  }
 }
 
 export type InsightDataShape = {
@@ -118,6 +138,9 @@ function parseCompetitionData(payload: unknown): CompetitionDataShape | null {
   const p = payload as {
     competitive_landscape?: Array<Record<string, unknown>>
     market_structure?: unknown
+    strategic_gaps?: unknown
+    pm_planning_summary?: unknown
+    strategic_action_plan?: unknown
   }
   const raw = Array.isArray(p.competitive_landscape) ? p.competitive_landscape : []
   const competitive_landscape = raw
@@ -126,17 +149,21 @@ function parseCompetitionData(payload: unknown): CompetitionDataShape | null {
       const name = typeof c.name === 'string' ? c.name.trim() : ''
       if (!name) return null
       const str = (k: string) => (typeof c[k] === 'string' ? (c[k] as string).trim() : undefined)
+      const yScore = c.innovation_level ?? c.growth_score
       return {
         name,
         positioning: str('positioning'),
         target_market: str('target_market'),
         market_presence: clampCompetitorScore1to10(c.market_presence),
-        innovation_level: clampCompetitorScore1to10(c.innovation_level),
+        innovation_level: clampCompetitorScore1to10(yScore),
         key_feature: str('key_feature'),
         pricing: str('pricing'),
         differentiation: str('differentiation'),
+        competitor_gap: str('competitor_gap'),
+        our_differentiation: str('our_differentiation'),
         strength: str('strength'),
         weakness: str('weakness'),
+        score_rationale: str('score_rationale'),
       }
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
@@ -145,7 +172,74 @@ function parseCompetitionData(payload: unknown): CompetitionDataShape | null {
     ms && typeof ms === 'object' && typeof (ms as { summary?: string }).summary === 'string'
       ? (ms as { summary: string }).summary
       : undefined
-  return { competitive_landscape, market_structure }
+
+  let strategic_gaps: CompetitionDataShape['strategic_gaps']
+  const sg = p.strategic_gaps
+  if (sg && typeof sg === 'object') {
+    const o = sg as Record<string, unknown>
+    const functional = Array.isArray(o.functional_gaps)
+      ? o.functional_gaps.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : Array.isArray(o.functional)
+        ? o.functional.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        : undefined
+    const pricing = Array.isArray(o.pricing_gaps)
+      ? o.pricing_gaps.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : Array.isArray(o.pricing)
+        ? o.pricing.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        : undefined
+    const summary = typeof o.summary === 'string' ? o.summary.trim() : undefined
+    if (functional?.length || pricing?.length || summary) strategic_gaps = { functional, pricing, summary }
+  }
+
+  const pm_planning_summary =
+    typeof p.pm_planning_summary === 'string' ? p.pm_planning_summary.trim() : undefined
+
+  let strategic_action_plan: CompetitionDataShape['strategic_action_plan']
+  const sap = p.strategic_action_plan
+  if (sap && typeof sap === 'object') {
+    const o = sap as Record<string, unknown>
+    const roadmap_priorities = Array.isArray(o.roadmap_priorities)
+      ? o.roadmap_priorities
+          .map((r) => {
+            if (!r || typeof r !== 'object') return null
+            const x = r as Record<string, unknown>
+            const title = typeof x.title === 'string' ? x.title.trim() : ''
+            if (!title) return null
+            return {
+              title,
+              rationale: typeof x.rationale === 'string' ? x.rationale.trim() : undefined,
+              priority_rank: typeof x.priority_rank === 'number' ? x.priority_rank : undefined,
+            }
+          })
+          .filter((x): x is NonNullable<typeof x> => x != null)
+      : undefined
+    const okr_key_results = Array.isArray(o.okr_key_results)
+      ? o.okr_key_results
+          .map((r) => {
+            if (!r || typeof r !== 'object') return null
+            const x = r as Record<string, unknown>
+            const key_results = Array.isArray(x.key_results)
+              ? x.key_results.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+              : undefined
+            return {
+              objective: typeof x.objective === 'string' ? x.objective.trim() : undefined,
+              key_results,
+            }
+          })
+          .filter((x): x is NonNullable<typeof x> => x != null)
+      : undefined
+    if (roadmap_priorities?.length || okr_key_results?.length) {
+      strategic_action_plan = { roadmap_priorities, okr_key_results }
+    }
+  }
+
+  return {
+    competitive_landscape,
+    market_structure,
+    ...(strategic_gaps ? { strategic_gaps } : {}),
+    ...(pm_planning_summary ? { pm_planning_summary } : {}),
+    ...(strategic_action_plan ? { strategic_action_plan } : {}),
+  }
 }
 
 function parseInsightData(payload: unknown): InsightDataShape | null {

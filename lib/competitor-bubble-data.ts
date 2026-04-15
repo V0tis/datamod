@@ -9,6 +9,8 @@ export type CompetitorScatterRow = {
   key_feature?: string
   pricing?: string
   differentiation?: string
+  /** 시장 점유·성장성 좌표 산정 근거 */
+  score_rationale?: string
 }
 
 type Tier = 'leader' | 'challenger' | 'niche' | 'emerging'
@@ -63,6 +65,7 @@ export type ScatterPayload = {
   name: string
   positioning?: string
   differentiation?: string
+  score_rationale?: string
   inferred?: boolean
   size: number
   tier: Tier
@@ -123,6 +126,7 @@ export function toScatterPayload(competitors: CompetitorScatterRow[]): ScatterPa
       name,
       positioning: typeof c.positioning === 'string' ? c.positioning.trim() : undefined,
       differentiation: typeof c.differentiation === 'string' ? c.differentiation.trim() : undefined,
+      score_rationale: typeof c.score_rationale === 'string' ? c.score_rationale.trim() : undefined,
       inferred,
       size: Math.min(120, Math.max(40, sizeBase)),
       tier,

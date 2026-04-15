@@ -68,9 +68,22 @@ export type StructuredAnalysisFields = {
     key_feature?: string
     pricing?: string
     differentiation?: string
+    competitor_gap?: string
+    our_differentiation?: string
     strength?: string
     weakness?: string
+    score_rationale?: string
   }>
+  strategic_gaps?: {
+    functional?: string[]
+    pricing?: string[]
+    summary?: string
+  }
+  pm_planning_summary?: string
+  strategic_action_plan?: {
+    roadmap_priorities?: Array<{ title: string; rationale?: string; priority_rank?: number }>
+    okr_key_results?: Array<{ objective?: string; key_results?: string[] }>
+  }
   market_structure?: { competition_density?: string; summary?: string }
   market_phase?: string
   /** Opportunity Score (0-100) - PM market attractiveness */

@@ -82,36 +82,57 @@ export function buildTaskTrendsPrompt(
   return buildTaskTrendsPromptParts(keyword, articles, webContext).prompt
 }
 
-/** Task 3: Competition analysis – DATA-DRIVEN ONLY. */
+/** Task 3: Competition analysis – DATA-DRIVEN ONLY, 비즈니스 전략·로드맵 근거 중심. */
 export const TASK_COMPETITION_SYSTEM = `${STRATEGIC_SYSTEM}
 
 사용자 메시지는 KEYWORD / COLLECTED_DATA / TASK / RULES 형식이다.
 
 경쟁 분석: DATA 텍스트에 회사·플랫폼·서비스 이름이 문자 그대로 등장한 경우에만 competitive_landscape에 넣는다.
 - 각 항목은 DATA 안에서 확인 가능한 문장·수치와 연결된다.
-- DATA에 경쟁 주체가 없으면 competitive_landscape는 []로 두고, market_structure.summary만 DATA로 채운다.
+- DATA에 경쟁 주체가 없으면 competitive_landscape는 []로 두고, market_structure.summary·strategic_gaps·pm_planning_summary·strategic_action_plan은 DATA 범위 안에서만 최소한으로 채운다.
 - 언론사·매거진·블로그·뉴스 미디어 브랜드는 경쟁사 후보에서 제외한다(보도 주체로만 등장한 경우).
 
-weakness 필드: DATA에 드러난 제품 한계·가격 민감·지연·CS 이슈·규제 언급 등을 "새 진입자가 파고들 수 있는 실행 가설" 문장으로 쓴다. "차별화하라" 같은 원론 한 줄로 끝내지 않는다.
+【Strategic Gap】 strategic_gaps: 경쟁사 집단이 기능·가격 측면에서 아직 충분히 점유하지 못한 영역을 명시한다. 추측이 아니라 DATA에 근거한 문장·불릿으로만 쓴다.
+【정량 좌표】 각 경쟁사마다 market_presence(시장 점유·존재감 1~10), growth_score(성장성·모멘텀 1~10)를 산출하고, score_rationale에 "왜 이 점수인지" DATA 근거 2~3문장을 쓴다(버블 차트·로드맵 설득력).
+【차별화 대비】 competitor_gap = 경쟁사들이 공통으로 안 하거나 약한 영역. our_differentiation = KEYWORD(우리 제품)이 그 공백을 메울 수 있는 각도. 둘을 대비되게 쓴다. differentiation 필드는 비우거나 competitor_gap+our_differentiation 요약 한 줄로만 써도 된다.
+【PM 근거】 pm_planning_summary: 이 JSON이 로드맵·OKR 수립에 왜 쓰이는지 PM 관점 2~4문장.
+【실행】 strategic_action_plan: roadmap_priorities(차기 제품 우선순위 3~5, rationale에 strategic_gaps·경쟁 공백 연결), okr_key_results(O 목표 후보 + 측정 가능한 KR 문장들).
 
-Format: {
+weakness: DATA에 드러난 한계를 "실험으로 검증 가능한 공략" 문장으로.
+
+Format (필드명·중괄호 유지): {
   "competitive_landscape": [{
     "name": "경쟁사명",
     "positioning": "포지셔닝 (1문장)",
     "target_market": "타겟 시장",
+    "key_feature": "핵심 기능·제품 (DATA 기반)",
+    "pricing": "가격·과금 구조 요약",
     "market_presence": number,
-    "innovation_level": number,
-    "differentiation": "차별화 포인트",
+    "growth_score": number,
+    "score_rationale": "시장 점유·성장성 점수 산정 근거 (DATA, 2~3문장)",
+    "competitor_gap": "경쟁사들이 집단적으로 놓치거나 약한 기능·가격 영역",
+    "our_differentiation": "KEYWORD가 그 공백을 메우는 차별화 포인트",
+    "differentiation": "선택: 위 둘의 한 줄 요약",
     "strength": "강점 (1문장)",
-    "weakness": "DATA 근거 진입·공략 포인트 (PM이 실험으로 옮길 수 있게)"
+    "weakness": "DATA 근거 공략·실험 가설"
   }],
-  "market_structure": { "summary": "시장 구조·공백·진입 포인트 (상황·의미·영향)" }
+  "market_structure": { "summary": "시장 구조·진입 포인트 (상황·의미·영향)" },
+  "strategic_gaps": {
+    "functional_gaps": ["기능적 공백 불릿"],
+    "pricing_gaps": ["가격·과금 공백 불릿"],
+    "summary": "Strategic Gap 한 단락 요약"
+  },
+  "pm_planning_summary": "로드맵·OKR에 바로 쓰는 기획 근거 요약",
+  "strategic_action_plan": {
+    "roadmap_priorities": [{ "priority_rank": number, "title": "제품·기능 우선순위", "rationale": "경쟁 구도·공백과의 연결" }],
+    "okr_key_results": [{ "objective": "목표 테마", "key_results": ["측정 가능한 KR", "..."] }]
+  }
 }
-- market_presence·innovation_level: 1~10 정수. DATA의 사실·비교 언급을 반영한 상대 평가(UI용). 근거가 약하면 4~6대로 보수적으로 두고 strength·weakness 문장에 근거를 녹인다.
-- 5~8개까지. name, positioning, market_presence, innovation_level 필수.
+- market_presence·growth_score: 1~10 정수. 차트 X=시장 점유, Y=성장성.
+- 5~8개까지. name, positioning, target_market, key_feature, pricing, market_presence, growth_score, score_rationale, competitor_gap, our_differentiation 필수(데이터로 채울 수 없으면 해당 항목은 DATA 한계를 한 문장으로 명시).
 Return ONLY valid JSON. 본문은 한국어.`
 
-const TASK_COMPETITION_USER_TASK = `위 DATA만으로 경쟁 JSON을 채운다. competitive_landscape에는 텍스트에 실제로 이름이 나온 회사·플랫폼만 넣는다. 없으면 []. 각 competitor의 weakness는 DATA에 나온 사실(지연·가격·기능 공백·불만·규제 등)을 짚어, 우리가 시도할 수 있는 구체 공략·실험 가설로 문장화한다. market_presence·innovation_level은 1~10으로 차트용 산정. market_structure.summary는 DATA에 기반한 구조·틈만.`
+const TASK_COMPETITION_USER_TASK = `위 DATA만으로 경쟁 JSON을 채운다. competitive_landscape에는 텍스트에 실제로 이름이 나온 회사·플랫폼만 넣는다. 없으면 []. 각 항목은 Competitor Landscape 테이블 컬럼(COMPETITOR·TARGET MARKET·KEY FEATURE·PRICING·DIFFERENTIATION에 대응)이 한 번에 읽히게 채운다. competitor_gap vs our_differentiation 대비를 선명히. strategic_gaps·pm_planning_summary·strategic_action_plan까지 포함해 비즈니스 전략 산출물로 완성한다.`
 
 export function buildTaskCompetitionSections(
   _keyword: string,
