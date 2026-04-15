@@ -1,6 +1,8 @@
 'use client'
 
+import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export interface ChartInsightData {
   insight?: string
@@ -21,6 +23,8 @@ export interface ChartWithInsightProps {
   headerActions?: React.ReactNode
   /** `flat`: 테두리·배경만으로 구분 (중첩 카드 느낌 완화) */
   variant?: 'default' | 'flat'
+  /** 산출 로직 요약 — [i] 툴팁 */
+  logicHint?: string | null
 }
 
 /**
@@ -34,23 +38,45 @@ export function ChartWithInsight({
   className,
   headerActions,
   variant = 'default',
+  logicHint,
 }: ChartWithInsightProps) {
   const hasInsight = Boolean(insight?.trim() || takeaway?.trim())
   const flat = variant === 'flat'
+  const hint = logicHint?.trim()
 
   return (
     <div
       className={cn(
         flat
-          ? 'rounded-lg border border-slate-100 bg-slate-50/60 p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950/40'
-          : 'rounded-xl border border-border/60 bg-muted/5 p-4',
+          ? 'rounded-lg border border-slate-100 bg-white p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950/50'
+          : 'rounded-xl border border-border/60 bg-white p-4 dark:bg-zinc-950/40',
         className
       )}
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          {title}
-        </h4>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {title}
+          </h4>
+          {hint ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-zinc-800"
+                    aria-label="이 데이터는 어떻게 산출되었는가"
+                  >
+                    <Info className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                  {hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
         {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
       </div>
       <div className="mb-3">{children}</div>

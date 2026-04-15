@@ -147,8 +147,8 @@ export function OpportunityScoreBreakdown({
         {/* 1. Base score */}
         <div className="flex items-center gap-3 sm:gap-4">
           <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{baseLabel}</span>
-          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-muted/60 flex items-center justify-center min-w-0">
-            <span className="text-sm font-bold tabular-nums text-foreground">{BASE}</span>
+          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-blue-100/90 flex items-center justify-center min-w-0 dark:bg-blue-950/50">
+            <span className="text-sm font-bold tabular-nums text-blue-900 dark:text-blue-100">{BASE}</span>
           </div>
           <span className="text-sm font-bold tabular-nums text-muted-foreground w-10 text-right shrink-0">{BASE}</span>
         </div>
@@ -169,7 +169,7 @@ export function OpportunityScoreBreakdown({
                 <div
                   className={cn(
                     'absolute top-0 bottom-0 h-full rounded transition-all duration-500 flex items-center justify-center z-10',
-                    isPositive ? 'bg-emerald-500/90 dark:bg-emerald-600/80' : 'bg-rose-500/90 dark:bg-rose-600/80'
+                    isPositive ? 'bg-blue-600/90 dark:bg-blue-500/85' : 'bg-red-500/90 dark:bg-red-500/85'
                   )}
                   style={{
                     width: `${barWidthPct}%`,

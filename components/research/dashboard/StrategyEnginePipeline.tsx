@@ -97,12 +97,18 @@ export interface StrategyEnginePipelineProps {
   globalErrorMessage?: string
   /** Hero 내장 시 카드/박스 중첩 제거, 기회 점수 그리드와 시각적 통일 */
   embedded?: boolean
+  /** 접이식 헤더와 중복되지 않게 상단 스파클 제목 행 숨김 */
+  hidePipelineTitle?: boolean
+  /** 에러 시 재시도 버튼·행 강조(접이식에서 자동 펼침과 함께 사용) */
+  prominentFailedRetry?: boolean
   /** AI 우선 모델 (run/setting) - task.provider 없을 때 fallback. priority: step > run > setting */
   aiPrimaryModel?: 'gemini' | 'groq'
   /** reportId - 변경 시 타임라인 상태 초기화 (stale error 방지) */
   resultId?: string | null
   /** 스트리밍 중 진행 메타(최종 정제 문구 등) */
   streamingProgressMeta?: AnalysisProgressMeta | null
+  /** 분석이 아직 끝나지 않았을 때(폴링/스트림) 큐 대기 배너 판별에 사용 */
+  pipelineInFlight?: boolean
   result?: {
     marketNews?: string[]
     painPoints?: string[]
@@ -355,9 +361,12 @@ export function StrategyEnginePipeline({
   globalErrorMessage,
   result,
   embedded = false,
+  hidePipelineTitle = false,
+  prominentFailedRetry = false,
   aiPrimaryModel = 'gemini',
   resultId,
   streamingProgressMeta = null,
+  pipelineInFlight = false,
   className,
 }: StrategyEnginePipelineProps) {
   /** 단계별 '분석 결과' 카드 펼침 — 분석 완료 후 사용자가 연 경우에만 true */
@@ -456,6 +465,16 @@ export function StrategyEnginePipeline({
 
   const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
 
+  const queueWaitingBanner = (() => {
+    if (!pipelineInFlight || allCompleted) return false
+    const statuses = PIPELINE_STAGES.map((_, i) => getStatus(i))
+    if (statuses.some((s) => s === 'running')) return false
+    for (let i = 1; i < statuses.length; i++) {
+      if (statuses[i - 1] === 'completed' && statuses[i] === 'pending') return true
+    }
+    return false
+  })()
+
   const streamingActivityLog = useResearchStore((s) => s.streamingActivityLog)
   const activityRows = useMemo(
     () =>
@@ -478,17 +497,34 @@ export function StrategyEnginePipeline({
       )}
     >
       <div className={cn('flex flex-col gap-4', embedded ? 'py-2' : 'p-5 sm:p-6')}>
-        <div className={cn('flex items-center gap-2 min-w-0', embedded ? '' : 'pb-0.5 border-b border-slate-200/70 dark:border-zinc-800')}>
-          <Sparkles className="h-4 w-4 text-slate-600 dark:text-zinc-400 shrink-0" />
-          <div className="min-w-0">
-            <span className={cn(embedded ? 'text-xs font-medium text-muted-foreground' : 'text-sm font-semibold tracking-tight text-slate-800 dark:text-zinc-100')}>
-              {allCompleted ? `분석 완료 · "${keyword}"` : `분석 파이프라인 · "${keyword}"`}
-            </span>
+        {!hidePipelineTitle ? (
+          <div className={cn('flex items-center gap-2 min-w-0', embedded ? '' : 'pb-0.5 border-b border-slate-200/70 dark:border-zinc-800')}>
+            <Sparkles className="h-4 w-4 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <div className="min-w-0">
+              <span className={cn(embedded ? 'text-xs font-medium text-muted-foreground' : 'text-sm font-semibold tracking-tight text-slate-800 dark:text-zinc-100')}>
+                {allCompleted ? `분석 완료 · "${keyword}"` : `분석 파이프라인 · "${keyword}"`}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="relative">
           <GlobalPipelineActivityStrip logs={activityRows} stripRef={globalStripRef} />
+          {queueWaitingBanner ? (
+            <div
+              className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50/95 px-3 py-2.5 text-xs leading-snug text-sky-950 dark:border-sky-900/80 dark:bg-sky-950/50 dark:text-sky-100"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-sky-600 dark:text-sky-400" aria-hidden />
+              <div>
+                <p className="font-semibold text-sky-950 dark:text-sky-50">다음 분석 준비 중…</p>
+                <p className="mt-0.5 text-[11px] text-sky-900/90 dark:text-sky-200/95">
+                  큐 대기 중이거나 서버가 다음 단계를 배정하는 중입니다. 실시간 상태와 함께 곧 이어집니다.
+                </p>
+              </div>
+            </div>
+          ) : null}
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
             const taskKey = stage.taskId && stage.taskId !== 'done' ? stage.taskId : stage.id
@@ -512,6 +548,7 @@ export function StrategyEnginePipeline({
                   !isError && 'border-slate-200 dark:border-zinc-700',
                   isError &&
                     'rounded-r-lg border-red-300/90 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/30',
+                  isError && prominentFailedRetry && 'ring-2 ring-red-500/45 shadow-md dark:ring-red-500/35',
                 )}
               >
                 <div className="absolute -left-[9px] top-1.5 z-[1]" aria-hidden>
@@ -622,12 +659,19 @@ export function StrategyEnginePipeline({
                   )}
 
                   {status === 'failed' && (() => {
-                    const rawError = (task as { error_message?: string } | null)?.error_message ?? globalErrorMessage ?? '오류 발생'
-                    const { description, recoveryHint, possibleCauses, variant: errVariant } = getAnalysisErrorMessage(rawError)
+                    const rawError =
+                      (task as { error_message?: string } | null)?.error_message?.trim() ||
+                      globalErrorMessage?.trim() ||
+                      ''
+                    const fallbackCopy = '데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+                    const rawForParse = rawError || fallbackCopy
+                    const { description, recoveryHint, possibleCauses, variant: errVariant } = getAnalysisErrorMessage(rawForParse)
                     const isQuota = errVariant === 'quota'
                     return (
                       <div className="mt-2 space-y-2" role="alert">
-                        <div className="text-sm font-medium text-foreground">일시적인 네트워크 오류입니다</div>
+                        <div className="text-sm font-medium text-foreground">
+                          {rawError ? '분석 단계에서 오류가 발생했습니다' : '데이터를 불러오지 못했습니다'}
+                        </div>
                         {description ? <div className="text-xs text-muted-foreground">{description}</div> : null}
                         {recoveryHint ? <div className="text-xs text-muted-foreground">{recoveryHint}</div> : null}
                         {possibleCauses && possibleCauses.length > 0 && (
@@ -643,13 +687,18 @@ export function StrategyEnginePipeline({
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           {onRetryStep && (
                             <Button
-                              variant="outline"
+                              variant={prominentFailedRetry ? 'destructive' : 'outline'}
                               size="sm"
                               onClick={() => onRetryStep(taskKey || undefined)}
-                              className="gap-1.5 h-9 border-slate-300 bg-white text-xs font-medium text-slate-800 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                              className={cn(
+                                'gap-1.5 h-9 text-xs font-medium',
+                                prominentFailedRetry
+                                  ? 'shadow-sm'
+                                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800'
+                              )}
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
-                              이 단계만 재시도
+                              {prominentFailedRetry ? '재시도' : '이 단계만 재시도'}
                             </Button>
                           )}
                           <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 text-xs">

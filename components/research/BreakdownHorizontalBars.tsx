@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,6 +16,15 @@ import { ChartSourceFooter } from '@/components/research/chart-source-footer'
 
 export type BreakdownBarRow = { label: string; value: number; fullMark?: number }
 
+function riskSeverityFill(v: number, vmax: number): string {
+  const t = vmax > 0 ? v / vmax : 0
+  if (t >= 0.82) return '#dc2626'
+  if (t >= 0.62) return '#ea580c'
+  if (t >= 0.42) return '#f97316'
+  if (t >= 0.22) return '#f59e0b'
+  return '#94a3b8'
+}
+
 export function BreakdownHorizontalBars({
   rows,
   valueLabel = '점수',
@@ -22,6 +32,7 @@ export function BreakdownHorizontalBars({
   className,
   heightClass = 'min-h-[220px] max-h-[380px]',
   showSource = true,
+  variant = 'default',
 }: {
   rows: BreakdownBarRow[]
   valueLabel?: string
@@ -30,6 +41,8 @@ export function BreakdownHorizontalBars({
   className?: string
   heightClass?: string
   showSource?: boolean
+  /** 리스크: 값이 클수록 붉은 톤 */
+  variant?: 'default' | 'risk'
 }) {
   const data = rows.map((r) => ({
     ...r,
@@ -67,7 +80,13 @@ export function BreakdownHorizontalBars({
               formatter={(v: number) => [`${v}${data[0]?.fullMark === 5 ? '/5' : ''}`, valueLabel]}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
             />
-            <Bar dataKey="v" fill={CHART_MINT} radius={[0, 6, 6, 0]} maxBarSize={18} name={valueLabel} />
+            <Bar dataKey="v" fill={variant === 'risk' ? '#ea580c' : CHART_MINT} radius={[0, 6, 6, 0]} maxBarSize={18} name={valueLabel}>
+              {variant === 'risk'
+                ? data.map((d, i) => (
+                    <Cell key={`risk-${d.label}-${i}`} fill={riskSeverityFill(d.v, vmax)} />
+                  ))
+                : null}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -170,6 +170,10 @@ export function StrategyExecutionTable({
     [key]
   )
 
+  const openTextDialog = useCallback((title: string, markdown: string) => {
+    setTextDialog({ title, markdown })
+  }, [])
+
   const setRowStatus = (index: number, status: RowStatus) => {
     setStatusByIndex((prev) => {
       const next = { ...prev, [index]: status }
@@ -210,10 +214,6 @@ export function StrategyExecutionTable({
       </div>
     )
   }
-
-  const openTextDialog = useCallback((title: string, markdown: string) => {
-    setTextDialog({ title, markdown })
-  }, [])
 
   return (
     <div className={cn('max-w-full min-w-0 overflow-hidden', shell)}>

@@ -96,6 +96,7 @@ export function ReportSectionTabBar({ className }: { className?: string }) {
         className={cn(
           'fixed left-0 right-0 z-[60] border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/90',
           'md:px-4 lg:px-6',
+          /* 글로벌 헤더(3.5rem) 아래 고정 — 상단 보조 버튼 제거 후에도 동일 오프셋 유지 */
           hideGlobalHeader ? 'top-0' : 'top-14',
           'transition-[top] duration-200 ease-out',
           className

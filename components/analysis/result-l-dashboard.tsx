@@ -19,10 +19,17 @@ import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkP
 import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
 import { injectKeywordBold } from '@/lib/text-keyword-bold'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
-import { AnalysisPhaseRerunIcons } from '@/components/research/analysis-phase-rerun-icons'
 import { MotionReveal } from '@/components/common/MotionReveal'
-import { PipelineStepperSlim } from '@/components/research/dashboard/PipelineStepperSlim'
-import { type PipelineSlimStatusContext } from '@/lib/analysis/pipeline-slim-status'
+import { useResearchStore } from '@/lib/stores/research-store'
+import { toast } from 'sonner'
+import { CollapsibleAnalysisPipeline } from '@/components/analysis/CollapsibleAnalysisPipeline'
+import { StrategyEnginePipeline } from '@/components/research/dashboard/StrategyEnginePipeline'
+import { taskIdToResearchRunOptions } from '@/lib/analysis/pipeline-task-retry'
+import {
+  getPipelineCollapsedHeadline,
+  getPipelineProgressPercent,
+  inferQueueWaitingBetweenSteps,
+} from '@/lib/analysis/pipeline-collapsed-headline'
 import { createIdleState, type StreamingState } from '@/lib/types/analysis-modes'
 import { scrollToReportSection } from '@/components/analysis/report-scroll-toc'
 import { ReportSectionTabBar } from '@/components/analysis/report-section-tab-bar'
@@ -37,19 +44,6 @@ function isStepComplete(
   return tasks?.some((t) => t.step_name === step && t.status === 'completed') ?? false
 }
 
-/** 파이프라인 슬림 스텝 인덱스 → 리포트 앵커 id (`lib/report-section-ids`와 동일) */
-const PIPELINE_INDEX_TO_SECTION_ID = [
-  'summary',
-  'market',
-  'competition',
-  'insights',
-  'strategic',
-  'action',
-  'summary',
-  'summary',
-  'summary',
-] as const
-
 type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
   countryCode?: string
   aiPrimaryModel?: 'gemini' | 'groq'
@@ -60,6 +54,8 @@ type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
   pipelineHasError?: boolean
   pipelineErrorStepIndex?: number
   pipelineLoading?: boolean
+  /** 타임라인 실패 시 백엔드/스트림 메시지 */
+  pipelineGlobalErrorMessage?: string | null
 }
 
 /** 글로벌 헤더(3.5rem) + 리포트 탭(~3.25rem) 대략 보정 — smooth scroll 시 제목이 가리지 않게 */
@@ -87,6 +83,7 @@ export function ResultLDashboard({
   pipelineHasError = false,
   pipelineErrorStepIndex = 0,
   pipelineLoading = false,
+  pipelineGlobalErrorMessage = null,
 }: ResultLDashboardProps) {
   const streamingState = streamingStateProp ?? createIdleState()
   const effectiveResult = displayResult ?? result
@@ -97,8 +94,29 @@ export function ResultLDashboard({
     streamingState.status === 'streaming' ||
     streamingState.status === 'completed'
 
-  const [userPinnedPipeline, setUserPinnedPipeline] = useState(false)
-  const [pickedPipelineIndex, setPickedPipelineIndex] = useState<number | null>(null)
+  const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
+  const analysisBusy = useResearchStore((s) => s.isAnalyzingNow())
+
+  const handleRetryPipelineStep = useCallback(
+    (failedTaskId?: string) => {
+      const k = keyword.trim()
+      if (!k) {
+        toast.error('키워드가 없습니다.')
+        return
+      }
+      if (phaseRerunDisabled || analysisBusy) {
+        toast.warning('다른 분석이 끝난 뒤 재시도할 수 있습니다.')
+        return
+      }
+      const opts = taskIdToResearchRunOptions(failedTaskId)
+      void startStreamingResearch(k, {
+        country_code: countryCode,
+        ai_primary_model: aiPrimaryModel,
+        ...opts,
+      }).catch(() => {})
+    },
+    [keyword, phaseRerunDisabled, analysisBusy, startStreamingResearch, countryCode, aiPrimaryModel]
+  )
 
   const reportId = effectiveResult?.reportId ?? null
   const sectionKeyPrefix = reportId ?? 'pending'
@@ -118,16 +136,38 @@ export function ResultLDashboard({
   const stableOppScore =
     liveOppNum ?? (analysisFailed ? lastStableOppRef.current : null)
 
-  useEffect(() => {
-    setUserPinnedPipeline(false)
-    setPickedPipelineIndex(null)
-  }, [reportId])
-
   const streamDone = streamingState.status === 'completed' && !pipelineHasError
   const streamingLive =
     streamingState.status === 'running' || streamingState.status === 'streaming' ? streamingState : null
   const streamingStepIdLive = streamingLive?.stepId
   const streamingCurrentStepLive = streamingLive?.currentStep
+  const streamingRetryMessage = streamingLive?.retryMessage
+  const streamingArticleTitle = streamingLive?.currentArticleTitle
+  const streamingProgressMetaLive = streamingLive?.progressMeta
+
+  const pipelineInFlight =
+    !!pipelineLoading ||
+    analysisBusy ||
+    streamingState.status === 'running' ||
+    streamingState.status === 'streaming' ||
+    polledStatus === 'running'
+
+  const analysisTasksForPipeline = useMemo(() => {
+    if (!analysisTasks?.length) return null
+    return analysisTasks.map((t) => {
+      const st = t.status as 'pending' | 'running' | 'completed' | 'failed'
+      const err =
+        t && typeof t === 'object' && 'error_message' in t && (t as { error_message?: unknown }).error_message != null
+          ? String((t as { error_message?: unknown }).error_message)
+          : null
+      return {
+        step_name: t.step_name,
+        status: st,
+        output_data: t.output_data,
+        error_message: err,
+      }
+    })
+  }, [analysisTasks])
 
   const timelineStep = useMemo(() => {
     if (polledStatus === 'running' && polledProgressStep != null) {
@@ -161,27 +201,6 @@ export function ResultLDashboard({
     [pipelineHasError, streamDone, displayResult, pipelineLoading]
   )
 
-  const slimCtx: PipelineSlimStatusContext = useMemo(
-    () => ({
-      analysisTasks,
-      streamingStepId: streamingStepIdLive,
-      currentStep: timelineStep,
-      allCompleted,
-      hasError: pipelineHasError,
-      errorStepIndex: pipelineErrorStepIndex,
-      result: effectiveResult ?? null,
-    }),
-    [
-      analysisTasks,
-      streamingStepIdLive,
-      timelineStep,
-      allCompleted,
-      pipelineHasError,
-      pipelineErrorStepIndex,
-      effectiveResult,
-    ]
-  )
-
   const showPipeline =
     polledProgressStep != null ||
     !!polledStatus ||
@@ -190,12 +209,48 @@ export function ResultLDashboard({
     streamDone ||
     pipelineLoading
 
-  const handlePipelineStep = useCallback((i: number) => {
-    setUserPinnedPipeline(true)
-    setPickedPipelineIndex(i)
-    const id = PIPELINE_INDEX_TO_SECTION_ID[i] ?? 'summary'
-    scrollToReportSection(id)
-  }, [])
+  const hasFailedTask = useMemo(
+    () => !!(analysisTasksForPipeline?.some((t) => t.status === 'failed')),
+    [analysisTasksForPipeline]
+  )
+
+  const queueWaitingForHeader = useMemo(
+    () =>
+      inferQueueWaitingBetweenSteps(pipelineInFlight, allCompleted, analysisTasksForPipeline ?? undefined),
+    [pipelineInFlight, allCompleted, analysisTasksForPipeline]
+  )
+
+  const pipelineHeadline = useMemo(
+    () =>
+      getPipelineCollapsedHeadline({
+        allCompleted,
+        pipelineHasError,
+        hasFailedTask,
+        pipelineInFlight,
+        timelineStep,
+        streamingStepId: streamingStepIdLive,
+        queueWaiting: queueWaitingForHeader,
+      }),
+    [
+      allCompleted,
+      pipelineHasError,
+      hasFailedTask,
+      pipelineInFlight,
+      timelineStep,
+      streamingStepIdLive,
+      queueWaitingForHeader,
+    ]
+  )
+
+  const pipelineProgressPct = useMemo(
+    () =>
+      getPipelineProgressPercent({
+        allCompleted,
+        timelineStep,
+        analysisTasks: analysisTasksForPipeline ?? undefined,
+      }),
+    [allCompleted, timelineStep, analysisTasksForPipeline]
+  )
 
   const km = effectiveResult?.key_metrics
   const scoreRationale =
@@ -258,6 +313,49 @@ export function ResultLDashboard({
   const skStrategic = loading && !executionDone
   const skAction = loading && !executionDone
 
+  function renderAnalysisTimeline() {
+    if (!showPipeline || !keyword.trim()) return null
+    return (
+      <CollapsibleAnalysisPipeline
+        title={pipelineHeadline.title}
+        sub={pipelineHeadline.sub}
+        progressPercent={pipelineProgressPct}
+        queueWaiting={queueWaitingForHeader}
+        allCompleted={allCompleted}
+        hasError={pipelineHasError}
+        pipelineInFlight={pipelineInFlight}
+        reportId={reportId}
+        autoExpandOnError
+        hasFailedTask={hasFailedTask}
+      >
+        <StrategyEnginePipeline
+          keyword={keyword}
+          currentStep={timelineStep >= 0 ? timelineStep : 0}
+          allCompleted={allCompleted}
+          streamingStepId={streamingStepIdLive}
+          retryMessage={streamingRetryMessage}
+          currentArticleTitle={streamingArticleTitle}
+          taskData={taskData}
+          analysisTasks={analysisTasksForPipeline}
+          newsList={newsList}
+          onRetryStep={handleRetryPipelineStep}
+          hasError={pipelineHasError}
+          errorStepIndex={pipelineErrorStepIndex}
+          globalErrorMessage={pipelineGlobalErrorMessage ?? undefined}
+          result={effectiveResult ?? null}
+          aiPrimaryModel={aiPrimaryModel}
+          resultId={reportId}
+          streamingProgressMeta={streamingProgressMetaLive ?? null}
+          pipelineInFlight={pipelineInFlight}
+          embedded
+          hidePipelineTitle
+          prominentFailedRetry={pipelineHasError || hasFailedTask}
+          className="border-0 bg-transparent shadow-none dark:bg-transparent"
+        />
+      </CollapsibleAnalysisPipeline>
+    )
+  }
+
   if (!hasResultData && !hasPipelineContext) {
     return (
       <div className="rounded-xl border border-dashed border-slate-100 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
@@ -274,14 +372,7 @@ export function ResultLDashboard({
         aria-label="분석 진행"
       >
         <div id="analysis-live-region" className="mx-auto max-w-3xl space-y-4">
-          {showPipeline && keyword.trim() && (
-            <PipelineStepperSlim
-              keyword={keyword}
-              selectedIndex={userPinnedPipeline ? pickedPipelineIndex : null}
-              onStepClick={handlePipelineStep}
-              {...slimCtx}
-            />
-          )}
+          {renderAnalysisTimeline()}
           <p className="text-center text-sm text-muted-foreground">
             분석 데이터를 불러오는 중입니다. 잠시 후 요약 카드가 표시됩니다.
           </p>
@@ -297,17 +388,8 @@ export function ResultLDashboard({
       role="region"
       aria-label="분석 결과 대시보드"
     >
-      <div className="mx-auto flex w-full max-w-none flex-col gap-1">
-        {showPipeline && keyword.trim() && (
-          <div className="z-30 py-0 lg:sticky lg:top-16">
-            <PipelineStepperSlim
-              keyword={keyword}
-              selectedIndex={userPinnedPipeline ? pickedPipelineIndex : null}
-              onStepClick={handlePipelineStep}
-              {...slimCtx}
-            />
-          </div>
-        )}
+      <div className="mx-auto flex w-full max-w-none flex-col gap-8">
+        {renderAnalysisTimeline()}
 
         <div className="flex min-h-0 flex-col gap-5 overflow-visible xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-6">
           <div className="w-full shrink-0 xl:sticky xl:top-28 xl:z-10 xl:w-[min(100%,18rem)] xl:max-w-none xl:self-start xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:overflow-x-visible">
@@ -327,18 +409,6 @@ export function ResultLDashboard({
               className="min-w-0 space-y-8"
               delay={0.06}
             >
-              {keyword.trim() ? (
-                <div className="flex justify-end">
-                  <AnalysisPhaseRerunIcons
-                    keyword={keyword}
-                    countryCode={countryCode}
-                    aiPrimaryModel={aiPrimaryModel}
-                    disabled={phaseRerunDisabled}
-                    className="shrink-0"
-                  />
-                </div>
-              ) : null}
-
               <section
                 key={`${sectionKeyPrefix}-summary`}
                 id="summary"
@@ -346,7 +416,7 @@ export function ResultLDashboard({
               >
                 <MotionReveal staticLayout={loading} delay={0.04}>
                   <div className="space-y-8 motion-safe:will-change-transform">
-                    <div className="rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950/30">
+                    <div className="rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950">
                       <div className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           요약 · 기회 점수
@@ -359,7 +429,7 @@ export function ResultLDashboard({
                         ) : (
                           <>
                             {/* Hero: 최종 점수 + 핵심 결론 요약 */}
-                            <div className="w-full rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/80">
+                            <div className="w-full rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-950">
                               <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:gap-10">
                                 <div className="flex shrink-0 flex-col items-center justify-center border-b border-slate-100 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10 dark:border-zinc-800">
                                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
@@ -386,7 +456,7 @@ export function ResultLDashboard({
 
                             {/* 전폭 핵심 결론: 3줄 액션 + 본문 */}
                             <div
-                              className="w-full space-y-5 rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/40"
+                              className="w-full space-y-5 rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-950"
                               aria-labelledby={`${sectionKeyPrefix}-conclusion-heading`}
                             >
                               <h3
@@ -408,7 +478,7 @@ export function ResultLDashboard({
                                 analysisFailed={analysisFailed}
                                 breakdown={effectiveResult?.key_metrics?.opportunity_score_breakdown}
                                 useKoreanLabels
-                                className="h-full border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                                className="h-full border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                               />
                               <StrategyFrameworkPanel
                                 key={frameworkPanelKeyF}
@@ -520,7 +590,7 @@ export function ResultLDashboard({
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.06}>
-                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950/20">
+                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950">
                       <div className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-1 pb-3 pt-1 sm:px-0 dark:border-zinc-800">
                         <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           전략 · 프레임워크 · GTM · 평가
@@ -569,7 +639,7 @@ export function ResultLDashboard({
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.08}>
-                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950/20">
+                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950">
                       <div className="space-y-1 border-b border-slate-100 px-1 pb-3 pt-1 sm:px-0 dark:border-zinc-800">
                         <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           액션 플랜

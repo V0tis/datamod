@@ -1376,6 +1376,11 @@ function ResultsContent() {
                 pipelineHasError={hasFailure}
                 pipelineErrorStepIndex={timelinePipelineErrorStepIndex}
                 pipelineLoading={loading}
+                pipelineGlobalErrorMessage={
+                  stepFailureMessage ??
+                  (streamingState.status === 'error' ? streamingState.message : null) ??
+                  (showPolledError ? polledError : null)
+                }
               />
             </ResultSectionErrorBoundary>
             {/* AI 분석 엔진 — 상세는 모달 (페이지 스크롤 유지) */}

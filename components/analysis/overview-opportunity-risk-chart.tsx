@@ -1,33 +1,18 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { Info } from 'lucide-react'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { analysisCardClass } from '@/components/analysis/analysis-card'
 import { OpportunityChartSourceDialog } from '@/components/analysis/opportunity-chart-source-dialog'
 import { cn } from '@/lib/utils'
-import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
-import { breakdownToRadarDisplayRows } from '@/lib/chart/opportunity-radar-display'
+import { topRiskFactorRows } from '@/lib/chart/risk-factor-rows'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { BreakdownHorizontalBars } from '@/components/research/BreakdownHorizontalBars'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
-function toBarRows(
-  breakdown: Record<string, number | undefined> | null | undefined,
-  opportunityScore: number
-): { label: string; value: number; fullMark: number }[] {
-  const base = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
-  const rows = breakdownToRadarDisplayRows(base as Record<string, number | undefined>)
-  if (rows.length >= 4) {
-    return rows.map((r) => ({ label: r.subject, value: r.score, fullMark: r.fullMark }))
-  }
-  const s = Math.min(100, Math.max(0, Math.round(opportunityScore)))
-  return [
-    { label: '기회', value: s, fullMark: 100 },
-    { label: '성장', value: Math.round(s * 0.9), fullMark: 100 },
-    { label: '수요', value: Math.round(s * 0.85), fullMark: 100 },
-    { label: '리스크 압력', value: Math.round(Math.max(0, 100 - s) * 0.75), fullMark: 100 },
-    { label: '타이밍', value: Math.round(s * 0.8), fullMark: 100 },
-  ]
-}
+const RISK_CHART_LOGIC =
+  '기회 점수 breakdown에서 리스크·경쟁·타이밍 관련 축을 골라 동일 스케일(0~100)로 환산한 뒤, 위험도가 높은 순으로 상위 5개만 표시합니다.'
 
 export function OverviewOpportunityRiskChart({
   result,
@@ -41,14 +26,32 @@ export function OverviewOpportunityRiskChart({
   const scoreRaw = result?.key_metrics?.opportunity_score
   const score = typeof scoreRaw === 'number' && Number.isFinite(scoreRaw) ? scoreRaw : 50
   const breakdown = result?.key_metrics?.opportunity_score_breakdown as Record<string, number | undefined> | undefined
-  const barRows = toBarRows(breakdown, score)
+  const barRows = topRiskFactorRows(breakdown, score)
   const scoreReasoning = result?.key_metrics?.opportunity_score_reasoning
   const showSkeleton = loading && (result == null || scoreRaw == null)
 
   return (
-    <div className={cn(analysisCardClass, 'p-5', className)}>
+    <div className={cn(analysisCardClass, 'bg-white p-5 dark:bg-zinc-950', className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">기회·리스크 다각도 뷰</h3>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">리스크 요인 (상위 5)</h3>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-zinc-800"
+                  aria-label="이 데이터는 어떻게 산출되었는가"
+                >
+                  <Info className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                {RISK_CHART_LOGIC}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         {!showSkeleton ? <OpportunityChartSourceDialog reasoning={scoreReasoning} breakdown={breakdown} /> : null}
       </div>
       {showSkeleton ? (
@@ -60,7 +63,14 @@ export function OverviewOpportunityRiskChart({
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
         >
-          <BreakdownHorizontalBars rows={barRows} valueLabel="지표" maxDomain={100} heightClass="min-h-[240px] max-h-[400px]" />
+          <BreakdownHorizontalBars
+            rows={barRows}
+            valueLabel="위험도(상대)"
+            maxDomain={100}
+            heightClass="min-h-[240px] max-h-[400px]"
+            variant="risk"
+            showSource
+          />
         </motion.div>
       )}
     </div>

@@ -197,7 +197,7 @@ export function StrategyFrameworkPanel({
       <div
         key={instanceKey}
         className={cn(
-          'rounded-xl border border-slate-100 bg-card shadow-none dark:border-zinc-800 dark:bg-zinc-900',
+          'rounded-xl border border-slate-100 bg-white shadow-none dark:border-zinc-800 dark:bg-zinc-950',
           className
         )}
       >

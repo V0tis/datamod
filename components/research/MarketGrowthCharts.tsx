@@ -159,6 +159,7 @@ export function MarketGrowthCharts({
       ) : (
         <ChartWithInsight
           title="시장 다각도 분석 (막대)"
+          logicHint="기회 점수 breakdown의 각 축을 동일 스케일(0~100)로 환산한 뒤, 막대 길이로 상대 강도를 비교합니다."
           insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
           takeaway={ma?.takeaway}
           variant="flat"
@@ -174,7 +175,7 @@ export function MarketGrowthCharts({
             />
           }
         >
-          <div className="mb-3 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="mb-3 rounded-md border border-slate-100 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-950">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-300">
               이 차트가 의미하는 핵심 인사이트
             </p>
@@ -197,6 +198,7 @@ export function MarketGrowthCharts({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
         <ChartWithInsight
           title="검색 트렌드 성장"
+          logicHint="시장 성장·트렌드 모멘텀을 반영해 월별 상대 검색 관심도 추정치를 구성합니다. Y축은 데이터 범위에 맞춰 확대됩니다."
           insight={st?.insight}
           takeaway={st?.takeaway}
           variant="flat"
@@ -247,6 +249,7 @@ export function MarketGrowthCharts({
 
         <ChartWithInsight
           title="시장 규모 · 잠재력 (워터폴)"
+          logicHint="기준 가중치(파랑)에서 시장·트렌드·보정 항을 순차 반영해 최종 기회 점수에 가깝게 누적합니다. 파랑=가산·기준, 빨강=감산 흐름입니다."
           insight={ms?.insight}
           takeaway={ms?.takeaway}
           variant="flat"
@@ -270,6 +273,7 @@ export function MarketGrowthCharts({
 
         <ChartWithInsight
           title="시장 도입 추이"
+          logicHint="성장 시그널 건수와 트렌드 강도를 반영한 S곡선 형태의 단계별 도입률 추정입니다."
           insight={ar?.insight}
           takeaway={ar?.takeaway}
           variant="flat"

@@ -1,8 +1,12 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { ChartSourceFooter } from '@/components/research/chart-source-footer'
-import { CHART_MINT, CHART_GRAY_AXIS } from '@/lib/chart-theme'
+import { CHART_GRAY_AXIS } from '@/lib/chart-theme'
+
+const BASE_FILL = '#2563eb'
+const POS_FILL = '#3b82f6'
+const NEG_FILL = '#ef4444'
+const NEU_FILL = '#64748b'
 
 type Segment = { label: string; start: number; end: number }
 
@@ -71,10 +75,27 @@ export function MarketScoreWaterfall({
           const yTop = yAt(s.end)
           const yBot = yAt(s.start)
           const bh = Math.max(3, yBot - yTop)
-          const fill = s.end < s.start ? '#f43f5e' : i === 0 ? '#94a3b8' : CHART_MINT
+          const delta = s.end - s.start
+          const fill =
+            i === 0
+              ? BASE_FILL
+              : delta >= 0
+                ? POS_FILL
+                : NEG_FILL
+          const stroke = i === 0 ? NEU_FILL : fill
           return (
             <g key={`${s.label}-${i}`}>
-              <rect x={x} y={yTop} width={barW} height={bh} rx={4} fill={fill} fillOpacity={0.88} />
+              <rect
+                x={x}
+                y={yTop}
+                width={barW}
+                height={bh}
+                rx={4}
+                fill={fill}
+                stroke={stroke}
+                strokeOpacity={0.25}
+                fillOpacity={0.92}
+              />
               <text
                 x={x + barW / 2}
                 y={h - 10}
@@ -95,7 +116,6 @@ export function MarketScoreWaterfall({
           잠재력 누적 → 목표 {final}
         </text>
       </svg>
-      <ChartSourceFooter />
     </div>
   )
 }
