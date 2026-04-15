@@ -21,6 +21,8 @@ export interface StartupConceptCardProps {
   fallbackTargetHint?: string | null
   keyword?: string
   className?: string
+  /** 이중 테두리·그라데이션 제거, 정보 밀도 우선 */
+  variant?: 'default' | 'flat'
 }
 
 /**
@@ -36,7 +38,9 @@ export function StartupConceptCard({
   fallbackTargetHint,
   keyword = '',
   className,
+  variant = 'default',
 }: StartupConceptCardProps) {
+  const flat = variant === 'flat'
   const idea = (productIdea || fallbackProductIdea || '').trim()
   const target = (targetCustomer || fallbackTargetHint || (keyword ? `${keyword} 관련 시장` : '')).trim()
   const monet = (monetization || '').trim()
@@ -56,30 +60,43 @@ export function StartupConceptCard({
   return (
     <div
       className={cn(
-        'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-4 sm:p-5',
+        flat
+          ? 'border-b border-border/50 pb-6'
+          : 'rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-4 sm:p-5',
         className
       )}
     >
-      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+      <h3
+        className={cn(
+          'font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2',
+          flat ? 'text-xs' : 'text-sm'
+        )}
+      >
         <Lightbulb className="h-4 w-4 text-primary" />
         실행 가능한 스타트업 컨셉
       </h3>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div
+        className={cn(
+          'grid gap-4',
+          flat ? 'grid-cols-1 lg:grid-cols-2 lg:gap-x-10 lg:gap-y-3' : 'grid-cols-1 sm:grid-cols-2 gap-4'
+        )}
+      >
         {blocks.map(({ key, label, value, icon: Icon }) => (
           <div
             key={key}
-            className="rounded-lg border border-border/60 bg-card/50 p-3 sm:p-4 min-h-0"
+            className={cn(
+              'min-h-0',
+              flat
+                ? 'grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-1 border-b border-border/35 pb-3 last:border-b-0 sm:pb-3'
+                : 'rounded-lg border border-border/60 bg-card/50 p-3 sm:p-4'
+            )}
           >
-            <div className="flex items-center gap-2 mb-1.5">
+            <div className={cn('flex items-center gap-2', flat && 'self-start pt-0.5')}>
               <Icon className="h-4 w-4 text-primary shrink-0" />
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {label}
-              </p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
             </div>
-            <p className="text-sm font-medium text-foreground leading-snug">
-              {value}
-            </p>
+            <p className={cn('text-sm font-medium text-foreground leading-snug', flat && 'min-w-0')}>{value}</p>
           </div>
         ))}
       </div>

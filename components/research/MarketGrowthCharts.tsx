@@ -5,27 +5,22 @@ import {
   Line,
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   ResponsiveContainer,
   Tooltip,
   CartesianGrid,
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { OpportunityChartSourceDialog } from '@/components/analysis/opportunity-chart-source-dialog'
-import { RadarAngleEllipsisTick } from '@/components/analysis/radar-angle-tick'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 import { breakdownToRadarDisplayRows } from '@/lib/chart/opportunity-radar-display'
 import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT, CHART_MINT_SOFT } from '@/lib/chart-theme'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
+import { BreakdownHorizontalBars } from '@/components/research/BreakdownHorizontalBars'
+import { MarketScoreWaterfall } from '@/components/research/MarketScoreWaterfall'
+import { ChartSourceFooter } from '@/components/research/chart-source-footer'
 
 const CHART_GRAY_FILL = '#94a3b8'
 
@@ -33,19 +28,16 @@ function chartInsightNarrative(insight?: string | null, takeaway?: string | null
   return [insight?.trim(), takeaway?.trim()].filter(Boolean).join('\n\n')
 }
 
-/** Normalize market_growth to -20..+20 scale (handles both formula and legacy 0-100) */
 function normMarketGrowth(v: number): number {
   if (v >= -25 && v <= 25) return v
   return (v - 50) * 0.4
 }
 
-/** Normalize trend_momentum to 0..20 scale */
 function normTrendMomentum(v: number): number {
   if (v >= 0 && v <= 25) return v
   return Math.min(20, Math.max(0, (v / 100) * 20))
 }
 
-/** Generate 6-month search trend line from momentum + market growth */
 function buildSearchTrendData(
   trendMomentum: number,
   marketGrowth: number,
@@ -62,17 +54,6 @@ function buildSearchTrendData(
   })
 }
 
-/** Current vs 1Y projection from opportunity score */
-function buildMarketSizeData(opportunityScore: number): { period: string; size: number }[] {
-  const growthFactor = 1 + (opportunityScore - 50) / 100
-  const projected = Math.round(Math.min(150, Math.max(50, opportunityScore * growthFactor)))
-  return [
-    { period: '현재', size: opportunityScore },
-    { period: '1년 후', size: projected },
-  ]
-}
-
-/** Adoption curve (S-curve style) from growth signals + momentum */
 function buildAdoptionData(
   growthSignalsCount: number,
   trendMomentum: number
@@ -86,6 +67,24 @@ function buildAdoptionData(
     const rate = Math.round(Math.min(100, Math.max(8, strength * sCurve * (0.7 + 0.3 * x))))
     return { stage, rate }
   })
+}
+
+function toMultiAngleRows(
+  breakdown: Record<string, number | undefined>,
+  opportunityScore: number
+): { label: string; value: number; fullMark: number }[] {
+  const rows = breakdownToRadarDisplayRows(breakdown)
+  if (rows.length >= 4) {
+    return rows.map((r) => ({ label: r.subject, value: r.score, fullMark: r.fullMark }))
+  }
+  const s = Math.min(100, Math.max(0, Math.round(opportunityScore)))
+  return [
+    { label: '시장 성장', value: Math.round(s * 0.85), fullMark: 100 },
+    { label: '트렌드', value: Math.round(s * 0.92), fullMark: 100 },
+    { label: '수요 신호', value: Math.round(s * 0.78), fullMark: 100 },
+    { label: '경쟁 압력', value: Math.round(Math.max(0, 100 - s) * 0.7), fullMark: 100 },
+    { label: '타이밍', value: Math.round(s * 0.8), fullMark: 100 },
+  ]
 }
 
 export interface ChartInsights {
@@ -107,16 +106,11 @@ export interface MarketGrowthChartsProps {
   marketTemperatureScore?: number | null
   keyword?: string
   chartInsights?: ChartInsights
-  /** 기회 점수 산출 요약 (모달 근거) */
   opportunityScoreReasoning?: string | null
   className?: string
-  /** 기회 점수·트렌드가 아직 없을 때 방사형 차트 영역만 스켈레톤 */
   radarSkeleton?: boolean
 }
 
-/**
- * 시장 성장: 방사형(다각도) + 트렌드 라인 · 규모 바 · 도입 영역 (민트·그레이 톤).
- */
 export function MarketGrowthCharts({
   opportunityScore,
   breakdown = {},
@@ -134,19 +128,16 @@ export function MarketGrowthCharts({
   const score = Math.min(100, Math.max(0, opportunityScore ?? 0))
 
   const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 50)
-  const sizeData = buildMarketSizeData(score)
-  const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
+  const searchVals = searchData.map((d) => d.value)
+  const sMin = Math.min(...searchVals)
+  const sMax = Math.max(...searchVals)
+  const span = Math.max(4, sMax - sMin)
+  const pad = Math.max(2, span * 0.12)
+  const yLow = Math.max(0, Math.floor(sMin - pad))
+  const yHigh = Math.min(100, Math.ceil(sMax + pad))
 
-  let radarRows = breakdownToRadarDisplayRows(effectiveBreakdown as Record<string, number | undefined>)
-  if (radarRows.length < 4) {
-    radarRows = [
-      { subject: '시장 성장', score: Math.round(score * 0.85), fullMark: 100 },
-      { subject: '트렌드', score: Math.round(score * 0.92), fullMark: 100 },
-      { subject: '수요 신호', score: Math.round(score * 0.78), fullMark: 100 },
-      { subject: '경쟁 압력', score: Math.round(Math.max(0, 100 - score) * 0.7), fullMark: 100 },
-      { subject: '타이밍', score: Math.round(score * 0.8), fullMark: 100 },
-    ]
-  }
+  const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
+  const multiRows = toMultiAngleRows(effectiveBreakdown as Record<string, number | undefined>, score)
 
   const st = chartInsights?.search_trend
   const ms = chartInsights?.market_size
@@ -159,7 +150,7 @@ export function MarketGrowthCharts({
         <SectionContentSkeleton variant="chart" className="rounded-xl border border-border/40 bg-card/30 p-3" />
       ) : (
         <ChartWithInsight
-          title="시장 다각도 분석 (레이더)"
+          title="시장 다각도 분석 (막대)"
           insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
           takeaway={ma?.takeaway}
           className="border border-border/60 bg-card/50"
@@ -175,40 +166,13 @@ export function MarketGrowthCharts({
             />
           }
         >
-          <div className="aspect-square w-full min-h-[240px] max-h-[420px] px-2 pb-2">
-            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={260} debounce={32}>
-              <RadarChart
-                cx="50%"
-                cy="50%"
-                outerRadius="58%"
-                margin={{ top: 40, right: 44, bottom: 40, left: 44 }}
-                data={radarRows}
-              >
-                <PolarGrid stroke={CHART_GRAY_GRID} />
-                <PolarAngleAxis
-                  dataKey="subject"
-                  tick={(p) => <RadarAngleEllipsisTick {...p} fill={CHART_GRAY_AXIS} />}
-                />
-                <PolarRadiusAxis angle={45} domain={[0, 100]} tick={{ fontSize: 9, fill: CHART_GRAY_AXIS }} />
-                <Tooltip
-                  formatter={(v: number) => [`${v}/100`, '점수']}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
-                />
-                <Radar
-                  name="지표"
-                  dataKey="score"
-                  stroke={CHART_MINT}
-                  fill={CHART_MINT_SOFT}
-                  fillOpacity={0.45}
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: CHART_MINT }}
-                  isAnimationActive
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
+          <BreakdownHorizontalBars
+            rows={multiRows}
+            valueLabel="점수"
+            maxDomain={100}
+            heightClass="min-h-[220px] max-h-[400px]"
+            showSource
+          />
         </ChartWithInsight>
       )}
 
@@ -230,10 +194,19 @@ export function MarketGrowthCharts({
               <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
                 <XAxis dataKey="month" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
+                <YAxis
+                  domain={[yLow, yHigh]}
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 32 }}
+                />
                 <Tooltip
                   formatter={(v: number) => [`${v}`, '검색 관심도']}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  contentStyle={{
+                    fontSize: 12,
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  }}
                   cursor={false}
                 />
                 <Line
@@ -250,42 +223,27 @@ export function MarketGrowthCharts({
               </LineChart>
             </ResponsiveContainer>
           </div>
+          <ChartSourceFooter />
         </ChartWithInsight>
 
         <ChartWithInsight
-          title="시장 규모 전망"
+          title="시장 규모 · 잠재력 (워터폴)"
           insight={ms?.insight}
           takeaway={ms?.takeaway}
           headerActions={
             <OpportunityChartSourceDialog
-              title="시장 규모 전망 — 데이터 출처"
+              title="시장 규모 — 데이터 출처"
               variant="chart_insight"
               reasoning={chartInsightNarrative(ms?.insight, ms?.takeaway)}
             />
           }
         >
-          <div className="aspect-video w-full min-h-[160px] max-h-[280px] sm:min-h-[180px] sm:max-h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sizeData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
-                <YAxis domain={[0, 120]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
-                <Tooltip
-                  formatter={(v: number) => [`${v}/100`, '시장 매력도']}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                  cursor={false}
-                />
-                <Bar
-                  dataKey="size"
-                  fill={CHART_MINT}
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={48}
-                  isAnimationActive
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="flex min-h-[200px] flex-col justify-center">
+            <MarketScoreWaterfall
+              opportunityScore={score}
+              marketGrowth={marketGrowth}
+              trendMomentum={trendMomentum}
+            />
           </div>
         </ChartWithInsight>
 
@@ -315,7 +273,12 @@ export function MarketGrowthCharts({
                 <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
                 <Tooltip
                   formatter={(v: number) => [`${v}%`, '도입률']}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                  contentStyle={{
+                    fontSize: 12,
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  }}
                   cursor={false}
                 />
                 <Area
@@ -331,6 +294,7 @@ export function MarketGrowthCharts({
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          <ChartSourceFooter />
         </ChartWithInsight>
       </div>
     </div>

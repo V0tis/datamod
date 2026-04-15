@@ -21,7 +21,7 @@ export interface StrategicActionsSectionProps {
 }
 
 function formatActionForClipboard(a: StrategicActionItem): string {
-  return `${a.title}\n\n설명:\n${a.description}\n\n기회:\n${a.opportunity}`
+  return `${a.title}\n\n상세 실행:\n${a.description}\n\n기대 효과:\n${a.opportunity}`
 }
 
 export function StrategicActionsSection({
@@ -46,7 +46,7 @@ export function StrategicActionsSection({
   const handleExportAll = () => {
     try {
       const lines = actions.map((a, i) =>
-        `## ${i + 1}. ${a.title}\n\n**설명:**\n${a.description}\n\n**기회:**\n${a.opportunity}`
+        `## ${i + 1}. ${a.title}\n\n**상세 실행:**\n${a.description}\n\n**기대 효과:**\n${a.opportunity}`
       ).join('\n\n---\n\n')
       const md = `# 전략 액션\n\n${lines}`
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
@@ -64,20 +64,17 @@ export function StrategicActionsSection({
 
   if (loading && actions.length === 0) {
     return (
-      <section
-        className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-        aria-label="전략 액션"
-      >
-        <div className="p-4 sm:p-5">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2 mb-4">
-            <Target className="h-5 w-5 text-primary" />
+      <section className={cn(className)} aria-label="전략 액션">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+            <Target className="h-4 w-4 text-primary" />
             전략 액션
           </h2>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 rounded-lg border border-border/60 bg-muted/20 animate-pulse" />
-            ))}
-          </div>
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-14 rounded-md bg-muted/25 animate-pulse" />
+          ))}
         </div>
       </section>
     )
@@ -86,79 +83,71 @@ export function StrategicActionsSection({
   if (actions.length === 0) return null
 
   return (
-    <section
-      className={cn('rounded-xl border border-border bg-card shadow-sm overflow-hidden', className)}
-      aria-label="전략 액션"
-    >
-      <div className="p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            전략 액션
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleExportAll}
-            className="gap-1.5 text-xs"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            내보내기
-          </Button>
-        </div>
+    <section className={cn('min-w-0', className)} aria-label="전략 액션">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary" />
+          전략 액션
+        </h2>
+        <Button variant="ghost" size="sm" onClick={handleExportAll} className="gap-1.5 text-xs h-8">
+          <FileDown className="h-3.5 w-3.5" />
+          내보내기
+        </Button>
+      </div>
 
-        <ul className="space-y-4">
-          {actions.map((action, index) => (
-            <li
-              key={action.id}
-              className="rounded-lg border border-border/60 bg-muted/10 p-4 sm:p-5"
-            >
-              <p className="text-xs font-medium text-primary mb-1">
-                {index + 1}. {action.title}
-              </p>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    설명
-                  </p>
-                  <p className="text-foreground leading-relaxed">{action.description}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    기회
-                  </p>
-                  <p className="text-foreground leading-relaxed">{action.opportunity}</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-border/50">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCopy(action)}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  {copiedId === action.id ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  복사
-                </Button>
-                {onSaveAction && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSaveAction(action)}
-                    className="gap-1.5 text-xs h-8"
-                  >
-                    <Bookmark className="h-3.5 w-3.5" />
-                    저장
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+      <div className="rin-table-scroll -mx-0.5 overflow-x-auto rounded-md border border-border/50">
+        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border/60 bg-muted/30 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="whitespace-nowrap px-3 py-2.5 w-10">#</th>
+              <th className="min-w-[140px] px-3 py-2.5">전략</th>
+              <th className="min-w-[220px] px-3 py-2.5">상세 실행 방안</th>
+              <th className="min-w-[180px] px-3 py-2.5">기대 효과</th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-right w-[7rem]">작업</th>
+            </tr>
+          </thead>
+          <tbody>
+            {actions.map((action, index) => (
+              <tr
+                key={action.id}
+                className="border-b border-border/40 transition-colors hover:bg-muted/15 last:border-b-0"
+              >
+                <td className="align-top px-3 py-3 tabular-nums text-muted-foreground">{index + 1}</td>
+                <td className="align-top px-3 py-3 font-medium text-foreground">{action.title}</td>
+                <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 leading-snug">{action.description}</td>
+                <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 leading-snug">{action.opportunity}</td>
+                <td className="align-top px-3 py-3">
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(action)}
+                      className="gap-1 h-8 px-2 text-xs"
+                    >
+                      {copiedId === action.id ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      복사
+                    </Button>
+                    {onSaveAction && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onSaveAction(action)}
+                        className="gap-1 h-8 px-2 text-xs"
+                      >
+                        <Bookmark className="h-3.5 w-3.5" />
+                        저장
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   )

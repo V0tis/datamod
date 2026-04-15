@@ -4,7 +4,6 @@ import { AlertTriangle, ClipboardList, Radar, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { extractNextActionItems } from '@/components/research/NextActionsForPM'
-import { analysisCardClass } from '@/components/analysis/analysis-card'
 
 type Props = {
   result: ResearchResponse | null
@@ -58,7 +57,10 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
       <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">긴급 액션</h3>
       <ul className="space-y-2">
         {items.map(({ key, count, label, hint, icon: Icon, cta, sectionId }) => (
-          <li key={key} className={cn(analysisCardClass, 'p-3')}>
+          <li
+            key={key}
+            className="rounded-lg border border-slate-100 bg-white p-3 shadow-none dark:border-zinc-800 dark:bg-zinc-900"
+          >
             <div className="flex items-start gap-2">
               <div className="flex shrink-0 flex-col items-center leading-none">
                 <span

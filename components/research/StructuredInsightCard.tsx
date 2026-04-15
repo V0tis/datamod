@@ -29,6 +29,8 @@ export interface StructuredInsight {
 export interface StructuredInsightCardProps {
   insight: StructuredInsight
   className?: string
+  /** 리스트형(구분선·여백) — 카드 테두리·그림자 없음 */
+  variant?: 'card' | 'list'
 }
 
 /** Extract key metrics (numbers, scores) from text for highlighting */
@@ -52,8 +54,13 @@ function extractKeyMetrics(text: string): string[] {
  * Structured insight card with 3-line preview and expandable detail.
  * Highlights key metrics.
  */
-export function StructuredInsightCard({ insight, className }: StructuredInsightCardProps) {
+export function StructuredInsightCard({
+  insight,
+  className,
+  variant = 'card',
+}: StructuredInsightCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const isList = variant === 'list'
   const impact = insight.impact ?? insight.whyItMatters ?? ''
   const reason = insight.reason ?? insight.implicationForProduct ?? ''
   const hasExtraSections = Boolean(impact || reason || insight.whyItMatters || insight.implicationForProduct)
@@ -68,34 +75,22 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
   const showImpact = displayImpact.length > 0 && displayImpact !== '—'
   const showReason = displayReason.length > 0 && displayReason !== '—'
 
-  return (
-    <motion.div
-      layout={false}
-      role={hasDetail ? 'button' : undefined}
-      tabIndex={hasDetail ? 0 : undefined}
-      onClick={
-        hasDetail
-          ? () => setExpanded((e) => !e)
-          : undefined
-      }
-      onKeyDown={
-        hasDetail
-          ? (ev) => {
-              if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault()
-                setExpanded((e) => !e)
-              }
-            }
-          : undefined
-      }
-      className={cn(
+  const shellClass = isList
+    ? cn(
+        'border-b border-border/45 py-6 last:border-b-0',
+        hasDetail && 'cursor-pointer',
+        className
+      )
+    : cn(
         'rounded-xl border border-slate-100 bg-white shadow-sm transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-900',
         'hover:-translate-y-1 hover:border-slate-200 hover:shadow-md dark:hover:border-zinc-700',
         hasDetail && 'cursor-pointer',
         className
-      )}
-    >
-      <div className="p-5 sm:p-5 md:p-6 lg:p-7">
+      )
+
+  const inner = (
+    <>
+      <div className={cn(!isList && 'p-5 sm:p-5 md:p-6 lg:p-7', isList && 'px-0')}>
         {(!titleSameAsContents || insight.sourceTimestamp) && (
           <div className="flex justify-between items-start gap-2 mb-1.5">
             <div className="min-w-0 flex-1">
@@ -168,7 +163,12 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
 
       {expanded && hasDetail && (
         <div
-          className="space-y-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7 dark:border-zinc-800 dark:bg-zinc-900/40"
+          className={cn(
+            'space-y-3 border-t px-5 py-4 sm:px-6 lg:px-7',
+            isList
+              ? 'mt-4 border-border/50 bg-muted/20 dark:bg-zinc-900/30'
+              : 'border-slate-100 bg-slate-50/50 dark:border-zinc-800 dark:bg-zinc-900/40'
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           {hasLongSummary && (
@@ -191,6 +191,55 @@ export function StructuredInsightCard({ insight, className }: StructuredInsightC
           )}
         </div>
       )}
+    </>
+  )
+
+  if (isList) {
+    return (
+      <article
+        role={hasDetail ? 'button' : undefined}
+        tabIndex={hasDetail ? 0 : undefined}
+        onClick={hasDetail ? () => setExpanded((e) => !e) : undefined}
+        onKeyDown={
+          hasDetail
+            ? (ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault()
+                  setExpanded((e) => !e)
+                }
+              }
+            : undefined
+        }
+        className={shellClass}
+      >
+        {inner}
+      </article>
+    )
+  }
+
+  return (
+    <motion.div
+      layout={false}
+      role={hasDetail ? 'button' : undefined}
+      tabIndex={hasDetail ? 0 : undefined}
+      onClick={
+        hasDetail
+          ? () => setExpanded((e) => !e)
+          : undefined
+      }
+      onKeyDown={
+        hasDetail
+          ? (ev) => {
+              if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault()
+                setExpanded((e) => !e)
+              }
+            }
+          : undefined
+      }
+      className={shellClass}
+    >
+      {inner}
     </motion.div>
   )
 }

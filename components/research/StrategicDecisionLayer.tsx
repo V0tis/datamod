@@ -27,12 +27,15 @@ export interface StrategicDecisionLayerProps {
   keyword?: string
   /** When true, renders without outer card wrapper (for use inside ResultPageSection) */
   embedded?: boolean
+  /** embedded 전용: 카드 그리드 대신 단일 테이블 */
+  flatTable?: boolean
 }
 
 export function StrategicDecisionLayer({
   result,
   loading = false,
   embedded = false,
+  flatTable = true,
 }: StrategicDecisionLayerProps) {
   const km = result?.key_metrics ?? {}
   const sdl = km.strategic_decision_layer
@@ -121,6 +124,43 @@ export function StrategicDecisionLayer({
   if (embedded) {
     return loading && !hasContent ? (
       <SectionContentSkeleton variant="grid" />
+    ) : flatTable ? (
+      <div className="overflow-x-auto rounded-md border border-border/50">
+        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border/60 bg-muted/30 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="whitespace-nowrap px-3 py-2.5 w-[9rem]">영역</th>
+              <th className="whitespace-nowrap px-3 py-2.5 w-[8rem]">요약</th>
+              <th className="min-w-[240px] px-3 py-2.5">근거·해석</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((card) => {
+              const Icon = card.icon
+              return (
+                <tr key={card.id} className="border-b border-border/40 last:border-b-0 hover:bg-muted/10">
+                  <td className="align-top px-3 py-3">
+                    <span className="flex items-center gap-2 font-medium text-foreground">
+                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      {card.label}
+                    </span>
+                  </td>
+                  <td className="align-top px-3 py-3 font-semibold tabular-nums text-foreground">{card.value}</td>
+                  <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400">
+                    {card.explanation ? (
+                      <MarkdownBody className="prose-base max-w-none text-sm leading-relaxed text-inherit [&_p]:my-0">
+                        {card.explanation}
+                      </MarkdownBody>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {cards.map((card) => {

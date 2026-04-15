@@ -17,6 +17,8 @@ import { AnalysisResultSections } from '@/components/research/AnalysisResultSect
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { MarkdownBody } from '@/components/ui/markdown-body'
+import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
+import { injectKeywordBold } from '@/lib/text-keyword-bold'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { AnalysisPhaseRerunIcons } from '@/components/research/analysis-phase-rerun-icons'
 import { MotionReveal } from '@/components/common/MotionReveal'
@@ -24,6 +26,7 @@ import { PipelineStepperSlim } from '@/components/research/dashboard/PipelineSte
 import { type PipelineSlimStatusContext } from '@/lib/analysis/pipeline-slim-status'
 import { createIdleState, type StreamingState } from '@/lib/types/analysis-modes'
 import { ReportScrollToc, scrollToReportSection } from '@/components/analysis/report-scroll-toc'
+import { ReportSectionTabBar } from '@/components/analysis/report-section-tab-bar'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -59,7 +62,8 @@ type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
   pipelineLoading?: boolean
 }
 
-const sectionScrollClass = 'scroll-mt-24'
+/** 스티키 탭바·헤더와 겹치지 않도록 앵커 여백 */
+const sectionScrollClass = 'scroll-mt-28 md:scroll-mt-32'
 
 /**
  * L자형 분석 대시보드: 슬림 파이프라인, 스티키 목차, 좌측 요약 레일, 단일 스크롤 통합 리포트.
@@ -207,6 +211,23 @@ export function ResultLDashboard({
     return `${t.slice(0, 360).trimEnd()}…`
   }, [conclusionFull])
 
+  const highlightTerms = useMemo(() => {
+    const list: string[] = []
+    if (keyword.trim()) list.push(keyword.trim())
+    const sigs = km?.positive_signals
+    if (Array.isArray(sigs)) {
+      for (const s of sigs.slice(0, 6)) {
+        if (typeof s === 'string' && s.length > 2 && s.length < 56) list.push(s.trim())
+      }
+    }
+    return [...new Set(list)].slice(0, 12)
+  }, [keyword, km])
+
+  const conclusionHighlighted = useMemo(
+    () => injectKeywordBold(conclusionFull, highlightTerms),
+    [conclusionFull, highlightTerms]
+  )
+
   const frameworkExecOutput = useMemo(() => {
     const execTask = analysisTasks?.find((t) => t.step_name === 'execution_layer')
     const raw =
@@ -287,8 +308,8 @@ export function ResultLDashboard({
           </div>
         )}
 
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:sticky xl:top-24 xl:h-fit xl:w-[10.5rem] xl:max-w-[11rem] xl:self-start xl:pr-1">
+        <div className="flex min-h-0 flex-col gap-5 xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-4">
+          <div className="flex w-full shrink-0 flex-col gap-3 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-6rem)] xl:w-[9.25rem] xl:max-w-[10rem] xl:self-start xl:overflow-y-auto xl:pr-0.5">
             <ReportScrollToc />
             <UrgentTaskCards
               result={effectiveResult ?? null}
@@ -299,6 +320,7 @@ export function ResultLDashboard({
           </div>
 
           <div className="min-w-0 flex-1 space-y-8">
+            <ReportSectionTabBar />
             <MotionReveal
               key={`main-${sectionKeyPrefix}`}
               staticLayout={loading}
@@ -324,7 +346,7 @@ export function ResultLDashboard({
               >
                 <MotionReveal staticLayout={loading} delay={0.04}>
                   <div className="space-y-8 motion-safe:will-change-transform">
-                    <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                    <Card className="border-slate-100 bg-white p-0 shadow-none dark:border-zinc-800 dark:bg-zinc-900">
                       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           요약 · 기회 점수
@@ -362,19 +384,20 @@ export function ResultLDashboard({
                               </div>
                             </div>
 
-                            {/* 전폭 핵심 결론 본문 */}
+                            {/* 전폭 핵심 결론: 3줄 액션 + 본문 */}
                             <div
-                              className="w-full rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/35"
+                              className="w-full space-y-5 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/35"
                               aria-labelledby={`${sectionKeyPrefix}-conclusion-heading`}
                             >
                               <h3
                                 id={`${sectionKeyPrefix}-conclusion-heading`}
-                                className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                                className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                               >
                                 핵심 결론
                               </h3>
-                              <MarkdownBody className="prose-base max-w-none leading-relaxed text-foreground">
-                                {conclusionFull}
+                              <ConclusionActionStrip result={effectiveResult ?? null} />
+                              <MarkdownBody className="prose-base max-w-none leading-loose text-slate-700 dark:prose-invert dark:text-zinc-300">
+                                {conclusionHighlighted}
                               </MarkdownBody>
                             </div>
 
@@ -499,14 +522,14 @@ export function ResultLDashboard({
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.06}>
-                    <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
-                        <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950/20">
+                      <div className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-1 pb-3 pt-1 sm:px-0 dark:border-zinc-800">
+                        <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           전략 · 프레임워크 · GTM · 평가
-                        </CardTitle>
+                        </h2>
                         <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
-                      </CardHeader>
-                      <CardContent className="space-y-8 px-3 pb-5 pt-4 sm:px-4 sm:pb-6 sm:pt-5">
+                      </div>
+                      <div className="space-y-8 px-0 pb-2 pt-5 sm:px-0">
                         {skStrategic ? (
                           <SectionContentSkeleton variant="mixed" />
                         ) : (
@@ -533,11 +556,12 @@ export function ResultLDashboard({
                               key={`${sectionKeyPrefix}-sev`}
                               result={effectiveResult ?? null}
                               loading={loading}
+                              embedded
                             />
                           </>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   </MotionReveal>
                 </section>
 
@@ -547,16 +571,16 @@ export function ResultLDashboard({
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.08}>
-                    <Card className="border-slate-100 bg-white p-0 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                      <CardHeader className="space-y-1 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
-                        <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                    <div className="border-b border-slate-200/90 bg-white pb-6 dark:border-zinc-800 dark:bg-zinc-950/20">
+                      <div className="space-y-1 border-b border-slate-100 px-1 pb-3 pt-1 sm:px-0 dark:border-zinc-800">
+                        <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           액션 플랜
-                        </CardTitle>
+                        </h2>
                         <p className="text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
                           상태는 이 브라우저에만 저장됩니다. 실행 과제를 배포·공유할 때는 별도 워크플로에 반영하세요.
                         </p>
-                      </CardHeader>
-                      <CardContent className="px-3 pb-5 pt-4 sm:px-4 sm:pb-6">
+                      </div>
+                      <div className="px-0 pt-5">
                         {skAction ? (
                           <SectionContentSkeleton variant="list" />
                         ) : (
@@ -567,10 +591,11 @@ export function ResultLDashboard({
                             analysisTasks={analysisTasks}
                             loading={loading}
                             keyword={keyword}
+                            nested
                           />
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   </MotionReveal>
                 </section>
               </MotionReveal>
@@ -598,14 +623,15 @@ function InsightSectionShell({
 }) {
   return (
     <MotionReveal staticLayout={loading} delay={0.08 + animationIndex * 0.05}>
-      <section id={id} className={cn(sectionScrollClass)}>
-        <Card className="border-slate-100 bg-white p-0 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 dark:border-zinc-800 dark:bg-zinc-900">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
-            <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">{title}</CardTitle>
-            <AnalysisSourceButton result={result} label="출처" />
-          </CardHeader>
-          <CardContent className="px-3 pb-5 pt-4 sm:px-4 sm:pb-6 sm:pt-5">{children}</CardContent>
-        </Card>
+      <section
+        id={id}
+        className={cn(sectionScrollClass, 'border-b border-slate-200/80 pb-2 dark:border-zinc-800')}
+      >
+        <div className="flex flex-row flex-wrap items-center justify-between gap-2 px-0 py-3">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">{title}</h2>
+          <AnalysisSourceButton result={result} label="출처" />
+        </div>
+        <div className="px-0 py-6">{children}</div>
       </section>
     </MotionReveal>
   )

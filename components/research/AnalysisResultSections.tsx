@@ -14,7 +14,6 @@ import { ProductStrategySection } from '@/components/research/ProductStrategySec
 import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { AnalysisCharts } from '@/components/research/AnalysisCharts'
 import { MarketGrowthCharts } from '@/components/research/MarketGrowthCharts'
-import { CompetitorTierChart, CompetitorLandscapeMap } from '@/components/research/CompetitorVisualMap'
 import { CompetitorLandscapeTable } from '@/components/research/CompetitorLandscapeTable'
 import { StartupConceptCard } from '@/components/research/StartupConceptCard'
 import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard'
@@ -23,7 +22,7 @@ import { StrategicActionsSection, type StrategicActionItem } from '@/components/
 import { textToBullets } from '@/lib/text-to-bullets'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { StreamingBulletList, StreamingRiskList } from '@/components/research/StreamingInsightText'
-import { CompetitorPositioningScatter } from '@/components/research/CompetitorPositioningScatter'
+import { CompetitorBubbleQuadrant } from '@/components/research/CompetitorBubbleQuadrant'
 import { RiskSignalsSeverityList } from '@/components/research/RiskSignalsSeverityList'
 import { normalizeRiskSignalsFromParse } from '@/lib/ai/pipeline-prompts'
 import { MarkdownBody } from '@/components/ui/markdown-body'
@@ -387,11 +386,7 @@ export function AnalysisResultSections({
           {competitiveLandscape.length > 0 && (
             <>
               <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
-              <CompetitorPositioningScatter competitors={competitiveLandscape} />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <CompetitorTierChart competitors={competitiveLandscape} />
-                <CompetitorLandscapeMap competitors={competitiveLandscape} />
-              </div>
+              <CompetitorBubbleQuadrant competitors={competitiveLandscape} />
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
                 <div className="flex flex-wrap gap-2">
@@ -433,6 +428,7 @@ export function AnalysisResultSections({
             status={getSectionStatus('execution_layer', analysisTasks, loading)}
             loading={loading}
             streamingComplete={!loading && !!hasFrameworks}
+            variant="flat"
           >
             {loading && !hasFrameworks ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -467,6 +463,7 @@ export function AnalysisResultSections({
           status={getSectionStatus('strategy_generation', analysisTasks, loading)}
           loading={loading}
           streamingComplete={!loading && (risks.length > 0 || riskSignalItems.length > 0)}
+          variant="flat"
         >
           {loading && risks.length === 0 && riskSignalItems.length === 0 ? (
             <SectionContentSkeleton variant="list" />
@@ -492,8 +489,9 @@ export function AnalysisResultSections({
           status={getSectionStatus('execution_layer', analysisTasks, loading)}
           loading={loading}
           streamingComplete={!loading && (strategyBullets.length > 0 || allActionItems.length > 0 || strategicActions.length > 0)}
+          variant="flat"
         >
-          <div className="space-y-4">
+          <div className="space-y-5">
             <StartupConceptCard
               productIdea={productIdea}
               targetCustomer={targetCustomer}
@@ -502,18 +500,21 @@ export function AnalysisResultSections({
               fallbackProductIdea={allActionItems[0] ?? opportunities[0] ?? strategyBullets[0]}
               fallbackTargetHint={keyword ? `${keyword} 관련 시장` : null}
               keyword={keyword}
+              variant="flat"
             />
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
-                <div className="rounded-lg border border-border/60 bg-card px-3 py-3 sm:px-4">
-                  <MarkdownBody>{strategyBullets.map((b) => `- ${b}`).join('\n')}</MarkdownBody>
+                <div className="border-l-2 border-primary/35 pl-3">
+                  <MarkdownBody className="prose-sm max-w-none text-foreground">
+                    {strategyBullets.map((b) => `- ${b}`).join('\n')}
+                  </MarkdownBody>
                 </div>
               </div>
             )}
             {opportunityReason && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
+              <div className="border-l-2 border-muted-foreground/25 pl-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
                 <div className="text-sm text-foreground leading-relaxed">
                   <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
                 </div>
@@ -701,11 +702,7 @@ export function AnalysisResultSections({
                   competitors={competitiveLandscape}
                   loading={loading}
                 />
-                <CompetitorPositioningScatter competitors={competitiveLandscape} />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <CompetitorTierChart competitors={competitiveLandscape} />
-                  <CompetitorLandscapeMap competitors={competitiveLandscape} />
-                </div>
+                <CompetitorBubbleQuadrant competitors={competitiveLandscape} />
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
                   <div className="flex flex-wrap gap-2">
@@ -818,11 +815,12 @@ export function AnalysisResultSections({
         status={isPmAnalytics ? getSectionStatus('execution_layer', analysisTasks, loading) : undefined}
         loading={isPmAnalytics && loading}
         streamingComplete={isPmAnalytics && !loading && (strategyBullets.length > 0 || allActionItems.length > 0 || strategicActions.length > 0)}
+        variant={isPmAnalytics ? 'flat' : 'default'}
       >
         {loading && strategyBullets.length === 0 && !opportunityReason && allActionItems.length === 0 ? (
           <SectionContentSkeleton variant="mixed" />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <StartupConceptCard
               productIdea={productIdea}
               targetCustomer={targetCustomer}
@@ -831,18 +829,34 @@ export function AnalysisResultSections({
               fallbackProductIdea={allActionItems[0] ?? opportunities[0] ?? strategyBullets[0]}
               fallbackTargetHint={keyword ? `${keyword} 관련 시장` : null}
               keyword={keyword}
+              variant={isPmAnalytics ? 'flat' : 'default'}
             />
             {strategyBullets.length > 0 && (
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">제품 전략</p>
-                <div className="rounded-lg border border-border/60 bg-card px-3 py-3 sm:px-4">
-                  <MarkdownBody>{strategyBullets.map((b) => `- ${b}`).join('\n')}</MarkdownBody>
+                <div className={cn(isPmAnalytics ? 'border-l-2 border-primary/35 pl-3' : 'rounded-lg border border-border/60 bg-card px-3 py-3 sm:px-4')}>
+                  <MarkdownBody className={cn(isPmAnalytics && 'prose-sm max-w-none text-foreground')}>
+                    {strategyBullets.map((b) => `- ${b}`).join('\n')}
+                  </MarkdownBody>
                 </div>
               </div>
             )}
             {opportunityReason && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <p className="text-[11px] font-medium text-primary uppercase tracking-wider mb-1">이 기회가 존재하는 이유</p>
+              <div
+                className={
+                  isPmAnalytics
+                    ? 'border-l-2 border-muted-foreground/25 pl-3'
+                    : 'rounded-lg border border-primary/20 bg-primary/5 p-4'
+                }
+              >
+                <p
+                  className={cn(
+                    'text-[11px] uppercase tracking-wider mb-1',
+                    isPmAnalytics ? 'font-medium text-muted-foreground' : 'font-medium text-primary'
+                  )}
+                >
+                  이 기회가 존재하는 이유
+                </p>
                 <div className="text-sm text-foreground leading-relaxed">
                   <ExpandableText text={opportunityReason} maxLength={200} expandMode="modal" modalTitle="점수 산출 근거" />
                 </div>

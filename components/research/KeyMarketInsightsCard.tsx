@@ -1,7 +1,8 @@
 'use client'
 
 import { StructuredInsightCard, type StructuredInsight } from '@/components/research/StructuredInsightCard'
-import { useEffect, useState, useRef } from 'react'
+import { InsightsRichBlocks } from '@/components/research/insights-rich-blocks'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
@@ -261,37 +262,72 @@ export function KeyMarketInsightsCard({
     return () => clearTimeout(t)
   }, [revealedCount, structuredInsights.length, useStreaming, skipAnimation])
 
-  const showCursor = useStreaming && revealedCount > 0 && revealedCount < structuredInsights.length
+  const strategicRisksLines = useMemo(() => {
+    const neg = [...(km.negative_risks ?? [])].filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    const rs = (km.risk_signals ?? [])
+      .filter((r) => !!r && typeof r.risk === 'string')
+      .map((r) => `${r.risk} (심각도 ${r.severity}/10)`)
+    return [...neg, ...rs].slice(0, 12)
+  }, [km])
+
+  const priorityItems = useMemo(
+    () =>
+      (km.pm_actions?.recommended_actions ?? [])
+        .slice(0, 10)
+        .map((a) => ({
+          title: (a.title ?? '').trim(),
+          detail: (a.reasoning ?? a.related_risk ?? '').trim() || undefined,
+        }))
+        .filter((p) => p.title.length > 0),
+    [km]
+  )
+
+  const expectedOutcomeLines = useMemo(
+    () =>
+      (km.key_strategic_insights ?? [])
+        .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+        .slice(0, 6),
+    [km]
+  )
 
   if (!hasContent && !loading) return null
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 md:p-7 dark:border-zinc-800 dark:bg-zinc-900/50">
+    <div className="space-y-0">
       {showStreamingComplete && (
-        <div className="mb-4 inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div className="mb-6 inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
           분석 완료
         </div>
       )}
       {loading && !hasEarlyData ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-5">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="rounded-xl border border-border/60 bg-card/50 p-5 sm:p-6 h-28 animate-pulse">
-              <div className="h-4 w-3/4 rounded bg-muted/50 mb-2" />
-              <div className="h-3 w-full rounded bg-muted/30" />
+        <div className="space-y-0 divide-y divide-border/50">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="py-6 animate-pulse">
+              <div className="h-4 w-2/5 rounded bg-muted/50 mb-3" />
+              <div className="h-3 w-full rounded bg-muted/30 mb-2" />
+              <div className="h-3 w-4/5 rounded bg-muted/25" />
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3 lg:gap-8">
-          {structuredInsights.slice(0, revealedCount).map((insight, i) => (
-            <StructuredInsightCard
-              key={i}
-              insight={insight}
-              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
-            />
-          ))}
-          {/* "AI 인사이트 생성중" 커서 비표시: 탭별 부분 결과를 바로 보여주기 위해 로딩 연출 제거 */}
-        </div>
+        <>
+          <div>
+            {structuredInsights.slice(0, revealedCount).map((insight, i) => (
+              <StructuredInsightCard
+                key={i}
+                insight={insight}
+                variant="list"
+                className="animate-in fade-in slide-in-from-bottom-2 duration-200"
+              />
+            ))}
+          </div>
+          <InsightsRichBlocks
+            strategicRisks={strategicRisksLines}
+            priorityItems={priorityItems}
+            expectedOutcomes={expectedOutcomeLines}
+            className="mt-2"
+          />
+        </>
       )}
     </div>
   )

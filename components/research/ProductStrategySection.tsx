@@ -17,6 +17,8 @@ export interface ProductStrategySectionProps {
   loading?: boolean
   /** 스트리밍 완료 시 "✓ 생성 완료" 표시 (Progressive Streaming UX) */
   streamingComplete?: boolean
+  /** 대시보드형 리포트: 이중 카드·그림자 최소화 */
+  variant?: 'default' | 'flat'
 }
 
 const STATUS_LABELS: Record<SectionStatus, string> = {
@@ -52,24 +54,33 @@ export function ProductStrategySection({
   status,
   loading,
   streamingComplete,
+  variant = 'default',
 }: ProductStrategySectionProps) {
   const showStatus = status != null || streamingComplete
   const displayLabel = streamingComplete ? '✓ 생성 완료' : status != null ? STATUS_LABELS[status] : null
   const displayIcon = streamingComplete ? <Check className="h-3.5 w-3.5 text-primary" /> : status != null ? <StatusIcon status={status} loading={status === 'running'} /> : null
+  const flat = variant === 'flat'
   return (
     <section
       id={id}
       className={cn(
-        'rounded-xl border-2 border-border/70 bg-card shadow-sm overflow-hidden scroll-mt-24',
-        'bg-gradient-to-b from-card to-muted/5',
+        'scroll-mt-24 overflow-hidden',
+        flat
+          ? 'border-0 border-b border-border/45 bg-transparent pb-8 shadow-none'
+          : 'rounded-xl border-2 border-border/70 bg-card bg-gradient-to-b from-card to-muted/5 shadow-sm',
         className
       )}
       aria-labelledby={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}
     >
-      <div className="px-5 py-4 sm:px-6 sm:py-4 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          'flex items-center justify-between gap-2 border-b border-border/60',
+          flat ? 'bg-transparent px-0 py-3' : 'bg-muted/20 px-5 py-4 sm:px-6 sm:py-4'
+        )}
+      >
         <h2
           id={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}
-          className="text-base font-semibold text-foreground flex items-center gap-2"
+          className={cn('font-semibold text-foreground flex items-center gap-2', flat ? 'text-sm' : 'text-base')}
         >
           {icon}
           {title}
@@ -84,7 +95,7 @@ export function ProductStrategySection({
           </span>
         )}
       </div>
-      <div className="p-5 sm:p-6">{children}</div>
+      <div className={cn(flat ? 'px-0 pt-4' : 'p-5 sm:p-6')}>{children}</div>
     </section>
   )
 }

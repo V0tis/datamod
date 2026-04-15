@@ -114,12 +114,15 @@ export function StrategyExecutionTable({
   analysisTasks,
   loading = false,
   keyword = '',
+  nested = false,
 }: {
   result: ResearchResponse | null
   taskData?: Partial<Record<string, unknown>>
   analysisTasks?: Array<{ step_name: string; output_data: unknown; status?: string }> | null
   loading?: boolean
   keyword?: string
+  /** 상위 섹션에 이미 테두리가 있을 때 이중 카드 제거 */
+  nested?: boolean
 }) {
   const rows = useMemo(
     () => extractNextActionItems(result, taskData, analysisTasks, { maxItems: 15 }),
@@ -179,9 +182,13 @@ export function StrategyExecutionTable({
     setExpanded((prev) => ({ ...prev, [index]: !prev[index] }))
   }
 
+  const shell = nested
+    ? 'rounded-md border border-slate-200/90 bg-transparent dark:border-zinc-700'
+    : 'rounded-xl border border-[#E5E7EB] bg-white dark:border-zinc-700 dark:bg-zinc-900'
+
   if ((loading || executionPending) && rows.length === 0) {
     return (
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className={cn(shell, 'p-5')}>
         <SectionContentSkeleton variant="list" />
         <p className="mt-3 text-center text-xs text-slate-500 dark:text-zinc-400">
           실행 과제·GTM 항목을 불러오는 중입니다…
@@ -192,7 +199,13 @@ export function StrategyExecutionTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+      <div
+        className={cn(
+          nested
+            ? 'border border-dashed border-slate-200/90 px-5 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:text-zinc-400'
+            : 'rounded-xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+        )}
+      >
         PM 액션 플랜이 비어 있습니다. 분석을 완료했는데도 비어 있으면 &ldquo;다시 분석하기&rdquo;로 재실행하거나, 인사이트 탭의 전략 요약을 참고하세요.
       </div>
     )
@@ -203,8 +216,8 @@ export function StrategyExecutionTable({
   }, [])
 
   return (
-    <div className="max-w-full min-w-0 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white dark:border-zinc-700 dark:bg-zinc-900">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-zinc-800">
+    <div className={cn('max-w-full min-w-0 overflow-hidden', shell)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-zinc-800 sm:px-4">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">전략 실행 테이블</h3>
         <AnalysisSourceButton result={result} label="출처 보기" />
       </div>

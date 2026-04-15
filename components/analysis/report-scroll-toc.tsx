@@ -33,7 +33,7 @@ export function ReportScrollToc({
   return (
     <nav
       className={cn(
-        'rounded-lg border border-slate-100 bg-white/95 p-2 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95',
+        'rounded-lg border border-slate-100 bg-white/95 p-2 shadow-none backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95',
         className
       )}
       aria-label="리포트 목차"
