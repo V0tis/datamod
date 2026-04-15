@@ -1,17 +1,14 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { REPORT_SECTION_IDS, REPORT_TOC_LABELS, type ReportSectionId } from '@/lib/report-section-ids'
 
 export type ReportTocItem = { id: string; label: string }
 
-const DEFAULT_ITEMS: ReportTocItem[] = [
-  { id: 'report-summary', label: '요약·기회 점수' },
-  { id: 'report-market', label: '시장·트렌드' },
-  { id: 'report-competition', label: '경쟁 환경' },
-  { id: 'report-insights', label: '핵심 인사이트' },
-  { id: 'report-strategic', label: '전략·프레임워크' },
-  { id: 'report-action', label: '액션 플랜' },
-]
+const DEFAULT_ITEMS: ReportTocItem[] = REPORT_SECTION_IDS.map((id: ReportSectionId) => ({
+  id,
+  label: REPORT_TOC_LABELS[id],
+}))
 
 /** 사용자가 목차를 클릭했을 때만 스크롤(자동 스크롤·포커스 강제 없음). */
 function scrollToSection(id: string) {

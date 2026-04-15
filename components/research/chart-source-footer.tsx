@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils'
 
-export const DEFAULT_CHART_SOURCE_TAG =
-  'Source: Google News API, RSS Feed Cross-analysis'
+export const DEFAULT_CHART_SOURCE_TAG = 'Data Source: RSS Feed & AI Synthesis'
 
 export function ChartSourceFooter({
   text = DEFAULT_CHART_SOURCE_TAG,

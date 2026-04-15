@@ -27,20 +27,31 @@ function extractKeyMetrics(text: string): string[] {
   return [...new Set(metrics)].slice(0, 4)
 }
 
-/** Map pipeline core_insights to StructuredInsight (no fallback "—") */
+function scoreToPriority(score?: number): 'high' | 'mid' | 'low' | undefined {
+  if (score == null || !Number.isFinite(score)) return undefined
+  if (score >= 7) return 'high'
+  if (score >= 4) return 'mid'
+  return 'low'
+}
+
+/** Map pipeline core_insights to StructuredInsight (no placeholder 영향/근거) */
 function coreInsightToStructured(item: CoreInsightItem, fallbackAsOf?: string): StructuredInsight {
   const title = (item.title ?? '').trim() || (item.summary ?? '').trim().slice(0, 15) + '…'
   const summary = (item.summary ?? '').trim() || '분석 인사이트'
-  const impact = (item.impact ?? '').trim() || '시장·제품 의사결정에 참고할 수 있는 요인입니다.'
-  const reason = (item.reason ?? '').trim() || '분석 데이터를 바탕으로 도출된 인사이트입니다.'
+  const impact = (item.impact ?? '').trim()
+  const reason = (item.reason ?? '').trim()
+  const priority = scoreToPriority(item.score)
   const sourceTimestamp = (item.source_timestamp ?? fallbackAsOf)?.trim()
+  const metricText = [summary, impact, reason].filter(Boolean).join(' ')
+  const km = extractKeyMetrics(metricText)
   return {
     title,
     summary,
-    impact,
-    reason,
+    ...(impact ? { impact } : {}),
+    ...(reason ? { reason } : {}),
+    ...(priority ? { priority } : {}),
     ...(sourceTimestamp ? { sourceTimestamp } : {}),
-    keyMetrics: extractKeyMetrics(summary + impact + reason).length > 0 ? extractKeyMetrics(summary + impact + reason) : undefined,
+    ...(km.length > 0 ? { keyMetrics: km } : {}),
   }
 }
 

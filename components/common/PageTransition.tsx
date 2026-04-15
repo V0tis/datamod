@@ -16,7 +16,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration }}
-        className="min-h-screen"
+        className="min-h-screen overflow-visible"
       >
         {children}
       </motion.div>

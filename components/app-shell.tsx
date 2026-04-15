@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AnalysisJobSync } from '@/components/research/analysis-job-sync'
 import { useResearchStore } from '@/lib/stores/research-store'
+import { useResultsMainScrolledPast } from '@/hooks/use-results-main-scroll'
 import { cn } from '@/lib/utils'
 
 const isAuthOnlyPath = (path: string) =>
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const isResultsPage = pathname?.startsWith('/results')
+  const resultsScrollPastHeader = useResultsMainScrolledPast(28)
 
   return (
     <>
@@ -74,12 +76,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </ErrorBoundary>
       <div
         className={cn(
-          'min-h-screen w-full',
+          'min-h-screen w-full transition-[padding] duration-200',
           /* <md: 햄버거만, md~lg: 아이콘 레일 72px, lg+: 전체 사이드바 220px */
-          isResultsPage ? 'pt-14' : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[calc(220px+1.5rem)]'
+          isResultsPage
+            ? resultsScrollPastHeader
+              ? 'pt-0'
+              : 'pt-14'
+            : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[calc(220px+1.5rem)]'
         )}
       >
-        <main className="min-h-screen bg-muted/25 overflow-auto px-2 sm:px-4 lg:px-8 xl:px-10">
+        <main
+          className={cn(
+            'min-h-screen overflow-auto px-2 sm:px-4 lg:px-8 xl:px-10',
+            isResultsPage ? 'bg-white dark:bg-zinc-950' : 'bg-muted/25'
+          )}
+        >
           <ErrorBoundary>
             <PageTransition>{children}</PageTransition>
           </ErrorBoundary>

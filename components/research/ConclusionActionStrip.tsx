@@ -3,12 +3,19 @@
 import { ListTodo } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
+import { stripLeadingMarkdownHeadings } from '@/lib/strip-markdown-heading-markers'
+
+function cleanActionLine(s: string): string {
+  return stripLeadingMarkdownHeadings(s)
+    .replace(/^[-*•\d.)\s]+/, '')
+    .trim()
+}
 
 function takeThreeActionLines(result: ResearchResponse | null): string[] {
   const km = result?.key_metrics
   const actions = km?.pm_actions?.recommended_actions ?? []
   const fromPm = actions
-    .map((a) => (a?.title ?? (a as { action?: string }).action ?? '').trim())
+    .map((a) => cleanActionLine(a?.title ?? (a as { action?: string }).action ?? ''))
     .filter(Boolean)
     .slice(0, 3)
   if (fromPm.length >= 3) return fromPm
@@ -16,7 +23,7 @@ function takeThreeActionLines(result: ResearchResponse | null): string[] {
   if (insight) {
     const parts = insight
       .split(/\n+/)
-      .map((s) => s.replace(/^[-*•\d.)\s]+/, '').trim())
+      .map((s) => cleanActionLine(s))
       .filter((s) => s.length > 8)
       .slice(0, 3)
     const merged = [...fromPm]

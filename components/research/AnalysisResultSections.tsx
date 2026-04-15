@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart3,
@@ -78,6 +79,80 @@ function getSectionStatus(
   return 'pending'
 }
 
+function EvidenceChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] leading-snug text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+      {children}
+    </span>
+  )
+}
+
+function MarketSizeEvidenceCard({
+  loading,
+  score,
+  reasoning,
+  newsCount,
+}: {
+  loading: boolean
+  score: number | null
+  reasoning?: string
+  newsCount: number
+}) {
+  const r = reasoning?.replace(/\s+/g, ' ').trim()
+  return (
+    <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">시장 규모</p>
+      <p className="text-xl font-semibold tabular-nums text-foreground">
+        {loading ? '산출 중...' : score != null ? `${score}/100` : '—'}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">시장 매력도</p>
+      <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">왜 이 점수인가?</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {r ? (
+          <EvidenceChip>
+            {r.length > 110 ? `${r.slice(0, 110).trim()}…` : r}
+          </EvidenceChip>
+        ) : (
+          !loading && <EvidenceChip>통합 리서치·RSS·검색 시그널을 종합한 매력도입니다.</EvidenceChip>
+        )}
+        {newsCount > 0 ? <EvidenceChip>뉴스·언급 시그널 {newsCount}건 반영</EvidenceChip> : null}
+      </div>
+    </div>
+  )
+}
+
+function GrowthPotentialEvidenceCard({
+  marketGrowth,
+  trendMomentum,
+  growthSignalCount,
+  trendSummary,
+}: {
+  marketGrowth: number | null
+  trendMomentum: number | null
+  growthSignalCount: number
+  trendSummary?: string
+}) {
+  const mg = marketGrowth ?? null
+  const tm = trendMomentum ?? null
+  const display = mg ?? tm ?? null
+  return (
+    <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">성장 잠재력</p>
+      <p className="text-xl font-semibold tabular-nums text-foreground">{display != null ? `${display}/100` : '—'}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">성장·트렌드 잠재력</p>
+      <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">왜 이 점수인가?</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {mg != null ? <EvidenceChip>시장 성장 지표 {mg}점</EvidenceChip> : null}
+        {tm != null ? <EvidenceChip>검색·트렌드 모멘텀 {tm}점</EvidenceChip> : null}
+        {growthSignalCount > 0 ? <EvidenceChip>성장 시그널 {growthSignalCount}개 추출</EvidenceChip> : null}
+        {trendSummary ? (
+          <EvidenceChip>{trendSummary.length > 100 ? `${trendSummary.slice(0, 100)}…` : trendSummary}</EvidenceChip>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export type AnalysisResultLayout = 'default' | 'pm-analytics'
 
 export interface AnalysisResultSectionsProps {
@@ -110,6 +185,7 @@ export function AnalysisResultSections({
 }: AnalysisResultSectionsProps) {
   /** 분석 중에도 차트/기회점수 표시: key_metrics 없으면 default 사용 */
   const km = result?.key_metrics ?? (loading ? DEFAULT_KEY_METRICS_LOADING : {})
+  const signalOutput = getTaskOutput('signal_layer', taskData, analysisTasks)
   const trendOutput = getTaskOutput('trend_analysis', taskData, analysisTasks)
   const competitionOutput = getTaskOutput('competition_analysis', taskData, analysisTasks)
   const insightOutput = getTaskOutput('insight_extraction', taskData, analysisTasks)
@@ -338,24 +414,28 @@ export function AnalysisResultSections({
             keyword={keyword}
             radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
           />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
             {(opportunityScore != null || loading) && (
-              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">시장 규모</p>
-                <p className="text-xl font-semibold text-foreground tabular-nums">
-                  {loading && opportunityScore == null ? '산출 중...' : opportunityScore != null ? `${opportunityScore}/100` : '—'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">시장 매력도</p>
-              </div>
+              <MarketSizeEvidenceCard
+                loading={loading && opportunityScore == null}
+                score={opportunityScore}
+                reasoning={
+                  typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined
+                }
+                newsCount={
+                  Array.isArray(signalOutput?.news_activity) ? (signalOutput.news_activity as unknown[]).length : 0
+                }
+              />
             )}
             {(marketGrowth != null || trendMomentum != null) && (
-              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">성장 잠재력</p>
-                <p className="text-xl font-semibold text-foreground tabular-nums">
-                  {(marketGrowth ?? trendMomentum ?? '—')}/100
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
-              </div>
+              <GrowthPotentialEvidenceCard
+                marketGrowth={marketGrowth}
+                trendMomentum={trendMomentum}
+                growthSignalCount={growthSignals.length}
+                trendSummary={
+                  typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined
+                }
+              />
             )}
           </div>
           <AnalysisCharts
@@ -420,7 +500,7 @@ export function AnalysisResultSections({
   /** sectionOnly="strategic": frameworks + risks + strategy only (for Structured layout) */
   if (sectionOnly === 'strategic') {
     return (
-      <div className="space-y-8 animate-in fade-in duration-300">
+      <div className="space-y-10 animate-in fade-in duration-300">
         {(hasFrameworks || loading) && (
           <ProductStrategySection
             title="제품 전략 프레임워크"
@@ -431,7 +511,7 @@ export function AnalysisResultSections({
             variant="flat"
           >
             {loading && !hasFrameworks ? (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-8">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="rounded-xl border border-border/60 bg-card p-4">
                     <div className="h-4 w-24 rounded bg-muted/50 animate-pulse mb-3" />
@@ -452,7 +532,7 @@ export function AnalysisResultSections({
                 opportunityBreakdown={breakdown}
                 strategicDecisionLayer={km.strategic_decision_layer}
                 strategyEvaluation={km.strategy_evaluation}
-                className="p-4 sm:p-5"
+                className="p-6 sm:p-6"
               />
             )}
           </ProductStrategySection>

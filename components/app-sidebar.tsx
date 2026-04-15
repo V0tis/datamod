@@ -21,6 +21,7 @@ import { DatamodWordmark } from '@/components/datamod-wordmark'
 import { cn } from '@/lib/utils'
 import { motionConfig } from '@/lib/motion-config'
 import { useLogout } from '@/components/providers/logout-provider'
+import { useResultsMainScrolledPast } from '@/hooks/use-results-main-scroll'
 
 const ICON_NAV = 20
 
@@ -56,6 +57,7 @@ export function AppSidebar() {
   }
 
   const isResultsPage = pathname?.startsWith('/results')
+  const hideResultsTopNav = useResultsMainScrolledPast(28)
 
   const sidebarContent = (
     <div className="flex h-full w-full flex-col bg-[#111827] text-gray-300">
@@ -297,7 +299,12 @@ export function AppSidebar() {
 
   if (isResultsPage) {
     return (
-      <header className="fixed left-0 right-0 top-0 z-40 min-h-14 shrink-0 border-b border-border bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <header
+        className={cn(
+          'fixed left-0 right-0 top-0 z-40 min-h-14 shrink-0 border-b border-border bg-white transition-transform duration-200 ease-out will-change-transform dark:border-zinc-800 dark:bg-zinc-950',
+          hideResultsTopNav && '-translate-y-full pointer-events-none'
+        )}
+      >
         {topbarContent}
       </header>
     )

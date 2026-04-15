@@ -137,6 +137,14 @@ export function MarketGrowthCharts({
   const yHigh = Math.min(100, Math.ceil(sMax + pad))
 
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
+  const adoptionRates = adoptionData.map((d) => d.rate)
+  const aMin = Math.min(...adoptionRates)
+  const aMax = Math.max(...adoptionRates)
+  const aSpan = Math.max(6, aMax - aMin)
+  const aPad = Math.max(3, aSpan * 0.12)
+  const adoptionYLow = Math.max(0, Math.floor(aMin - aPad))
+  const adoptionYHigh = Math.min(100, Math.ceil(aMax + aPad))
+
   const multiRows = toMultiAngleRows(effectiveBreakdown as Record<string, number | undefined>, score)
 
   const st = chartInsights?.search_trend
@@ -153,7 +161,7 @@ export function MarketGrowthCharts({
           title="시장 다각도 분석 (막대)"
           insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
           takeaway={ma?.takeaway}
-          className="border border-border/60 bg-card/50"
+          variant="flat"
           headerActions={
             <OpportunityChartSourceDialog
               reasoning={
@@ -166,6 +174,16 @@ export function MarketGrowthCharts({
             />
           }
         >
+          <div className="mb-3 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-300">
+              이 차트가 의미하는 핵심 인사이트
+            </p>
+            <p className="mt-1 text-sm leading-snug text-slate-800 dark:text-zinc-100">
+              {ma?.takeaway?.trim() ||
+                ma?.insight?.trim() ||
+                '각 축은 기회 점수 산출에 쓰인 요인의 상대 강도를 보여 주며, 강한 축을 우선 과제로 두는 것이 유리합니다.'}
+            </p>
+          </div>
           <BreakdownHorizontalBars
             rows={multiRows}
             valueLabel="점수"
@@ -181,6 +199,7 @@ export function MarketGrowthCharts({
           title="검색 트렌드 성장"
           insight={st?.insight}
           takeaway={st?.takeaway}
+          variant="flat"
           headerActions={
             <OpportunityChartSourceDialog
               title="검색 트렌드 — 데이터 출처"
@@ -230,6 +249,7 @@ export function MarketGrowthCharts({
           title="시장 규모 · 잠재력 (워터폴)"
           insight={ms?.insight}
           takeaway={ms?.takeaway}
+          variant="flat"
           headerActions={
             <OpportunityChartSourceDialog
               title="시장 규모 — 데이터 출처"
@@ -245,12 +265,14 @@ export function MarketGrowthCharts({
               trendMomentum={trendMomentum}
             />
           </div>
+          <ChartSourceFooter />
         </ChartWithInsight>
 
         <ChartWithInsight
           title="시장 도입 추이"
           insight={ar?.insight}
           takeaway={ar?.takeaway}
+          variant="flat"
           headerActions={
             <OpportunityChartSourceDialog
               title="시장 도입 추이 — 데이터 출처"
@@ -270,7 +292,11 @@ export function MarketGrowthCharts({
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
                 <XAxis dataKey="stage" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }} />
+                <YAxis
+                  domain={[adoptionYLow, adoptionYHigh]}
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }}
+                />
                 <Tooltip
                   formatter={(v: number) => [`${v}%`, '도입률']}
                   contentStyle={{

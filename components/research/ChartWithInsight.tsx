@@ -19,6 +19,8 @@ export interface ChartWithInsightProps {
   className?: string
   /** 제목 옆·아래 액션(예: 데이터 출처 버튼) */
   headerActions?: React.ReactNode
+  /** `flat`: 테두리·배경만으로 구분 (중첩 카드 느낌 완화) */
+  variant?: 'default' | 'flat'
 }
 
 /**
@@ -31,11 +33,20 @@ export function ChartWithInsight({
   children,
   className,
   headerActions,
+  variant = 'default',
 }: ChartWithInsightProps) {
   const hasInsight = Boolean(insight?.trim() || takeaway?.trim())
+  const flat = variant === 'flat'
 
   return (
-    <div className={cn('rounded-xl border border-border/60 bg-muted/5 p-4', className)}>
+    <div
+      className={cn(
+        flat
+          ? 'rounded-lg border border-slate-100 bg-slate-50/60 p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950/40'
+          : 'rounded-xl border border-border/60 bg-muted/5 p-4',
+        className
+      )}
+    >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           {title}

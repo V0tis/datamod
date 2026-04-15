@@ -64,7 +64,7 @@ export function ProductStrategySection({
     <section
       id={id}
       className={cn(
-        'scroll-mt-24 overflow-hidden',
+        'scroll-mt-24 overflow-visible',
         flat
           ? 'border-0 border-b border-border/45 bg-transparent pb-8 shadow-none'
           : 'rounded-xl border-2 border-border/70 bg-card bg-gradient-to-b from-card to-muted/5 shadow-sm',
@@ -95,7 +95,7 @@ export function ProductStrategySection({
           </span>
         )}
       </div>
-      <div className={cn(flat ? 'px-0 pt-4' : 'p-5 sm:p-6')}>{children}</div>
+      <div className={cn(flat ? 'px-0 pt-6' : 'p-5 sm:p-6 md:p-6')}>{children}</div>
     </section>
   )
 }

@@ -16,7 +16,6 @@ import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluat
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
-import { MarkdownBody } from '@/components/ui/markdown-body'
 import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
 import { injectKeywordBold } from '@/lib/text-keyword-bold'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
@@ -25,10 +24,11 @@ import { MotionReveal } from '@/components/common/MotionReveal'
 import { PipelineStepperSlim } from '@/components/research/dashboard/PipelineStepperSlim'
 import { type PipelineSlimStatusContext } from '@/lib/analysis/pipeline-slim-status'
 import { createIdleState, type StreamingState } from '@/lib/types/analysis-modes'
-import { ReportScrollToc, scrollToReportSection } from '@/components/analysis/report-scroll-toc'
+import { scrollToReportSection } from '@/components/analysis/report-scroll-toc'
 import { ReportSectionTabBar } from '@/components/analysis/report-section-tab-bar'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConclusionStructuredBlocks } from '@/components/research/ConclusionStructuredBlocks'
+import { stripLeadingMarkdownHeadings } from '@/lib/strip-markdown-heading-markers'
 
 function isStepComplete(
   tasks: Array<{ step_name: string; status: string }> | null | undefined,
@@ -37,17 +37,17 @@ function isStepComplete(
   return tasks?.some((t) => t.step_name === step && t.status === 'completed') ?? false
 }
 
-/** 파이프라인 슬림 스텝 인덱스 → 리포트 앵커 id */
+/** 파이프라인 슬림 스텝 인덱스 → 리포트 앵커 id (`lib/report-section-ids`와 동일) */
 const PIPELINE_INDEX_TO_SECTION_ID = [
-  'report-summary',
-  'report-market',
-  'report-competition',
-  'report-insights',
-  'report-strategic',
-  'report-action',
-  'report-summary',
-  'report-summary',
-  'report-summary',
+  'summary',
+  'market',
+  'competition',
+  'insights',
+  'strategic',
+  'action',
+  'summary',
+  'summary',
+  'summary',
 ] as const
 
 type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
@@ -62,8 +62,8 @@ type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
   pipelineLoading?: boolean
 }
 
-/** 스티키 탭바·헤더와 겹치지 않도록 앵커 여백 */
-const sectionScrollClass = 'scroll-mt-28 md:scroll-mt-32'
+/** 글로벌 헤더(3.5rem) + 리포트 탭(~3.25rem) 대략 보정 — smooth scroll 시 제목이 가리지 않게 */
+const sectionScrollClass = 'scroll-mt-[6.75rem] md:scroll-mt-[7.5rem]'
 
 /**
  * L자형 분석 대시보드: 슬림 파이프라인, 스티키 목차, 좌측 요약 레일, 단일 스크롤 통합 리포트.
@@ -193,7 +193,7 @@ export function ResultLDashboard({
   const handlePipelineStep = useCallback((i: number) => {
     setUserPinnedPipeline(true)
     setPickedPipelineIndex(i)
-    const id = PIPELINE_INDEX_TO_SECTION_ID[i] ?? 'report-summary'
+    const id = PIPELINE_INDEX_TO_SECTION_ID[i] ?? 'summary'
     scrollToReportSection(id)
   }, [])
 
@@ -202,8 +202,9 @@ export function ResultLDashboard({
     sanitizeForKoreanDisplay(
       km?.strategic_decision_layer?.market_opportunity_explanation ?? km?.opportunity_score_reasoning
     )?.trim() || null
-  const conclusionFull =
+  const conclusionFull = stripLeadingMarkdownHeadings(
     sanitizeForKoreanDisplay(km?.summary_insights)?.trim() || '핵심 전략 방향을 분석 완료 후 확인할 수 있습니다.'
+  )
 
   const conclusionExcerpt = useMemo(() => {
     const t = conclusionFull.replace(/\s+/g, ' ').trim()
@@ -223,9 +224,9 @@ export function ResultLDashboard({
     return [...new Set(list)].slice(0, 12)
   }, [keyword, km])
 
-  const conclusionHighlighted = useMemo(
-    () => injectKeywordBold(conclusionFull, highlightTerms),
-    [conclusionFull, highlightTerms]
+  const conclusionExcerptHighlighted = useMemo(
+    () => injectKeywordBold(conclusionExcerpt, highlightTerms),
+    [conclusionExcerpt, highlightTerms]
   )
 
   const frameworkExecOutput = useMemo(() => {
@@ -292,13 +293,13 @@ export function ResultLDashboard({
   return (
     <div
       id="analysis-live-region"
-      className={cn(analysisPageBg, 'rounded-xl px-1 py-3 sm:px-2 sm:py-4')}
+      className={cn(analysisPageBg, 'rounded-xl px-1 py-3 sm:px-2 sm:py-4 overflow-visible')}
       role="region"
       aria-label="분석 결과 대시보드"
     >
-      <div className="mx-auto flex w-full max-w-none flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-none flex-col gap-1">
         {showPipeline && keyword.trim() && (
-          <div className="z-30 py-0.5 lg:sticky lg:top-16">
+          <div className="z-30 py-0 lg:sticky lg:top-16">
             <PipelineStepperSlim
               keyword={keyword}
               selectedIndex={userPinnedPipeline ? pickedPipelineIndex : null}
@@ -308,9 +309,8 @@ export function ResultLDashboard({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-col gap-5 xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-4">
-          <div className="flex w-full shrink-0 flex-col gap-3 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-6rem)] xl:w-[9.25rem] xl:max-w-[10rem] xl:self-start xl:overflow-y-auto xl:pr-0.5">
-            <ReportScrollToc />
+        <div className="flex min-h-0 flex-col gap-5 overflow-visible xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-6">
+          <div className="w-full shrink-0 xl:sticky xl:top-28 xl:z-10 xl:w-[min(100%,18rem)] xl:max-w-none xl:self-start xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:overflow-x-visible">
             <UrgentTaskCards
               result={effectiveResult ?? null}
               taskData={taskData}
@@ -319,12 +319,12 @@ export function ResultLDashboard({
             />
           </div>
 
-          <div className="min-w-0 flex-1 space-y-8">
+          <div className="min-w-0 flex-1 space-y-3">
             <ReportSectionTabBar />
             <MotionReveal
               key={`main-${sectionKeyPrefix}`}
               staticLayout={loading}
-              className="min-w-0 space-y-10"
+              className="min-w-0 space-y-8"
               delay={0.06}
             >
               {keyword.trim() ? (
@@ -340,26 +340,26 @@ export function ResultLDashboard({
               ) : null}
 
               <section
-                key={`${sectionKeyPrefix}-report-summary`}
-                id="report-summary"
+                key={`${sectionKeyPrefix}-summary`}
+                id="summary"
                 className={sectionScrollClass}
               >
                 <MotionReveal staticLayout={loading} delay={0.04}>
                   <div className="space-y-8 motion-safe:will-change-transform">
-                    <Card className="border-slate-100 bg-white p-0 shadow-none dark:border-zinc-800 dark:bg-zinc-900">
-                      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
-                        <CardTitle className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                    <div className="rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950/30">
+                      <div className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
+                        <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                           요약 · 기회 점수
-                        </CardTitle>
+                        </h2>
                         <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
-                      </CardHeader>
-                      <CardContent className="space-y-6 px-3 pb-5 pt-4 sm:space-y-8 sm:px-4 sm:pb-6 sm:pt-5">
+                      </div>
+                      <div className="space-y-6 px-3 pb-5 pt-4 sm:space-y-8 sm:px-4 sm:pb-6 sm:pt-5">
                         {skSummary ? (
                           <SectionContentSkeleton variant="mixed" className="py-2" />
                         ) : (
                           <>
                             {/* Hero: 최종 점수 + 핵심 결론 요약 */}
-                            <div className="w-full rounded-xl border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/80">
+                            <div className="w-full rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/80">
                               <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:gap-10">
                                 <div className="flex shrink-0 flex-col items-center justify-center border-b border-slate-100 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10 dark:border-zinc-800">
                                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
@@ -378,7 +378,7 @@ export function ResultLDashboard({
                                     핵심 결론 요약
                                   </p>
                                   <p className="text-pretty text-base font-medium leading-relaxed text-slate-900 dark:text-zinc-50">
-                                    {conclusionExcerpt}
+                                    {conclusionExcerptHighlighted}
                                   </p>
                                 </div>
                               </div>
@@ -386,7 +386,7 @@ export function ResultLDashboard({
 
                             {/* 전폭 핵심 결론: 3줄 액션 + 본문 */}
                             <div
-                              className="w-full space-y-5 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/35"
+                              className="w-full space-y-5 rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-900/40"
                               aria-labelledby={`${sectionKeyPrefix}-conclusion-heading`}
                             >
                               <h3
@@ -396,9 +396,7 @@ export function ResultLDashboard({
                                 핵심 결론
                               </h3>
                               <ConclusionActionStrip result={effectiveResult ?? null} />
-                              <MarkdownBody className="prose-base max-w-none leading-loose text-slate-700 dark:prose-invert dark:text-zinc-300">
-                                {conclusionHighlighted}
-                              </MarkdownBody>
+                              <ConclusionStructuredBlocks markdown={conclusionFull} highlightTerms={highlightTerms} />
                             </div>
 
                             {/* 근거: 점수 분해 + 전략 프레임워크 레이더 */}
@@ -436,15 +434,15 @@ export function ResultLDashboard({
                             />
                           </>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   </div>
                 </MotionReveal>
               </section>
 
                 <InsightSectionShell
-                  key={`${sectionKeyPrefix}-report-market`}
-                  id="report-market"
+                  key={`${sectionKeyPrefix}-market`}
+                  id="market"
                   title="시장 트렌드 · 수요 신호"
                   result={effectiveResult ?? null}
                   loading={loading}
@@ -468,8 +466,8 @@ export function ResultLDashboard({
                 </InsightSectionShell>
 
                 <InsightSectionShell
-                  key={`${sectionKeyPrefix}-report-competition`}
-                  id="report-competition"
+                  key={`${sectionKeyPrefix}-competition`}
+                  id="competition"
                   title="경쟁 환경 · 포지셔닝"
                   result={effectiveResult ?? null}
                   loading={loading}
@@ -493,8 +491,8 @@ export function ResultLDashboard({
                 </InsightSectionShell>
 
                 <InsightSectionShell
-                  key={`${sectionKeyPrefix}-report-insights`}
-                  id="report-insights"
+                  key={`${sectionKeyPrefix}-insights`}
+                  id="insights"
                   title="핵심 인사이트"
                   result={effectiveResult ?? null}
                   loading={loading}
@@ -517,8 +515,8 @@ export function ResultLDashboard({
                 </InsightSectionShell>
 
                 <section
-                  key={`${sectionKeyPrefix}-report-strategic`}
-                  id="report-strategic"
+                  key={`${sectionKeyPrefix}-strategic`}
+                  id="strategic"
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.06}>
@@ -529,7 +527,7 @@ export function ResultLDashboard({
                         </h2>
                         <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
                       </div>
-                      <div className="space-y-8 px-0 pb-2 pt-5 sm:px-0">
+                      <div className="space-y-10 px-0 pb-2 pt-6 sm:px-0">
                         {skStrategic ? (
                           <SectionContentSkeleton variant="mixed" />
                         ) : (
@@ -566,8 +564,8 @@ export function ResultLDashboard({
                 </section>
 
                 <section
-                  key={`${sectionKeyPrefix}-report-action`}
-                  id="report-action"
+                  key={`${sectionKeyPrefix}-action`}
+                  id="action"
                   className={sectionScrollClass}
                 >
                   <MotionReveal staticLayout={loading} delay={0.08}>
