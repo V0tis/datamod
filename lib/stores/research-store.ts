@@ -106,6 +106,8 @@ export interface ResearchResponse {
       market_timing?: number
     }
     opportunity_score_reasoning?: string
+    opportunity_score_summary_text?: string
+    opportunity_score_reason_text?: string
     summary_insights?: string
     background_rationale?: string
     conclusion_three_lines?: string[]
@@ -172,6 +174,7 @@ export interface ResearchResponse {
       score_distribution?: { insight?: string; takeaway?: string }
     }
     strategic_decision_layer?: {
+      opportunity_score_reason_text?: string
       market_opportunity_explanation?: string
       competition_intensity?: 'low' | 'medium' | 'high'
       competition_explanation?: string
@@ -182,9 +185,22 @@ export interface ResearchResponse {
     }
     /** Porter 보강·전략 요약용 수치 (runResearch / 파서에서 채움) */
     strategy_evaluation?: {
+      cross_validation_score?: number
+      cross_validation_summary?: string
+      risk_items?: Array<{ issue: string; mitigation_level: string; plan: string }>
+      opportunity_items?: Array<{ value: string; difficulty_level: string; priority: number }>
       competition_risk?: number
       growth_potential?: number
       market_attractiveness?: number
+      execution_difficulty?: number
+      market_attractiveness_label?: string
+      market_attractiveness_reason?: string
+      competition_risk_label?: string
+      competition_risk_reason?: string
+      execution_difficulty_label?: string
+      execution_difficulty_reason?: string
+      growth_potential_label?: string
+      growth_potential_reason?: string
     }
     swot_analysis?: {
       strengths?: string[]
@@ -407,14 +423,16 @@ export interface InsightsSection {
   inferences: string[]
 }
 
-/** Build ResearchResponse from section state so we never setResult(fullObject). */
+/** 스트리밍 중 pass2 등으로 compose할 때 기존 파이프라인 필드(conclusion_three_lines 등)를 유지 */
 function composeResultFromSections(
   summary: SummarySection | null,
   market: MarketTemperatureSection | null,
   actions: RecommendedActionsSection | null,
-  insights: InsightsSection | null
+  insights: InsightsSection | null,
+  prevResult?: ResearchResponse | null
 ): ResearchResponse | null {
   if (!summary) return null
+  const prevKm = prevResult?.key_metrics
   return {
     reportId: summary.reportId,
     updated_at: summary.updated_at ?? undefined,
@@ -429,7 +447,7 @@ function composeResultFromSections(
     analysis_gemini: summary.analysis_gemini,
     analysis_results: summary.analysis_results,
     key_metrics: {
-      ...(summary.analysis_results ? {} : {}),
+      ...(prevKm && typeof prevKm === 'object' ? prevKm : {}),
       analysis_target: summary.analysis_target ?? undefined,
       confidence_score: summary.confidence ?? undefined,
       summary_insights: summary.summaryText || undefined,
@@ -442,9 +460,26 @@ function composeResultFromSections(
       facts: insights?.facts,
       hypotheses: insights?.hypotheses,
       inferences: insights?.inferences,
-      pm_actions: actions ? { recommended_actions: actions.actions, monitoring_points: actions.monitoring_points, decision_risks: [] } : undefined,
+      pm_actions: actions ? { recommended_actions: actions.actions, monitoring_points: actions.monitoring_points, decision_risks: [] } : prevKm?.pm_actions,
     },
   }
+}
+
+/** strategy_generation 스트림 payload → conclusion_three_lines */
+function threeLinesFromStrategyTaskOutput(data: unknown): string[] | undefined {
+  if (!data || typeof data !== 'object') return undefined
+  const raw = (data as { three_line_actions?: unknown }).three_line_actions
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const lines = raw
+    .filter((x): x is string => typeof x === 'string')
+    .map((s) => {
+      const t = s.replace(/\s+/g, ' ').trim()
+      if (t.length <= 120) return t
+      return `${t.slice(0, 119).trimEnd()}…`
+    })
+    .filter((s) => s.length > 0)
+    .slice(0, 3)
+  return lines.length > 0 ? lines : undefined
 }
 
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음, 'none' = 기록 없음, 'error' = 요청 실패(스트림 시작 금지) */
@@ -694,7 +729,7 @@ export const useResearchStore = create<ResearchStore>()(
         status: 'completed' | 'failed' | 'running',
         opts?: { outputData?: unknown; errorMessage?: string | null; provider?: string | null; fallback_used?: boolean; primary_provider_error?: string | null }
       ) => {
-        /** `/api/research/tasks`·runResearch와 동일 순서. insight_extraction 누락 시 병합마다 해당 단계가 사라져 타임라인이 대기로 되돌아감 */
+        /** `/api/research/tasks`·runResearch와 동일 순서. 누락 시 병합마다 해당 단계가 사라져 타임라인이 대기로 되돌아감 */
         const STEP_ORDER = [
           'signal_layer',
           'trend_analysis',
@@ -702,22 +737,44 @@ export const useResearchStore = create<ResearchStore>()(
           'insight_extraction',
           'strategy_generation',
           'execution_layer',
+          'risk_opportunity',
         ] as const
         set((s) => {
           const prev = s.analysisTasks ?? []
           const byStep = new Map(prev.map((t) => [t.step_name, t]))
-          const entry = {
+          type Row = (typeof prev)[0]
+          const prevRow = byStep.get(stepName)
+          const base: Row =
+            prevRow ??
+            ({
+              step_name: stepName,
+              status: 'pending' as const,
+              output_data: null,
+              error_message: null,
+              started_at: null,
+              completed_at: null,
+              provider: null,
+              fallback_used: false,
+              primary_provider_error: null,
+            } as Row)
+          const nextRow: Row = {
+            ...base,
             step_name: stepName,
             status,
-            output_data: opts?.outputData ?? null,
-            error_message: opts?.errorMessage ?? null,
-            started_at: null,
-            completed_at: null,
-            provider: opts?.provider ?? null,
-            fallback_used: opts?.fallback_used ?? false,
-            primary_provider_error: opts?.primary_provider_error ?? null,
+            ...(opts?.outputData !== undefined ? { output_data: opts.outputData } : {}),
+            ...(opts?.errorMessage !== undefined
+              ? { error_message: opts.errorMessage }
+              : status === 'running'
+                ? { error_message: null }
+                : {}),
+            ...(opts?.provider !== undefined ? { provider: opts.provider } : {}),
+            fallback_used: opts?.fallback_used ?? base.fallback_used ?? false,
+            ...(opts?.primary_provider_error !== undefined
+              ? { primary_provider_error: opts.primary_provider_error }
+              : {}),
           }
-          byStep.set(stepName, { ...byStep.get(stepName), ...entry } as (typeof prev)[0])
+          byStep.set(stepName, nextRow)
+          const ordered = new Set<string>(STEP_ORDER as unknown as string[])
           const merged = STEP_ORDER.map((name) => {
             const t = byStep.get(name)
             return (
@@ -734,7 +791,8 @@ export const useResearchStore = create<ResearchStore>()(
               }
             )
           })
-          return { analysisTasks: merged }
+          const extras = prev.filter((t) => !ordered.has(t.step_name))
+          return { analysisTasks: extras.length ? [...merged, ...extras] : merged }
         })
       },
 
@@ -882,7 +940,8 @@ export const useResearchStore = create<ResearchStore>()(
           summarySection,
           marketTemperatureSection,
           recommendedActionsSection,
-          insightsSection
+          insightsSection,
+          state.result
         )
         if (result && (payload.reportId != null || payload.analysis_depth != null || payload.serper_used != null)) {
           result = {
@@ -1017,7 +1076,7 @@ export const useResearchStore = create<ResearchStore>()(
           recommendedActionsSection: preserveForStepRetry ? snap.recommendedActionsSection : null,
           insightsSection: preserveForStepRetry ? snap.insightsSection : null,
           error: null,
-          insights: null,
+          insights: preserveForStepRetry ? snap.insights : null,
           taskData: preserveForStepRetry ? snap.taskData : {},
           analysisId: preserveForStepRetry ? snap.analysisId : null,
           analysisTasks: preserveForStepRetry ? snap.analysisTasks : null,
@@ -1025,6 +1084,10 @@ export const useResearchStore = create<ResearchStore>()(
           liveInsightSuggestion: null,
           liveInsightSuggestionLoading: false,
         })
+
+        if (retryPipelineStep) {
+          get().mergeStreamingTaskIntoAnalysisTasks(retryPipelineStep, 'running', {})
+        }
 
         const appendActivity = (message: string, kind?: 'error', stepIdRaw?: string) => {
           const stepId = stepIdRaw ? normalizeActivityStepId(stepIdRaw) : undefined
@@ -1307,6 +1370,23 @@ export const useResearchStore = create<ResearchStore>()(
                         fallback_used: ev.fallback_used ?? false,
                         primary_provider_error: ev.primaryProviderError ?? null,
                       })
+                      if (task === 'strategy_generation' && ev.data != null) {
+                        const three = threeLinesFromStrategyTaskOutput(ev.data)
+                        const d = ev.data as Record<string, unknown>
+                        const bg = typeof d.background_rationale === 'string' ? d.background_rationale.trim() : ''
+                        if ((three?.length ?? 0) > 0 || bg) {
+                          set((s) => {
+                            const prev = s.result
+                            if (!prev) return {}
+                            const km = { ...(prev.key_metrics ?? {}) }
+                            if (three?.length) km.conclusion_three_lines = three
+                            if (bg) km.background_rationale = bg
+                            const ss = typeof d.strategy_summary === 'string' ? d.strategy_summary.trim() : ''
+                            if (ss) km.summary_insights = ss
+                            return { result: { ...prev, key_metrics: km } }
+                          })
+                        }
+                      }
                       const after = get()
                       if (after.analysisId && after.analysisTasks) {
                         writePipelineClientCache(after.analysisId, after.analysisTasks, after.taskData)

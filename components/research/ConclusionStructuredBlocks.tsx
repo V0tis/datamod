@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { MarkdownBody } from '@/components/ui/markdown-body'
 import { stripLeadingMarkdownHeadings } from '@/lib/strip-markdown-heading-markers'
@@ -11,6 +12,12 @@ function titleLineLabel(line: string): string | null {
   if (/^전략$/i.test(s) || /^strategy$/i.test(s)) return '전략'
   if (/^기대\s*효과$/i.test(s) || /^기대효과$/i.test(s) || /^expected/i.test(s)) return '기대 효과'
   return null
+}
+
+function displayBlockTitle(title: string): string {
+  if (title === '전략') return '핵심 전략'
+  if (title === '기대 효과') return '예상 효과'
+  return title
 }
 
 /** `##` 제거 후 단독 줄 제목(배경/전략/기대 효과) 또는 단락 3분할 */
@@ -45,7 +52,10 @@ export function tryParseConclusionTriad(text: string): { title: string; body: st
     return mapped
   }
 
-  const paras = t.split(/\n\n+/).map((p) => p.trim()).filter((p) => p.length > 12)
+  const paras = t
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 12)
   if (paras.length >= 3) {
     return [
       { title: '배경 및 근거', body: paras[0] },
@@ -54,6 +64,126 @@ export function tryParseConclusionTriad(text: string): { title: string; body: st
     ]
   }
   return null
+}
+
+const bodyTypography = 'text-[15px] leading-[1.65] tracking-wide text-pretty text-slate-700 [word-break:keep-all] dark:text-zinc-300'
+
+function renderInlineBold(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return (
+        <strong key={i} className="font-semibold text-slate-900 dark:text-zinc-50">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    return part
+  })
+}
+
+/** 불릿/번호 줄·단락을 항목으로 분리(표시용으로 #,* 접두 제거) */
+function bodyToItems(body: string): string[] {
+  const stripped = stripLeadingMarkdownHeadings(body).trim()
+  if (!stripped) return []
+
+  const oneLine = (s: string) =>
+    s
+      .split('\n')
+      .map((l) =>
+        l
+          .replace(/^#{1,6}\s*/, '')
+          .replace(/^[-*•]\s+/, '')
+          .replace(/^\d+[.)]\s+/, '')
+          .trim()
+      )
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+
+  if (stripped.includes('\n\n')) {
+    return stripped
+      .split(/\n\n+/)
+      .map((p) => oneLine(p))
+      .filter(Boolean)
+  }
+
+  const lines = stripped
+    .split('\n')
+    .map((l) =>
+      l
+        .replace(/^#{1,6}\s*/, '')
+        .replace(/^[-*•]\s+/, '')
+        .replace(/^\d+[.)]\s+/, '')
+        .trim()
+    )
+    .filter(Boolean)
+  return lines.length ? lines : [oneLine(stripped)].filter(Boolean)
+}
+
+function TriadSectionBody({
+  blockTitle,
+  body,
+  highlightTerms,
+}: {
+  blockTitle: string
+  body: string
+  highlightTerms: string[]
+}) {
+  const items = bodyToItems(body)
+  const highlightedItems = items.map((line) => injectKeywordBold(line, highlightTerms))
+
+  if (blockTitle === '배경 및 근거') {
+    return (
+      <dl className={cn('space-y-3', bodyTypography)}>
+        {highlightedItems.map((line, i) => (
+          <div key={i} className="border-l-2 border-slate-200 pl-3 dark:border-zinc-700">
+            <dt className="sr-only">근거 {i + 1}</dt>
+            <dd className="m-0">{renderInlineBold(line)}</dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
+
+  if (blockTitle === '전략') {
+    return (
+      <ul className="m-0 list-none space-y-2.5 p-0">
+        {highlightedItems.map((line, i) => (
+          <li key={i} className={cn('flex gap-2.5', bodyTypography)}>
+            <span className="mt-0.5 shrink-0 font-mono text-xs font-bold text-sky-600 dark:text-sky-400" aria-hidden>
+              ·
+            </span>
+            <span className="min-w-0 flex-1">{renderInlineBold(line)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  if (blockTitle === '기대 효과') {
+    return (
+      <aside
+        className="rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-4 py-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/35"
+        aria-label="예상 효과"
+      >
+        <dl className={cn('m-0 space-y-2.5', bodyTypography)}>
+          {highlightedItems.map((line, i) => (
+            <div key={i}>
+              <dt className="sr-only">효과 {i + 1}</dt>
+              <dd className="m-0 text-emerald-950 dark:text-emerald-100">{renderInlineBold(line)}</dd>
+            </div>
+          ))}
+        </dl>
+      </aside>
+    )
+  }
+
+  return (
+    <MarkdownBody className={cn('prose-base max-w-none dark:prose-invert', bodyTypography)}>
+      {injectKeywordBold(body, highlightTerms)}
+    </MarkdownBody>
+  )
 }
 
 export function ConclusionStructuredBlocks({
@@ -72,7 +202,11 @@ export function ConclusionStructuredBlocks({
     const highlighted = injectKeywordBold(cleaned, highlightTerms)
     return (
       <MarkdownBody
-        className={cn('prose-base max-w-none leading-loose text-slate-700 dark:prose-invert dark:text-zinc-300', className)}
+        className={cn(
+          'prose-base max-w-none text-slate-700 dark:prose-invert dark:text-zinc-300',
+          'leading-[1.65] tracking-wide text-pretty [word-break:keep-all]',
+          className
+        )}
       >
         {highlighted}
       </MarkdownBody>
@@ -80,21 +214,17 @@ export function ConclusionStructuredBlocks({
   }
 
   return (
-    <div className={cn('grid gap-4 sm:grid-cols-1 md:grid-cols-3 md:gap-6', className)}>
+    <div className={cn('grid gap-5 sm:grid-cols-1 md:grid-cols-3 md:gap-6', className)}>
       {triad.map((block, i) => (
-        <div
+        <section
           key={`${block.title}-${i}`}
-          className="rounded-lg border border-slate-100 bg-white p-5 shadow-none dark:border-zinc-800 dark:bg-zinc-900/50"
+          className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/50"
         >
-          <h4 className="border-b border-slate-100 pb-2 text-sm font-bold text-slate-900 dark:border-zinc-800 dark:text-zinc-50">
-            {block.title}
+          <h4 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold tracking-tight text-slate-900 dark:border-zinc-800 dark:text-zinc-50">
+            {displayBlockTitle(block.title)}
           </h4>
-          <div className="prose prose-sm mt-3 max-w-none dark:prose-invert">
-            <MarkdownBody className="text-sm leading-relaxed text-slate-700 dark:text-zinc-300">
-              {injectKeywordBold(block.body, highlightTerms)}
-            </MarkdownBody>
-          </div>
-        </div>
+          <TriadSectionBody blockTitle={block.title} body={block.body} highlightTerms={highlightTerms} />
+        </section>
       ))}
     </div>
   )

@@ -196,6 +196,17 @@ export function AnalysisResultSections({
   // Market Opportunity
   const opportunityScore = typeof km.opportunity_score === 'number' ? km.opportunity_score : null
   const breakdown = km.opportunity_score_breakdown ?? {}
+  const opportunityScoreSummaryLine =
+    (typeof km.opportunity_score_summary_text === 'string' && km.opportunity_score_summary_text.trim()) ||
+    (typeof km.opportunity_score_reasoning === 'string' && km.opportunity_score_reasoning.trim()) ||
+    undefined
+  const opportunityScoreReasonNarrative =
+    (typeof km.opportunity_score_reason_text === 'string' && km.opportunity_score_reason_text.trim()) ||
+    (typeof km.strategic_decision_layer?.market_opportunity_explanation === 'string' &&
+      km.strategic_decision_layer.market_opportunity_explanation.trim()) ||
+    undefined
+  const opportunityScoreChartDialogText =
+    [opportunityScoreReasonNarrative, opportunityScoreSummaryLine].filter(Boolean).join('\n\n') || undefined
   const marketGrowth = typeof breakdown.market_growth === 'number' ? breakdown.market_growth : null
   const trendMomentum = typeof breakdown.trend_momentum === 'number' ? breakdown.trend_momentum : null
   const growthSignals = Array.isArray(trendOutput?.growth_signals)
@@ -429,7 +440,7 @@ export function AnalysisResultSections({
             growthSignalsCount={growthSignals.length}
             marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
             chartInsights={km.chart_insights}
-            opportunityScoreReasoning={typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined}
+            opportunityScoreReasoning={opportunityScoreChartDialogText}
             keyword={keyword}
             radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
           />
@@ -438,9 +449,7 @@ export function AnalysisResultSections({
               <MarketSizeEvidenceCard
                 loading={loading && opportunityScore == null}
                 score={opportunityScore}
-                reasoning={
-                  typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined
-                }
+                reasoning={opportunityScoreSummaryLine}
                 newsCount={
                   Array.isArray(signalOutput?.news_activity) ? (signalOutput.news_activity as unknown[]).length : 0
                 }
@@ -710,7 +719,7 @@ export function AnalysisResultSections({
               growthSignalsCount={growthSignals.length}
               marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
               chartInsights={km.chart_insights}
-              opportunityScoreReasoning={typeof km.opportunity_score_reasoning === 'string' ? km.opportunity_score_reasoning : undefined}
+              opportunityScoreReasoning={opportunityScoreChartDialogText}
               keyword={keyword}
               radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
             />

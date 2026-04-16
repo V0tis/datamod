@@ -25,7 +25,10 @@ export type OpportunityScoreBreakdown = {
 export type OpportunityScoreOutput = {
   opportunity_score: number
   breakdown: OpportunityScoreBreakdown
+  /** 좌측 게이지 하단: 건수·구성 등 객관 지표 한 줄 (레거시 필드명) */
   score_reasoning: string
+  /** 동일 문구 — UI·저장용 명시 키 */
+  summary_text: string
 }
 
 /**
@@ -85,9 +88,10 @@ export function computeOpportunityScore(
   if (input.opportunities_count > 0) {
     parts.push(`기회 요인 ${input.opportunities_count}건`)
   }
-  const summary =
-    parts.length > 0 ? parts.join(', ') : '시장 데이터'
-  const score_reasoning = `${summary}을 반영해 기회 점수를 산출했습니다. (${opportunity_score}/100)`
+  const summary_text =
+    parts.length > 0
+      ? `${parts.join(', ')}을 반영한 수치입니다.`
+      : `시장·경쟁·기회·리스크 신호를 반영한 수치입니다.`
 
   return {
     opportunity_score,
@@ -98,6 +102,7 @@ export function computeOpportunityScore(
       competition_density,
       risk_factors,
     },
-    score_reasoning,
+    score_reasoning: summary_text,
+    summary_text,
   }
 }

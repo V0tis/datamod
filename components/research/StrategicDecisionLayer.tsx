@@ -62,7 +62,9 @@ export function StrategicDecisionLayer({
         : undefined)
 
   const marketOpportunityExplanation =
-    sanitizeForKoreanDisplay(sdl?.market_opportunity_explanation ?? km.opportunity_score_reasoning) || null
+    sanitizeForKoreanDisplay(
+      km.opportunity_score_reason_text ?? sdl?.opportunity_score_reason_text ?? sdl?.market_opportunity_explanation
+    ) || null
   const competitionExplanation = sanitizeForKoreanDisplay(sdl?.competition_explanation) || null
   const productMarketFit = sdl?.product_market_fit
   const productMarketFitExplanation = sanitizeForKoreanDisplay(sdl?.product_market_fit_explanation) || null

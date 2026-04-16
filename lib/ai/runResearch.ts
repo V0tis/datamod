@@ -27,8 +27,12 @@ import {
   buildStrategicRecommendationPrompt,
   PM_ACTION_PLAN_SYSTEM,
   buildPMActionPlanPrompt,
+  type PmActionOpportunityFacts,
   STRATEGY_EVALUATION_SYSTEM,
   buildStrategyEvaluationPrompt,
+  clampCrossValidationScore,
+  normalizeStrategyEvalRiskItems,
+  normalizeStrategyEvalOpportunityItems,
   normalizeOpportunitySignalsFromParse,
   normalizeRiskSignalsFromParse,
   flattenOpportunitySignalsForPrompt,
@@ -38,8 +42,14 @@ import {
 } from './pipeline-prompts'
 import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
-import { is429OrQuotaError, sleep } from './retry-with-backoff'
-import { computeOpportunityScore } from './opportunity-score-formula'
+import {
+  is429OrQuotaError,
+  sleep,
+  PIPELINE_LLM_COOLDOWN_MS,
+  PIPELINE_WEB_SEARCH_GAP_MS,
+  PIPELINE_STRATEGY_PRE_DELAY_MS,
+} from './retry-with-backoff'
+import { computeOpportunityScore, type OpportunityScoreOutput } from './opportunity-score-formula'
 import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { enrichPorter5Forces, type Porter5ForcesShape } from '@/lib/strategy-framework-mapper'
@@ -76,7 +86,7 @@ import {
   type TrendDataShape,
   type PipelineResumeState,
 } from '@/lib/ai/pipeline-resume'
-import { searchWeb, formatWebContext } from '@/lib/web-search'
+import { searchWeb, formatWebContext, type WebSearchResult } from '@/lib/web-search'
 import type {
   InitialResearchSummary,
   ChartData,
@@ -211,6 +221,8 @@ export type RunResearchParams = {
   userId: string
   geminiKey: string
   groqKey?: string | null
+  /** Anthropic API key — strategy_generation에서 Groq 폴백 실패 시에만 사용 */
+  anthropicKey?: string | null
   /** Serper API key for web search (user settings or env fallback) */
   serperKey?: string | null
   /** 분석 깊이: quick(빠른 인사이트), standard(전체 리포트), deep(심층 리서치). 기본 standard */
@@ -428,7 +440,6 @@ Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
       systemInstruction: ARTICLE_SUMMARY_SYSTEM,
       maxOutputTokens: 1500,
       model: GEMINI_MODEL,
-      isRetryable: () => false,
     })
     if (llmCtx) {
       await recordLlmUsage(llmCtx.supabase, {
@@ -840,22 +851,27 @@ type StrategicRecommendationResult = {
   strategy_summary: string
   market_summary?: string
   key_strategic_insights?: string[]
-  /** [시장 현황, 핵심 기회, 실행 전략] — 각 60자 이하 권장 */
+  /** [현상, 기회, 실행] — 각 ~120자 권장 */
   three_line_actions?: string[]
   /** 시장·경쟁 근거 마크다운(three_line과 중복 금지) */
   background_rationale?: string
 }
 
-function clampConclusionLine(s: string, max = 60): string {
+function clampConclusionLine(s: string, max = 120): string {
   const t = s.replace(/\s+/g, ' ').trim()
   if (t.length <= max) return t
   return `${t.slice(0, max - 1).trimEnd()}…`
 }
 
+/** 모델이 1~2줄만 줘도 저장·UI에 반영되도록 1~3줄까지 허용 */
 function normalizeThreeLineActions(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined
-  const lines = raw.filter((x): x is string => typeof x === 'string').map((s) => clampConclusionLine(s, 60))
-  return lines.length === 3 ? lines : undefined
+  const lines = raw
+    .filter((x): x is string => typeof x === 'string')
+    .map((s) => clampConclusionLine(s, 120))
+    .filter((s) => s.length > 0)
+    .slice(0, 3)
+  return lines.length > 0 ? lines : undefined
 }
 
 /** Step 4: Strategic Recommendation - structured JSON */
@@ -867,7 +883,8 @@ async function runStrategicRecommendationTask(
   competitionSummary: string,
   extractedInsights: InsightExtractionResult,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext
+  llmCtx?: LlmRecordingContext,
+  anthropicKey?: string | null
 ): Promise<{ data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildStrategicRecommendationPrompt(keyword, marketOverview, competitionSummary, extractedInsights)
   if (!prompt?.trim()) {
@@ -877,6 +894,7 @@ async function runStrategicRecommendationTask(
     step: 'strategy_generation',
     geminiKey,
     groqKey,
+    anthropicKey,
     primaryProvider,
     systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM,
     prompt,
@@ -925,6 +943,34 @@ async function runStrategicRecommendationTask(
   }
 }
 
+function mergeOpportunityScoreKeyMetrics(
+  target: Record<string, unknown>,
+  oppScore: OpportunityScoreOutput,
+  strategicDecisionLayer: Record<string, unknown> | null | undefined
+) {
+  const sdl = strategicDecisionLayer && typeof strategicDecisionLayer === 'object' ? strategicDecisionLayer : null
+  const reasonRaw =
+    (typeof sdl?.opportunity_score_reason_text === 'string' && sdl.opportunity_score_reason_text.trim()) ||
+    (typeof sdl?.market_opportunity_explanation === 'string' && sdl.market_opportunity_explanation.trim()) ||
+    ''
+  const reason = sanitizeForKoreanDisplay(reasonRaw)?.trim() || ''
+  target.opportunity_score_summary_text = oppScore.summary_text
+  target.opportunity_score_reasoning = oppScore.summary_text
+  if (reason.length >= 12) {
+    target.opportunity_score_reason_text = reason
+  } else {
+    delete target.opportunity_score_reason_text
+  }
+  if (sdl) {
+    const next = { ...sdl }
+    if (reason.length >= 12) {
+      next.market_opportunity_explanation = reason
+      next.opportunity_score_reason_text = reason
+    }
+    target.strategic_decision_layer = next
+  }
+}
+
 /** Step 5: PM Action Plan - structured JSON. Validates result; regenerates once if invalid. */
 async function runPMActionPlanTask(
   geminiKey: string,
@@ -934,7 +980,8 @@ async function runPMActionPlanTask(
   opportunitiesSummary: string,
   risksSummary: string,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext
+  llmCtx?: LlmRecordingContext,
+  opportunityFacts?: PmActionOpportunityFacts | null
 ): Promise<{
   executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -945,6 +992,7 @@ async function runPMActionPlanTask(
     monetization?: string
     pm_action_plan?: PMActionPlanItem[]
     strategic_decision_layer?: {
+      opportunity_score_reason_text?: string
       market_opportunity_explanation?: string
       competition_intensity?: 'low' | 'medium' | 'high'
       competition_explanation?: string
@@ -968,7 +1016,7 @@ async function runPMActionPlanTask(
   usedFallback: boolean
   primaryProviderError?: string
 }> {
-  const prompt = buildPMActionPlanPrompt(keyword, strategySummary, opportunitiesSummary, risksSummary)
+  const prompt = buildPMActionPlanPrompt(keyword, strategySummary, opportunitiesSummary, risksSummary, opportunityFacts ?? null)
   if (!prompt?.trim()) {
     throw new Error('PM 액션 플랜에 필요한 데이터가 없습니다. 전략·기회·리스크 데이터를 확인해 주세요.')
   }
@@ -1017,6 +1065,7 @@ async function runPMActionPlanTask(
     monetization?: string
     pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string; category?: string }>
     strategic_decision_layer?: {
+      opportunity_score_reason_text?: string
       market_opportunity_explanation?: string
       competition_intensity?: string
       competition_explanation?: string
@@ -1231,17 +1280,27 @@ async function runPMActionPlanTask(
       target_customer: typeof parsed?.target_customer === 'string' ? parsed.target_customer.trim() : undefined,
       monetization: typeof parsed?.monetization === 'string' ? parsed.monetization.trim() : undefined,
       pm_action_plan: pmPlan.length > 0 ? pmPlan : undefined,
-      strategic_decision_layer: parsed?.strategic_decision_layer && typeof parsed.strategic_decision_layer === 'object'
-        ? (parsed.strategic_decision_layer as {
-            market_opportunity_explanation?: string
-            competition_intensity?: 'low' | 'medium' | 'high'
-            competition_explanation?: string
-            product_market_fit?: 'low' | 'medium' | 'high'
-            product_market_fit_explanation?: string
-            entry_strategy?: string
-            entry_explanation?: string
-          })
-        : undefined,
+      strategic_decision_layer: (() => {
+        if (!parsed?.strategic_decision_layer || typeof parsed.strategic_decision_layer !== 'object') return undefined
+        const layer = { ...(parsed.strategic_decision_layer as Record<string, unknown>) }
+        const a = typeof layer.opportunity_score_reason_text === 'string' ? layer.opportunity_score_reason_text.trim() : ''
+        const b = typeof layer.market_opportunity_explanation === 'string' ? layer.market_opportunity_explanation.trim() : ''
+        const mergedReason = sanitizeForKoreanDisplay(a || b)?.trim() || ''
+        if (mergedReason.length >= 12) {
+          layer.market_opportunity_explanation = mergedReason
+          layer.opportunity_score_reason_text = mergedReason
+        }
+        return layer as {
+          opportunity_score_reason_text?: string
+          market_opportunity_explanation?: string
+          competition_intensity?: 'low' | 'medium' | 'high'
+          competition_explanation?: string
+          product_market_fit?: 'low' | 'medium' | 'high'
+          product_market_fit_explanation?: string
+          entry_strategy?: string
+          entry_explanation?: string
+        }
+      })(),
       swot_analysis: swot,
       jtbd: jtbdFiltered,
       porter_5_forces: porterParsed,
@@ -1254,6 +1313,10 @@ async function runPMActionPlanTask(
 
 /** Strategy Evaluation - score + label + reason per dimension */
 type StrategyEvaluationResult = {
+  cross_validation_score?: number
+  cross_validation_summary?: string
+  risk_items?: Array<{ issue: string; mitigation_level: string; plan: string }>
+  opportunity_items?: Array<{ value: string; difficulty_level: string; priority: number }>
   market_attractiveness: number
   market_attractiveness_label?: string
   market_attractiveness_reason?: string
@@ -1266,6 +1329,16 @@ type StrategyEvaluationResult = {
   growth_potential: number
   growth_potential_label?: string
   growth_potential_reason?: string
+}
+
+function deriveCrossValidationFromDimensions(
+  ma: number,
+  cr: number,
+  ed: number,
+  gp: number
+): number {
+  const attract = (ma + (11 - cr) + (11 - ed) + gp) / 4
+  return Math.min(100, Math.max(0, Math.round((attract / 10) * 100)))
 }
 
 function clampScore(n: unknown): number {
@@ -1303,8 +1376,8 @@ async function runStrategyEvaluationTask(
       primaryProvider,
       systemInstruction: STRATEGY_EVALUATION_SYSTEM,
       prompt,
-      maxOutputTokens: 450,
-      groqMaxTokens: 450,
+      maxOutputTokens: 1200,
+      groqMaxTokens: 1200,
       geminiModel: GEMINI_MODEL,
       ctx: llmCtx,
     })
@@ -1313,6 +1386,10 @@ async function runStrategyEvaluationTask(
     throw new Error('전략 평가 중 오류가 발생했습니다. ' + (err instanceof Error ? err.message : String(err)))
   }
   const fallbackEval: StrategyEvaluationResult = {
+    cross_validation_score: 50,
+    cross_validation_summary: '평가 응답 파싱에 실패하여 차원 점수 기반 추정치입니다.',
+    risk_items: [],
+    opportunity_items: [],
     market_attractiveness: 5,
     competition_risk: 5,
     execution_difficulty: 5,
@@ -1327,17 +1404,44 @@ async function runStrategyEvaluationTask(
   }
   const parsed = evalParseResult.data
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : undefined)
+  const ma = clampScore(parsed.market_attractiveness)
+  const cr = clampScore(parsed.competition_risk)
+  const ed = clampScore(parsed.execution_difficulty)
+  const gp = clampScore(parsed.growth_potential)
+  const risk_items = normalizeStrategyEvalRiskItems(
+    (parsed as Record<string, unknown>).risk_items ?? (parsed as Record<string, unknown>).risks_structured
+  )
+  const opportunity_items = normalizeStrategyEvalOpportunityItems(
+    (parsed as Record<string, unknown>).opportunity_items ??
+      (parsed as Record<string, unknown>).opportunities_structured
+  )
+  let cross_validation_score = clampCrossValidationScore(
+    (parsed as Record<string, unknown>).cross_validation_score
+  )
+  if (cross_validation_score === undefined) {
+    cross_validation_score = deriveCrossValidationFromDimensions(ma, cr, ed, gp)
+  }
+  const cross_validation_summary =
+    str((parsed as Record<string, unknown>).cross_validation_summary) ||
+    (risk_items.length || opportunity_items.length
+      ? '정량·정성 신호를 리스크·기회 항목에 반영했습니다.'
+      : undefined)
+
   return {
-    market_attractiveness: clampScore(parsed.market_attractiveness),
+    cross_validation_score,
+    cross_validation_summary,
+    risk_items: risk_items.length ? risk_items : undefined,
+    opportunity_items: opportunity_items.length ? opportunity_items : undefined,
+    market_attractiveness: ma,
     market_attractiveness_label: str(parsed.market_attractiveness_label),
     market_attractiveness_reason: str(parsed.market_attractiveness_reason),
-    competition_risk: clampScore(parsed.competition_risk),
+    competition_risk: cr,
     competition_risk_label: str(parsed.competition_risk_label),
     competition_risk_reason: str(parsed.competition_risk_reason),
-    execution_difficulty: clampScore(parsed.execution_difficulty),
+    execution_difficulty: ed,
     execution_difficulty_label: str(parsed.execution_difficulty_label),
     execution_difficulty_reason: str(parsed.execution_difficulty_reason),
-    growth_potential: clampScore(parsed.growth_potential),
+    growth_potential: gp,
     growth_potential_label: str(parsed.growth_potential_label),
     growth_potential_reason: str(parsed.growth_potential_reason),
   }
@@ -1677,7 +1781,14 @@ function parseStrategyTaskOutput(raw: unknown): StrategicRecommendationResult | 
   const bg = typeof o.background_rationale === 'string' ? o.background_rationale.trim() : ''
   const strategy_summary = typeof o.strategy_summary === 'string' ? o.strategy_summary.trim() : ''
   const three = normalizeThreeLineActions(o.three_line_actions)
-  if (!strategy_summary && !bg && opportunities.length === 0 && risks.length === 0 && !three) return null
+  if (
+    !strategy_summary &&
+    !bg &&
+    opportunities.length === 0 &&
+    risks.length === 0 &&
+    (three == null || three.length === 0)
+  )
+    return null
   const mergedSummary = strategy_summary || bg || ' '
   return {
     opportunities,
@@ -1764,6 +1875,7 @@ async function* runResearchRetrySingleStep(
     userId,
     geminiKey,
     groqKey,
+    anthropicKey,
     mode: depthMode = 'standard',
     primaryProvider: primaryProviderParam,
     stepAISettings: stepSettings,
@@ -1993,7 +2105,8 @@ async function* runResearchRetrySingleStep(
         resume.competitionSummary,
         insightData,
         effectiveStrategyProvider,
-        llmCtx
+        llmCtx,
+        anthropicKey ?? null
       )
       const strategyData = stratResult.data
       const stratProvider =
@@ -2046,7 +2159,7 @@ async function* runResearchRetrySingleStep(
       })
       merged.opportunity_score = oppScore.opportunity_score
       merged.opportunity_score_breakdown = oppScore.breakdown
-      merged.opportunity_score_reasoning = oppScore.score_reasoning
+      mergeOpportunityScoreKeyMetrics(merged, oppScore, merged.strategic_decision_layer as Record<string, unknown> | undefined)
       sanitizeDeep(merged)
 
       await supabase.from('research_history').upsert(
@@ -2083,6 +2196,13 @@ async function* runResearchRetrySingleStep(
         fallback_used: false,
       }
 
+      const pmFactsRetry: PmActionOpportunityFacts = {
+        positive_signals_count: Array.isArray(existingKm.positive_signals) ? existingKm.positive_signals.length : 0,
+        neutral_signals_count: Array.isArray(existingKm.neutral_signals) ? existingKm.neutral_signals.length : 0,
+        competitor_count: Array.isArray(existingKm.competitive_landscape) ? existingKm.competitive_landscape.length : 0,
+        strategy_opportunities_count: strategyData.opportunities.length,
+        strategy_risks_count: strategyData.risks.length,
+      }
       const pmResult = await runPMActionPlanTask(
         geminiKey,
         groqKey,
@@ -2091,7 +2211,8 @@ async function* runResearchRetrySingleStep(
         opportunitiesSummary,
         risksSummary,
         actionProviderResolved,
-        llmCtx
+        llmCtx,
+        pmFactsRetry
       )
       const executionData = { ...pmResult.executionData }
       const executionProvider =
@@ -2148,7 +2269,7 @@ async function* runResearchRetrySingleStep(
       })
       merged.opportunity_score = oppScore.opportunity_score
       merged.opportunity_score_breakdown = oppScore.breakdown
-      merged.opportunity_score_reasoning = oppScore.score_reasoning
+      mergeOpportunityScoreKeyMetrics(merged, oppScore, merged.strategic_decision_layer as Record<string, unknown> | undefined)
       const stratEval = merged.strategy_evaluation as
         | {
             competition_risk?: number
@@ -2249,6 +2370,10 @@ async function* runResearchRetrySingleStep(
 
       const merged: Record<string, unknown> = { ...existingKm }
       merged.strategy_evaluation = {
+        cross_validation_score: strategyEvaluation.cross_validation_score,
+        cross_validation_summary: strategyEvaluation.cross_validation_summary,
+        risk_items: strategyEvaluation.risk_items,
+        opportunity_items: strategyEvaluation.opportunity_items,
         market_attractiveness: strategyEvaluation.market_attractiveness,
         market_attractiveness_label: strategyEvaluation.market_attractiveness_label,
         market_attractiveness_reason: strategyEvaluation.market_attractiveness_reason,
@@ -2341,6 +2466,7 @@ export async function* runResearch(
     userId,
     geminiKey,
     groqKey,
+    anthropicKey,
     serperKey,
     mode: depthMode = 'standard',
     primaryProvider: primaryProviderParam,
@@ -2644,9 +2770,11 @@ export async function* runResearch(
   let competitorWebContext = ''
   try {
     const compQueries = [`${keyword} competitors`, `${keyword} market leaders`, `${keyword} platforms`]
-    const compResults = await Promise.all(
-      compQueries.slice(0, 2).map((q) => searchWeb(q, { num: 5, ...webSearchOptions }))
-    )
+    const compResults: WebSearchResult[][] = []
+    for (let i = 0; i < Math.min(2, compQueries.length); i++) {
+      if (i > 0) await sleep(PIPELINE_WEB_SEARCH_GAP_MS)
+      compResults.push(await searchWeb(compQueries[i], { num: 5, ...webSearchOptions }))
+    }
     const merged = compResults.flat().slice(0, 12)
     if (merged.length > 0) {
       competitorWebContext = formatWebContext(merged, 12)
@@ -2678,8 +2806,9 @@ export async function* runResearch(
 
   const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
 
-  const trendSettled = await Promise.allSettled([
-    runTrendTask(
+  let trendSettled: PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>
+  try {
+    const value = await runTrendTask(
       geminiKey,
       groqKey,
       keyword,
@@ -2688,8 +2817,11 @@ export async function* runResearch(
       webContext,
       articleRawContentTotalChars,
       llmCtx
-    ),
-  ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>)
+    )
+    trendSettled = { status: 'fulfilled', value }
+  } catch (reason) {
+    trendSettled = { status: 'rejected', reason }
+  }
 
   if (trendSettled.status === 'rejected') {
     const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
@@ -2701,12 +2833,15 @@ export async function* runResearch(
     return
   }
 
+  await sleep(PIPELINE_LLM_COOLDOWN_MS)
+
   log('competition_analysis', 'running')
   await upsertAnalysisTask('competition_analysis', 'running', { provider: competitorProvider, fallback_used: false })
   yield { type: 'task', task: 'competition_analysis', status: 'running', provider: competitorProvider, fallback_used: false }
 
-  const compSettled = await Promise.allSettled([
-    runCompetitionTask(
+  let compSettled: PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>
+  try {
+    const value = await runCompetitionTask(
       geminiKey,
       groqKey,
       keyword,
@@ -2716,8 +2851,11 @@ export async function* runResearch(
       competitorWebContext || undefined,
       articleRawContentTotalChars,
       llmCtx
-    ),
-  ]).then(([r]) => r as PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>)
+    )
+    compSettled = { status: 'fulfilled', value }
+  } catch (reason) {
+    compSettled = { status: 'rejected', reason }
+  }
 
   if (compSettled.status === 'rejected') {
     const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
@@ -2797,6 +2935,10 @@ export async function* runResearch(
 
   } // end if (!skipDataCollection)
 
+  if (!skipDataCollection) {
+    await sleep(PIPELINE_LLM_COOLDOWN_MS)
+  }
+
   // Step 3: Insight Extraction
   const insightProviderResolved = resolveAIForStep(effectiveStepSettings, 'insight')
   let insightData: InsightExtractionResult
@@ -2867,10 +3009,8 @@ export async function* runResearch(
   }
   } // end else (insight extraction path)
 
-  const stratPrimaryIsGemini = primaryProvider === 'gemini'
-
-  // Rate-limit guard: brief pause before next AI call to avoid 429
-  await sleep(500)
+  // Rate-limit guard: 인사이트 직후 Gemini RPM 완화
+  await sleep(PIPELINE_STRATEGY_PRE_DELAY_MS)
 
   // Step 4: Strategic Recommendation
   const step4StartMs = Date.now()
@@ -2895,7 +3035,8 @@ export async function* runResearch(
       competitionSummary,
       insightData,
       effectiveStrategyProvider,
-      llmCtx
+      llmCtx,
+      anthropicKey ?? null
     )
     strategyData = stratResult.data
     const stratProvider = effectiveStrategyProvider === 'gemini' ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
@@ -2940,8 +3081,8 @@ export async function* runResearch(
     return
   }
 
-  // Rate-limit guard: brief pause before next AI call
-  await sleep(500)
+  // Rate-limit guard: 전략 직후 실행 단계 LLM 호출 간격
+  await sleep(PIPELINE_LLM_COOLDOWN_MS)
 
   // Step 5: PM Action Plan
   const opportunitiesSummary = strategyData.opportunities.join('. ')
@@ -2980,6 +3121,13 @@ export async function* runResearch(
   await upsertAnalysisTask('execution_layer', 'running', { provider: actionProviderResolved, fallback_used: false })
   yield { type: 'task', task: 'execution_layer', status: 'running', provider: actionProviderResolved, fallback_used: false }
   try {
+    const pmOpportunityFacts: PmActionOpportunityFacts = {
+      positive_signals_count: trendData.positive_signals.length,
+      neutral_signals_count: trendData.neutral_signals.length,
+      competitor_count: competitionData.competitive_landscape.length,
+      strategy_opportunities_count: strategyData.opportunities.length,
+      strategy_risks_count: strategyData.risks.length,
+    }
     const pmResult = await runPMActionPlanTask(
       geminiKey,
       groqKey,
@@ -2988,7 +3136,8 @@ export async function* runResearch(
       opportunitiesSummary,
       risksSummary,
       actionProviderResolved,
-      llmCtx
+      llmCtx,
+      pmOpportunityFacts
     )
     executionData = { ...pmResult.executionData }
 
@@ -3077,7 +3226,7 @@ export async function* runResearch(
   }
 
   // Rate-limit guard before final evaluation call
-  await sleep(500)
+  await sleep(PIPELINE_LLM_COOLDOWN_MS)
 
   let strategyEvaluation: StrategyEvaluationResult | undefined
   const riskProvider = resolveAIForStep(effectiveStepSettings, 'risk')
@@ -3179,6 +3328,10 @@ export async function* runResearch(
       : undefined,
     strategy_evaluation: strategyEvaluation
       ? {
+          cross_validation_score: strategyEvaluation.cross_validation_score,
+          cross_validation_summary: strategyEvaluation.cross_validation_summary,
+          risk_items: strategyEvaluation.risk_items,
+          opportunity_items: strategyEvaluation.opportunity_items,
           market_attractiveness: strategyEvaluation.market_attractiveness,
           market_attractiveness_label: strategyEvaluation.market_attractiveness_label,
           market_attractiveness_reason: strategyEvaluation.market_attractiveness_reason,
@@ -3205,7 +3358,11 @@ export async function* runResearch(
 
   structured.opportunity_score = opportunityScoreData.opportunity_score
   structured.opportunity_score_breakdown = opportunityScoreData.breakdown
-  structured.opportunity_score_reasoning = opportunityScoreData.score_reasoning
+  mergeOpportunityScoreKeyMetrics(
+    structured as unknown as Record<string, unknown>,
+    opportunityScoreData,
+    structured.strategic_decision_layer as Record<string, unknown> | undefined
+  )
 
   structured.porter_5_forces = enrichPorter5Forces(
     structured.porter_5_forces,

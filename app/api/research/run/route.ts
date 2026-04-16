@@ -5,7 +5,13 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGeminiKeyForRequest, getGroqKeyForRequest, getSerperKeyForRequest, getStepAISettingsForRequest } from '@/lib/research-keys'
+import {
+  getGeminiKeyForRequest,
+  getGroqKeyForRequest,
+  getAnthropicKeyForRequest,
+  getSerperKeyForRequest,
+  getStepAISettingsForRequest,
+} from '@/lib/research-keys'
 import { runResearch, type ResearchStreamEvent, type RetryPipelineStepId } from '@/lib/ai'
 import { logger } from '@/lib/logger'
 
@@ -131,9 +137,10 @@ export async function POST(req: Request) {
     const bodyPrimaryModel = body.ai_primary_model === 'groq' || body.ai_primary_model === 'gemini'
       ? body.ai_primary_model
       : null
-    const [geminiResult, groqKey, serperKey, stepAISettings] = await Promise.all([
+    const [geminiResult, groqKey, anthropicKey, serperKey, stepAISettings] = await Promise.all([
       getGeminiKeyForRequest(supabase, user.id),
       getGroqKeyForRequest(supabase, user.id),
+      getAnthropicKeyForRequest(supabase, user.id),
       getSerperKeyForRequest(supabase, user.id),
       getStepAISettingsForRequest(supabase, user.id),
     ])
@@ -241,6 +248,7 @@ export async function POST(req: Request) {
             userId: user.id,
             geminiKey: gemini,
             groqKey,
+            anthropicKey: anthropicKey || null,
             serperKey,
             primaryProvider,
             stepAISettings,

@@ -38,4 +38,5 @@ export const DEFAULT_KEY_METRICS_LOADING: NonNullable<ResearchResponse['key_metr
   summary_insights: '-',
   keyConclusions: [],
   opportunity_score_reasoning: '',
+  opportunity_score_summary_text: '',
 }

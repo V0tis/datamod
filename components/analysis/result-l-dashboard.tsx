@@ -108,6 +108,10 @@ export function ResultLDashboard({
         return
       }
       const opts = taskIdToResearchRunOptions(failedTaskId)
+      if (opts == null) {
+        toast.error('이 단계는 자동 재시도를 지원하지 않거나, 단계 정보가 없습니다.')
+        return
+      }
       void startStreamingResearch(k, {
         country_code: countryCode,
         ai_primary_model: aiPrimaryModel,
@@ -252,9 +256,11 @@ export function ResultLDashboard({
   )
 
   const km = effectiveResult?.key_metrics
-  const scoreRationale =
+  const scoreSummaryLeft =
+    sanitizeForKoreanDisplay(km?.opportunity_score_summary_text ?? km?.opportunity_score_reasoning)?.trim() || null
+  const scoreReasonRight =
     sanitizeForKoreanDisplay(
-      km?.strategic_decision_layer?.market_opportunity_explanation ?? km?.opportunity_score_reasoning
+      km?.opportunity_score_reason_text ?? km?.strategic_decision_layer?.market_opportunity_explanation
     )?.trim() || null
   /** 상단 액션 카드와 중복되지 않게: 근거·배경 전용(없으면 기존 summary_insights) */
   const conclusionFull = stripLeadingMarkdownHeadings(
@@ -431,16 +437,16 @@ export function ResultLDashboard({
                                     loading={loading && liveOppNum == null}
                                     stableScore={stableOppScore}
                                     analysisFailed={analysisFailed}
-                                    rationaleSummary={scoreRationale}
+                                    rationaleSummary={scoreSummaryLeft}
                                   />
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
                                     점수 근거 한줄
                                   </p>
-                                  {scoreRationale ? (
+                                  {scoreReasonRight ? (
                                     <p className="text-pretty text-sm font-medium leading-relaxed text-slate-800 dark:text-zinc-100">
-                                      {scoreRationale}
+                                      {scoreReasonRight}
                                     </p>
                                   ) : (
                                     <p className="text-pretty text-sm leading-relaxed text-slate-500 dark:text-zinc-400">

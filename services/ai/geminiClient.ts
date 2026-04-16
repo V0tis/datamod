@@ -5,7 +5,8 @@
  */
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GEMINI_TAB_MODEL, GEMINI_CONSENSUS_MODEL, GEMINI_MODEL } from '@/lib/gemini-config'
-import { withExponentialBackoff } from '@/lib/gemini-retry'
+import { withExponentialBackoff, isRetryableGeminiError } from '@/lib/gemini-retry'
+import { extractGemini429RetryDelayMs, parseRetryDelayMsFromGoogleRpcBody } from '@/lib/ai/gemini-quota-error'
 import { fetchWithTimeout, withTimeout, AI_MAX_RETRIES } from '@/lib/ai/safe-fetch'
 
 const GEMINI_BASE_URL_V1 = 'https://generativelanguage.googleapis.com/v1/models'
@@ -41,13 +42,26 @@ export async function requestGenerateContent(
         body: JSON.stringify(body),
       })
       if (r.status === 429 || r.status >= 500) {
-        const err = new Error(`Gemini ${r.status}`) as Error & { status?: number }
+        let retryAfterMs = 0
+        if (r.status === 429) {
+          try {
+            const j = (await r.clone().json()) as unknown
+            retryAfterMs = parseRetryDelayMsFromGoogleRpcBody(j)
+          } catch {
+            /* ignore */
+          }
+        }
+        const err = new Error(`Gemini ${r.status}`) as Error & { status?: number; retryAfterMs?: number }
         err.status = r.status
+        if (retryAfterMs > 0) err.retryAfterMs = retryAfterMs
         throw err
       }
       return r
     },
-    DEFAULT_BACKOFF
+    {
+      ...DEFAULT_BACKOFF,
+      resolveRetryDelayMs: (e) => extractGemini429RetryDelayMs(e),
+    }
   )
   return res
 }
@@ -69,8 +83,10 @@ export type GenerateTextOptions = {
   systemInstruction?: string
   maxOutputTokens?: number
   model?: string
-  /** Override retry predicate (e.g. skip retry on 404) */
+  /** Override retry predicate (e.g. skip retry on 404). 미지정 시 429·5xx 등 재시도 */
   isRetryable?: (error: unknown) => boolean
+  /** false면 응답의 retryDelay를 백오프에 합성하지 않음 */
+  useGeminiQuotaRetryDelay?: boolean
 }
 
 /**
@@ -116,6 +132,7 @@ export async function generateText(options: GenerateTextOptions): Promise<string
     maxOutputTokens = 2048,
     model = GEMINI_TAB_MODEL,
     isRetryable,
+    useGeminiQuotaRetryDelay = true,
   } = options
   const genAI = new GoogleGenerativeAI(apiKey)
   const modelConfig: {
@@ -133,7 +150,11 @@ export async function generateText(options: GenerateTextOptions): Promise<string
       )
       return result.response.text()
     },
-    { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
+    {
+      ...DEFAULT_BACKOFF,
+      ...(isRetryable ? { isRetryable } : { isRetryable: isRetryableGeminiError }),
+      ...(useGeminiQuotaRetryDelay ? { resolveRetryDelayMs: extractGemini429RetryDelayMs } : {}),
+    }
   )
   return text ?? ''
 }
@@ -157,6 +178,7 @@ export async function generateTextWithUsage(options: GenerateTextOptions): Promi
     maxOutputTokens = 2048,
     model = GEMINI_TAB_MODEL,
     isRetryable,
+    useGeminiQuotaRetryDelay = true,
   } = options
   const genAI = new GoogleGenerativeAI(apiKey)
   const modelConfig: {
@@ -174,7 +196,11 @@ export async function generateTextWithUsage(options: GenerateTextOptions): Promi
       )
       return r
     },
-    { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
+    {
+      ...DEFAULT_BACKOFF,
+      ...(isRetryable ? { isRetryable } : { isRetryable: isRetryableGeminiError }),
+      ...(useGeminiQuotaRetryDelay ? { resolveRetryDelayMs: extractGemini429RetryDelayMs } : {}),
+    }
   )
   const text = result.response.text() ?? ''
   type UsageMeta = {
@@ -242,7 +268,11 @@ export async function generateResearchWithGrounding(
       )
       return r.response
     },
-    { ...DEFAULT_BACKOFF, ...(isRetryable ? { isRetryable } : {}) }
+    {
+      ...DEFAULT_BACKOFF,
+      ...(isRetryable ? { isRetryable } : { isRetryable: isRetryableGeminiError }),
+      resolveRetryDelayMs: extractGemini429RetryDelayMs,
+    }
   )
   const text = response.text()
   type GroundingResp = {

@@ -9,6 +9,8 @@ import {
   sleep,
   getExponentialDelayMs,
 } from '@/lib/ai/retry-with-backoff'
+import { extractGemini429RetryDelayMs } from '@/lib/ai/gemini-quota-error'
+import { completeAnthropicMessages } from '@/services/ai/anthropicClient'
 import {
   estimatePromptTokens,
   shouldForceGeminiLongContext,
@@ -71,6 +73,8 @@ export async function runPipelineGeminiGroqText(options: {
   step: string
   geminiKey: string
   groqKey: string | null | undefined
+  /** strategy_generation 전용: Groq 실패 시 Claude(Anthropic) 3차 폴백 */
+  anthropicKey?: string | null
   primaryProvider: PipelinePrimaryModel
   systemInstruction: string
   prompt: string
@@ -83,6 +87,7 @@ export async function runPipelineGeminiGroqText(options: {
     step,
     geminiKey,
     groqKey,
+    anthropicKey,
     primaryProvider,
     systemInstruction,
     prompt,
@@ -101,7 +106,6 @@ export async function runPipelineGeminiGroqText(options: {
       systemInstruction,
       maxOutputTokens,
       model: longModel,
-      isRetryable: () => false,
     })
     await safeRecord(ctx, {
       stepName: step,
@@ -117,8 +121,16 @@ export async function runPipelineGeminiGroqText(options: {
   }
 
   const primaryIsGemini = primaryProvider === 'gemini'
-  /** PM 액션 플랜: Groq 재시도 없이 빠르게 Gemini Flash 폴백 */
-  const maxPrimaryRetries = step === 'execution_layer' && !primaryIsGemini ? 0 : AI_MAX_RETRIES
+  /**
+   * 전략 단계: Gemini 쿼터(429) 시 대기 없이 Groq로 넘기기 위해 Gemini 쪽 재시도 루프를 생략.
+   * PM 액션(Groq 우선): Groq 재시도 없이 빠르게 Gemini 폴백.
+   */
+  const maxPrimaryRetries =
+    step === 'strategy_generation' && primaryIsGemini && groqKey?.trim()
+      ? 0
+      : step === 'execution_layer' && !primaryIsGemini
+        ? 0
+        : AI_MAX_RETRIES
   let usedFallback = false
   let primaryProviderError: string | undefined
 
@@ -136,7 +148,6 @@ export async function runPipelineGeminiGroqText(options: {
           systemInstruction,
           maxOutputTokens,
           model: geminiModel,
-          isRetryable: () => false,
         })
         const text = r.text ?? ''
         await safeRecord(ctx, {
@@ -187,7 +198,9 @@ export async function runPipelineGeminiGroqText(options: {
       return { text, usedFallback: false }
     } catch (err) {
       if (attempt < maxPrimaryRetries && is429OrQuotaError(err)) {
-        await sleep(getExponentialDelayMs(attempt, AI_BASE_DELAY_MS))
+        const serverMs = extractGemini429RetryDelayMs(err)
+        const exp = getExponentialDelayMs(attempt, AI_BASE_DELAY_MS)
+        await sleep(serverMs > 0 ? Math.max(exp, serverMs) : exp)
         continue
       }
       if (isFallbackTriggerError(err)) {
@@ -224,7 +237,6 @@ export async function runPipelineGeminiGroqText(options: {
               systemInstruction,
               maxOutputTokens,
               model: geminiFallbackModel,
-              isRetryable: () => false,
             })
             const textGem = r.text ?? ''
             usedFallback = true
@@ -240,6 +252,24 @@ export async function runPipelineGeminiGroqText(options: {
             return { text: textGem, usedFallback: true, primaryProviderError }
           }
         } catch {
+          if (
+            step === 'strategy_generation' &&
+            primaryIsGemini &&
+            typeof anthropicKey === 'string' &&
+            anthropicKey.trim().length > 0
+          ) {
+            try {
+              const ar = await completeAnthropicMessages(anthropicKey.trim(), systemInstruction, prompt, {
+                maxTokens: groqMaxTokens,
+              })
+              if (ar.text?.trim()) {
+                const note = `${primaryProviderError ?? 'primary failed'}; groq fallback failed; anthropic`
+                return { text: ar.text.trim(), usedFallback: true, primaryProviderError: note }
+              }
+            } catch {
+              /* fall through */
+            }
+          }
           throw err
         }
         throw err

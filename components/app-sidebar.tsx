@@ -158,8 +158,8 @@ export function AppSidebar() {
   )
 
   const topbarContent = (
-    <div className="flex min-h-[3.5rem] w-full flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-border bg-white px-3 py-2 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-4">
+    <div className="flex min-h-[3.5rem] w-full items-center justify-between gap-2 border-b border-border bg-white px-3 py-2 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90"
@@ -168,7 +168,10 @@ export function AppSidebar() {
           <RinLogo className="h-8 w-8 shrink-0 text-neutral-900 dark:text-zinc-100" />
           <DatamodWordmark className="text-sm" textClassName="text-neutral-900 dark:text-zinc-100" />
         </Link>
-        <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:flex-initial" aria-label="메인 메뉴">
+        <nav
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden"
+          aria-label="메인 메뉴"
+        >
           {navItems.map((item) => {
             const active = isActive(item)
             const Icon = item.icon
@@ -178,7 +181,7 @@ export function AppSidebar() {
                 href={item.href}
                 title={item.tooltip}
                 className={cn(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200',
+                  'flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors duration-200 sm:px-3',
                   active
                     ? 'bg-slate-100 text-sky-600 dark:bg-zinc-800 dark:text-sky-400'
                     : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
@@ -189,17 +192,20 @@ export function AppSidebar() {
                   className={cn('shrink-0 transition-colors duration-200', active ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400')}
                   aria-hidden
                 />
-                {item.label}
+                <span className="whitespace-nowrap">{item.label}</span>
               </Link>
             )
           })}
         </nav>
       </div>
-      <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <ThemeSwitcher />
         {user ? (
           <>
-            <span className="max-w-[140px] truncate text-xs text-slate-500 dark:text-zinc-400" title={user.email ?? ''}>
+            <span
+              className="hidden max-w-[min(10rem,28vw)] truncate text-xs text-slate-500 md:inline dark:text-zinc-400"
+              title={user.email ?? ''}
+            >
               {user.email ?? 'User'}
             </span>
             <button
@@ -208,13 +214,13 @@ export function AppSidebar() {
               disabled={isLoggingOut}
               title="로그아웃"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
+                'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
                 'text-slate-600 hover:bg-slate-100 hover:text-neutral-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
               <LogOut size={ICON_NAV} className="shrink-0 text-slate-400" aria-hidden />
-              로그아웃
+              <span className="hidden sm:inline">로그아웃</span>
             </button>
           </>
         ) : (
@@ -222,12 +228,12 @@ export function AppSidebar() {
             href="/login"
             title="로그인"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
+              'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
               'text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
             )}
           >
             <LogOut size={ICON_NAV} className="shrink-0 text-slate-400" aria-hidden />
-            로그인
+            <span className="hidden sm:inline">로그인</span>
           </Link>
         )}
       </div>

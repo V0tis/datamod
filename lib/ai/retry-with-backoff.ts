@@ -51,6 +51,15 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** 연속 Gemini LLM 호출 사이 권장 최소 간격 (RPM 완화) */
+export const PIPELINE_LLM_COOLDOWN_MS = 2200
+
+/** Serper 등 외부 검색 병렬 호출을 나눌 때 요청 간 간격 */
+export const PIPELINE_WEB_SEARCH_GAP_MS = 1600
+
+/** 인사이트 직후 전략 단계 진입 전 추가 여유 */
+export const PIPELINE_STRATEGY_PRE_DELAY_MS = 2600
+
 /** Jitter 80%~120% to avoid thundering herd on retry */
 function delayWithJitter(baseMs: number): number {
   const jitter = 0.8 + Math.random() * 0.4

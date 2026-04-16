@@ -53,6 +53,11 @@ export type WithBackoffOptions = {
   baseDelayMs?: number
   /** 재시도 여부 (기본: 429/quota/rate limit/5xx) */
   isRetryable?: (error: unknown) => boolean
+  /**
+   * API가 권장하는 추가 대기(ms). 있으면 `max(지수 백오프+jitter, 이 값+jitter)`로 대기해
+   * Gemini 429 응답의 retryDelay(예: 15s)를 반영한다.
+   */
+  resolveRetryDelayMs?: (error: unknown) => number
 }
 
 /**
@@ -67,6 +72,7 @@ export async function withExponentialBackoff<T>(
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
   const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS
   const isRetryable = options.isRetryable ?? isRetryableGeminiError
+  const resolveRetryDelayMs = options.resolveRetryDelayMs
 
   let lastError: unknown
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -77,7 +83,9 @@ export async function withExponentialBackoff<T>(
       if (attempt === maxRetries || !isRetryable(e)) {
         throw e
       }
-      const delayMs = delayWithJitter(baseDelayMs * Math.pow(2, attempt))
+      const exponential = delayWithJitter(baseDelayMs * Math.pow(2, attempt))
+      const fromApi = resolveRetryDelayMs?.(e) ?? 0
+      const delayMs = fromApi > 0 ? Math.max(exponential, delayWithJitter(fromApi)) : exponential
       await sleep(delayMs)
     }
   }

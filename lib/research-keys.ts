@@ -95,6 +95,21 @@ export async function getGroqKeyForRequest(
   return userGroq && userGroq.length > 0 ? userGroq : ''
 }
 
+/** Anthropic(Claude) — 선택. 전략 단계 3차 폴백에만 사용 */
+export async function getAnthropicKeyForRequest(
+  supabase: SupabaseClient,
+  userId: string | undefined
+): Promise<string> {
+  if (!userId) return ''
+  const { data: row } = await supabase
+    .from('user_settings')
+    .select('anthropic_api_key')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const k = (row as { anthropic_api_key?: string } | null)?.anthropic_api_key?.trim()
+  return k && k.length > 0 ? k : ''
+}
+
 /**
  * Resolve Serper key: **사용자 DB만**. 서버 env 폴백 없음.
  */

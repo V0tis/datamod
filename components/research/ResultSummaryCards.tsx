@@ -141,7 +141,9 @@ export const ResultSummaryCards = memo(function ResultSummaryCards({
     sanitizeForKoreanDisplay(sdl?.product_market_fit_explanation ?? sdl?.entry_explanation)?.trim() || null
   const competitionExplanationAi = sanitizeForKoreanDisplay(sdl?.competition_explanation)?.trim() || null
   const opportunityExplanationAi =
-    sanitizeForKoreanDisplay(sdl?.market_opportunity_explanation ?? km.opportunity_score_reasoning)?.trim() || null
+    sanitizeForKoreanDisplay(
+      km.opportunity_score_reason_text ?? sdl?.opportunity_score_reason_text ?? sdl?.market_opportunity_explanation
+    )?.trim() || null
 
   const cards = [
     {

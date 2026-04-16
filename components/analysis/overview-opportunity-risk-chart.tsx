@@ -27,7 +27,14 @@ export function OverviewOpportunityRiskChart({
   const score = typeof scoreRaw === 'number' && Number.isFinite(scoreRaw) ? scoreRaw : 50
   const breakdown = result?.key_metrics?.opportunity_score_breakdown as Record<string, number | undefined> | undefined
   const barRows = topRiskFactorRows(breakdown, score)
-  const scoreReasoning = result?.key_metrics?.opportunity_score_reasoning
+  const km = result?.key_metrics
+  const scoreReasoning =
+    [
+      typeof km?.opportunity_score_reason_text === 'string' ? km.opportunity_score_reason_text.trim() : '',
+      typeof km?.opportunity_score_summary_text === 'string' ? km.opportunity_score_summary_text.trim() : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n') || undefined
   const showSkeleton = loading && (result == null || scoreRaw == null)
 
   return (

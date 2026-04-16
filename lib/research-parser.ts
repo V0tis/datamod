@@ -51,12 +51,20 @@ export type StructuredAnalysisFields = {
   positive_signals?: string[]
   neutral_signals?: string[]
   negative_risks?: string[]
-  /** 인사이트 추출 단계: 리스크 문장 + 심각도·발생 가능성(1–10) */
-  risk_signals?: Array<{ risk: string; severity: number; likelihood: number }>
+  /** 인사이트 추출 단계: 리스크 문장 + 심각도·발생 가능성(1–10) + 교차검증·완화 힌트 */
+  risk_signals?: Array<{
+    risk: string
+    severity: number
+    likelihood: number
+    quantitative_evidence?: string
+    qualitative_evidence?: string
+    mitigation_level?: '상' | '중' | '하'
+    mitigation_plan?: string
+  }>
   summary_insights?: string
   /** 시장·경쟁 데이터 근거만 담은 마크다운(배경). summary_insights와 중복 서술 금지를 위해 분리 저장 시 사용 */
   background_rationale?: string
-  /** [시장 현황, 핵심 기회, 실행 전략] 각 60자 내외 액션 지향 3줄 */
+  /** [현상, 기회, 실행] PM 액션 지향 3줄(각 ~120자) */
   conclusion_three_lines?: string[]
   pm_actions?: {
     recommended_actions?: StructuredRecommendedAction[]
@@ -105,13 +113,21 @@ export type StructuredAnalysisFields = {
     market_timing?: number
   }
   opportunity_score_reasoning?: string
+  /** 수식·집계 기반 지표 요약(게이지 하단 등). 레거시로 opportunity_score_reasoning과 동일할 수 있음 */
+  opportunity_score_summary_text?: string
+  /** PM 톤 한 줄: 점수의 결정적 비즈니스 근거(우측 '점수 근거 한줄') */
+  opportunity_score_reason_text?: string
   strategic_actions?: {
     immediate?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     mid_term?: Array<{ action?: string; priority?: string; expected_impact?: string }>
     risk_mitigation?: Array<{ action?: string; priority?: string; risk_addressed?: string }>
   }
-  /** Strategy Evaluation - AI-scored dimensions 1-10 + label/reason per dimension */
+  /** Strategy Evaluation - 교차검증·리스크/기회 항목 + AI-scored dimensions 1-10 */
   strategy_evaluation?: {
+    cross_validation_score?: number
+    cross_validation_summary?: string
+    risk_items?: Array<{ issue: string; mitigation_level: string; plan: string }>
+    opportunity_items?: Array<{ value: string; difficulty_level: string; priority: number }>
     market_attractiveness?: number
     market_attractiveness_label?: string
     market_attractiveness_reason?: string
@@ -166,6 +182,7 @@ export type StructuredAnalysisFields = {
     }>
     /** Strategic Decision Layer – market opportunity, competition, PMF, entry timing with AI explanations */
     strategic_decision_layer?: {
+    opportunity_score_reason_text?: string
     market_opportunity_explanation?: string
     competition_intensity?: 'low' | 'medium' | 'high'
     competition_explanation?: string
