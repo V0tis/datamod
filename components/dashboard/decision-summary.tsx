@@ -12,7 +12,7 @@ export type DecisionSummaryData = {
   confidenceLabel: string
   reasons: string[]
   strategyHref: string | null
-  source: 'opportunity' | 'trend' | 'empty'
+  source: 'opportunity' | 'trend' | 'empty' | 'live_insight'
 }
 
 type DecisionSummaryProps = {
@@ -87,6 +87,11 @@ export function DecisionSummary({ loading, data, onStartAnalysis, startDisabled 
               {source === 'trend' && (
                 <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                   성장 중
+                </span>
+              )}
+              {source === 'live_insight' && (
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                  실시간 분석
                 </span>
               )}
               {source === 'empty' && (

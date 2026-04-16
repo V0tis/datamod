@@ -15,7 +15,7 @@ import {
   Legend,
   ReferenceLine,
 } from 'recharts'
-import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 import type { TrendItem } from '@/lib/trends-types'
 import { cn } from '@/lib/utils'
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'

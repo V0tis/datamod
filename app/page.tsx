@@ -24,7 +24,7 @@ import { LandingPage } from '@/components/landing/landing-page'
 import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 import { RinLogo } from '@/components/rin-logo'
 import type { SavedInsight } from '@/lib/insights-types'
-import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
 import { type DecisionSummaryData } from '@/components/dashboard/decision-summary'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
@@ -78,8 +78,6 @@ function DatamodSearchInner() {
   }, [])
   const [recentReports, setRecentReports] = useState<{ keyword: string; created_at: string | null; country_code: string; opportunity_score?: number | null; analysis_status?: string | null }[]>([])
   const [recentReportsLoading, setRecentReportsLoading] = useState(false)
-  const [dashboardRecs, setDashboardRecs] = useState<{ highOpportunity: DashboardKeywordRow[]; highRisk: DashboardKeywordRow[] }>({ highOpportunity: [], highRisk: [] })
-  const [dashboardRecsLoading, setDashboardRecsLoading] = useState(false)
   const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([])
   const [savedInsightsLoading, setSavedInsightsLoading] = useState(false)
   const [sharedTrends, setSharedTrends] = useState<TrendsResponse>({
@@ -149,21 +147,26 @@ function DatamodSearchInner() {
   const streamingState = useResearchStore((s) => s.streamingState)
   const currentAnalysisKeyword = useResearchStore((s) => s.keyword)
   const isAnalyzingNow = useResearchStore((s) => s.isAnalyzingNow)
+  const liveInsightSuggestion = useResearchStore((s) => s.liveInsightSuggestion)
+  const liveInsightSuggestionLoading = useResearchStore((s) => s.liveInsightSuggestionLoading)
   /** Use analysis UI only when searching from form; trend click should not change main page */
   const showAnalysisUI = (searching || isAnalyzingNow()) && !navigatingFromTrend
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const decisionSummaryData = useMemo((): DecisionSummaryData => {
-    const top = dashboardRecs.highOpportunity[0]
-    if (top) {
+    if (liveInsightSuggestion) {
+      const li = liveInsightSuggestion
       return {
-        recommendedKeyword: top.keyword,
-        confidence: top.opportunity_score,
-        confidenceLabel: `추천 신뢰도 ${top.opportunity_score}점`,
-        reasons: [`기회 ${top.opportunity_score}점 · 상위 코호트`, `분석 ${top.analysis_count}건 반영`],
-        strategyHref: `/results?keyword=${encodeURIComponent(top.keyword)}&country=${encodeURIComponent(trendCountry)}`,
-        source: 'opportunity',
+        recommendedKeyword: li.focus_market_keyword,
+        confidence: li.opportunity_score,
+        confidenceLabel: `매력 ${li.attractiveness_grade} · 리스크 ${li.risk_grade} (${li.risk_score})`,
+        reasons: [
+          li.rationale_one_liner,
+          `실시간 분석 · 기회 ${li.opportunity_score}점 / 장벽(리스크) ${li.risk_score}점`,
+        ],
+        strategyHref: `/results?keyword=${encodeURIComponent(li.focus_market_keyword)}&country=${encodeURIComponent(trendCountry)}`,
+        source: 'live_insight',
       }
     }
     const trendList = sharedTrends[trendCountry] ?? []
@@ -189,10 +192,36 @@ function DatamodSearchInner() {
       strategyHref: null,
       source: 'empty',
     }
-  }, [dashboardRecs.highOpportunity, sharedTrends, trendCountry])
+  }, [liveInsightSuggestion, sharedTrends, trendCountry])
 
   const decisionSummaryLoading =
-    dashboardRecsLoading || (dashboardRecs.highOpportunity.length === 0 && trendsLoading)
+    liveInsightSuggestionLoading || (!liveInsightSuggestion && trendsLoading)
+
+  const liveDashboardOpportunityRows = useMemo((): DashboardKeywordRow[] => {
+    if (!liveInsightSuggestion) return []
+    const li = liveInsightSuggestion
+    return [
+      {
+        keyword: li.focus_market_keyword,
+        opportunity_score: li.opportunity_score,
+        risk_score: li.risk_score,
+        analysis_count: 1,
+      },
+    ]
+  }, [liveInsightSuggestion])
+
+  const liveDashboardRiskRows = useMemo((): DashboardKeywordRow[] => {
+    if (!liveInsightSuggestion) return []
+    const li = liveInsightSuggestion
+    return [
+      {
+        keyword: li.focus_market_keyword,
+        opportunity_score: li.opportunity_score,
+        risk_score: li.risk_score,
+        analysis_count: 1,
+      },
+    ]
+  }, [liveInsightSuggestion])
 
   /** 스크롤·포커스 강제 없음 — 읽기 위치 유지 정책 */
   const scrollToSearchAndFocus = useCallback(() => {}, [])
@@ -257,32 +286,9 @@ function DatamodSearchInner() {
       .finally(() => setRecentReportsLoading(false))
   }, [user])
 
-  const fetchDashboardRecommendations = useCallback(() => {
-    if (!user) {
-      setDashboardRecs({ highOpportunity: [], highRisk: [] })
-      setDashboardRecsLoading(false)
-      return
-    }
-    setDashboardRecsLoading(true)
-    fetch('/api/research/dashboard-recommendations')
-      .then((res) => res.json())
-      .then((data: { highOpportunity?: DashboardKeywordRow[]; highRisk?: DashboardKeywordRow[] }) => {
-        setDashboardRecs({
-          highOpportunity: Array.isArray(data?.highOpportunity) ? data.highOpportunity : [],
-          highRisk: Array.isArray(data?.highRisk) ? data.highRisk : [],
-        })
-      })
-      .catch(() => setDashboardRecs({ highOpportunity: [], highRisk: [] }))
-      .finally(() => setDashboardRecsLoading(false))
-  }, [user])
-
   useEffect(() => {
     fetchRecentReports()
   }, [fetchRecentReports])
-
-  useEffect(() => {
-    fetchDashboardRecommendations()
-  }, [fetchDashboardRecommendations])
 
   const fetchSavedInsights = useCallback(() => {
     if (!user) {
@@ -316,7 +322,7 @@ function DatamodSearchInner() {
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [user, fetchRecentReports, fetchSavedInsights, fetchDashboardRecommendations])
+  }, [user, fetchRecentReports, fetchSavedInsights])
 
   const fetchTrends = (forceRefresh = false) => {
     setTrendsLoading(true)
@@ -441,8 +447,8 @@ function DatamodSearchInner() {
   }, [user])
 
   const { strongOppCount, strongRiskCount } = useDashboardSignalCounts(
-    dashboardRecs.highOpportunity,
-    dashboardRecs.highRisk
+    liveDashboardOpportunityRows,
+    liveDashboardRiskRows
   )
 
   const getButtonLabel = () => {
@@ -683,12 +689,12 @@ function DatamodSearchInner() {
                 </DashboardCardShell>
               </section>
               <DashboardKpiStrip
-                opportunities={dashboardRecs.highOpportunity}
-                risks={dashboardRecs.highRisk}
+                opportunities={liveDashboardOpportunityRows}
+                risks={liveDashboardRiskRows}
                 trendItems={trendItems}
                 recentAnalysisCount={recentReports.length}
                 trendsUpdatedAt={sharedTrends.updatedAt}
-                loading={dashboardRecsLoading || trendsLoading}
+                loading={liveInsightSuggestionLoading || trendsLoading}
               />
             </div>
 
@@ -697,9 +703,9 @@ function DatamodSearchInner() {
               data={decisionSummaryData}
               startDisabled={showAnalysisUI}
               onStartAnalysis={() => {
-                const top = dashboardRecs.highOpportunity[0]
-                if (top) {
-                  setQuery(top.keyword)
+                const focus = liveInsightSuggestion?.focus_market_keyword?.trim()
+                if (focus) {
+                  setQuery(focus)
                   setError(null)
                 } else {
                   const t = (sharedTrends[trendCountry] ?? [])[0]
@@ -716,10 +722,10 @@ function DatamodSearchInner() {
             <div className="grid w-full grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-10 lg:items-stretch lg:gap-8">
               <div className="flex min-w-0 flex-col gap-6 lg:col-span-7">
                 <DashboardMonitorTop3
-                  opportunities={dashboardRecs.highOpportunity}
-                  risks={dashboardRecs.highRisk}
+                  opportunities={liveDashboardOpportunityRows}
+                  risks={liveDashboardRiskRows}
                   trendCountry={trendCountry}
-                  loading={dashboardRecsLoading}
+                  loading={liveInsightSuggestionLoading}
                   opportunityInsightTag={opportunityInsightTag}
                   riskInsightTag={riskInsightTag}
                 />
@@ -737,10 +743,10 @@ function DatamodSearchInner() {
                   <div className="bg-white p-4 sm:p-5 dark:bg-zinc-950">
                     <DashboardChartsBlock
                       variant="stack"
-                      opportunities={dashboardRecs.highOpportunity}
-                      risks={dashboardRecs.highRisk}
+                      opportunities={liveDashboardOpportunityRows}
+                      risks={liveDashboardRiskRows}
                       trendItems={trendItems}
-                      loading={dashboardRecsLoading || trendsLoading}
+                      loading={liveInsightSuggestionLoading || trendsLoading}
                     />
                   </div>
                 </div>

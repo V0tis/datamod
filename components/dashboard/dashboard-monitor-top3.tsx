@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { BookOpen, ChevronRight, Target, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dashboardCardClass } from '@/components/dashboard/dashboard-tokens'
-import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 import { MiniSparkline } from '@/components/dashboard/mini-sparkline'
 
 type Country = string
@@ -45,7 +45,7 @@ export function DashboardMonitorTop3({
         accentClass="text-emerald-600"
         loading={loading}
         rowCount={oppTop.length}
-        empty="완료된 분석이 쌓이면 상위 기회 키워드가 표시됩니다."
+        empty="시장 분석을 마치면 실시간 인사이트 기준 기회 키워드가 표시됩니다."
       >
         {oppTop.map((row, i) => (
           <Link
@@ -122,7 +122,7 @@ export function DashboardMonitorTop3({
 
       <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-zinc-400">
         <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        완료된 리서치 기준 · 행 선택 시 상세 리포트로 이동합니다.
+        최근 시장 분석·인사이트 기준 · 행 선택 시 상세 리포트로 이동합니다.
       </p>
     </div>
   )

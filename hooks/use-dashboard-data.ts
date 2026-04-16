@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 
 /**
- * 히어로 부제·배지에 쓰는 고기회/고리스크 건수 (코호트 데이터 기반).
+ * 히어로 부제·배지에 쓰는 고기회/고리스크 건수 (실시간 인사이트 행 기준).
  */
 export function useDashboardSignalCounts(
   highOpportunity: DashboardKeywordRow[],

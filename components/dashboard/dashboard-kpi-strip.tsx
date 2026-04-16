@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import { dashboardCardClass } from '@/components/dashboard/dashboard-tokens'
 import { MiniSparkline } from '@/components/dashboard/mini-sparkline'
-import type { DashboardKeywordRow } from '@/app/api/research/dashboard-recommendations/route'
+import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 import type { TrendItem } from '@/lib/trends-types'
 
 function avg(nums: number[]): number | null {
@@ -127,7 +127,7 @@ export function DashboardKpiStrip({
         label="상위 기회 지수"
         value={avgOpp != null ? String(avgOpp) : '—'}
         qualityBadge={oppBadge}
-        footNote={avgOpp == null ? '코호트 데이터가 쌓이면 평균 점수가 표시됩니다.' : '상위 5개 키워드 기회 점수 평균'}
+        footNote={avgOpp == null ? '시장 분석을 완료하면 실시간 기회·리스크 점수가 표시됩니다.' : '상위 5개 키워드 기회 점수 평균'}
         sparkSeed={avgOpp ?? 42}
         sparkTone="emerald"
       />
@@ -135,7 +135,7 @@ export function DashboardKpiStrip({
         label="리스크 압력"
         value={avgRisk != null ? String(avgRisk) : '—'}
         qualityBadge={riskBadge}
-        footNote={avgRisk == null ? '리스크 코호트가 없습니다.' : '상위 5개 키워드 리스크 점수 평균'}
+        footNote={avgRisk == null ? '완료된 분석이 없으면 리스크 지표를 계산할 수 없습니다.' : '상위 5개 키워드 리스크 점수 평균'}
         sparkSeed={avgRisk ?? 17}
         sparkTone="red"
       />

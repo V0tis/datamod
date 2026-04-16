@@ -29,6 +29,8 @@ import {
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { normalizeActivityStepId } from '@/lib/analysis/pipeline-activity-step'
 import { writePipelineClientCache, readPipelineClientCache } from '@/lib/analysis/pipeline-client-cache'
+import { buildInsightSuggestionRequestBody } from '@/lib/insight-suggestion/build-request-body'
+import type { InsightSuggestionResult } from '@/lib/types/insight-suggestion'
 
 export interface NewsItem {
   title: string
@@ -360,6 +362,11 @@ interface ResearchState {
   }> | null
   /** 최근 스트리밍 활동 로그 (단계별 stepId, 최대 150행) */
   streamingActivityLog: Array<{ ts: number; message: string; kind?: 'error'; type?: 'error'; stepId?: string }>
+  /** 마지막 분석 실행 국가 (인사이트 제안 API 등) */
+  analysisCountryCode: string
+  /** 실시간 인사이트 제안(코호트 DB 집계 아님, 현재 분석 컨텍스트 기반) */
+  liveInsightSuggestion: InsightSuggestionResult | null
+  liveInsightSuggestionLoading: boolean
 }
 
 /** Section-level state to avoid monolithic setResult; each section updates independently. */
@@ -535,6 +542,8 @@ interface ResearchStore extends ResearchState {
   cancelJob: (jobId: string) => Promise<void>
   /** research_history 캐시 조회. 캐시 있으면 복원 후 'cached', 비어있으면 'empty', 없으면 'none'. */
   loadFromHistory: (keyword: string, countryCode?: string) => Promise<LoadHistoryResult>
+  /** 현재 스토어의 리서치 데이터만으로 인사이트 제안 API 호출 */
+  refreshLiveInsightSuggestion: () => Promise<void>
   /** 폴링 결과로 즉시 result 갱신 (분석 완료 시 자동 렌더용) */
   hydrateFromStatusResult: (keyword: string, countryCode: string, pollResult: { reportId?: string; key_metrics?: unknown; content?: Record<string, unknown>; source_links?: unknown[]; updated_at?: string }) => void
   /** 키워드로 DB에 캐시된 리포트가 있으면 복원하고 true 반환. 없으면 false. */
@@ -576,6 +585,9 @@ const initialState: ResearchState = {
   analysisId: null,
   analysisTasks: null,
   streamingActivityLog: [],
+  analysisCountryCode: 'KR',
+  liveInsightSuggestion: null,
+  liveInsightSuggestionLoading: false,
 }
 
 export const useResearchStore = create<ResearchStore>()(
@@ -594,7 +606,13 @@ export const useResearchStore = create<ResearchStore>()(
           set({ geminiQuota: null })
         }
       },
-      reset: () => set({ ...initialState, analysisStatus: 'queued' }),
+      reset: () =>
+        set({
+          ...initialState,
+          analysisStatus: 'queued',
+          liveInsightSuggestion: null,
+          liveInsightSuggestionLoading: false,
+        }),
 
       resetForRouteChange: (keyword: string) => {
         const k = (keyword ?? '').trim()
@@ -983,6 +1001,7 @@ export const useResearchStore = create<ResearchStore>()(
 
         set({
           keyword: k,
+          analysisCountryCode: countryCode,
           status: 'loading',
           analysisStatus: 'analyzing',
           analysisMode: mode,
@@ -1001,6 +1020,8 @@ export const useResearchStore = create<ResearchStore>()(
           analysisId: preserveForStepRetry ? snap.analysisId : null,
           analysisTasks: preserveForStepRetry ? snap.analysisTasks : null,
           streamingActivityLog: [],
+          liveInsightSuggestion: null,
+          liveInsightSuggestionLoading: false,
         })
 
         const appendActivity = (message: string, kind?: 'error', stepIdRaw?: string) => {
@@ -1510,6 +1531,38 @@ export const useResearchStore = create<ResearchStore>()(
         }
       },
 
+      refreshLiveInsightSuggestion: async () => {
+        const st = get()
+        const body = buildInsightSuggestionRequestBody({
+          keyword: st.keyword,
+          countryCode: st.analysisCountryCode ?? 'KR',
+          result: st.result,
+          taskData: st.taskData,
+          newsList: st.newsList,
+        })
+        if (!body) {
+          set({ liveInsightSuggestion: null, liveInsightSuggestionLoading: false })
+          return
+        }
+        set({ liveInsightSuggestionLoading: true })
+        try {
+          const res = await fetch('/api/research/insight-suggestion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+          })
+          const json = (await res.json()) as InsightSuggestionResult & { error?: string }
+          if (!res.ok || typeof json?.rationale_one_liner !== 'string' || !json.rationale_one_liner.trim()) {
+            set({ liveInsightSuggestion: null, liveInsightSuggestionLoading: false })
+            return
+          }
+          set({ liveInsightSuggestion: json as InsightSuggestionResult, liveInsightSuggestionLoading: false })
+        } catch {
+          set({ liveInsightSuggestion: null, liveInsightSuggestionLoading: false })
+        }
+      },
+
       loadFromHistory: async (keyword: string, countryCode = 'KR') => {
         const k = keyword?.trim()
         if (!k) return 'none'
@@ -1641,6 +1694,7 @@ export const useResearchStore = create<ResearchStore>()(
                 : null
             set({
               keyword: k,
+              analysisCountryCode: countryCode,
               status: statusFromBackend,
               analysisStatus,
               summarySection,
@@ -1658,6 +1712,7 @@ export const useResearchStore = create<ResearchStore>()(
                   }
                 : {}),
             })
+            void get().refreshLiveInsightSuggestion()
             return 'cached'
           }
           return data.emptyAnalysis ? 'empty' : 'none'
@@ -1688,6 +1743,7 @@ export const useResearchStore = create<ResearchStore>()(
         } as ResearchResponse
         set({
             keyword: k,
+            analysisCountryCode: countryCode,
             status: 'done',
             analysisStatus: 'completed',
             result: fullResult,
@@ -1695,6 +1751,7 @@ export const useResearchStore = create<ResearchStore>()(
             error: null,
             newsList: (pollResult.source_links ?? []) as NewsItem[],
           })
+        void get().refreshLiveInsightSuggestion()
       },
 
       loadReportByKeyword: async (keyword: string) => {
@@ -2008,9 +2065,17 @@ export const useResearchStore = create<ResearchStore>()(
             lastSuccessfulReport: null,
           }
         }
+        if (version < 4 || typeof (next as { analysisCountryCode?: string }).analysisCountryCode !== 'string') {
+          next = {
+            ...next,
+            analysisCountryCode: 'KR',
+            liveInsightSuggestion: null,
+            liveInsightSuggestionLoading: false,
+          }
+        }
         return { ...p, state: next as ResearchState }
       },
-      version: 3,
+      version: 4,
       storage: {
         getItem: (name: string) => {
           if (typeof window === 'undefined') return null
@@ -2044,6 +2109,7 @@ export const useResearchStore = create<ResearchStore>()(
       },
       partialize: (state) => ({
         keyword: state.keyword,
+        analysisCountryCode: state.analysisCountryCode,
         status: state.status,
         analysisStatus: state.analysisStatus,
         analysisMode: state.analysisMode,
@@ -2065,6 +2131,14 @@ export const useResearchStore = create<ResearchStore>()(
             state.status = 'idle'
             state.analysisStatus = 'queued'
           }
+        }
+        const reportId = state.result && typeof state.result === 'object' && 'reportId' in state.result
+          ? (state.result as { reportId?: string | null }).reportId
+          : null
+        if (reportId) {
+          queueMicrotask(() => {
+            void useResearchStore.getState().refreshLiveInsightSuggestion()
+          })
         }
       },
     }
