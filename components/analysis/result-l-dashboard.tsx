@@ -17,7 +17,6 @@ import { AnalysisResultSections } from '@/components/research/AnalysisResultSect
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
 import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
-import { injectKeywordBold } from '@/lib/text-keyword-bold'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { MotionReveal } from '@/components/common/MotionReveal'
 import { useResearchStore } from '@/lib/stores/research-store'
@@ -257,15 +256,12 @@ export function ResultLDashboard({
     sanitizeForKoreanDisplay(
       km?.strategic_decision_layer?.market_opportunity_explanation ?? km?.opportunity_score_reasoning
     )?.trim() || null
+  /** 상단 액션 카드와 중복되지 않게: 근거·배경 전용(없으면 기존 summary_insights) */
   const conclusionFull = stripLeadingMarkdownHeadings(
-    sanitizeForKoreanDisplay(km?.summary_insights)?.trim() || '핵심 전략 방향을 분석 완료 후 확인할 수 있습니다.'
+    sanitizeForKoreanDisplay(km?.background_rationale)?.trim() ||
+      sanitizeForKoreanDisplay(km?.summary_insights)?.trim() ||
+      '핵심 전략 방향을 분석 완료 후 확인할 수 있습니다.'
   )
-
-  const conclusionExcerpt = useMemo(() => {
-    const t = conclusionFull.replace(/\s+/g, ' ').trim()
-    if (t.length <= 360) return t
-    return `${t.slice(0, 360).trimEnd()}…`
-  }, [conclusionFull])
 
   const highlightTerms = useMemo(() => {
     const list: string[] = []
@@ -278,11 +274,6 @@ export function ResultLDashboard({
     }
     return [...new Set(list)].slice(0, 12)
   }, [keyword, km])
-
-  const conclusionExcerptHighlighted = useMemo(
-    () => injectKeywordBold(conclusionExcerpt, highlightTerms),
-    [conclusionExcerpt, highlightTerms]
-  )
 
   const frameworkExecOutput = useMemo(() => {
     const execTask = analysisTasks?.find((t) => t.step_name === 'execution_layer')
@@ -445,11 +436,17 @@ export function ResultLDashboard({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                                    핵심 결론 요약
+                                    점수 근거 한줄
                                   </p>
-                                  <p className="text-pretty text-base font-medium leading-relaxed text-slate-900 dark:text-zinc-50">
-                                    {conclusionExcerptHighlighted}
-                                  </p>
+                                  {scoreRationale ? (
+                                    <p className="text-pretty text-sm font-medium leading-relaxed text-slate-800 dark:text-zinc-100">
+                                      {scoreRationale}
+                                    </p>
+                                  ) : (
+                                    <p className="text-pretty text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
+                                      기회 점수 산출 근거는 하단 &quot;배경 및 근거&quot;와 점수 분해에서 확인할 수 있습니다.
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -466,7 +463,15 @@ export function ResultLDashboard({
                                 핵심 결론
                               </h3>
                               <ConclusionActionStrip result={effectiveResult ?? null} />
-                              <ConclusionStructuredBlocks markdown={conclusionFull} highlightTerms={highlightTerms} />
+                              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-zinc-800">
+                                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                                  배경 및 근거
+                                </h4>
+                                <p className="mb-3 text-xs text-slate-500 dark:text-zinc-400">
+                                  시장·경쟁 데이터에 기반한 요약입니다. 위 &quot;3줄 요약 액션&quot;과 동일 문장을 반복하지 않습니다.
+                                </p>
+                                <ConclusionStructuredBlocks markdown={conclusionFull} highlightTerms={highlightTerms} />
+                              </div>
                             </div>
 
                             {/* 근거: 점수 분해 + 전략 프레임워크 레이더 */}

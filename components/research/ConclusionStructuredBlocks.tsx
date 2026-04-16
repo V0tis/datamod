@@ -7,7 +7,7 @@ import { injectKeywordBold } from '@/lib/text-keyword-bold'
 
 function titleLineLabel(line: string): string | null {
   const s = line.replace(/^#{1,6}\s*/, '').trim()
-  if (/^배경$/i.test(s) || /^background$/i.test(s)) return '배경'
+  if (/^배경(\s*및\s*근거)?$/i.test(s) || /^background$/i.test(s)) return '배경 및 근거'
   if (/^전략$/i.test(s) || /^strategy$/i.test(s)) return '전략'
   if (/^기대\s*효과$/i.test(s) || /^기대효과$/i.test(s) || /^expected/i.test(s)) return '기대 효과'
   return null
@@ -48,7 +48,7 @@ export function tryParseConclusionTriad(text: string): { title: string; body: st
   const paras = t.split(/\n\n+/).map((p) => p.trim()).filter((p) => p.length > 12)
   if (paras.length >= 3) {
     return [
-      { title: '배경', body: paras[0] },
+      { title: '배경 및 근거', body: paras[0] },
       { title: '전략', body: paras[1] },
       { title: '기대 효과', body: paras.slice(2).join('\n\n') },
     ]

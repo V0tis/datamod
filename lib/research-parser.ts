@@ -54,6 +54,10 @@ export type StructuredAnalysisFields = {
   /** 인사이트 추출 단계: 리스크 문장 + 심각도·발생 가능성(1–10) */
   risk_signals?: Array<{ risk: string; severity: number; likelihood: number }>
   summary_insights?: string
+  /** 시장·경쟁 데이터 근거만 담은 마크다운(배경). summary_insights와 중복 서술 금지를 위해 분리 저장 시 사용 */
+  background_rationale?: string
+  /** [시장 현황, 핵심 기회, 실행 전략] 각 60자 내외 액션 지향 3줄 */
+  conclusion_three_lines?: string[]
   pm_actions?: {
     recommended_actions?: StructuredRecommendedAction[]
     monitoring_points?: string[]

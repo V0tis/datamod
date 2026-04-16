@@ -132,7 +132,15 @@ export type TaskCompletedPayload = {
     opportunity_signals: OpportunitySignalItem[]
     risk_signals: RiskSignalItem[]
   }
-  strategy_generation?: { opportunities: string[]; risks: string[]; strategy_summary: string; market_summary?: string; key_strategic_insights?: string[] }
+  strategy_generation?: {
+    opportunities: string[]
+    risks: string[]
+    strategy_summary: string
+    market_summary?: string
+    key_strategic_insights?: string[]
+    three_line_actions?: string[]
+    background_rationale?: string
+  }
   execution_layer?: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
     feature_ideas?: string[]
@@ -832,6 +840,22 @@ type StrategicRecommendationResult = {
   strategy_summary: string
   market_summary?: string
   key_strategic_insights?: string[]
+  /** [시장 현황, 핵심 기회, 실행 전략] — 각 60자 이하 권장 */
+  three_line_actions?: string[]
+  /** 시장·경쟁 근거 마크다운(three_line과 중복 금지) */
+  background_rationale?: string
+}
+
+function clampConclusionLine(s: string, max = 60): string {
+  const t = s.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max - 1).trimEnd()}…`
+}
+
+function normalizeThreeLineActions(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const lines = raw.filter((x): x is string => typeof x === 'string').map((s) => clampConclusionLine(s, 60))
+  return lines.length === 3 ? lines : undefined
 }
 
 /** Step 4: Strategic Recommendation - structured JSON */
@@ -876,17 +900,25 @@ async function runStrategicRecommendationTask(
     fallbackStrategy,
     'strategy_generation'
   )
+  const bg =
+    typeof parsed.background_rationale === 'string' ? parsed.background_rationale.trim() : ''
+  const three = normalizeThreeLineActions(parsed.three_line_actions)
+  const summary =
+    typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary.trim() : ''
+  const mergedSummary = summary || bg || marketOverview
   return {
     data: {
       opportunities: Array.isArray(parsed.opportunities)
         ? parsed.opportunities.filter((s): s is string => typeof s === 'string')
         : fallbackOpp,
       risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : fallbackRisk,
-      strategy_summary: typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary : marketOverview,
+      strategy_summary: mergedSummary,
       market_summary: typeof parsed.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
       key_strategic_insights: Array.isArray(parsed.key_strategic_insights)
         ? parsed.key_strategic_insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
         : undefined as string[] | undefined,
+      three_line_actions: three,
+      background_rationale: bg || undefined,
     },
     usedFallback,
     primaryProviderError,
@@ -1642,16 +1674,21 @@ function parseStrategyTaskOutput(raw: unknown): StrategicRecommendationResult | 
     ? o.opportunities.filter((x): x is string => typeof x === 'string')
     : []
   const risks = Array.isArray(o.risks) ? o.risks.filter((x): x is string => typeof x === 'string') : []
+  const bg = typeof o.background_rationale === 'string' ? o.background_rationale.trim() : ''
   const strategy_summary = typeof o.strategy_summary === 'string' ? o.strategy_summary.trim() : ''
-  if (!strategy_summary && opportunities.length === 0 && risks.length === 0) return null
+  const three = normalizeThreeLineActions(o.three_line_actions)
+  if (!strategy_summary && !bg && opportunities.length === 0 && risks.length === 0 && !three) return null
+  const mergedSummary = strategy_summary || bg || ' '
   return {
     opportunities,
     risks,
-    strategy_summary: strategy_summary || ' ',
+    strategy_summary: mergedSummary,
     market_summary: typeof o.market_summary === 'string' ? o.market_summary.trim() : undefined,
     key_strategic_insights: Array.isArray(o.key_strategic_insights)
       ? o.key_strategic_insights.filter((x): x is string => typeof x === 'string').slice(0, 5)
       : undefined,
+    three_line_actions: three,
+    background_rationale: bg || undefined,
   }
 }
 
@@ -1983,7 +2020,10 @@ async function* runResearchRetrySingleStep(
       }
 
       const merged: Record<string, unknown> = { ...existingKm }
-      merged.summary_insights = strategyData.strategy_summary
+      merged.summary_insights =
+        strategyData.background_rationale?.trim() || strategyData.strategy_summary
+      merged.background_rationale = strategyData.background_rationale
+      merged.conclusion_three_lines = strategyData.three_line_actions
       merged.market_summary = strategyData.market_summary
       merged.key_strategic_insights = strategyData.key_strategic_insights
       merged.opportunity_areas = strategyData.opportunities.length ? strategyData.opportunities : merged.opportunity_areas
@@ -3071,9 +3111,14 @@ export async function* runResearch(
     yield { type: 'task', task: 'risk_opportunity', status: 'failed', error: errorForUi, fallbackMessage: errorForUi }
   }
 
+  const summaryForStorage =
+    strategyData.background_rationale?.trim() || strategyData.strategy_summary
+
   const structured: StructuredAnalysisFields = {
     market_temperature_score: trendData.market_score,
-    summary_insights: strategyData.strategy_summary,
+    summary_insights: summaryForStorage,
+    background_rationale: strategyData.background_rationale,
+    conclusion_three_lines: strategyData.three_line_actions,
     market_summary: strategyData.market_summary,
     key_strategic_insights: strategyData.key_strategic_insights,
     core_insights: insightData.core_insights?.length ? insightData.core_insights : undefined,

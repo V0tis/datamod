@@ -155,18 +155,25 @@ export function buildInsightExtractionPrompt(
 /** Step 4: Strategic Recommendation – why this strategy, expected result, risk, difficulty, priority. DATA-DRIVEN ONLY. */
 export const STRATEGIC_RECOMMENDATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 전략은 제공된 DATA와 앞 단계 인사이트에만 기대어 쓴다. 원론(차별화 필요 등)만 말하지 말고, DATA에 나온 경쟁사·수치·이벤트를 빌려 "누구의 어떤 약점·지연·가격·채널을 어떻게 공략할지"까지 문장으로 연결한다.
-반드시 드러낼 것: 전략을 택한 이유(why), 기대 결과, 리스크, 실행 난이도, 우선순위.
+문체: "~할 수 있습니다", "~존재하며" 같은 장황한 설명체 금지. 명사형 종결·간결한 보고체(예: "~을 통한 ~ 확보", "~집중 구조", "~대비 공백") 우선.
 ${PM_REQUIRED_OUTPUT_STRUCTURE}
 Format: {
   "opportunities": ["기회 (DATA 근거·파급·실행 힌트)", "..."],
   "risks": ["리스크 (파급·완화 시나리오 힌트)", "..."],
-  "strategy_summary": "마크다운 전략 보고를 **하나의 JSON 문자열**로만 담는다. 구조: (1) ## 배경 (2) ## 핵심 전략 (3) ## 예상 효과. 각 본문은 불릿(- 또는 *). why·기대 결과·리스크·난이도·우선순위를 세 섹션에 나누어 쓴다.",
+  "three_line_actions": [
+    "1) 시장 현황: 경쟁 구도·수요 한 줄 (60자 이하)",
+    "2) 핵심 기회: 경쟁사가 간과한 차별 포인트 한 줄 (60자 이하)",
+    "3) 실행 전략: 우선 기능·로드맵·OKR 지표 한 줄 (60자 이하)"
+  ],
+  "background_rationale": "마크다운. ## 배경 및 근거 로 시작. 시장·경쟁·트렌드 DATA만 근거로 서술. 실행 액션·로드맵 문장은 넣지 않는다(three_line_actions와 중복 금지).",
+  "strategy_summary": "레거시 호환: 비우거나 background_rationale을 요약한 짧은 문자열만. 신규 필드가 있으면 비워도 됨.",
   "market_summary": "1~2문장. situation·meaning·impact가 한 번에 읽히게.",
   "key_strategic_insights": ["전략 인사이트: 이유·파급·PM이 내일 할 일"]
 }
-- strategy_summary 문자열 안에만 마크다운을 넣고, JSON 이스케이프 규칙을 지킨다.
+- three_line_actions는 정확히 3개 문자열. 각 60자 이하. 접두 번호(1)2)3))는 생략해도 되고, 넣어도 된다.
+- background_rationale에만 마크다운 헤더·불릿을 넣는다.
 - opportunities·risks는 문자열 배열로 유지한다.
-Return ONLY valid JSON. 본문은 한국어. 섹션 헤더는 ## 배경 / ## 핵심 전략 / ## 예상 효과.`
+Return ONLY valid JSON. 본문은 한국어.`
 
 export function buildStrategicRecommendationPrompt(
   keyword: string,
@@ -197,7 +204,7 @@ export function buildStrategicRecommendationPrompt(
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `위 DATA만으로 전략 JSON을 채운다. opportunities·risks·market_summary에는 DATA 속 사실·비교·인용이 드러나게 쓴다. strategy_summary 한 문자열 안에 ## 배경 / ## 핵심 전략 / ## 예상 효과와 불릿을 넣고, 경쟁이 언급되면 DATA에 근거한 취약점 공략·틈새 진입을 구체 문장으로 넣는다(원론적 차별화 구호만 쓰지 않는다).`,
+    task: `위 DATA만으로 전략 JSON을 채운다. opportunities·risks·market_summary에는 DATA 속 사실·비교·인용이 드러나게 쓴다. three_line_actions는 [현상-기회-액션] 순으로만 채우고, background_rationale에는 시장·경쟁 근거만 넣는다(액션 중복 금지). strategy_summary는 비우거나 한 줄 요약만.`,
     suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

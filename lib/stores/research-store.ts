@@ -107,6 +107,8 @@ export interface ResearchResponse {
     }
     opportunity_score_reasoning?: string
     summary_insights?: string
+    background_rationale?: string
+    conclusion_three_lines?: string[]
     pm_actions?: {
       recommended_actions?: Array<{ title: string; reasoning?: string; urgency_level?: 'low' | 'medium' | 'high'; related_risk?: string }>
       monitoring_points?: string[]
