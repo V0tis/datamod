@@ -108,7 +108,11 @@ const TAB_PROFILE = 'profile'
 const TAB_AI_CONFIG = 'ai-config'
 
 const STEP_AI_FIELDS: { key: keyof StepAIModels; label: string; desc: string }[] = [
-  { key: 'ai_market_model', label: '시장 리서치 AI', desc: '트렌드 분석 및 시장 데이터 수집' },
+  {
+    key: 'ai_market_model',
+    label: '시장 리서치 AI',
+    desc: '트렌드 분석, 시장 데이터 수집, 수집 기사 AI 요약',
+  },
   { key: 'ai_competitor_model', label: '경쟁 분석 AI', desc: '경쟁사 환경 및 포지셔닝 분석' },
   { key: 'ai_insight_model', label: '인사이트 AI', desc: '핵심 인사이트 및 시사점 추출' },
   { key: 'ai_strategy_model', label: '전략 생성 AI', desc: '전략적 추천 및 방향성 생성' },

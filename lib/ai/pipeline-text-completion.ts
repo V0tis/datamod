@@ -166,14 +166,20 @@ export async function runPipelineGeminiGroqText(options: {
       if (!groqKey) throw new Error('Groq key not available')
       let userContent = prompt
       let groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
-      if (groqRes.payloadTooLarge && (step === 'execution_layer' || step === 'strategy_execution_bundle')) {
+      if (
+        groqRes.payloadTooLarge &&
+        (step === 'execution_layer' || step === 'strategy_execution_bundle' || step === 'article_summary')
+      ) {
         console.warn(`[pipeline] Groq 413 on ${step}: shrinking input, then retrying Groq`)
         userContent = geminiKey
           ? await summarizeUserPromptForPmActionGemini(geminiKey, prompt)
           : compressTextForPmActionInput(prompt, 8000)
         groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
       }
-      if (groqRes.payloadTooLarge && (step === 'execution_layer' || step === 'strategy_execution_bundle')) {
+      if (
+        groqRes.payloadTooLarge &&
+        (step === 'execution_layer' || step === 'strategy_execution_bundle' || step === 'article_summary')
+      ) {
         userContent = compressTextForPmActionInput(userContent, 6000)
         console.warn(`[pipeline] Groq still 413 on ${step}: hard-truncating user prompt to 6000 chars`)
         groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })

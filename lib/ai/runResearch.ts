@@ -9,8 +9,6 @@ import { GEMINI_MODEL } from '@/lib/gemini-config'
 import { BASE_MARKDOWN_PROMPT } from './base-prompt'
 import { runTabAnalysis } from './unified-ai-service'
 import { runPipelineGeminiGroqText, type LlmRecordingContext } from '@/lib/ai/pipeline-text-completion'
-import { generateTextWithUsage } from '@/services/ai/geminiClient'
-import { recordLlmUsage } from '@/lib/llm-usage-record'
 import {
   TASK_TRENDS_SYSTEM,
   buildTaskTrendsPromptParts,
@@ -560,13 +558,19 @@ const ARTICLE_SUMMARY_SYSTEM = `Output only in standard professional Korean. Str
 Summarize each news article for market research in 2-3 sentences: key facts, implications, and market relevance.
 Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } in input order, as the sole message.`
 
-/** 한 배치(최대 4편)만 Gemini로 요약 — 단일 API 호출 */
+/** 한 배치(최대 4편) 요약 — 시장 리서치 단계와 동일한 AI 설정(`runPipelineGeminiGroqText`) */
 async function summarizeOneArticleBatchCall(
   articles: ArticleWithContent[],
   geminiKey: string,
+  groqKey: string | null | undefined,
+  primaryProvider: AIPrimaryModel,
   llmCtx?: LlmRecordingContext
-): Promise<ArticleForAnalysis[]> {
-  if (articles.length === 0) return []
+): Promise<{
+  items: ArticleForAnalysis[]
+  usedFallback: boolean
+  primaryProviderError?: string
+}> {
+  if (articles.length === 0) return { items: [], usedFallback: false }
   const prompt = `Summarize each article in 2-3 sentences (Korean). Focus on facts and market relevance.
 
 ${articles
@@ -578,33 +582,31 @@ ${articles
 
 Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
 
-  const gen = await generateTextWithUsage({
-    apiKey: geminiKey,
-    prompt,
+  const completion = await runPipelineGeminiGroqText({
+    step: 'article_summary',
+    geminiKey,
+    groqKey,
+    primaryProvider,
     systemInstruction: ARTICLE_SUMMARY_SYSTEM,
+    prompt,
     maxOutputTokens: 1500,
-    model: GEMINI_MODEL,
+    groqMaxTokens: 1500,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
   })
-  if (llmCtx) {
-    await recordLlmUsage(llmCtx.supabase, {
-      userId: llmCtx.userId,
-      analysisId: llmCtx.analysisId,
-      stepName: 'article_summary',
-      provider: 'gemini',
-      model: gen.model,
-      promptTokens: gen.promptTokenCount,
-      completionTokens: gen.candidatesTokenCount,
-      totalTokens: gen.totalTokenCount,
-    })
-  }
-  const text = gen.text
+  const text = completion.text
   const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
   const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
-  return articles.map((a, i) => ({
+  const items = articles.map((a, i) => ({
     title: a.title,
     summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
     publisher: a.publisher,
   }))
+  return {
+    items,
+    usedFallback: completion.usedFallback,
+    primaryProviderError: completion.primaryProviderError,
+  }
 }
 
 type QuotaBackoffEvent = Extract<ResearchStreamEvent, { type: 'quota_backoff' }>
@@ -615,6 +617,9 @@ type ArticleBatchWorkResult = {
   backoffs: QuotaBackoffEvent[]
   /** 429·쿼터 한도 소진 후에도 LLM 실패 → 본문 발췌 요약으로 대체한 경우 */
   usedLocalSnippetDueToQuota?: boolean
+  /** 우선 모델 실패 후 파이프라인 폴백 모델로 생성한 경우 */
+  usedLlmFallback?: boolean
+  primaryProviderError?: string
 }
 
 /**
@@ -623,6 +628,8 @@ type ArticleBatchWorkResult = {
 async function* summarizeArticleBatchWithRetriesGen(
   batch: ArticleWithContent[],
   geminiKey: string,
+  groqKey: string | null | undefined,
+  primaryProvider: AIPrimaryModel,
   llmCtx: LlmRecordingContext | undefined,
   order: number
 ): AsyncGenerator<QuotaBackoffEvent, ArticleBatchWorkResult, void> {
@@ -630,8 +637,15 @@ async function* summarizeArticleBatchWithRetriesGen(
   const maxRetries = 2
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const items = await summarizeOneArticleBatchCall(batch, geminiKey, llmCtx)
-      return { order, items, backoffs, usedLocalSnippetDueToQuota: false }
+      const out = await summarizeOneArticleBatchCall(batch, geminiKey, groqKey, primaryProvider, llmCtx)
+      return {
+        order,
+        items: out.items,
+        backoffs,
+        usedLocalSnippetDueToQuota: false,
+        usedLlmFallback: out.usedFallback,
+        primaryProviderError: out.primaryProviderError,
+      }
     } catch (err) {
       const fallback = (): ArticleForAnalysis[] =>
         batch.map((a) => ({
@@ -684,14 +698,21 @@ async function* summarizeArticleBatchWithRetriesGen(
 async function* summarizeArticlesWithAIBatchedGen(
   articles: ArticleWithContent[],
   geminiKey: string,
+  groqKey: string | null | undefined,
+  primaryProvider: AIPrimaryModel,
   llmCtx?: LlmRecordingContext
 ): AsyncGenerator<
   ResearchStreamEvent,
-  { merged: ArticleForAnalysis[]; usedLocalSnippetDueToQuota: boolean },
+  {
+    merged: ArticleForAnalysis[]
+    usedLocalSnippetDueToQuota: boolean
+    anyLlmFallback: boolean
+    primaryProviderError?: string
+  },
   void
 > {
   if (articles.length === 0) {
-    return { merged: [], usedLocalSnippetDueToQuota: false }
+    return { merged: [], usedLocalSnippetDueToQuota: false, anyLlmFallback: false }
   }
   const totalChars = articles.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
   const maxSingleBatchArticles = 4
@@ -702,6 +723,8 @@ async function* summarizeArticlesWithAIBatchedGen(
       : chunkArray(articles, maxSingleBatchArticles)
 
   let usedLocalSnippetDueToQuota = false
+  let anyLlmFallback = false
+  let primaryProviderError: string | undefined
   const merged: ArticleForAnalysis[] = []
 
   for (let i = 0; i < batches.length; i++) {
@@ -710,19 +733,23 @@ async function* summarizeArticlesWithAIBatchedGen(
       type: 'task',
       task: 'article_summary',
       status: 'running',
-      provider: 'gemini',
+      provider: primaryProvider,
       fallback_used: false,
       currentArticleTitle:
         batches.length === 1
           ? batch[0]!.title.slice(0, 60)
           : `요약 배치 ${i + 1}/${batches.length} (총 ${batches.length}회)`,
     }
-    const g = summarizeArticleBatchWithRetriesGen(batch, geminiKey, llmCtx, i)
+    const g = summarizeArticleBatchWithRetriesGen(batch, geminiKey, groqKey, primaryProvider, llmCtx, i)
     while (true) {
       const step = await g.next()
       if (step.done) {
         const r = step.value as ArticleBatchWorkResult
         if (r.usedLocalSnippetDueToQuota) usedLocalSnippetDueToQuota = true
+        if (r.usedLlmFallback) {
+          anyLlmFallback = true
+          if (r.primaryProviderError) primaryProviderError = r.primaryProviderError
+        }
         merged.push(...r.items)
         break
       }
@@ -730,7 +757,7 @@ async function* summarizeArticlesWithAIBatchedGen(
     }
   }
 
-  return { merged, usedLocalSnippetDueToQuota }
+  return { merged, usedLocalSnippetDueToQuota, anyLlmFallback, primaryProviderError }
 }
 
 /** Non-competitor patterns: magazines, blogs, news media – filter these out from competitive_landscape */
@@ -2922,6 +2949,11 @@ export async function* runResearch(
   const articlesWithContent = resultsSlots
   console.log('[article-extract] done:', articlesWithContent.length, '| items:', articlesWithContent.map((a) => ({ title: a.title.slice(0, 40), contentLen: a.content.length })))
 
+  const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
+  const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
+  const articleSummaryPrimary: AIPrimaryModel =
+    marketProvider === 'groq' && !(groqKey?.trim()) ? 'gemini' : marketProvider
+
   if (checkAborted(signal)) {
     yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
     return
@@ -2930,7 +2962,13 @@ export async function* runResearch(
   // Article summarization (AI) — 배치당 1 LLM 호출, 배치 병렬 최대 3; 429 시 백오프 후 해당 배치만 재시도
   let articlesForAnalysis: ArticleForAnalysis[]
   try {
-    const summaryGen = summarizeArticlesWithAIBatchedGen(articlesWithContent, geminiKey, llmCtx)
+    const summaryGen = summarizeArticlesWithAIBatchedGen(
+      articlesWithContent,
+      geminiKey,
+      groqKey,
+      articleSummaryPrimary,
+      llmCtx
+    )
     let sumStep = await summaryGen.next()
     while (!sumStep.done) {
       yield sumStep.value as ResearchStreamEvent
@@ -2939,22 +2977,36 @@ export async function* runResearch(
     const summaryBundle = sumStep.value as {
       merged: ArticleForAnalysis[]
       usedLocalSnippetDueToQuota: boolean
+      anyLlmFallback: boolean
+      primaryProviderError?: string
     }
-    const { merged, usedLocalSnippetDueToQuota } = summaryBundle
+    const { merged, usedLocalSnippetDueToQuota, anyLlmFallback, primaryProviderError: articleSumPrimaryErr } =
+      summaryBundle
     if (usedLocalSnippetDueToQuota) {
       yield {
         type: 'article_summary_quality_notice',
-        message: '무료 한도 초과 → 요약 품질이 낮을 수 있습니다. (Gemini 대신 본문 발췌를 사용합니다.)',
+        message:
+          '무료 한도 초과 등으로 요약 단계에 실패해 본문 발췌로 대체했습니다. 품질이 낮을 수 있습니다.',
       }
     }
     articlesForAnalysis = merged
+    const articleSummaryDisplayProvider =
+      articleSummaryPrimary === 'gemini'
+        ? anyLlmFallback
+          ? 'groq'
+          : 'gemini'
+        : anyLlmFallback
+          ? 'gemini'
+          : 'groq'
     console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
     yield {
       type: 'task',
       task: 'article_summary',
       status: 'completed',
-      provider: 'gemini',
-      fallback_used: usedLocalSnippetDueToQuota,
+      provider: articleSummaryDisplayProvider,
+      fallback_used: anyLlmFallback || usedLocalSnippetDueToQuota,
+      primaryProviderError:
+        anyLlmFallback || usedLocalSnippetDueToQuota ? articleSumPrimaryErr : undefined,
       progressMeta: { newsCount: articlesForAnalysis.length, sourceLabel: '기사 요약 완료' },
     }
   } catch (err) {
@@ -2968,8 +3020,8 @@ export async function* runResearch(
       type: 'task',
       task: 'article_summary',
       status: 'completed',
-      provider: 'gemini',
-      fallback_used: false,
+      provider: articleSummaryPrimary,
+      fallback_used: true,
     }
   }
 
@@ -2999,9 +3051,6 @@ export async function* runResearch(
   }
 
   // Phase 2: 시장 트렌드 + 경쟁 분석 — 단일 LLM(시장·경쟁 컨텍스트). 실패 시 분리 호출로 폴백.
-  const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
-  const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
-
   const textPointCount = Math.max(1, articlesForAnalysis.length)
   const trendSourceLabel = 'Google News·RSS 수집·요약'
   const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
