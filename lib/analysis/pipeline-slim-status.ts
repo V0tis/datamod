@@ -1,44 +1,23 @@
 /**
- * Shared pipeline stage status for slim stepper (keeps parity with StrategyEnginePipeline).
+ * Shared pipeline stage status for slim stepper (9단계, StrategyEnginePipeline과 동기).
  */
 
-import { streamTaskToStageIndex } from '@/lib/analysis/pipeline-activity-step'
+import { streamTaskToStageIndex, STREAM_TO_NINE_INDEX } from '@/lib/analysis/pipeline-nine-stage'
 import { getPhase2CompetitionRowStatus, getPhase2TrendRowStatus } from '@/lib/analysis/phase2-row-status'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
-const STREAM_TO_INDEX: Record<string, number> = {
-  signal_layer: 0,
-  news: 0,
-  article_extraction: 0,
-  article_summary: 0,
-  trend_analysis: 1,
-  pass1: 1,
-  competition_analysis: 2,
-  insight_extraction: 3,
-  strategy_generation: 4,
-  execution_layer: 5,
-  pass2: 5,
-  creative: 5,
-  risk_opportunity: 6,
-  risks_opportunities: 6,
-  post_processing: 7,
-  post_processing_key_metrics: 7,
-  post_processing_creative: 7,
-  post_processing_saving: 7,
-  final_refining: 7,
-  done: 8,
-}
+const STREAM_TO_INDEX = STREAM_TO_NINE_INDEX
 
 const PIPELINE_STAGE_META = [
+  { taskId: '__prep__' as const },
   { taskId: 'signal_layer' as const },
+  { taskId: 'article_extraction' as const },
   { taskId: 'trend_analysis' as const },
   { taskId: 'competition_analysis' as const },
   { taskId: 'insight_extraction' as const },
   { taskId: 'strategy_generation' as const },
   { taskId: 'execution_layer' as const },
   { taskId: 'risk_opportunity' as const },
-  { taskId: 'post_processing' as const },
-  { taskId: 'done' as const },
 ] as const
 
 export type PipelineStageStatus = 'pending' | 'running' | 'completed' | 'failed'
@@ -59,11 +38,11 @@ export function computeEffectivePipelineIndex(
   currentStep: number,
   analysisTasks?: Array<{ step_name: string; status: string }> | null
 ): number {
-  if (allCompleted) return 7
+  if (allCompleted) return 8
   if (streamingStepId === 'competition_analysis' && analysisTasks?.length) {
     const tr = analysisTasks.find((t) => t.step_name === 'trend_analysis')
-    if (tr?.status !== 'completed') return 1
-    return 2
+    if (tr?.status !== 'completed') return 3
+    return 4
   }
   if (streamingStepId && STREAM_TO_INDEX[streamingStepId] != null) {
     return STREAM_TO_INDEX[streamingStepId]
@@ -91,29 +70,42 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
   )
 
   const effectiveIndex = computeEffectivePipelineIndex(allCompleted, streamingStepId, currentStep, analysisTasks)
-  const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
+  const failIdx = hasError ? Math.min(errorStepIndex, 8) : -1
+
+  const sig = taskMap['signal_layer']
+  const artEx = taskMap['article_extraction']
+  const artSum = taskMap['article_summary']
 
   const out: PipelineStageStatus[] = []
 
   for (let i = 0; i < PIPELINE_STAGE_META.length; i++) {
     const stage = PIPELINE_STAGE_META[i]
     const taskId = stage.taskId
-    const task = taskId !== 'done' ? taskMap[taskId] : null
+    const task =
+      taskId === '__prep__'
+        ? null
+        : taskId === 'article_extraction'
+          ? artEx ?? artSum
+          : taskMap[taskId]
 
     let status: PipelineStageStatus
 
     if (hasError && failIdx >= 0 && i === failIdx) {
       status = 'failed'
+    } else if (taskId === '__prep__') {
+      if (!sig) status = allCompleted || effectiveIndex > 0 ? 'completed' : 'pending'
+      else if (sig.status === 'pending') status = 'running'
+      else status = 'completed'
     } else if (taskId === 'trend_analysis') {
       status = getPhase2TrendRowStatus(taskMap['trend_analysis'])
     } else if (taskId === 'competition_analysis') {
       status = getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
     } else if (
-      i === 0 &&
+      taskId === 'article_extraction' &&
       (streamingStepId === 'article_extraction' ||
         streamingStepId === 'article_summary' ||
-        taskMap['article_extraction']?.status === 'running' ||
-        taskMap['article_summary']?.status === 'running')
+        artEx?.status === 'running' ||
+        artSum?.status === 'running')
     ) {
       status = 'running'
     } else if (task && task.status) {
@@ -121,7 +113,7 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
       else if (task.status === 'completed') status = 'completed'
       else if (task.status === 'running') status = 'running'
       else status = 'pending'
-    } else if (i === 6) {
+    } else if (taskId === 'risk_opportunity') {
       const riskTask = taskMap['risk_opportunity']
       if (riskTask) {
         if (riskTask.status === 'failed') status = 'failed'
@@ -141,22 +133,6 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
             streamingStepId === 'final_refining')
         status = allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
       }
-    } else if (i === 7) {
-      if (
-        result?.key_metrics != null &&
-        typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
-      ) {
-        status = 'completed'
-      } else {
-        const isPostProcessing =
-          streamingStepId &&
-          (streamingStepId.startsWith('post_processing_') ||
-            streamingStepId === 'post_processing' ||
-            streamingStepId === 'final_refining')
-        status = allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
-      }
-    } else if (i === 8) {
-      status = allCompleted ? 'completed' : 'pending'
     } else if (hasError && failIdx >= 0) {
       if (i === failIdx) status = 'failed'
       else if (i < failIdx) status = 'completed'
@@ -176,15 +152,15 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
 }
 
 export const PIPELINE_SLIM_LABELS = [
+  '준비',
   '수집',
-  '시장',
+  '가공',
+  '흐름',
   '경쟁',
-  '인사이트',
+  '통찰',
   '전략',
-  '실행',
-  '리스크',
-  '점수',
-  '완료',
+  '액션',
+  '검증',
 ] as const
 
 /** Highlight the step that is running or streaming; otherwise last completed phase while loading. */
@@ -192,8 +168,8 @@ export function inferActivePipelineIndex(ctx: PipelineSlimStatusContext): number
   const trTask = ctx.analysisTasks?.find((t) => t.step_name === 'trend_analysis')
   const coTask = ctx.analysisTasks?.find((t) => t.step_name === 'competition_analysis')
   if (trTask?.status === 'running' || coTask?.status === 'running') {
-    if (coTask?.status === 'running' && trTask?.status === 'completed') return 2
-    return 1
+    if (coTask?.status === 'running' && trTask?.status === 'completed') return 4
+    return 3
   }
   const running = ctx.analysisTasks?.find((t) => t.status === 'running')
   if (running) {

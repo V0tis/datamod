@@ -123,6 +123,20 @@ function RiskSignalRow({ item }: { item: RiskSignalItem }) {
                 >
                   {cfg.label}
                 </span>
+                {item.mitigation_level ? (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold tabular-nums',
+                      item.mitigation_level === '상'
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+                        : item.mitigation_level === '하'
+                          ? 'border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-200'
+                          : 'border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+                    )}
+                  >
+                    완화 {item.mitigation_level}
+                  </span>
+                ) : null}
                 <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
                   종합 {total}/100
                 </span>

@@ -65,11 +65,11 @@ export function ResultTimelineSection({
   const streamDone = streamingState.status === 'completed' && !hasError
   const timelineStep =
     polledStatus === 'running' && polledProgressStep != null
-      ? Math.min(7, Math.max(0, polledProgressStep))
+      ? Math.min(8, Math.max(0, polledProgressStep))
       : streamingState.status === 'running' || streamingState.status === 'streaming'
         ? streamingState.currentStep
         : streamDone || (displayResult != null && !loading && !hasError)
-          ? 7
+          ? 8
           : -1
 
   const show =

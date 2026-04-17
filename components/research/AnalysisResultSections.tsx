@@ -494,7 +494,14 @@ export function AnalysisResultSections({
           {competitiveLandscape.length > 0 && (
             <>
               <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
-              <CompetitorBubbleQuadrant competitors={competitiveLandscape} />
+              <CompetitorBubbleQuadrant
+                competitors={competitiveLandscape}
+                pmCaption={
+                  layout === 'pm-analytics' && competitiveLandscape.length > 0
+                    ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                    : null
+                }
+              />
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
                 <div className="flex flex-wrap gap-2">
@@ -722,6 +729,13 @@ export function AnalysisResultSections({
               opportunityScoreReasoning={opportunityScoreChartDialogText}
               keyword={keyword}
               radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
+              pmSectionCaption={
+                isPmAnalytics
+                  ? topInsights[0] ||
+                    opportunityScoreSummaryLine ||
+                    (opportunityScore != null ? `기회 점수 ${opportunityScore}점은 시장 매력·성장·경쟁 압력을 종합한 결과입니다.` : null)
+                  : null
+              }
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(opportunityScore != null || loading) && (
@@ -857,7 +871,14 @@ export function AnalysisResultSections({
                   competitors={competitiveLandscape}
                   loading={loading}
                 />
-                <CompetitorBubbleQuadrant competitors={competitiveLandscape} />
+                <CompetitorBubbleQuadrant
+                competitors={competitiveLandscape}
+                pmCaption={
+                  layout === 'pm-analytics' && competitiveLandscape.length > 0
+                    ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                    : null
+                }
+              />
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
                   <div className="flex flex-wrap gap-2">

@@ -109,6 +109,8 @@ export interface MarketGrowthChartsProps {
   opportunityScoreReasoning?: string | null
   className?: string
   radarSkeleton?: boolean
+  /** 섹션 상단 고정: AI PM 한 줄 (대시보드용) */
+  pmSectionCaption?: string | null
 }
 
 export function MarketGrowthCharts({
@@ -120,6 +122,7 @@ export function MarketGrowthCharts({
   opportunityScoreReasoning,
   className,
   radarSkeleton = false,
+  pmSectionCaption,
 }: MarketGrowthChartsProps) {
   const defaultBreakdown = { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : defaultBreakdown
@@ -158,6 +161,7 @@ export function MarketGrowthCharts({
         <SectionContentSkeleton variant="chart" className="rounded-xl border border-border/40 bg-card/30 p-3" />
       ) : (
         <ChartWithInsight
+          pmCaption={pmSectionCaption}
           title="시장 다각도 분석 (막대)"
           logicHint="기회 점수 breakdown의 각 축을 동일 스케일(0~100)로 환산한 뒤, 막대 길이로 상대 강도를 비교합니다."
           insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}

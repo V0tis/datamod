@@ -1393,7 +1393,7 @@ function ResultsContent() {
                 phaseRerunDisabled={loading || analysisPipelineBusy}
                 streamingState={streamingState}
                 polledProgressStep={
-                  polledStatus === 'running' ? Math.min(7, Math.max(0, polledProgressStep)) : undefined
+                  polledStatus === 'running' ? Math.min(8, Math.max(0, polledProgressStep)) : undefined
                 }
                 polledStatus={polledStatus}
                 pipelineHasError={hasFailure}

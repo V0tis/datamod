@@ -4,29 +4,9 @@
  */
 
 import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
+import { NINE_TO_PROGRESS_MESSAGE_INDEX, STREAM_TO_NINE_INDEX } from '@/lib/analysis/pipeline-nine-stage'
 
-const STREAM_TO_INDEX: Record<string, number> = {
-  signal_layer: 0,
-  news: 0,
-  article_extraction: 0,
-  article_summary: 0,
-  trend_analysis: 1,
-  pass1: 1,
-  competition_analysis: 2,
-  insight_extraction: 3,
-  strategy_generation: 4,
-  execution_layer: 5,
-  pass2: 5,
-  creative: 5,
-  risk_opportunity: 6,
-  risks_opportunities: 6,
-  done: 7,
-  post_processing: 7,
-  post_processing_key_metrics: 7,
-  post_processing_creative: 7,
-  post_processing_saving: 7,
-  final_refining: 7,
-}
+const STREAM_TO_INDEX = STREAM_TO_NINE_INDEX
 
 /** 7-step progress for loading UX - user-facing analysis stages */
 export const PROGRESS_STEPS = [
@@ -45,16 +25,9 @@ export const STEP_ETA_SECONDS = [20, 18, 20, 18, 22, 25, 20] as const
 /** Seconds after which to show long-step message (e.g. "AI가 전략을 생성하는 중입니다...") */
 export const LONG_STEP_THRESHOLD_SEC = 8
 
-/** Map pipeline step index (0–7) to 7-step progress index (0–6). Step 6 = risk_opportunity, 7 = post_processing. */
+/** Map 9-stage pipeline index (0–8) to 7-step progress message index (0–6). */
 export const PIPELINE_TO_PROGRESS_INDEX: Record<number, number> = {
-  0: 0, // signal_layer, news
-  1: 1, // trend_analysis
-  2: 1, // competition_analysis (Phase 2 병렬 — 시장과 동일 진행 슬롯)
-  3: 3, // insight_extraction
-  4: 4, // strategy_generation
-  5: 5, // execution_layer, creative
-  6: 6, // risk_opportunity
-  7: 6, // post_processing (same UX message as step 6: 기회 점수·차트)
+  ...NINE_TO_PROGRESS_MESSAGE_INDEX,
 }
 
 /** 후처리 단계별 메시지 (리스크·기회 평가 → 기회점수·차트 산출) */
@@ -106,7 +79,7 @@ export function getProgressStepIndex(stepId?: string | null, pipelineIndex?: num
     : typeof pipelineIndex === 'number' && pipelineIndex >= 0
       ? pipelineIndex
       : 0
-  const mapped = PIPELINE_TO_PROGRESS_INDEX[Math.min(idx, 6)]
+  const mapped = PIPELINE_TO_PROGRESS_INDEX[Math.min(idx, 8)]
   return mapped != null ? mapped : Math.min(idx, PROGRESS_STEPS.length - 1)
 }
 
@@ -174,9 +147,13 @@ export function getAnalysisActivityMessage(
       : typeof currentStep === 'number' && currentStep >= 0
         ? currentStep
         : 0
-  const progressIndex = PIPELINE_TO_PROGRESS_INDEX[Math.min(stepIdx, 6)] ?? Math.min(stepIdx, PROGRESS_STEPS.length - 1)
+  const progressIndex =
+    PIPELINE_TO_PROGRESS_INDEX[Math.min(stepIdx, 8)] ?? Math.min(stepIdx, PROGRESS_STEPS.length - 1)
   const meta = options?.progressMeta
 
+  if (stepId === 'analysis_prep') {
+    return options?.short ? '준비 중…' : '캐시 조회 및 데이터 정합성을 확인하는 중입니다...'
+  }
   if (stepId === 'article_extraction') {
     const base = '기사 본문 추출 중'
     return options?.currentArticleTitle ? `${base}: ${options.currentArticleTitle}` : base
@@ -213,7 +190,7 @@ export function getAnalysisActivityMessage(
     return '시장 데이터 분석 중...'
   }
   if (stepId === 'competition_analysis') {
-    return '시장 분석 중...'
+    return '경쟁사 행동·채택률 분석 중...'
   }
 
   if (options?.elapsedMs != null && options.elapsedMs >= LONG_STEP_THRESHOLD_SEC * 1000) {

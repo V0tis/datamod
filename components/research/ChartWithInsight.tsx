@@ -10,6 +10,8 @@ export interface ChartInsightData {
 }
 
 export interface ChartWithInsightProps {
+  /** 차트 상단 고정: AI PM 한 줄 해석 */
+  pmCaption?: string | null
   /** Chart title */
   title: string
   /** AI-generated insight summary (1-2 sentences) */
@@ -31,6 +33,7 @@ export interface ChartWithInsightProps {
  * Wraps a chart with Chart Title, AI Insight Summary, and Key Takeaway.
  */
 export function ChartWithInsight({
+  pmCaption,
   title,
   insight,
   takeaway,
@@ -44,6 +47,8 @@ export function ChartWithInsight({
   const flat = variant === 'flat'
   const hint = logicHint?.trim()
 
+  const cap = pmCaption?.trim()
+
   return (
     <div
       className={cn(
@@ -53,6 +58,14 @@ export function ChartWithInsight({
         className
       )}
     >
+      {cap ? (
+        <div className="mb-3 rounded-lg border border-zinc-200/80 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">
+            AI PM의 한 줄 평
+          </p>
+          <p className="mt-1 text-sm font-medium leading-snug text-zinc-800 dark:text-zinc-100">{cap}</p>
+        </div>
+      ) : null}
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">

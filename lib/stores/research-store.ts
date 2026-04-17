@@ -1044,10 +1044,10 @@ export const useResearchStore = create<ResearchStore>()(
           'insight_extraction' | 'strategy_generation' | 'execution_layer' | 'risk_opportunity',
           number
         > = {
-          insight_extraction: 3,
-          strategy_generation: 4,
-          execution_layer: 5,
-          risk_opportunity: 6,
+          insight_extraction: 5,
+          strategy_generation: 6,
+          execution_layer: 7,
+          risk_opportunity: 8,
         }
         const startStepIdx = retryPipelineStep ? RETRY_STEP_INDEX[retryPipelineStep] : 0
         const startStepId = retryPipelineStep ?? steps[0]?.id ?? 'signal_layer'
@@ -1222,23 +1222,24 @@ export const useResearchStore = create<ResearchStore>()(
 
           // Product Strategy Engine - 5 layers + post_processing (6)
           const stepMap: Record<string, number> = {
-            signal_layer: 0,
-            news: 0,
-            article_extraction: 0,
-            article_summary: 0,
-            trend_analysis: 1,
-            pass1: 1,
-            competition_analysis: 1,
-            insight_extraction: 3,
-            strategy_generation: 4,
-            execution_layer: 5,
-            pass2: 5,
-            creative: 5,
-            risk_opportunity: 6,
-            post_processing: 7,
-            post_processing_key_metrics: 7,
-            post_processing_creative: 7,
-            post_processing_saving: 7,
+            analysis_prep: 0,
+            signal_layer: 1,
+            news: 1,
+            article_extraction: 2,
+            article_summary: 2,
+            trend_analysis: 3,
+            pass1: 3,
+            competition_analysis: 4,
+            insight_extraction: 5,
+            strategy_generation: 6,
+            execution_layer: 7,
+            pass2: 7,
+            creative: 7,
+            risk_opportunity: 8,
+            post_processing: 8,
+            post_processing_key_metrics: 8,
+            post_processing_creative: 8,
+            post_processing_saving: 8,
           }
 
           while (!streamEnded) {
@@ -1294,6 +1295,9 @@ export const useResearchStore = create<ResearchStore>()(
                 if (type === 'analysis_started') {
                   const ev = event as { analysisId?: string }
                   if (ev.analysisId) setAnalysisId(ev.analysisId)
+                  if (!retryPipelineStep) {
+                    setStepProgress(0, 'analysis_prep')
+                  }
                   appendActivity('데이터 수집·AI 분석을 시작합니다.', undefined, 'signal_layer')
                 }
 
@@ -1333,7 +1337,7 @@ export const useResearchStore = create<ResearchStore>()(
                     ev.phase === 1 || ev.phase === 2 || ev.phase === 3 ? ev.phase : 1
                   const msg = typeof ev.message === 'string' ? ev.message : ''
                   if (msg) appendActivity(msg, undefined, 'post_processing')
-                  setStepProgress(7, 'final_refining', undefined, undefined, {
+                  setStepProgress(8, 'final_refining', undefined, undefined, {
                     refiningPhase: phase,
                     refiningMessage: msg || undefined,
                   })
@@ -1380,9 +1384,7 @@ export const useResearchStore = create<ResearchStore>()(
                       )
                     }
                     if (status === 'completed') {
-                      const pipelineAdvanceIdx =
-                        task === 'competition_analysis' ? 2 : stepIdx
-                      lastSuccessfulStep = Math.max(lastSuccessfulStep, pipelineAdvanceIdx)
+                      lastSuccessfulStep = Math.max(lastSuccessfulStep, stepIdx)
                       if (ev.data != null) {
                         get().setTaskData(task, ev.data)
                       }
@@ -2197,7 +2199,7 @@ export const useResearchStore = create<ResearchStore>()(
         }
         return { ...p, state: next as ResearchState }
       },
-      version: 4,
+      version: 5,
       storage: {
         getItem: (name: string) => {
           if (typeof window === 'undefined') return null
@@ -2229,29 +2231,49 @@ export const useResearchStore = create<ResearchStore>()(
           }
         },
       },
-      partialize: (state) => ({
-        keyword: state.keyword,
-        analysisCountryCode: state.analysisCountryCode,
-        status: state.status,
-        analysisStatus: state.analysisStatus,
-        analysisMode: state.analysisMode,
-        newsList: state.newsList,
-        result: state.result,
-        summarySection: state.summarySection,
-        marketTemperatureSection: state.marketTemperatureSection,
-        recommendedActionsSection: state.recommendedActionsSection,
-        insightsSection: state.insightsSection,
-        error: state.error,
-        insights: state.insights,
-        lastSuccessfulReport: state.lastSuccessfulReport,
-      }),
+      partialize: (state) => {
+        const analyzing =
+          state.status === 'loading' &&
+          (state.streamingState.status === 'running' || state.streamingState.status === 'streaming')
+        const base = {
+          keyword: state.keyword,
+          analysisCountryCode: state.analysisCountryCode,
+          status: state.status,
+          analysisStatus: state.analysisStatus,
+          analysisMode: state.analysisMode,
+          newsList: state.newsList,
+          result: state.result,
+          summarySection: state.summarySection,
+          marketTemperatureSection: state.marketTemperatureSection,
+          recommendedActionsSection: state.recommendedActionsSection,
+          insightsSection: state.insightsSection,
+          error: state.error,
+          insights: state.insights,
+          lastSuccessfulReport: state.lastSuccessfulReport,
+        }
+        if (!analyzing) return base
+        return {
+          ...base,
+          analysisId: state.analysisId,
+          currentStep: state.currentStep,
+          totalSteps: state.totalSteps,
+          streamingState: state.streamingState,
+          taskData: state.taskData,
+          analysisTasks: state.analysisTasks,
+          streamingActivityLog: state.streamingActivityLog.slice(-80),
+        }
+      },
       onRehydrateStorage: () => (state) => {
         if (!state) return
         if (state.status === 'loading') {
           const ss = state.streamingState
-          if (!ss || (ss.status !== 'running' && ss.status !== 'streaming')) {
-            state.status = 'idle'
-            state.analysisStatus = 'queued'
+          const mid = ss.status === 'running' || ss.status === 'streaming'
+          state.status = 'idle'
+          state.analysisStatus = 'queued'
+          if (mid) {
+            state.streamingState = createIdleState()
+            state.error =
+              '분석 중 페이지를 벗어났거나 새로고침되어 스트림이 끊겼습니다. 저장된 중간 결과가 있으면 아래에 표시됩니다. 이어서 분석하려면 동일 키워드로 다시 실행하거나, 실패한 단계에서 재시도하세요.'
           }
         }
         const reportId = state.result && typeof state.result === 'object' && 'reportId' in state.result

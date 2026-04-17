@@ -2,25 +2,27 @@ import { streamTaskToStageIndex } from '@/lib/analysis/pipeline-activity-step'
 
 const ORDERED_STEPS = [
   'signal_layer',
+  'article_extraction',
+  'article_summary',
   'trend_analysis',
   'competition_analysis',
   'insight_extraction',
   'strategy_generation',
   'execution_layer',
   'risk_opportunity',
-  'post_processing',
 ] as const
 
-/** 접힌 바·요약용 짧은 라벨 */
+/** 접힌 바·요약용 짧은 라벨 (9단계) */
 export const PIPELINE_STAGE_HEADLINES = [
-  '데이터 수집',
-  '시장 분석',
-  '경쟁 분석',
-  '인사이트',
+  '준비',
+  '수집',
+  '기사 가공',
+  '시장 흐름',
+  '경쟁',
+  '통찰',
   '전략',
-  '실행',
-  '리스크·기회',
-  '점수·차트',
+  '액션',
+  '검증·점수',
 ] as const
 
 /**
@@ -84,10 +86,10 @@ export function getPipelineProgressPercent(input: {
   const tasks = input.analysisTasks ?? []
   const done = tasks.filter((t) => t.status === 'completed').length
   const running = tasks.some((t) => t.status === 'running')
-  let pct = Math.min(92, Math.round((done / 8) * 88))
+  let pct = Math.min(92, Math.round((done / 9) * 88))
   if (running) pct = Math.min(94, pct + 8)
   if (tasks.length === 0 && input.timelineStep >= 0) {
-    pct = Math.min(85, Math.round((Math.min(7, input.timelineStep) / 7) * 72))
+    pct = Math.min(85, Math.round((Math.min(8, input.timelineStep) / 8) * 72))
   }
   return Math.max(4, pct)
 }

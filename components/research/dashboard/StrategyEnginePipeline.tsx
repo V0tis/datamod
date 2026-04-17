@@ -17,42 +17,33 @@ import { getProviderDisplayName, getProviderStatusKo } from '@/lib/ai/provider-d
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
+import { NINE_PIPELINE_STAGES, STREAM_TO_NINE_INDEX } from '@/lib/analysis/pipeline-nine-stage'
 
-/** AI Analysis Timeline - 8 steps: 5파이프라인 + 리스크평가 + 기회점수산출 + 완료 */
-const PIPELINE_STAGES = [
-  { id: 'signal_layer', label: '데이터 수집', taskId: 'signal_layer' as const, sectionLabel: '수집된 시그널' },
-  { id: 'trend_analysis', label: '시장 리서치', taskId: 'trend_analysis' as const, sectionLabel: '시장 개요' },
-  { id: 'competition_analysis', label: '경쟁사 분석', taskId: 'competition_analysis' as const, sectionLabel: '감지된 경쟁사' },
-  { id: 'insight_extraction', label: '인사이트 추출', taskId: 'insight_extraction' as const, sectionLabel: '핵심 인사이트' },
-  { id: 'strategy_generation', label: '전략 추천', taskId: 'strategy_generation' as const, sectionLabel: '리스크 및 기회' },
-  { id: 'execution_layer', label: 'PM 액션 플랜', taskId: 'execution_layer' as const, sectionLabel: '제안 전략' },
-  { id: 'risks_opportunities', label: '리스크 및 기회 평가', taskId: 'risk_opportunity' as const, sectionLabel: '리스크 및 기회', isVirtual: true },
-  { id: 'post_processing', label: '기회 점수·차트 산출', taskId: 'post_processing' as const, sectionLabel: '기회 점수·차트', isVirtual: true },
-  { id: 'done', label: '분석 완료', taskId: 'done' as const, sectionLabel: '', isVirtual: true },
+const PIPELINE_TASK_KEYS = [
+  'analysis_prep',
+  'signal_layer',
+  'article_extraction',
+  'trend_analysis',
+  'competition_analysis',
+  'insight_extraction',
+  'strategy_generation',
+  'execution_layer',
+  'risk_opportunity',
 ] as const
 
-const STREAM_TO_INDEX: Record<string, number> = {
-  signal_layer: 0,
-  news: 0,
-  article_extraction: 0,
-  article_summary: 0,
-  trend_analysis: 1,
-  pass1: 1,
-  competition_analysis: 2,
-  insight_extraction: 3,
-  strategy_generation: 4,
-  execution_layer: 5,
-  pass2: 5,
-  creative: 5,
-  risk_opportunity: 6,
-  risks_opportunities: 6,
-  post_processing: 7,
-  post_processing_key_metrics: 7,
-  post_processing_creative: 7,
-  post_processing_saving: 7,
-  final_refining: 7,
-  done: 8,
-}
+const PIPELINE_STAGES = NINE_PIPELINE_STAGES.map((meta, i) => ({
+  id: meta.id,
+  label: meta.label,
+  subtitle: meta.subtitle,
+  taskId: PIPELINE_TASK_KEYS[i],
+})) as readonly {
+  id: string
+  label: string
+  subtitle: string
+  taskId: (typeof PIPELINE_TASK_KEYS)[number]
+}[]
+
+const STREAM_TO_INDEX = STREAM_TO_NINE_INDEX
 
 export interface PipelineStageInsight {
   /** Section header (e.g. "Signals detected", "AI Insight") */
@@ -67,7 +58,7 @@ export interface PipelineStageInsight {
 
 export interface StrategyEnginePipelineProps {
   keyword: string
-  /** Backend current step (0–6). -1 = not started. 6 = all done. */
+  /** Backend current step (0–8). -1 = not started. */
   currentStep: number
   /** When true, all stages show as completed */
   allCompleted?: boolean
@@ -92,7 +83,7 @@ export interface StrategyEnginePipelineProps {
   onRetryStep?: (failedStepTaskId?: string) => void
   /** Global analysis failure - timeline stays visible, this step shows error */
   hasError?: boolean
-  /** Step index (0–4) where global error occurred */
+  /** Step index (0–8) where global error occurred */
   errorStepIndex?: number
   /** Error message to show in failed step when task.error_message is empty */
   globalErrorMessage?: string
@@ -125,19 +116,41 @@ export interface StrategyEnginePipelineProps {
   className?: string
 }
 
+function mergeTaskOutput(
+  taskMap: Record<string, { output_data?: unknown } | null | undefined>,
+  taskData: Partial<Record<string, unknown>>,
+  key: string
+): Record<string, unknown> | null {
+  const fromRow = taskMap[key]?.output_data
+  const raw =
+    fromRow && typeof fromRow === 'object' ? fromRow : taskData[key as keyof typeof taskData]
+  return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+}
+
 function getStageInsight(
   stageIndex: number,
   taskData: Partial<Record<string, unknown>>,
-  analysisTask: { output_data?: unknown } | null,
+  taskMap: Record<string, { output_data?: unknown } | null | undefined>,
   result: StrategyEnginePipelineProps['result'],
   newsList: Array<{ title?: string; url?: string; publisher?: string }>
 ): PipelineStageInsight | null {
-  const stage = PIPELINE_STAGES[stageIndex]
-  const taskId = stage?.taskId
-  const td = (analysisTask?.output_data && typeof analysisTask.output_data === 'object'
-    ? analysisTask.output_data
-    : taskId ? taskData[taskId] : null) as Record<string, unknown> | null
   const km = result?.key_metrics ?? {}
+
+  if (stageIndex === 0) {
+    return {
+      sectionLabel: '준비',
+      summary: '캐시 조회·데이터 정합성 확인 및 파이프라인 초기화가 완료되었습니다.',
+      signals: ['분석 경로 확정', '외부 시그널 소스 연결'],
+    }
+  }
+
+  const td =
+    stageIndex === 2
+      ? mergeTaskOutput(taskMap, taskData, 'article_extraction') ??
+        mergeTaskOutput(taskMap, taskData, 'article_summary')
+      : PIPELINE_STAGES[stageIndex]?.taskId
+        ? mergeTaskOutput(taskMap, taskData, PIPELINE_STAGES[stageIndex].taskId as string)
+        : null
 
   if (td && typeof td === 'object') {
     const obj = td as Record<string, unknown>
@@ -194,7 +207,7 @@ function getStageInsight(
       : []
 
     switch (stageIndex) {
-      case 0: {
+      case 1: {
         // 시장 신호 수집: headlines + URL (클릭 시 원문 이동)
         const itemsWithUrl = news_activity
           .slice(0, 5)
@@ -224,60 +237,100 @@ function getStageInsight(
           signals: sourceSignals.slice(0, 5),
         }
       }
-      case 1:
+      case 2: {
+        const na = Array.isArray(obj.news_activity) ? (obj.news_activity as unknown[]).length : 0
+        const batch = Array.isArray((obj as { batch_titles?: unknown }).batch_titles)
+          ? ((obj as { batch_titles: unknown[] }).batch_titles).length
+          : 0
+        const n = na || batch || 0
+        const lines = Array.isArray(obj.insights)
+          ? (obj.insights as string[]).filter((s): s is string => typeof s === 'string').slice(0, 4)
+          : []
         return {
-          sectionLabel: 'AI 인사이트',
+          sectionLabel: '기사 가공',
+          summary: n > 0 ? `핵심 기사 ${n}건 추출·요약 반영` : '기사 본문 추출·요약이 반영되었습니다.',
+          signals: lines.length > 0 ? lines : ['웹/RSS 시그널을 분석용 컨텍스트로 정제했습니다.'],
+        }
+      }
+      case 3:
+        return {
+          sectionLabel: '시장 트렌드',
           summary: trend_summary,
           signals: growth_signals?.slice(0, 5),
         }
-      case 2:
+      case 4:
         return {
           sectionLabel: '감지된 경쟁사',
           summary: typeof obj.market_structure === 'string' ? obj.market_structure : undefined,
           signals: compSignals.slice(0, 6),
         }
-      case 3:
+      case 5: {
+        const ki = Array.isArray((obj as { key_insights?: unknown }).key_insights)
+          ? ((obj as { key_insights: unknown[] }).key_insights).filter((x): x is string => typeof x === 'string')
+          : []
+        const ins = Array.isArray(obj.insights)
+          ? (obj.insights as string[]).filter((s): s is string => typeof s === 'string')
+          : []
+        const merged = [...ki, ...ins].slice(0, 6)
         return {
-          sectionLabel: '리스크 신호',
-          summary: strategy_summary,
-          signals: [...risks.slice(0, 4), ...opportunities.slice(0, 2)].filter(Boolean).slice(0, 6),
+          sectionLabel: '핵심 인사이트',
+          summary: merged.length ? `${merged.length}개 인사이트·시그널 도출` : strategy_summary,
+          signals: merged.length ? merged : growth_signals?.slice(0, 5),
         }
-    case 4:
-      const execSignals4 = [
+      }
+      case 6: {
+        const execSignals6 = [
           ...actionSignals,
           ...feature_ideas.slice(0, 3),
           ...go_to_market.slice(0, 2),
         ].filter(Boolean)
-        const strategySummary = actionSignals[0]
+        const strategySummaryLine = actionSignals[0]
           ? `초기 수용자 타겟: ${actionSignals[0]}`
           : feature_ideas[0]
             ? `Core value: ${feature_ideas[0]}`
-            : execSignals4.length > 0
-              ? `${execSignals4.length}개 전략 액션 도출`
+            : execSignals6.length > 0
+              ? `${execSignals6.length}개 전략 가설 도출`
               : undefined
         return {
-          sectionLabel: '제안 전략',
-          summary: strategySummary,
-          signals: execSignals4.slice(0, 5),
+          sectionLabel: '전략 가설',
+          summary: strategySummaryLine ?? strategy_summary,
+          signals: execSignals6.slice(0, 5),
         }
-    case 5:
-      // 리스크 및 기회 평가 - from strategy_generation
-      return {
-        sectionLabel: '리스크 및 기회',
-        summary: strategy_summary,
-        signals: [...risks.slice(0, 3), ...opportunities.slice(0, 3)].filter(Boolean).slice(0, 6),
       }
-    case 6:
-      // 기회 점수·차트 산출 (post_processing) - 별도 task 데이터 없음
-      return null
-    case 7:
-      return null
+      case 7: {
+        const pa = Array.isArray(obj.product_actions) ? obj.product_actions : []
+        const titles = pa
+          .slice(0, 6)
+          .map((a) =>
+            typeof a === 'object' && a && typeof (a as { action?: string }).action === 'string'
+              ? (a as { action: string }).action
+              : ''
+          )
+          .filter(Boolean)
+        return {
+          sectionLabel: 'PM 액션',
+          summary: titles.length ? `${titles.length}개 실행 과제 정리` : undefined,
+          signals: titles.length ? titles : go_to_market.slice(0, 5),
+        }
+      }
+      case 8:
+        return {
+          sectionLabel: '리스크·기회 검증',
+          summary: strategy_summary,
+          signals: [...risks.slice(0, 3), ...opportunities.slice(0, 3)].filter(Boolean).slice(0, 6),
+        }
     }
   }
 
   // Fallback from result (history load)
   switch (stageIndex) {
     case 0:
+      return {
+        sectionLabel: '준비',
+        summary: '저장된 리포트에서 분석 경로가 복원되었습니다.',
+        signals: ['캐시/히스토리 기준'],
+      }
+    case 1:
       if (newsList.length > 0) {
         const signalItems = newsList
           .slice(0, 5)
@@ -303,44 +356,66 @@ function getStageInsight(
         }
       }
       return null
-    case 1:
+    case 2:
       return {
-        sectionLabel: 'AI 인사이트',
+        sectionLabel: '기사 가공',
+        summary: newsList.length ? `수집된 ${newsList.length}건 기준 요약·추출 반영` : '기사 요약·추출 단계가 반영되었습니다.',
+        signals: ['히스토리 로드'],
+      }
+    case 3:
+      return {
+        sectionLabel: '시장 트렌드',
         summary: km.summary_insights ?? result?.marketNews?.[0],
         signals: (km.positive_signals ?? result?.marketNews ?? []).slice(0, 4),
       }
-    case 2:
+    case 4:
       return {
         sectionLabel: '감지된 경쟁사',
         summary: result?.competitorTrends,
         signals: (km.neutral_signals ?? []).slice(0, 4),
       }
-    case 3:
+    case 5: {
       const pos = km.positive_signals ?? []
       const neg = km.negative_risks ?? result?.painPoints ?? []
       return {
-        sectionLabel: '리스크 신호',
-        summary: pos.length || neg.length ? `${pos.length}개 기회, ${neg.length}개 리스크` : undefined,
+        sectionLabel: '핵심 인사이트',
+        summary: pos.length || neg.length ? `${pos.length}개 기회 신호, ${neg.length}개 리스크 신호` : undefined,
         signals: [...neg.slice(0, 4), ...pos.slice(0, 2)].filter(Boolean),
       }
-    case 4:
+    }
+    case 6: {
       const actions = km.pm_actions?.recommended_actions ?? []
       return {
-        sectionLabel: '제안 전략',
+        sectionLabel: '전략 가설',
         summary: actions.length ? `${actions.length}개 전략 액션 도출` : undefined,
         signals: actions.slice(0, 4).map((a) => a?.title ?? '').filter(Boolean),
       }
-    case 5:
+    }
+    case 7: {
+      const kmx = km as Record<string, unknown>
+      const plan = Array.isArray(kmx.pm_action_plan) ? (kmx.pm_action_plan as Array<{ action_title?: string }>) : []
+      const titles = plan
+        .map((p: { action_title?: string }) =>
+          typeof p.action_title === 'string' ? p.action_title : ''
+        )
+        .filter(Boolean)
+      return {
+        sectionLabel: 'PM 액션',
+        summary: titles.length ? `${titles.length}개 실행 과제` : undefined,
+        signals: titles.slice(0, 5),
+      }
+    }
+    case 8: {
       const pos5 = km.positive_signals ?? []
       const neg5 = km.negative_risks ?? result?.painPoints ?? []
+      const se = (km as { strategy_evaluation?: { cross_validation_score?: number } }).strategy_evaluation
+      const cv = typeof se?.cross_validation_score === 'number' ? `교차검증 ${se.cross_validation_score}%` : undefined
       return {
-        sectionLabel: '리스크 및 기회',
-        summary: pos5.length || neg5.length ? `${pos5.length}개 기회, ${neg5.length}개 리스크` : undefined,
+        sectionLabel: '리스크·기회 검증',
+        summary: cv ?? (pos5.length || neg5.length ? `${pos5.length}개 기회, ${neg5.length}개 리스크` : undefined),
         signals: [...neg5.slice(0, 3), ...pos5.slice(0, 3)].filter(Boolean),
       }
-    case 6:
-    case 7:
-      return null
+    }
   }
 
   return null
@@ -386,9 +461,9 @@ export function StrategyEnginePipeline({
   )
 
   const effectiveIndex = allCompleted
-    ? 7
+    ? 8
     : streamingStepId === 'competition_analysis' && taskMap['trend_analysis']?.status !== 'completed'
-      ? 1
+      ? 3
       : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
         ? STREAM_TO_INDEX[streamingStepId]
         : currentStep >= 0
@@ -410,34 +485,68 @@ export function StrategyEnginePipeline({
   function getStatus(i: number): StageStatus {
     const stage = PIPELINE_STAGES[i]
     const taskId = stage?.taskId
-    const task = taskId && taskId !== 'done' ? taskMap[taskId] : null
-    const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
-    // Global error: failed step always shows failed (do not render error+running)
+    const task = taskId && taskId !== 'analysis_prep' ? taskMap[taskId] : null
+    const failIdx = hasError ? Math.min(errorStepIndex, 8) : -1
     if (hasError && failIdx >= 0 && i === failIdx) return 'failed'
-    if (i === 1) return getPhase2TrendRowStatus(taskMap['trend_analysis'])
-    if (i === 2) return getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
-    // Stage 0: 신호 수집 완료 후에도 기사 추출·요약이 돌면 같은 단계를 running으로 유지 (완료처럼 멈춘 것처럼 보이는 버그 방지)
+
+    const sig = taskMap['signal_layer']
+    const artEx = taskMap['article_extraction']
+    const artSum = taskMap['article_summary']
+
     if (i === 0) {
-      if (
+      if (!pipelineInFlight && !sig) return 'pending'
+      if (!sig) return 'running'
+      if (sig.status === 'pending') return 'running'
+      return 'completed'
+    }
+
+    if (i === 1) {
+      if (task && task.status) {
+        if (task.status === 'failed') return 'failed'
+        if (task.status === 'completed') return 'completed'
+        if (task.status === 'running') return 'running'
+        return 'pending'
+      }
+      if (hasError && failIdx >= 0) {
+        if (i === failIdx) return 'failed'
+        if (i < failIdx) return 'completed'
+        return 'pending'
+      }
+      if (i < effectiveIndex) return 'completed'
+      if (i === effectiveIndex && !allCompleted) return 'running'
+      return 'pending'
+    }
+
+    if (i === 2) {
+      if (sig?.status !== 'completed' && sig?.status !== 'failed') return 'pending'
+      const articleRunning =
         streamingStepId === 'article_extraction' ||
         streamingStepId === 'article_summary' ||
-        taskMap['article_extraction']?.status === 'running' ||
-        taskMap['article_summary']?.status === 'running'
-      ) {
-        return 'running'
-      }
+        artEx?.status === 'running' ||
+        artSum?.status === 'running'
+      if (articleRunning) return 'running'
+      if (!artEx && !artSum) return 'completed'
+      const exDone = !artEx || artEx.status === 'completed' || artEx.status === 'failed'
+      const smDone = !artSum || artSum.status === 'completed' || artSum.status === 'failed'
+      if (exDone && smDone && (artEx?.status === 'completed' || artSum?.status === 'completed' || (!artEx && !artSum)))
+        return 'completed'
+      if (exDone && smDone) return 'completed'
+      return 'pending'
     }
-    // Real task status - do not infer when we have it
-    if (task && task.status) {
+
+    if (i === 3) return getPhase2TrendRowStatus(taskMap['trend_analysis'])
+    if (i === 4) return getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
+
+    if (task && task.status && i >= 5 && i <= 7) {
       if (task.status === 'failed') return 'failed'
       if (task.status === 'completed') return 'completed'
       if (task.status === 'running') return 'running'
       return 'pending'
     }
-    if (i === 6) {
+
+    if (i === 8) {
       const riskTask = taskMap['risk_opportunity']
       if (riskTask) return riskTask.status
-      /** task 행이 아직 없어도 key_metrics가 오면 리스크/기회 단계는 완료로 */
       if (
         result?.key_metrics != null &&
         typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
@@ -450,21 +559,7 @@ export function StrategyEnginePipeline({
           streamingStepId === 'final_refining')
       return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
     }
-    if (i === 7) {
-      if (
-        result?.key_metrics != null &&
-        typeof (result.key_metrics as { opportunity_score?: unknown }).opportunity_score === 'number'
-      )
-        return 'completed'
-      const isPostProcessing =
-        streamingStepId &&
-        (streamingStepId.startsWith('post_processing_') ||
-          streamingStepId === 'post_processing' ||
-          streamingStepId === 'final_refining')
-      return allCompleted ? 'completed' : isPostProcessing ? 'running' : 'pending'
-    }
-    if (i === 8) return allCompleted ? 'completed' : 'pending'
-    // Global error when no task: failed step + completed before + pending after
+
     if (hasError && failIdx >= 0) {
       if (i === failIdx) return 'failed'
       if (i < failIdx) return 'completed'
@@ -474,8 +569,6 @@ export function StrategyEnginePipeline({
     if (i === effectiveIndex && !allCompleted) return 'running'
     return 'pending'
   }
-
-  const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
 
   const queueWaitingBanner = (() => {
     if (!pipelineInFlight || allCompleted) return false
@@ -504,7 +597,7 @@ export function StrategyEnginePipeline({
     <div
       className={cn(
         !embedded &&
-          'rounded-lg border border-slate-200/90 bg-slate-50/40 shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950/30',
+          'rounded-[12px] border border-zinc-200/90 bg-zinc-50/50 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden dark:border-zinc-800 dark:bg-zinc-950/30',
         className
       )}
     >
@@ -537,17 +630,46 @@ export function StrategyEnginePipeline({
               </div>
             </div>
           ) : null}
+          {/* 9단계 요약 스텝 인디케이터 */}
+          <div
+            className="mb-5 grid gap-2 sm:gap-3"
+            style={{ gridTemplateColumns: 'repeat(9, minmax(0, 1fr))' }}
+            aria-label="분석 파이프라인 9단계 진행"
+          >
+            {PIPELINE_STAGES.map((st, j) => {
+              const stStatus = getStatus(j)
+              return (
+                <div key={st.id} className="flex flex-col items-center gap-1 min-w-0 text-center">
+                  <span
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums shadow-sm ring-1 transition-colors',
+                      stStatus === 'completed' &&
+                        'bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-zinc-600',
+                      stStatus === 'running' &&
+                        'bg-primary text-primary-foreground ring-primary/35 shadow-md',
+                      stStatus === 'pending' && 'bg-zinc-50 text-zinc-400 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-600',
+                      stStatus === 'failed' && 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950 dark:text-red-200',
+                    )}
+                  >
+                    {j + 1}
+                  </span>
+                  <span className="hidden sm:block text-[9px] font-medium leading-tight text-zinc-500 dark:text-zinc-400 truncate max-w-full px-0.5">
+                    {st.label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
           {PIPELINE_STAGES.map((stage, i) => {
             const status = getStatus(i)
-            const taskKey = stage.taskId && stage.taskId !== 'done' ? stage.taskId : stage.id
-            const analysisTask = taskMap[taskKey] ?? null
+            const taskKey = stage.taskId === 'analysis_prep' ? 'signal_layer' : stage.taskId
             const insight =
-              status === 'completed'
-                ? getStageInsight(i, taskData, analysisTask, result, newsList)
-                : null
+              status === 'completed' ? getStageInsight(i, taskData, taskMap, result, newsList) : null
             const hasInsight = insight && (insight.summary || (insight.signals?.length ?? 0) > 0)
             const showInsightPanel = Boolean(hasInsight && status === 'completed')
-            const task = taskMap[taskKey] ?? null
+            const task = (i === 0 ? taskMap['signal_layer'] : taskMap[taskKey]) ?? null
+            const retryStepId = stage.taskId === 'analysis_prep' ? 'signal_layer' : taskKey
 
             const isError = status === 'failed'
             const stageLogs = filterLogsForStage(activityRows, i)
@@ -594,13 +716,25 @@ export function StrategyEnginePipeline({
                       status === 'failed' && 'text-red-800 dark:text-red-200',
                     )}
                   >
-                    <span>{stage.label}</span>
-                    <span className="ml-2 text-xs font-normal text-slate-500 dark:text-zinc-500">
-                      {status === 'completed' && '완료'}
-                      {status === 'running' && '진행 중'}
-                      {status === 'pending' && '대기'}
-                      {status === 'failed' && '실패'}
-                    </span>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="tracking-tight">{stage.label}</span>
+                        <span className="text-[11px] font-normal text-zinc-500 dark:text-zinc-500">
+                          {status === 'completed' && '완료'}
+                          {status === 'running' && '진행 중'}
+                          {status === 'pending' && '대기'}
+                          {status === 'failed' && '실패'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-normal leading-snug text-zinc-500 dark:text-zinc-400">
+                        {stage.subtitle}
+                      </p>
+                      {status === 'completed' && insight?.summary ? (
+                        <p className="mt-1 rounded-md border border-zinc-200/90 bg-white/90 px-2.5 py-1.5 text-xs font-medium leading-snug text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-100">
+                          {insight.summary}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
                   {status !== 'pending' && (
@@ -657,7 +791,13 @@ export function StrategyEnginePipeline({
                               const lastEntry = stageLogs[stageLogs.length - 1]
                               if (lastEntry?.message) return plainActivityPreview(lastEntry.message, 180)
                               if (retryMessage && i === effectiveIndex) return retryMessage
-                              return getAnalysisActivityMessage(i === effectiveIndex ? (streamingStepId ?? stage.id) : stage.id, i, {
+                              const stepForMsg =
+                                i === 0
+                                  ? 'analysis_prep'
+                                  : i === effectiveIndex
+                                    ? (streamingStepId ?? stage.id)
+                                    : stage.id
+                              return getAnalysisActivityMessage(stepForMsg, i, {
                                 short: true,
                                 elapsedMs: i === effectiveIndex ? stepElapsedMs : undefined,
                                 currentArticleTitle: i === effectiveIndex ? currentArticleTitle : undefined,
@@ -701,7 +841,7 @@ export function StrategyEnginePipeline({
                             <Button
                               variant={prominentFailedRetry ? 'destructive' : 'outline'}
                               size="sm"
-                              onClick={() => onRetryStep(taskKey || undefined)}
+                              onClick={() => onRetryStep(retryStepId || undefined)}
                               className={cn(
                                 'gap-1.5 h-9 text-xs font-medium',
                                 prominentFailedRetry

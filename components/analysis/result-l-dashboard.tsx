@@ -174,7 +174,7 @@ export function ResultLDashboard({
 
   const timelineStep = useMemo(() => {
     if (polledStatus === 'running' && polledProgressStep != null) {
-      return Math.min(7, Math.max(0, polledProgressStep))
+      return Math.min(8, Math.max(0, polledProgressStep))
     }
     if (streamingLive) {
       return streamingCurrentStepLive ?? -1

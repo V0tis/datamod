@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
 import {
   CartesianGrid,
@@ -33,7 +34,13 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
   const row = payload[0]?.payload as (ScatterPayload & { size: number; tier: string }) | undefined
   if (!row) return null
   return (
-    <div className="max-w-[280px] rounded-xl border border-border/70 bg-background/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-sm">
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      className="max-w-[280px] rounded-xl border border-zinc-200/90 bg-white/98 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-950/95"
+    >
       <p className="text-sm font-semibold text-foreground">{row.name}</p>
       <p className="mt-1 tabular-nums text-muted-foreground">
         시장 점유(가로) {row.x.toFixed(1)} · 성장성(세로) {row.y.toFixed(1)}
@@ -45,7 +52,7 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
         <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed text-foreground/85">{row.score_rationale}</p>
       ) : null}
       <p className="mt-2 text-[10px] text-muted-foreground">클릭하면 근거 전문을 볼 수 있습니다.</p>
-    </div>
+    </motion.div>
   )
 }
 
@@ -59,9 +66,12 @@ const QUADRANT = {
 export function CompetitorBubbleQuadrant({
   competitors,
   className,
+  pmCaption,
 }: {
   competitors: CompetitorScatterRow[]
   className?: string
+  /** 섹션 상단 고정: AI PM 한 줄 */
+  pmCaption?: string | null
 }) {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<ScatterPayload | null>(null)
@@ -71,11 +81,12 @@ export function CompetitorBubbleQuadrant({
   return (
     <>
       <ChartWithInsight
+        pmCaption={pmCaption}
         title="경쟁사 버블 매트릭스"
         insight="가로 시장 점유(1–10), 세로 성장성(1–10). 중앙 (5,5) 기준 4분면으로 포지션을 읽습니다. 버블을 클릭하면 좌표 산정 근거를 확인할 수 있습니다."
         className={className}
       >
-        <div className="rounded-2xl border border-slate-100 bg-muted/15 px-2 py-4 sm:px-4 dark:border-zinc-800">
+        <div className="rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/30">
           <div className="relative h-[min(400px,58vw)] w-full min-h-[300px]">
             <div
               className="pointer-events-none absolute left-[14%] right-[10%] top-10 bottom-14 z-[5] text-[10px] font-medium text-muted-foreground/90"
@@ -136,7 +147,11 @@ export function CompetitorBubbleQuadrant({
                   strokeOpacity={0.65}
                   strokeWidth={1.25}
                 />
-                <Tooltip cursor={{ strokeDasharray: '4 4' }} content={<BubbleTooltip />} />
+                <Tooltip
+                  cursor={{ strokeDasharray: '4 4' }}
+                  content={<BubbleTooltip />}
+                  wrapperStyle={{ outline: 'none', zIndex: 20 }}
+                />
                 <Scatter
                   name="경쟁사"
                   data={data}
@@ -148,17 +163,20 @@ export function CompetitorBubbleQuadrant({
                     const cx = Number(p.cx ?? 0)
                     const cy = Number(p.cy ?? 0)
                     const payload = p.payload as ScatterPayload
-                    const r = Math.max(6, Math.min(22, ((payload?.size ?? 60) / 120) * 18 + 6))
+                    const r = Math.max(12, Math.min(40, ((payload?.size ?? 60) / 120) * 28 + 10))
+                    const fill = payload?.fill ?? CHART_MINT
                     return (
                       <circle
                         cx={cx}
                         cy={cy}
                         r={r}
-                        fill={payload?.fill ?? CHART_MINT}
-                        fillOpacity={0.9}
-                        stroke="var(--background)"
-                        strokeWidth={2}
-                        className="cursor-pointer outline-none hover:opacity-100"
+                        fill={fill}
+                        fillOpacity={0.92}
+                        stroke="#0f172a"
+                        strokeOpacity={0.35}
+                        strokeWidth={2.5}
+                        className="cursor-pointer outline-none transition-transform duration-200 ease-out hover:scale-[1.04]"
+                        style={{ filter: 'drop-shadow(0 2px 6px rgba(15,23,42,0.18))' }}
                         onClick={() => {
                           setSelected(payload)
                           setOpen(true)
