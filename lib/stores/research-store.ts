@@ -1228,7 +1228,7 @@ export const useResearchStore = create<ResearchStore>()(
             article_summary: 0,
             trend_analysis: 1,
             pass1: 1,
-            competition_analysis: 2,
+            competition_analysis: 1,
             insight_extraction: 3,
             strategy_generation: 4,
             execution_layer: 5,
@@ -1307,6 +1307,16 @@ export const useResearchStore = create<ResearchStore>()(
                   )
                 }
 
+                if (type === 'quota_backoff') {
+                  const ev = event as { message?: string; waitMs?: number; step?: string; attempt?: number }
+                  const msg =
+                    typeof ev.message === 'string' && ev.message.trim()
+                      ? ev.message.trim()
+                      : `API 한도로 ${Math.ceil((ev.waitMs ?? 8000) / 1000)}초 대기 후 재시도합니다.`
+                  appendActivity(msg, undefined, typeof ev.step === 'string' ? ev.step : '__global__')
+                  toast.info(msg, { duration: Math.min(12_000, Math.max(4000, (ev.waitMs ?? 8000) + 2000)) })
+                }
+
                 if (type === 'final_refining') {
                   const ev = event as { phase?: number; message?: string }
                   const phase =
@@ -1360,7 +1370,9 @@ export const useResearchStore = create<ResearchStore>()(
                       )
                     }
                     if (status === 'completed') {
-                      lastSuccessfulStep = stepIdx
+                      const pipelineAdvanceIdx =
+                        task === 'competition_analysis' ? 2 : stepIdx
+                      lastSuccessfulStep = Math.max(lastSuccessfulStep, pipelineAdvanceIdx)
                       if (ev.data != null) {
                         get().setTaskData(task, ev.data)
                       }

@@ -49,7 +49,7 @@ export const LONG_STEP_THRESHOLD_SEC = 8
 export const PIPELINE_TO_PROGRESS_INDEX: Record<number, number> = {
   0: 0, // signal_layer, news
   1: 1, // trend_analysis
-  2: 2, // competition_analysis
+  2: 1, // competition_analysis (Phase 2 병렬 — 시장과 동일 진행 슬롯)
   3: 3, // insight_extraction
   4: 4, // strategy_generation
   5: 5, // execution_layer, creative

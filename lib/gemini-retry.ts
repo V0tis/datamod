@@ -12,7 +12,7 @@ export const RATE_LIMIT_USER_MESSAGE =
   '서버가 혼잡하여 잠시 후 다시 시도해 주세요.'
 
 const DEFAULT_MAX_RETRIES = 2
-const DEFAULT_BASE_DELAY_MS = 1000
+const DEFAULT_BASE_DELAY_MS = 5000
 
 /** ms 밀리초 대기 */
 export function sleep(ms: number): Promise<void> {
@@ -85,7 +85,11 @@ export async function withExponentialBackoff<T>(
       }
       const exponential = delayWithJitter(baseDelayMs * Math.pow(2, attempt))
       const fromApi = resolveRetryDelayMs?.(e) ?? 0
-      const delayMs = fromApi > 0 ? Math.max(exponential, delayWithJitter(fromApi)) : exponential
+      const floorMs = 5000
+      const delayMs = Math.max(
+        floorMs,
+        fromApi > 0 ? Math.max(exponential, delayWithJitter(fromApi)) : exponential
+      )
       await sleep(delayMs)
     }
   }

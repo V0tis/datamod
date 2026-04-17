@@ -278,9 +278,7 @@ export async function POST(req: Request) {
               await markResearchFailed(supabase, user.id, keyword, countryCode, msg)
               break
             }
-            if (event.type === 'done' || event.type === 'cached') {
-              break
-            }
+            // done/cached 이후에도 async generator 정리·finally가 실행되도록 여기서 끊지 않음
           }
           } finally {
             clearTimeout(deadlineId)

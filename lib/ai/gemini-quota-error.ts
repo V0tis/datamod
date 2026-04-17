@@ -4,7 +4,8 @@
  */
 
 const MAX_RETRY_WAIT_MS = 120_000
-const MIN_RETRY_WAIT_MS = 1_000
+/** 429 재시도 시 API 권장·백오프 하한(즉시 재호출 방지) */
+const MIN_RETRY_WAIT_MS = 5_000
 
 function clampDelay(ms: number): number {
   if (!Number.isFinite(ms) || ms <= 0) return 0

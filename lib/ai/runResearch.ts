@@ -45,10 +45,13 @@ import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import {
   is429OrQuotaError,
   sleep,
+  getExponentialDelayMs,
   PIPELINE_LLM_COOLDOWN_MS,
   PIPELINE_WEB_SEARCH_GAP_MS,
   PIPELINE_STRATEGY_PRE_DELAY_MS,
 } from './retry-with-backoff'
+import { extractGemini429RetryDelayMs } from '@/lib/ai/gemini-quota-error'
+import { chunkArray, runWithConcurrencyLimit } from '@/lib/ai/concurrency-pool'
 import { computeOpportunityScore, type OpportunityScoreOutput } from './opportunity-score-formula'
 import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
@@ -56,7 +59,6 @@ import { enrichPorter5Forces, type Porter5ForcesShape } from '@/lib/strategy-fra
 import { hasNonKoreanContent, ensureKoreanText } from '@/lib/ai/language-validate'
 import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
 
-const AI_BASE_DELAY_MS = 1000
 const AI_MAX_RETRIES = 2
 
 function logAiError(provider: string, step: string, reason: string, retryAttempt: number, err: unknown) {
@@ -203,6 +205,8 @@ export type ResearchStreamEvent =
   | { type: 'cached'; reportId: string }
   | { type: 'error'; message: string; step?: string }
   | { type: 'pipeline_resume'; phase: 2 | 3; skippedSteps: string[]; message: string }
+  /** 429 등 재시도 대기 — 클라이언트 토스트·활동 로그용 */
+  | { type: 'quota_backoff'; waitMs: number; step: string; attempt: number; message: string }
 
 export type AIPrimaryModel = 'gemini' | 'groq'
 
@@ -415,8 +419,8 @@ const ARTICLE_SUMMARY_SYSTEM = `Output only in standard professional Korean. Str
 Summarize each news article for market research in 2-3 sentences: key facts, implications, and market relevance.
 Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } in input order, as the sole message.`
 
-/** Summarize articles with AI (batch). Fallback: use title or content slice. */
-async function summarizeArticlesWithAI(
+/** 한 배치(최대 4편)만 Gemini로 요약 — 단일 API 호출 */
+async function summarizeOneArticleBatchCall(
   articles: ArticleWithContent[],
   geminiKey: string,
   llmCtx?: LlmRecordingContext
@@ -433,41 +437,119 @@ ${articles
 
 Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
 
-  try {
-    const gen = await generateTextWithUsage({
-      apiKey: geminiKey,
-      prompt,
-      systemInstruction: ARTICLE_SUMMARY_SYSTEM,
-      maxOutputTokens: 1500,
-      model: GEMINI_MODEL,
+  const gen = await generateTextWithUsage({
+    apiKey: geminiKey,
+    prompt,
+    systemInstruction: ARTICLE_SUMMARY_SYSTEM,
+    maxOutputTokens: 1500,
+    model: GEMINI_MODEL,
+  })
+  if (llmCtx) {
+    await recordLlmUsage(llmCtx.supabase, {
+      userId: llmCtx.userId,
+      analysisId: llmCtx.analysisId,
+      stepName: 'article_summary',
+      provider: 'gemini',
+      model: gen.model,
+      promptTokens: gen.promptTokenCount,
+      completionTokens: gen.candidatesTokenCount,
+      totalTokens: gen.totalTokenCount,
     })
-    if (llmCtx) {
-      await recordLlmUsage(llmCtx.supabase, {
-        userId: llmCtx.userId,
-        analysisId: llmCtx.analysisId,
-        stepName: 'article_summary',
-        provider: 'gemini',
-        model: gen.model,
-        promptTokens: gen.promptTokenCount,
-        completionTokens: gen.candidatesTokenCount,
-        totalTokens: gen.totalTokenCount,
+  }
+  const text = gen.text
+  const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
+  const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
+  return articles.map((a, i) => ({
+    title: a.title,
+    summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
+    publisher: a.publisher,
+  }))
+}
+
+type QuotaBackoffEvent = Extract<ResearchStreamEvent, { type: 'quota_backoff' }>
+
+type ArticleBatchWorkResult = {
+  order: number
+  items: ArticleForAnalysis[]
+  backoffs: QuotaBackoffEvent[]
+}
+
+/** 배치별 429 재시도(지수 백오프·최소 5초). 성공 시 backoffs는 빈 배열일 수 있음 */
+async function summarizeArticleBatchWithRetries(
+  batch: ArticleWithContent[],
+  geminiKey: string,
+  llmCtx: LlmRecordingContext | undefined,
+  order: number
+): Promise<ArticleBatchWorkResult> {
+  const backoffs: QuotaBackoffEvent[] = []
+  const maxRetries = 2
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const items = await summarizeOneArticleBatchCall(batch, geminiKey, llmCtx)
+      return { order, items, backoffs }
+    } catch (err) {
+      const fallback = (): ArticleForAnalysis[] =>
+        batch.map((a) => ({
+          title: a.title,
+          summary: a.content.slice(0, 300) || a.title,
+          publisher: a.publisher,
+        }))
+      if (attempt === maxRetries || !is429OrQuotaError(err)) {
+        console.warn('[article_summary] batch fallback', { order, attempt, err })
+        return { order, items: fallback(), backoffs }
+      }
+      const serverMs = extractGemini429RetryDelayMs(err)
+      const exp = getExponentialDelayMs(attempt, 5000)
+      const delayMs = Math.max(5000, serverMs > 0 ? Math.max(exp, serverMs) : exp)
+      const sec = Math.ceil(delayMs / 1000)
+      backoffs.push({
+        type: 'quota_backoff',
+        waitMs: delayMs,
+        step: 'article_summary',
+        attempt: attempt + 1,
+        message: `API 할당량 조절을 위해 ${sec}초 후 다시 시도합니다...`,
       })
+      await sleep(delayMs)
     }
-    const text = gen.text
-    const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
-    const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
-    return articles.map((a, i) => ({
-      title: a.title,
-      summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
-      publisher: a.publisher,
-    }))
-  } catch {
-    return articles.map((a) => ({
+  }
+  return {
+    order,
+    items: batch.map((a) => ({
       title: a.title,
       summary: a.content.slice(0, 300) || a.title,
       publisher: a.publisher,
-    }))
+    })),
+    backoffs,
   }
+}
+
+/**
+ * 기사 요약 LLM 호출 최적화:
+ * - 짧은 입력(기사 ≤4·본문 합계 ≤9k자)은 **1회** 배치 호출로 유지해 API 횟수를 늘리지 않음.
+ * - 긴 입력만 4편 단위로 쪼개고, 배치 간 **동시 최대 3**으로만 병렬(타임아웃·토큰 한도 완화).
+ */
+async function summarizeArticlesWithAIBatched(
+  articles: ArticleWithContent[],
+  geminiKey: string,
+  llmCtx?: LlmRecordingContext
+): Promise<{ merged: ArticleForAnalysis[]; backoffs: QuotaBackoffEvent[] }> {
+  if (articles.length === 0) return { merged: [], backoffs: [] }
+  const totalChars = articles.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
+  const maxSingleBatchArticles = 4
+  const maxCharsSingleCall = 9000
+  if (articles.length <= maxSingleBatchArticles && totalChars <= maxCharsSingleCall) {
+    const one = await summarizeArticleBatchWithRetries(articles, geminiKey, llmCtx, 0)
+    return { merged: one.items, backoffs: one.backoffs }
+  }
+  const batches = chunkArray(articles, maxSingleBatchArticles)
+  const jobs = batches.map((batch, order) => ({ batch, order }))
+  const results = await runWithConcurrencyLimit(jobs, 3, ({ batch, order }) =>
+    summarizeArticleBatchWithRetries(batch, geminiKey, llmCtx, order)
+  )
+  const sorted = [...results].sort((a, b) => a.order - b.order)
+  const backoffs = sorted.flatMap((r) => r.backoffs)
+  const merged = sorted.flatMap((r) => r.items)
+  return { merged, backoffs }
 }
 
 /** Non-competitor patterns: magazines, blogs, news media – filter these out from competitive_landscape */
@@ -2703,31 +2785,42 @@ export async function* runResearch(
     return
   }
 
-  // Article content extraction (Readability) - yield before each to show progress
+  // Article content extraction (Readability) — 동시 최대 3건, 웨이브 간 짧은 간격(RPM 완화)
+  const ARTICLE_EXTRACT_CONCURRENCY = 3
   const ARTICLE_REQUEST_DELAY_MS = 500
-  const results: ArticleWithContent[] = []
-  for (let i = 0; i < articlesToExtract.length; i++) {
+  const resultsSlots: ArticleWithContent[] = new Array(articlesToExtract.length)
+  for (let wave = 0; wave < articlesToExtract.length; wave += ARTICLE_EXTRACT_CONCURRENCY) {
     if (checkAborted(signal)) {
       yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'signal_layer' }
       return
     }
-    if (i > 0) await new Promise((r) => setTimeout(r, ARTICLE_REQUEST_DELAY_MS))
+    const end = Math.min(wave + ARTICLE_EXTRACT_CONCURRENCY, articlesToExtract.length)
+    const slice = articlesToExtract.slice(wave, end)
+    const titleHint =
+      slice.length === 1
+        ? slice[0].title.slice(0, 60)
+        : `동시 수집 ${wave + 1}–${end}번 기사 (최대 ${ARTICLE_EXTRACT_CONCURRENCY}병렬)`
     yield {
       type: 'task',
       task: 'article_extraction',
       status: 'running',
       provider: null,
       fallback_used: false,
-      currentArticleTitle: articlesToExtract[i].title.slice(0, 60),
+      currentArticleTitle: titleHint,
     }
-    try {
-      const extracted = await extractArticleContent(articlesToExtract[i])
-      results.push(extracted)
-    } catch {
-      results.push({ ...articlesToExtract[i], content: articlesToExtract[i].title })
-    }
+    await Promise.all(
+      slice.map(async (item, j) => {
+        const idx = wave + j
+        try {
+          resultsSlots[idx] = await extractArticleContent(item)
+        } catch {
+          resultsSlots[idx] = { ...item, content: item.title }
+        }
+      })
+    )
+    if (end < articlesToExtract.length) await sleep(ARTICLE_REQUEST_DELAY_MS)
   }
-  const articlesWithContent = results
+  const articlesWithContent = resultsSlots
   console.log('[article-extract] done:', articlesWithContent.length, '| items:', articlesWithContent.map((a) => ({ title: a.title.slice(0, 40), contentLen: a.content.length })))
 
   if (checkAborted(signal)) {
@@ -2735,7 +2828,7 @@ export async function* runResearch(
     return
   }
 
-  // Article summarization (AI)
+  // Article summarization (AI) — 배치당 1 LLM 호출, 배치 병렬 최대 3; 429 시 백오프 후 해당 배치만 재시도
   let articlesForAnalysis: ArticleForAnalysis[]
   try {
     if (articlesWithContent.length > 0) {
@@ -2745,11 +2838,26 @@ export async function* runResearch(
         status: 'running',
         provider: 'gemini',
         fallback_used: false,
-        currentArticleTitle: articlesWithContent[0].title.slice(0, 60),
+        currentArticleTitle:
+          articlesWithContent.length <= 4
+            ? articlesWithContent[0].title.slice(0, 60)
+            : `요약 배치 (${Math.ceil(articlesWithContent.length / 4)}회·동시 최대 3)`,
       }
     }
-    articlesForAnalysis = await summarizeArticlesWithAI(articlesWithContent, geminiKey, llmCtx)
+    const { merged, backoffs } = await summarizeArticlesWithAIBatched(articlesWithContent, geminiKey, llmCtx)
+    for (const ev of backoffs) {
+      yield ev
+    }
+    articlesForAnalysis = merged
     console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
+    yield {
+      type: 'task',
+      task: 'article_summary',
+      status: 'completed',
+      provider: 'gemini',
+      fallback_used: false,
+      progressMeta: { newsCount: articlesForAnalysis.length, sourceLabel: '기사 요약 완료' },
+    }
   } catch (err) {
     console.warn('[article_summary] fallback to content', err)
     articlesForAnalysis = articlesWithContent.map((a) => ({
@@ -2757,6 +2865,13 @@ export async function* runResearch(
       summary: a.content.slice(0, 300) || a.title,
       publisher: a.publisher,
     }))
+    yield {
+      type: 'task',
+      task: 'article_summary',
+      status: 'completed',
+      provider: 'gemini',
+      fallback_used: false,
+    }
   }
 
   await updateProgress(1, 'analyzing')
@@ -2784,14 +2899,18 @@ export async function* runResearch(
     console.warn('[AI Timeline] competitor web search failed (continuing without)', { keyword, err })
   }
 
-  // Layer 2: 시장 리서치 (trend) 완료 후 → Layer 3: 경쟁사 분석 (competition) 순차 실행
+  // Phase 2: 시장 트렌드 + 경쟁 분석 — 동일 입력만 필요하므로 Promise.allSettled 병렬 (쿨다운 1회 후 동시 LLM)
   const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
   const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
 
-  log('trend_analysis', 'running')
-  await upsertAnalysisTask('trend_analysis', 'running', { provider: marketProvider, fallback_used: false })
   const textPointCount = Math.max(1, articlesForAnalysis.length)
   const trendSourceLabel = 'Google News·RSS 수집·요약'
+  const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
+
+  log('trend_analysis', 'running')
+  log('competition_analysis', 'running')
+  await upsertAnalysisTask('trend_analysis', 'running', { provider: marketProvider, fallback_used: false })
+  await upsertAnalysisTask('competition_analysis', 'running', { provider: competitorProvider, fallback_used: false })
   yield {
     type: 'task',
     task: 'trend_analysis',
@@ -2803,12 +2922,12 @@ export async function* runResearch(
       sourceLabel: trendSourceLabel,
     },
   }
+  yield { type: 'task', task: 'competition_analysis', status: 'running', provider: competitorProvider, fallback_used: false }
 
-  const articleRawContentTotalChars = articlesWithContent.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
+  await sleep(PIPELINE_LLM_COOLDOWN_MS)
 
-  let trendSettled: PromiseSettledResult<Awaited<ReturnType<typeof runTrendTask>>>
-  try {
-    const value = await runTrendTask(
+  const [trendSettled, compSettled] = await Promise.allSettled([
+    runTrendTask(
       geminiKey,
       groqKey,
       keyword,
@@ -2817,31 +2936,8 @@ export async function* runResearch(
       webContext,
       articleRawContentTotalChars,
       llmCtx
-    )
-    trendSettled = { status: 'fulfilled', value }
-  } catch (reason) {
-    trendSettled = { status: 'rejected', reason }
-  }
-
-  if (trendSettled.status === 'rejected') {
-    const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
-    log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
-    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: marketProvider, fallback_used: false })
-    await updateProgress(1, 'failed')
-    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: marketProvider, fallback_used: false }
-    yield { type: 'error', message: msg, step: 'trend_analysis' }
-    return
-  }
-
-  await sleep(PIPELINE_LLM_COOLDOWN_MS)
-
-  log('competition_analysis', 'running')
-  await upsertAnalysisTask('competition_analysis', 'running', { provider: competitorProvider, fallback_used: false })
-  yield { type: 'task', task: 'competition_analysis', status: 'running', provider: competitorProvider, fallback_used: false }
-
-  let compSettled: PromiseSettledResult<Awaited<ReturnType<typeof runCompetitionTask>>>
-  try {
-    const value = await runCompetitionTask(
+    ),
+    runCompetitionTask(
       geminiKey,
       groqKey,
       keyword,
@@ -2851,16 +2947,42 @@ export async function* runResearch(
       competitorWebContext || undefined,
       articleRawContentTotalChars,
       llmCtx
-    )
-    compSettled = { status: 'fulfilled', value }
-  } catch (reason) {
-    compSettled = { status: 'rejected', reason }
+    ),
+  ])
+
+  if (trendSettled.status === 'rejected') {
+    const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
+    log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
+    await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: marketProvider, fallback_used: false })
+    if (compSettled.status === 'fulfilled') {
+      await upsertAnalysisTask('competition_analysis', 'failed', {
+        errorMessage: '트렌드 단계 실패로 경쟁 분석 결과는 사용하지 않습니다.',
+        provider: competitorProvider,
+        fallback_used: false,
+      })
+    } else if (compSettled.status === 'rejected') {
+      const cmsg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
+      await upsertAnalysisTask('competition_analysis', 'failed', {
+        errorMessage: cmsg,
+        provider: competitorProvider,
+        fallback_used: false,
+      })
+    }
+    await updateProgress(1, 'failed')
+    yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: marketProvider, fallback_used: false }
+    yield { type: 'error', message: msg, step: 'trend_analysis' }
+    return
   }
 
   if (compSettled.status === 'rejected') {
     const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
     log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
     await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: competitorProvider, fallback_used: false })
+    await upsertAnalysisTask('trend_analysis', 'failed', {
+      errorMessage: '경쟁 분석 실패로 파이프라인을 중단합니다.',
+      provider: marketProvider,
+      fallback_used: false,
+    })
     await updateProgress(2, 'failed')
     yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: competitorProvider, fallback_used: false }
     yield { type: 'error', message: msg, step: 'competition_analysis' }

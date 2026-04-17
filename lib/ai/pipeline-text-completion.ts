@@ -20,7 +20,8 @@ import { recordLlmUsage } from '@/lib/llm-usage-record'
 import { summarizeUserPromptForPmActionGemini } from '@/lib/ai/pm-action-groq-recovery'
 import { compressTextForPmActionInput } from '@/lib/ai/pipeline-prompts'
 
-const AI_BASE_DELAY_MS = 1000
+/** Gemini 429 재시도: 최소 5초대 지수 백오프(즉시 재호출 방지) */
+const AI_BASE_DELAY_MS = 5000
 const AI_MAX_RETRIES = 2
 
 export type PipelinePrimaryModel = 'gemini' | 'groq'

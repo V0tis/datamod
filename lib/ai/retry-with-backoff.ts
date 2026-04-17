@@ -98,7 +98,8 @@ export async function withRetry<T>(
 ): Promise<T> {
   const { provider, step, onRetry, onError } = options
   const maxRetries = 2
-  const baseDelayMs = 1000
+  /** 429 등: 즉시 재시도 금지, 최소 5초대부터 지수 백오프 */
+  const baseDelayMs = 5000
   let lastError: unknown
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -134,7 +135,7 @@ export async function withRetry<T>(
         throw err
       }
 
-      const delayMs = delayWithJitter(baseDelayMs * Math.pow(2, attempt))
+      const delayMs = Math.max(5000, delayWithJitter(baseDelayMs * Math.pow(2, attempt)))
       onRetry?.(attempt + 1)
       await sleep(delayMs)
     }

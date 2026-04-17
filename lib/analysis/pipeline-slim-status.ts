@@ -3,6 +3,7 @@
  */
 
 import { streamTaskToStageIndex } from '@/lib/analysis/pipeline-activity-step'
+import { getPhase2CompetitionRowStatus, getPhase2TrendRowStatus } from '@/lib/analysis/phase2-row-status'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
 const STREAM_TO_INDEX: Record<string, number> = {
@@ -55,9 +56,15 @@ export type PipelineSlimStatusContext = {
 export function computeEffectivePipelineIndex(
   allCompleted: boolean,
   streamingStepId: string | undefined,
-  currentStep: number
+  currentStep: number,
+  analysisTasks?: Array<{ step_name: string; status: string }> | null
 ): number {
   if (allCompleted) return 7
+  if (streamingStepId === 'competition_analysis' && analysisTasks?.length) {
+    const tr = analysisTasks.find((t) => t.step_name === 'trend_analysis')
+    if (tr?.status !== 'completed') return 1
+    return 2
+  }
   if (streamingStepId && STREAM_TO_INDEX[streamingStepId] != null) {
     return STREAM_TO_INDEX[streamingStepId]
   }
@@ -83,7 +90,7 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
     {} as Record<string, { status: string }>
   )
 
-  const effectiveIndex = computeEffectivePipelineIndex(allCompleted, streamingStepId, currentStep)
+  const effectiveIndex = computeEffectivePipelineIndex(allCompleted, streamingStepId, currentStep, analysisTasks)
   const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
 
   const out: PipelineStageStatus[] = []
@@ -97,6 +104,10 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
 
     if (hasError && failIdx >= 0 && i === failIdx) {
       status = 'failed'
+    } else if (taskId === 'trend_analysis') {
+      status = getPhase2TrendRowStatus(taskMap['trend_analysis'])
+    } else if (taskId === 'competition_analysis') {
+      status = getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
     } else if (task && task.status) {
       if (task.status === 'failed') status = 'failed'
       else if (task.status === 'completed') status = 'completed'
@@ -172,6 +183,12 @@ export const PIPELINE_SLIM_LABELS = [
 
 /** Highlight the step that is running or streaming; otherwise last completed phase while loading. */
 export function inferActivePipelineIndex(ctx: PipelineSlimStatusContext): number {
+  const trTask = ctx.analysisTasks?.find((t) => t.step_name === 'trend_analysis')
+  const coTask = ctx.analysisTasks?.find((t) => t.step_name === 'competition_analysis')
+  if (trTask?.status === 'running' || coTask?.status === 'running') {
+    if (coTask?.status === 'running' && trTask?.status === 'completed') return 2
+    return 1
+  }
   const running = ctx.analysisTasks?.find((t) => t.status === 'running')
   if (running) {
     const idx = streamTaskToStageIndex(running.step_name)

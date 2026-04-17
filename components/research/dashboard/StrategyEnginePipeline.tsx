@@ -10,6 +10,7 @@ import {
   filterLogsForStage,
   plainActivityPreview,
 } from '@/components/research/dashboard/PipelineStepActivityLog'
+import { getPhase2CompetitionRowStatus, getPhase2TrendRowStatus } from '@/lib/analysis/phase2-row-status'
 import { getAnalysisActivityMessage } from '@/lib/analysis-activity-messages'
 import { getAnalysisErrorMessage } from '@/lib/analysis-error-messages'
 import { getProviderDisplayName, getProviderStatusKo } from '@/lib/ai/provider-display'
@@ -386,11 +387,13 @@ export function StrategyEnginePipeline({
 
   const effectiveIndex = allCompleted
     ? 7
-    : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
-      ? STREAM_TO_INDEX[streamingStepId]
-      : currentStep >= 0
-        ? currentStep
-        : 0
+    : streamingStepId === 'competition_analysis' && taskMap['trend_analysis']?.status !== 'completed'
+      ? 1
+      : streamingStepId && STREAM_TO_INDEX[streamingStepId] != null
+        ? STREAM_TO_INDEX[streamingStepId]
+        : currentStep >= 0
+          ? currentStep
+          : 0
 
   const [stepStartTime, setStepStartTime] = useState(0)
   const [tickTime, setTickTime] = useState(0)
@@ -411,6 +414,8 @@ export function StrategyEnginePipeline({
     const failIdx = hasError ? Math.min(errorStepIndex, 7) : -1
     // Global error: failed step always shows failed (do not render error+running)
     if (hasError && failIdx >= 0 && i === failIdx) return 'failed'
+    if (i === 1) return getPhase2TrendRowStatus(taskMap['trend_analysis'])
+    if (i === 2) return getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
     // Real task status - do not infer when we have it
     if (task && task.status) {
       if (task.status === 'failed') return 'failed'
