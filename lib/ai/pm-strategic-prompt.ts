@@ -194,3 +194,52 @@ export function buildTaskCompetitionPromptFromNews(
 ): string {
   return buildTaskCompetitionPromptParts(keyword, articles, webContext, competitorWebContext).prompt
 }
+
+/** 시장 트렌드 + 경쟁 분석 — 단일 LLM 호출용 (DATA·규칙은 각 단계와 동일, 출력만 루트로 묶음). */
+export const TASK_MARKET_COMPETITION_BUNDLE_SYSTEM = `${STRATEGIC_SYSTEM}
+
+한 번의 응답으로 **시장 트렌드(trends)** 와 **경쟁 분석(competition)** 을 모두 채운다. 사용자 메시지는 KEYWORD / COLLECTED_DATA / TASK / RULES 형식이다.
+
+【trends】 ${TASK_TRENDS_SYSTEM.replace(STRATEGIC_SYSTEM, '').trim()}
+【competition】 ${TASK_COMPETITION_SYSTEM.replace(STRATEGIC_SYSTEM, '').trim()}
+
+최상위 JSON 루트는 **반드시** 아래 두 키만 가진다(다른 최상위 키 금지):
+{
+  "trends": {
+    "market_score": number,
+    "summary": string,
+    "positive_signals": string[],
+    "neutral_signals": string[]
+  },
+  "competition": {
+    "competitive_landscape": [...],
+    "market_structure": { "summary": string },
+    "strategic_gaps": { "functional_gaps"?: string[], "pricing_gaps"?: string[], "summary"?: string },
+    "pm_planning_summary"?: string,
+    "strategic_action_plan"?: { "roadmap_priorities"?: [...], "okr_key_results"?: [...] }
+  }
+}
+- trends·competition 각각의 필드 규칙·금지 사항은 위 【】 블록과 동일하게 적용한다.
+- competition 필드 상세·필수 항목은 TASK_COMPETITION_SYSTEM의 Format 블록을 그대로 따른다.
+Return ONLY this one JSON object. 본문은 한국어.`
+
+const TASK_MARKET_COMPETITION_BUNDLE_USER = `위 COLLECTED_DATA·search results만으로 trends JSON과 competition JSON을 **한 응답**에 채운다.
+trends: 시장 트렌드 규칙(점수·시그널·summary) 준수.
+competition: 경쟁 규칙(이름 DATA 근거, 행별 competitor_gap·our_differentiation, strategic_gaps·pm_planning_summary·strategic_action_plan) 준수.
+DATA에 명시적 경쟁 주체가 없으면 competition.competitive_landscape는 [].`
+
+export function buildMarketCompetitionBundlePromptParts(
+  keyword: string,
+  articles: ArticleForAnalysis[],
+  webContext?: string,
+  competitorWebContext?: string
+): { prompt: string; sections: DataDrivenSections } {
+  const sections = buildTaskCompetitionSections(keyword, articles, webContext, competitorWebContext)
+  const prompt = buildDataDrivenPrompt({
+    keyword,
+    sections,
+    task: TASK_MARKET_COMPETITION_BUNDLE_USER,
+    suffix: `응답은 { "trends": {...}, "competition": {...} } 형태의 JSON 하나만. ${KOREAN_ONLY_SUFFIX}`,
+  })
+  return { prompt, sections }
+}

@@ -468,6 +468,69 @@ export function buildPMActionPlanPrompt(
   })
 }
 
+/** 전략 추천 + PM 액션 — 단일 LLM 호출용 (전략·실행 상호 정렬). */
+export const STRATEGY_EXECUTION_BUNDLE_SYSTEM = `${STRATEGIC_RECOMMENDATION_SYSTEM}
+
+---
+
+번들 규칙: **같은 응답** 안에서 (1) strategy 객체를 DATA·인사이트로 완성한 뒤 (2) execution 객체를 그 strategy와 논리적으로 일치하게 채운다(모순·중복 서술 금지).
+
+${PM_ACTION_PLAN_SYSTEM}
+
+【루트 출력 형식】 오직 하나의 JSON 객체이며 최상위 키는 **strategy** 와 **execution** 두 개만 허용한다.
+- strategy: 위 STRATEGIC_RECOMMENDATION_SYSTEM의 Format·필수 규칙을 그대로 따른다.
+- execution: 위 PM_ACTION_PLAN_SYSTEM의 슬림 스키마·필수 규칙을 따르며, strategy에서 도출한 기회·리스크·요약을 반영한다.
+Return ONLY: { "strategy": { ... }, "execution": { ... } }. 본문은 한국어.`
+
+export function buildStrategyExecutionBundlePrompt(
+  keyword: string,
+  marketOverview: string,
+  competitionSummary: string,
+  extractedInsights: {
+    key_insights?: string[]
+    opportunity_signals?: OpportunitySignalItem[]
+    risk_signals?: RiskSignalItem[]
+  },
+  opportunityFacts?: PmActionOpportunityFacts | null
+): string {
+  const insights = [
+    ...(extractedInsights.key_insights ?? []),
+    ...flattenOpportunitySignalsForPrompt(extractedInsights.opportunity_signals),
+    ...flattenRiskSignalsForPrompt(extractedInsights.risk_signals),
+  ].filter(Boolean)
+  const insightsBlock = insights.length
+    ? `extracted insights (from prior step):\n${insights.map((i) => `- ${i}`).join('\n')}`
+    : ''
+  const strategyInput = [
+    marketOverview?.trim() && `market overview:\n${marketOverview.trim()}`,
+    competitionSummary?.trim() && `competition:\n${competitionSummary.trim()}`,
+    insightsBlock,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  const facts =
+    opportunityFacts != null
+      ? [
+          'OPPORTUNITY_SCORE_FACTS (검증·맥락용. **이 블록의 숫자·건수를 JSON에 그대로 복사하지 말 것** — execution.strategic_decision_layer.opportunity_score_reason_text에는 건수 나열 금지):',
+          `- 긍정 시그널: ${opportunityFacts.positive_signals_count}건`,
+          `- 중립 시그널: ${opportunityFacts.neutral_signals_count}건`,
+          `- 경쟁사(랜드스케이프): ${opportunityFacts.competitor_count}곳`,
+          `- 전략상 기회(문항 수): ${opportunityFacts.strategy_opportunities_count}건`,
+          `- 전략상 리스크(문항 수): ${opportunityFacts.strategy_risks_count}건`,
+        ].join('\n')
+      : ''
+
+  const collectedData = [strategyInput, facts].filter((s) => s.trim().length > 0).join('\n\n---\n\n')
+  if (!collectedData.trim()) return ''
+  return buildDataDrivenPrompt({
+    keyword,
+    sections: { collectedData },
+    task: `COLLECTED_DATA로 strategy를 완성한 뒤, 동일 응답의 execution을 채운다. execution은 strategy의 opportunities·risks·요약과 execution용 FACTS 블록에 정렬된다. strategy의 three_line_actions·background_rationale 규칙과 execution의 pm_action_plan(5개)·priority_action·steps 규칙을 모두 만족한다.`,
+    suffix: `Return ONLY the root object { "strategy": {...}, "execution": {...} }. ${KOREAN_ONLY_SUFFIX}`,
+  })
+}
+
 /** Strategy Evaluation – score + reason supporting PM decision. DATA-DRIVEN ONLY. */
 export const STRATEGY_EVALUATION_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 **전략 원칙:** (1) 전략 가설을 정량 신호(시장·검색·채택·점유 등)와 정성 신호(뉴스 톤·커뮤니티·경쟁 행보)로 **대조**해 일치도를 수치화한다. (2) 리스크는 나열이 아니라 **완화 가능성(상/중/하)**과 **구체 대응 plan**을 반드시 쌍으로 쓴다. (3) 기회는 가치뿐 아니라 **실행 난이도(고/중/저)**와 **priority(숫자, 1이 최우선)**로 투입 대비 성과 관점의 순위를 제시한다.

@@ -361,6 +361,10 @@ function ResultsContent() {
         setPolledStatus(status)
         setPolledProgressStep(step)
         if (status === 'completed') {
+          const snap = useResearchStore.getState()
+          if (snap.streamingState.status === 'error' && snap.analysisStatus === 'failed') {
+            return
+          }
           if (data.result?.reportId) {
             hydrateFromStatusResult(k, countryCode, data.result)
           }
@@ -515,13 +519,27 @@ function ResultsContent() {
     const failedNow =
       (prev.canonical === 'analyzing' && canonicalStatus === 'failed') ||
       (prev.polled === 'running' && polledStatus === 'failed')
-    if (completedNow) {
+    const blockFalseSuccessToast =
+      hasFailure ||
+      streamingState.status === 'error' ||
+      status === 'error' ||
+      !!displayError
+    if (completedNow && !blockFalseSuccessToast) {
+      toast.dismiss('analysis-fail-toast')
       toast.success('분석이 완료되었습니다.', { id: 'analysis-complete-toast' })
     } else if (failedNow) {
+      toast.dismiss('analysis-complete-toast')
       toast.error('분석 중 오류가 발생했습니다.', { id: 'analysis-fail-toast' })
     }
     prevAnalysisToastRef.current = { canonical: canonicalStatus, polled: polledStatus }
-  }, [canonicalStatus, polledStatus])
+  }, [
+    canonicalStatus,
+    polledStatus,
+    hasFailure,
+    streamingState.status,
+    status,
+    displayError,
+  ])
 
   // Fallback: if loading persists >30s with no result, auto-refetch
   useEffect(() => {
@@ -537,6 +555,11 @@ function ResultsContent() {
     if (!loadingStartRef.current) loadingStartRef.current = Date.now()
     const timer = setTimeout(() => {
       if (loadingStartRef.current && Date.now() - loadingStartRef.current >= 30_000) {
+        const snap = useResearchStore.getState()
+        if (snap.streamingState.status === 'error' && snap.analysisStatus === 'failed') {
+          loadingStartRef.current = null
+          return
+        }
         toast.info('분석이 완료되었습니다. 결과를 불러옵니다...')
         loadFromHistory(k, countryFromUrl)
         loadingStartRef.current = null

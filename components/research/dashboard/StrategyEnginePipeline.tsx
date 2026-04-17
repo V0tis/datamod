@@ -416,16 +416,23 @@ export function StrategyEnginePipeline({
     if (hasError && failIdx >= 0 && i === failIdx) return 'failed'
     if (i === 1) return getPhase2TrendRowStatus(taskMap['trend_analysis'])
     if (i === 2) return getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
+    // Stage 0: 신호 수집 완료 후에도 기사 추출·요약이 돌면 같은 단계를 running으로 유지 (완료처럼 멈춘 것처럼 보이는 버그 방지)
+    if (i === 0) {
+      if (
+        streamingStepId === 'article_extraction' ||
+        streamingStepId === 'article_summary' ||
+        taskMap['article_extraction']?.status === 'running' ||
+        taskMap['article_summary']?.status === 'running'
+      ) {
+        return 'running'
+      }
+    }
     // Real task status - do not infer when we have it
     if (task && task.status) {
       if (task.status === 'failed') return 'failed'
       if (task.status === 'completed') return 'completed'
       if (task.status === 'running') return 'running'
       return 'pending'
-    }
-    // Stage 0: article_extraction/article_summary 진행 중
-    if (i === 0 && (streamingStepId === 'article_extraction' || streamingStepId === 'article_summary')) {
-      return 'running'
     }
     if (i === 6) {
       const riskTask = taskMap['risk_opportunity']

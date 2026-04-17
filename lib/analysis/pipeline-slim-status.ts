@@ -108,13 +108,19 @@ export function getPipelineSlimStageStatuses(ctx: PipelineSlimStatusContext): Pi
       status = getPhase2TrendRowStatus(taskMap['trend_analysis'])
     } else if (taskId === 'competition_analysis') {
       status = getPhase2CompetitionRowStatus(taskMap['trend_analysis'], taskMap['competition_analysis'])
+    } else if (
+      i === 0 &&
+      (streamingStepId === 'article_extraction' ||
+        streamingStepId === 'article_summary' ||
+        taskMap['article_extraction']?.status === 'running' ||
+        taskMap['article_summary']?.status === 'running')
+    ) {
+      status = 'running'
     } else if (task && task.status) {
       if (task.status === 'failed') status = 'failed'
       else if (task.status === 'completed') status = 'completed'
       else if (task.status === 'running') status = 'running'
       else status = 'pending'
-    } else if (i === 0 && (streamingStepId === 'article_extraction' || streamingStepId === 'article_summary')) {
-      status = 'running'
     } else if (i === 6) {
       const riskTask = taskMap['risk_opportunity']
       if (riskTask) {

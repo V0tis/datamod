@@ -1317,6 +1317,16 @@ export const useResearchStore = create<ResearchStore>()(
                   toast.info(msg, { duration: Math.min(12_000, Math.max(4000, (ev.waitMs ?? 8000) + 2000)) })
                 }
 
+                if (type === 'article_summary_quality_notice') {
+                  const ev = event as { message?: string }
+                  const msg =
+                    typeof ev.message === 'string' && ev.message.trim()
+                      ? ev.message.trim()
+                      : '무료 한도 초과 → 요약 품질이 낮을 수 있습니다. (본문 발췌를 사용합니다.)'
+                  appendActivity(msg, undefined, 'article_summary')
+                  toast.info(msg, { id: 'article-summary-quality-notice', duration: 10_000 })
+                }
+
                 if (type === 'final_refining') {
                   const ev = event as { phase?: number; message?: string }
                   const phase =
@@ -1697,8 +1707,22 @@ export const useResearchStore = create<ResearchStore>()(
           if (data.emptyAnalysis) return 'empty'
           const ar = parseJsonField(data.analysis_results) as ResearchResponse['analysis_results']
           const km = parseJsonField(data.key_metrics) as ResearchResponse['key_metrics']
-          // State: use analysis_status from API; never infer from partial data. Legacy: no analysis_status → completed.
-          const analysisStatus = ((data as { analysis_status?: string }).analysis_status as CanonicalAnalysisStatus | undefined) ?? 'completed'
+          const pipelineTasksEarly = Array.isArray(data.pipeline_tasks) ? data.pipeline_tasks : null
+          const rawAnalysisStatus = (data as { analysis_status?: string }).analysis_status
+          const apiAnalysisStatus: CanonicalAnalysisStatus | undefined =
+            rawAnalysisStatus === 'completed' ||
+            rawAnalysisStatus === 'failed' ||
+            rawAnalysisStatus === 'analyzing' ||
+            rawAnalysisStatus === 'queued'
+              ? rawAnalysisStatus
+              : undefined
+          let analysisStatus: CanonicalAnalysisStatus = apiAnalysisStatus ?? 'completed'
+          if (
+            apiAnalysisStatus == null &&
+            pipelineTasksEarly?.some((t) => t.status === 'failed')
+          ) {
+            analysisStatus = 'failed'
+          }
           if (data.reportId) {
             const statusFromBackend =
               analysisStatus === 'completed' ? 'done' as const
@@ -1761,7 +1785,7 @@ export const useResearchStore = create<ResearchStore>()(
               analysis_results: ar,
               key_metrics: km,
             } as ResearchResponse
-            const pipelineTasks = Array.isArray(data.pipeline_tasks) ? data.pipeline_tasks : null
+            const pipelineTasks = pipelineTasksEarly
             const pipelineAnalysisId =
               typeof data.pipeline_analysis_id === 'string' && data.pipeline_analysis_id.length > 0
                 ? data.pipeline_analysis_id
@@ -1818,6 +1842,10 @@ export const useResearchStore = create<ResearchStore>()(
       hydrateFromStatusResult: (keyword, countryCode, pollResult) => {
         const k = keyword?.trim()
         if (!k || !pollResult.reportId) return
+        const snap = get()
+        if (snap.analysisStatus === 'failed' && snap.streamingState.status === 'error') {
+          return
+        }
         const rawContent = pollResult.content
         const content = (typeof rawContent === 'object' && rawContent != null && !Array.isArray(rawContent)
           ? rawContent

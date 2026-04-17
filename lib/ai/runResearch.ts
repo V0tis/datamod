@@ -16,6 +16,8 @@ import {
   buildTaskTrendsPromptParts,
   TASK_COMPETITION_SYSTEM,
   buildTaskCompetitionPromptParts,
+  TASK_MARKET_COMPETITION_BUNDLE_SYSTEM,
+  buildMarketCompetitionBundlePromptParts,
   type ArticleForAnalysis,
 } from './pm-strategic-prompt'
 import { logDataDrivenPromptInjection, logRssNewsCollectionCheck } from './prompt-integrity-log'
@@ -25,6 +27,8 @@ import {
   buildInsightExtractionPrompt,
   STRATEGIC_RECOMMENDATION_SYSTEM,
   buildStrategicRecommendationPrompt,
+  STRATEGY_EXECUTION_BUNDLE_SYSTEM,
+  buildStrategyExecutionBundlePrompt,
   PM_ACTION_PLAN_SYSTEM,
   buildPMActionPlanPrompt,
   type PmActionOpportunityFacts,
@@ -41,6 +45,7 @@ import {
   type RiskSignalItem,
 } from './pipeline-prompts'
 import { safeParseAiJson } from '@/lib/ai/safe-json-parse'
+import { materializePmExecutionFromParsed, type PmPlanParsedShape } from '@/lib/ai/pm-execution-materialize'
 import { RATE_LIMIT_GRACEFUL_MESSAGE } from '@/lib/api/rate-limit'
 import {
   is429OrQuotaError,
@@ -51,7 +56,7 @@ import {
   PIPELINE_STRATEGY_PRE_DELAY_MS,
 } from './retry-with-backoff'
 import { extractGemini429RetryDelayMs } from '@/lib/ai/gemini-quota-error'
-import { chunkArray, runWithConcurrencyLimit } from '@/lib/ai/concurrency-pool'
+import { chunkArray } from '@/lib/ai/concurrency-pool'
 import { computeOpportunityScore, type OpportunityScoreOutput } from './opportunity-score-formula'
 import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
@@ -207,6 +212,8 @@ export type ResearchStreamEvent =
   | { type: 'pipeline_resume'; phase: 2 | 3; skippedSteps: string[]; message: string }
   /** 429 등 재시도 대기 — 클라이언트 토스트·활동 로그용 */
   | { type: 'quota_backoff'; waitMs: number; step: string; attempt: number; message: string }
+  /** 기사 요약: 무료 한도 등으로 LLM 실패 후 본문 발췌 폴백 — 사용자 안내 */
+  | { type: 'article_summary_quality_notice'; message: string }
 
 export type AIPrimaryModel = 'gemini' | 'groq'
 
@@ -343,328 +350,45 @@ type CompetitionTaskResult = {
   primaryProviderError?: string
 }
 
-/** Run trend analysis (no yield; for parallel execution). Requires real data - no AI call when data empty. */
-async function runTrendTask(
-  geminiKey: string,
-  groqKey: string | null | undefined,
-  keyword: string,
-  articles: ArticleForAnalysis[],
-  primaryProvider: AIPrimaryModel,
-  webContext?: string,
-  prePromptArticleContentChars?: number,
-  llmCtx?: LlmRecordingContext
-): Promise<TrendTaskResult> {
-  const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
-  if (!hasData) {
-    throw new Error('트렌드 분석에 필요한 데이터가 없습니다. 뉴스·웹 검색 결과를 확인해 주세요.')
+type CompParsedSchema = {
+  competitive_landscape?: Array<{
+    name?: string
+    positioning?: string
+    target_market?: string
+    market_presence?: number
+    innovation_level?: number
+    growth_score?: number
+    key_feature?: string
+    pricing?: string
+    differentiation?: string
+    competitor_gap?: string
+    our_differentiation?: string
+    strength?: string
+    weakness?: string
+    score_rationale?: string
+  }>
+  market_structure?: { summary?: string }
+  strategic_gaps?: {
+    functional_gaps?: string[]
+    pricing_gaps?: string[]
+    functional?: string[]
+    pricing?: string[]
+    summary?: string
   }
-  const { prompt, sections } = buildTaskTrendsPromptParts(keyword, articles, webContext)
-  logDataDrivenPromptInjection({
-    phase: 'trend_analysis',
-    keyword,
-    prompt,
-    sections,
-    originalSourceChars: prePromptArticleContentChars,
-  })
-  if (!prompt.trim()) {
-    throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
-  }
-  const completion = await runPipelineGeminiGroqText({
-    step: 'trend_analysis',
-    geminiKey,
-    groqKey,
-    primaryProvider,
-    systemInstruction: TASK_TRENDS_SYSTEM,
-    prompt,
-    maxOutputTokens: 800,
-    groqMaxTokens: 800,
-    geminiModel: GEMINI_MODEL,
-    ctx: llmCtx,
-  })
-  const text = completion.text
-  const usedFallback = completion.usedFallback
-  const primaryProviderError = completion.primaryProviderError
-  const fallbackTrend = {
-    market_score: 50 as number,
-    summary: '',
-    positive_signals: [] as string[],
-    neutral_signals: [] as string[],
-  }
-  const parseResult = safeParseAiJson<
-    { market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }
-  >(typeof text === 'string' ? text : '', {
-    fallback: fallbackTrend,
-    logFailures: true,
-    context: 'trend_analysis',
-  })
-  if (!parseResult.ok) {
-    throw new Error('트렌드 분석 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
-  }
-  const parsed = parseResult.data
-  const trendData = {
-    summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
-    market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
-    positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
-    neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
-  }
-  const trendPayload = {
-    trend_summary: trendData.summary,
-    market_temperature_score: trendData.market_score,
-    growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
-  }
-  return { trendData, trendPayload, usedFallback, primaryProviderError }
-}
-
-const ARTICLE_SUMMARY_SYSTEM = `Output only in standard professional Korean. Strictly follow UTF-8 encoding.
-Summarize each news article for market research in 2-3 sentences: key facts, implications, and market relevance.
-Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } in input order, as the sole message.`
-
-/** 한 배치(최대 4편)만 Gemini로 요약 — 단일 API 호출 */
-async function summarizeOneArticleBatchCall(
-  articles: ArticleWithContent[],
-  geminiKey: string,
-  llmCtx?: LlmRecordingContext
-): Promise<ArticleForAnalysis[]> {
-  if (articles.length === 0) return []
-  const prompt = `Summarize each article in 2-3 sentences (Korean). Focus on facts and market relevance.
-
-${articles
-  .map(
-    (a, i) =>
-      `[${i + 1}] title: ${a.title}\ncontent: ${a.content.slice(0, 1500)}${a.content.length > 1500 ? '...' : ''}`
-  )
-  .join('\n\n')}
-
-Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
-
-  const gen = await generateTextWithUsage({
-    apiKey: geminiKey,
-    prompt,
-    systemInstruction: ARTICLE_SUMMARY_SYSTEM,
-    maxOutputTokens: 1500,
-    model: GEMINI_MODEL,
-  })
-  if (llmCtx) {
-    await recordLlmUsage(llmCtx.supabase, {
-      userId: llmCtx.userId,
-      analysisId: llmCtx.analysisId,
-      stepName: 'article_summary',
-      provider: 'gemini',
-      model: gen.model,
-      promptTokens: gen.promptTokenCount,
-      completionTokens: gen.candidatesTokenCount,
-      totalTokens: gen.totalTokenCount,
-    })
-  }
-  const text = gen.text
-  const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
-  const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
-  return articles.map((a, i) => ({
-    title: a.title,
-    summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
-    publisher: a.publisher,
-  }))
-}
-
-type QuotaBackoffEvent = Extract<ResearchStreamEvent, { type: 'quota_backoff' }>
-
-type ArticleBatchWorkResult = {
-  order: number
-  items: ArticleForAnalysis[]
-  backoffs: QuotaBackoffEvent[]
-}
-
-/** 배치별 429 재시도(지수 백오프·최소 5초). 성공 시 backoffs는 빈 배열일 수 있음 */
-async function summarizeArticleBatchWithRetries(
-  batch: ArticleWithContent[],
-  geminiKey: string,
-  llmCtx: LlmRecordingContext | undefined,
-  order: number
-): Promise<ArticleBatchWorkResult> {
-  const backoffs: QuotaBackoffEvent[] = []
-  const maxRetries = 2
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const items = await summarizeOneArticleBatchCall(batch, geminiKey, llmCtx)
-      return { order, items, backoffs }
-    } catch (err) {
-      const fallback = (): ArticleForAnalysis[] =>
-        batch.map((a) => ({
-          title: a.title,
-          summary: a.content.slice(0, 300) || a.title,
-          publisher: a.publisher,
-        }))
-      if (attempt === maxRetries || !is429OrQuotaError(err)) {
-        console.warn('[article_summary] batch fallback', { order, attempt, err })
-        return { order, items: fallback(), backoffs }
-      }
-      const serverMs = extractGemini429RetryDelayMs(err)
-      const exp = getExponentialDelayMs(attempt, 5000)
-      const delayMs = Math.max(5000, serverMs > 0 ? Math.max(exp, serverMs) : exp)
-      const sec = Math.ceil(delayMs / 1000)
-      backoffs.push({
-        type: 'quota_backoff',
-        waitMs: delayMs,
-        step: 'article_summary',
-        attempt: attempt + 1,
-        message: `API 할당량 조절을 위해 ${sec}초 후 다시 시도합니다...`,
-      })
-      await sleep(delayMs)
-    }
-  }
-  return {
-    order,
-    items: batch.map((a) => ({
-      title: a.title,
-      summary: a.content.slice(0, 300) || a.title,
-      publisher: a.publisher,
-    })),
-    backoffs,
+  pm_planning_summary?: string
+  strategic_action_plan?: {
+    roadmap_priorities?: Array<{ title?: string; rationale?: string; priority_rank?: number }>
+    okr_key_results?: Array<{ objective?: string; key_results?: string[] }>
   }
 }
 
-/**
- * 기사 요약 LLM 호출 최적화:
- * - 짧은 입력(기사 ≤4·본문 합계 ≤9k자)은 **1회** 배치 호출로 유지해 API 횟수를 늘리지 않음.
- * - 긴 입력만 4편 단위로 쪼개고, 배치 간 **동시 최대 3**으로만 병렬(타임아웃·토큰 한도 완화).
- */
-async function summarizeArticlesWithAIBatched(
-  articles: ArticleWithContent[],
-  geminiKey: string,
-  llmCtx?: LlmRecordingContext
-): Promise<{ merged: ArticleForAnalysis[]; backoffs: QuotaBackoffEvent[] }> {
-  if (articles.length === 0) return { merged: [], backoffs: [] }
-  const totalChars = articles.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
-  const maxSingleBatchArticles = 4
-  const maxCharsSingleCall = 9000
-  if (articles.length <= maxSingleBatchArticles && totalChars <= maxCharsSingleCall) {
-    const one = await summarizeArticleBatchWithRetries(articles, geminiKey, llmCtx, 0)
-    return { merged: one.items, backoffs: one.backoffs }
-  }
-  const batches = chunkArray(articles, maxSingleBatchArticles)
-  const jobs = batches.map((batch, order) => ({ batch, order }))
-  const results = await runWithConcurrencyLimit(jobs, 3, ({ batch, order }) =>
-    summarizeArticleBatchWithRetries(batch, geminiKey, llmCtx, order)
-  )
-  const sorted = [...results].sort((a, b) => a.order - b.order)
-  const backoffs = sorted.flatMap((r) => r.backoffs)
-  const merged = sorted.flatMap((r) => r.items)
-  return { merged, backoffs }
+function clampCompetitorScore1to10(n: unknown): number | undefined {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return undefined
+  return Math.min(10, Math.max(1, Math.round(n)))
 }
 
-/** Non-competitor patterns: magazines, blogs, news media – filter these out from competitive_landscape */
-const NON_COMPETITOR_PATTERNS = /\b(magazine|mag|blog|뉴스|매거진|블로그|미디어|daily|times|post|journal|review|techcrunch|vogue|elle|forbes|medium\.com|substack|언론|매체)\b/i
-
-function isLikelyNonCompetitor(entry: { name?: string; positioning?: string }): boolean {
-  const name = (entry.name ?? '').trim()
-  const positioning = (entry.positioning ?? '').trim()
-  const combined = `${name} ${positioning}`.toLowerCase()
-  return NON_COMPETITOR_PATTERNS.test(combined)
-}
-
-/** Run competition analysis from articles (no yield; for parallel execution with trend). */
-async function runCompetitionTask(
-  geminiKey: string,
-  groqKey: string | null | undefined,
-  keyword: string,
-  articles: ArticleForAnalysis[],
-  primaryProvider: AIPrimaryModel,
-  webContext?: string,
-  competitorWebContext?: string,
-  prePromptArticleContentChars?: number,
-  llmCtx?: LlmRecordingContext
-): Promise<CompetitionTaskResult> {
-  const hasData =
-    (competitorWebContext?.trim().length ?? 0) > 0 ||
-    (webContext?.trim().length ?? 0) > 0 ||
-    articles.length > 0
-  if (!hasData) {
-    return {
-      competitionData: { competitive_landscape: [], market_structure: undefined },
-      usedFallback: false,
-    }
-  }
-
-  const { prompt, sections } = buildTaskCompetitionPromptParts(keyword, articles, webContext, competitorWebContext)
-  logDataDrivenPromptInjection({
-    phase: 'competition_analysis',
-    keyword,
-    prompt,
-    sections,
-    originalSourceChars: prePromptArticleContentChars,
-  })
-  const completion = await runPipelineGeminiGroqText({
-    step: 'competition_analysis',
-    geminiKey,
-    groqKey,
-    primaryProvider,
-    systemInstruction: TASK_COMPETITION_SYSTEM,
-    prompt,
-    maxOutputTokens: 2200,
-    groqMaxTokens: 2200,
-    geminiModel: GEMINI_MODEL,
-    ctx: llmCtx,
-  })
-  const text = completion.text
-  const usedFallback = completion.usedFallback
-  const primaryProviderError = completion.primaryProviderError
-  const fallbackCompetition: CompetitionTaskResult['competitionData'] = {
-    competitive_landscape: [],
-    market_structure: undefined,
-    strategic_gaps: undefined,
-    pm_planning_summary: undefined,
-    strategic_action_plan: undefined,
-  }
-  function clampCompetitorScore1to10(n: unknown): number | undefined {
-    if (typeof n !== 'number' || !Number.isFinite(n)) return undefined
-    return Math.min(10, Math.max(1, Math.round(n)))
-  }
-
-  type CompParsedSchema = {
-    competitive_landscape?: Array<{
-      name?: string
-      positioning?: string
-      target_market?: string
-      market_presence?: number
-      innovation_level?: number
-      growth_score?: number
-      key_feature?: string
-      pricing?: string
-      differentiation?: string
-      competitor_gap?: string
-      our_differentiation?: string
-      strength?: string
-      weakness?: string
-      score_rationale?: string
-    }>
-    market_structure?: { summary?: string }
-    strategic_gaps?: {
-      functional_gaps?: string[]
-      pricing_gaps?: string[]
-      functional?: string[]
-      pricing?: string[]
-      summary?: string
-    }
-    pm_planning_summary?: string
-    strategic_action_plan?: {
-      roadmap_priorities?: Array<{ title?: string; rationale?: string; priority_rank?: number }>
-      okr_key_results?: Array<{ objective?: string; key_results?: string[] }>
-    }
-  }
-  const compParseResult = safeParseAiJson<CompParsedSchema>(typeof text === 'string' ? text : '', {
-    fallback: { competitive_landscape: [], market_structure: undefined } as CompParsedSchema,
-    logFailures: true,
-    context: 'competition_analysis',
-  })
-  if (!compParseResult.ok) {
-    console.warn('[runCompetitionTask] 파싱 실패, fallback 사용', { keyword, preview: (typeof text === 'string' ? text : '').slice(0, 100) })
-    return {
-      competitionData: fallbackCompetition,
-      usedFallback: true,
-      primaryProviderError: '경쟁사 분석 결과 파싱 실패. 빈 결과로 진행합니다.',
-    }
-  }
-  const parsed = compParseResult.data
+/** competition_analysis JSON → 저장용 형태 (단일/번들 공통). */
+function materializeCompetitionDataFromParsed(parsed: CompParsedSchema): CompetitionDataShape {
   const landscape = Array.isArray(parsed?.competitive_landscape)
     ? parsed.competitive_landscape
         .filter((c): c is NonNullable<typeof parsed.competitive_landscape>[number] => typeof c?.name === 'string')
@@ -744,14 +468,444 @@ async function runCompetitionTask(
     if (rp?.length || okr?.length) strategic_action_plan = { roadmap_priorities: rp, okr_key_results: okr }
   }
 
-  const competitionData: CompetitionDataShape = {
+  return {
     competitive_landscape: landscape,
     market_structure: typeof parsed?.market_structure?.summary === 'string' ? parsed.market_structure.summary : undefined,
     ...(strategic_gaps ? { strategic_gaps } : {}),
     ...(pm_planning_summary ? { pm_planning_summary } : {}),
     ...(strategic_action_plan ? { strategic_action_plan } : {}),
   }
-  return { competitionData, usedFallback, primaryProviderError }
+}
+
+function buildTrendTaskResultFromTrendJson(
+  parsed: { market_score?: unknown; summary?: unknown; positive_signals?: unknown; neutral_signals?: unknown },
+  usedFallback: boolean,
+  primaryProviderError?: string
+): TrendTaskResult {
+  const trendData = {
+    summary: typeof parsed.summary === 'string' ? parsed.summary : '트렌드 분석 완료',
+    market_score: typeof parsed.market_score === 'number' ? Math.min(100, Math.max(0, parsed.market_score)) : 50,
+    positive_signals: Array.isArray(parsed.positive_signals) ? parsed.positive_signals.filter((s): s is string => typeof s === 'string') : [],
+    neutral_signals: Array.isArray(parsed.neutral_signals) ? parsed.neutral_signals.filter((s): s is string => typeof s === 'string') : [],
+  }
+  const trendPayload = {
+    trend_summary: trendData.summary,
+    market_temperature_score: trendData.market_score,
+    growth_signals: [...trendData.positive_signals, ...trendData.neutral_signals].slice(0, 5),
+  }
+  return { trendData, trendPayload, usedFallback, primaryProviderError }
+}
+
+/** Run trend analysis (no yield; for parallel execution). Requires real data - no AI call when data empty. */
+async function runTrendTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  articles: ArticleForAnalysis[],
+  primaryProvider: AIPrimaryModel,
+  webContext?: string,
+  prePromptArticleContentChars?: number,
+  llmCtx?: LlmRecordingContext
+): Promise<TrendTaskResult> {
+  const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
+  if (!hasData) {
+    throw new Error('트렌드 분석에 필요한 데이터가 없습니다. 뉴스·웹 검색 결과를 확인해 주세요.')
+  }
+  const { prompt, sections } = buildTaskTrendsPromptParts(keyword, articles, webContext)
+  logDataDrivenPromptInjection({
+    phase: 'trend_analysis',
+    keyword,
+    prompt,
+    sections,
+    originalSourceChars: prePromptArticleContentChars,
+  })
+  if (!prompt.trim()) {
+    throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
+  }
+  const completion = await runPipelineGeminiGroqText({
+    step: 'trend_analysis',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: TASK_TRENDS_SYSTEM,
+    prompt,
+    maxOutputTokens: 800,
+    groqMaxTokens: 800,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
+  const fallbackTrend = {
+    market_score: 50 as number,
+    summary: '',
+    positive_signals: [] as string[],
+    neutral_signals: [] as string[],
+  }
+  const parseResult = safeParseAiJson<
+    { market_score?: number; summary?: string; positive_signals?: string[]; neutral_signals?: string[] }
+  >(typeof text === 'string' ? text : '', {
+    fallback: fallbackTrend,
+    logFailures: true,
+    context: 'trend_analysis',
+  })
+  if (!parseResult.ok) {
+    throw new Error('트렌드 분석 결과를 파싱하지 못했습니다. AI 응답 형식이 올바르지 않습니다.')
+  }
+  return buildTrendTaskResultFromTrendJson(parseResult.data, usedFallback, primaryProviderError)
+}
+
+const ARTICLE_SUMMARY_SYSTEM = `Output only in standard professional Korean. Strictly follow UTF-8 encoding.
+Summarize each news article for market research in 2-3 sentences: key facts, implications, and market relevance.
+Return exactly this JSON shape: { "summaries": ["summary1", "summary2", ...] } in input order, as the sole message.`
+
+/** 한 배치(최대 4편)만 Gemini로 요약 — 단일 API 호출 */
+async function summarizeOneArticleBatchCall(
+  articles: ArticleWithContent[],
+  geminiKey: string,
+  llmCtx?: LlmRecordingContext
+): Promise<ArticleForAnalysis[]> {
+  if (articles.length === 0) return []
+  const prompt = `Summarize each article in 2-3 sentences (Korean). Focus on facts and market relevance.
+
+${articles
+  .map(
+    (a, i) =>
+      `[${i + 1}] title: ${a.title}\ncontent: ${a.content.slice(0, 1500)}${a.content.length > 1500 ? '...' : ''}`
+  )
+  .join('\n\n')}
+
+Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
+
+  const gen = await generateTextWithUsage({
+    apiKey: geminiKey,
+    prompt,
+    systemInstruction: ARTICLE_SUMMARY_SYSTEM,
+    maxOutputTokens: 1500,
+    model: GEMINI_MODEL,
+  })
+  if (llmCtx) {
+    await recordLlmUsage(llmCtx.supabase, {
+      userId: llmCtx.userId,
+      analysisId: llmCtx.analysisId,
+      stepName: 'article_summary',
+      provider: 'gemini',
+      model: gen.model,
+      promptTokens: gen.promptTokenCount,
+      completionTokens: gen.candidatesTokenCount,
+      totalTokens: gen.totalTokenCount,
+    })
+  }
+  const text = gen.text
+  const parsed = parseAiJson<{ summaries?: string[] }>(text ?? '', { summaries: [] }, 'article_summary')
+  const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : []
+  return articles.map((a, i) => ({
+    title: a.title,
+    summary: typeof summaries[i] === 'string' && summaries[i].trim() ? summaries[i].trim() : a.content.slice(0, 300) || a.title,
+    publisher: a.publisher,
+  }))
+}
+
+type QuotaBackoffEvent = Extract<ResearchStreamEvent, { type: 'quota_backoff' }>
+
+type ArticleBatchWorkResult = {
+  order: number
+  items: ArticleForAnalysis[]
+  backoffs: QuotaBackoffEvent[]
+  /** 429·쿼터 한도 소진 후에도 LLM 실패 → 본문 발췌 요약으로 대체한 경우 */
+  usedLocalSnippetDueToQuota?: boolean
+}
+
+/**
+ * 배치별 429 재시도 — 대기 **전**에 quota_backoff를 yield 하여 클라이언트가 멈춘 것처럼 보이지 않게 함.
+ */
+async function* summarizeArticleBatchWithRetriesGen(
+  batch: ArticleWithContent[],
+  geminiKey: string,
+  llmCtx: LlmRecordingContext | undefined,
+  order: number
+): AsyncGenerator<QuotaBackoffEvent, ArticleBatchWorkResult, void> {
+  const backoffs: QuotaBackoffEvent[] = []
+  const maxRetries = 2
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const items = await summarizeOneArticleBatchCall(batch, geminiKey, llmCtx)
+      return { order, items, backoffs, usedLocalSnippetDueToQuota: false }
+    } catch (err) {
+      const fallback = (): ArticleForAnalysis[] =>
+        batch.map((a) => ({
+          title: a.title,
+          summary: a.content.slice(0, 300) || a.title,
+          publisher: a.publisher,
+        }))
+      const quotaRelated = is429OrQuotaError(err)
+      if (attempt === maxRetries || !quotaRelated) {
+        console.warn('[article_summary] batch fallback', { order, attempt, err })
+        return {
+          order,
+          items: fallback(),
+          backoffs,
+          usedLocalSnippetDueToQuota: attempt === maxRetries && quotaRelated,
+        }
+      }
+      const serverMs = extractGemini429RetryDelayMs(err)
+      const exp = getExponentialDelayMs(attempt, 5000)
+      const delayMs = Math.max(5000, serverMs > 0 ? Math.max(exp, serverMs) : exp)
+      const sec = Math.ceil(delayMs / 1000)
+      const ev: QuotaBackoffEvent = {
+        type: 'quota_backoff',
+        waitMs: delayMs,
+        step: 'article_summary',
+        attempt: attempt + 1,
+        message: `API 할당량 조절을 위해 ${sec}초 후 다시 시도합니다...`,
+      }
+      backoffs.push(ev)
+      yield ev
+      await sleep(delayMs)
+    }
+  }
+  return {
+    order,
+    items: batch.map((a) => ({
+      title: a.title,
+      summary: a.content.slice(0, 300) || a.title,
+      publisher: a.publisher,
+    })),
+    backoffs,
+    usedLocalSnippetDueToQuota: false,
+  }
+}
+
+/**
+ * 기사 요약: 배치마다 진행 task + 재시도 중 quota_backoff를 즉시 스트림으로보냄.
+ * (과거 Promise.all 병렬은 대기 동안 NDJSON이 막혀 UI가 멈춘 것처럼 보였음 → 순차 배치)
+ */
+async function* summarizeArticlesWithAIBatchedGen(
+  articles: ArticleWithContent[],
+  geminiKey: string,
+  llmCtx?: LlmRecordingContext
+): AsyncGenerator<
+  ResearchStreamEvent,
+  { merged: ArticleForAnalysis[]; usedLocalSnippetDueToQuota: boolean },
+  void
+> {
+  if (articles.length === 0) {
+    return { merged: [], usedLocalSnippetDueToQuota: false }
+  }
+  const totalChars = articles.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
+  const maxSingleBatchArticles = 4
+  const maxCharsSingleCall = 9000
+  const batches =
+    articles.length <= maxSingleBatchArticles && totalChars <= maxCharsSingleCall
+      ? [articles]
+      : chunkArray(articles, maxSingleBatchArticles)
+
+  let usedLocalSnippetDueToQuota = false
+  const merged: ArticleForAnalysis[] = []
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i]
+    yield {
+      type: 'task',
+      task: 'article_summary',
+      status: 'running',
+      provider: 'gemini',
+      fallback_used: false,
+      currentArticleTitle:
+        batches.length === 1
+          ? batch[0]!.title.slice(0, 60)
+          : `요약 배치 ${i + 1}/${batches.length} (총 ${batches.length}회)`,
+    }
+    const g = summarizeArticleBatchWithRetriesGen(batch, geminiKey, llmCtx, i)
+    while (true) {
+      const step = await g.next()
+      if (step.done) {
+        const r = step.value as ArticleBatchWorkResult
+        if (r.usedLocalSnippetDueToQuota) usedLocalSnippetDueToQuota = true
+        merged.push(...r.items)
+        break
+      }
+      yield step.value as ResearchStreamEvent
+    }
+  }
+
+  return { merged, usedLocalSnippetDueToQuota }
+}
+
+/** Non-competitor patterns: magazines, blogs, news media – filter these out from competitive_landscape */
+const NON_COMPETITOR_PATTERNS = /\b(magazine|mag|blog|뉴스|매거진|블로그|미디어|daily|times|post|journal|review|techcrunch|vogue|elle|forbes|medium\.com|substack|언론|매체)\b/i
+
+function isLikelyNonCompetitor(entry: { name?: string; positioning?: string }): boolean {
+  const name = (entry.name ?? '').trim()
+  const positioning = (entry.positioning ?? '').trim()
+  const combined = `${name} ${positioning}`.toLowerCase()
+  return NON_COMPETITOR_PATTERNS.test(combined)
+}
+
+/** Run competition analysis from articles (no yield; for parallel execution with trend). */
+async function runCompetitionTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  articles: ArticleForAnalysis[],
+  primaryProvider: AIPrimaryModel,
+  webContext?: string,
+  competitorWebContext?: string,
+  prePromptArticleContentChars?: number,
+  llmCtx?: LlmRecordingContext
+): Promise<CompetitionTaskResult> {
+  const hasData =
+    (competitorWebContext?.trim().length ?? 0) > 0 ||
+    (webContext?.trim().length ?? 0) > 0 ||
+    articles.length > 0
+  if (!hasData) {
+    return {
+      competitionData: { competitive_landscape: [], market_structure: undefined },
+      usedFallback: false,
+    }
+  }
+
+  const { prompt, sections } = buildTaskCompetitionPromptParts(keyword, articles, webContext, competitorWebContext)
+  logDataDrivenPromptInjection({
+    phase: 'competition_analysis',
+    keyword,
+    prompt,
+    sections,
+    originalSourceChars: prePromptArticleContentChars,
+  })
+  const completion = await runPipelineGeminiGroqText({
+    step: 'competition_analysis',
+    geminiKey,
+    groqKey,
+    primaryProvider,
+    systemInstruction: TASK_COMPETITION_SYSTEM,
+    prompt,
+    maxOutputTokens: 2200,
+    groqMaxTokens: 2200,
+    geminiModel: GEMINI_MODEL,
+    ctx: llmCtx,
+  })
+  const text = completion.text
+  const usedFallback = completion.usedFallback
+  const primaryProviderError = completion.primaryProviderError
+  const fallbackCompetition: CompetitionTaskResult['competitionData'] = {
+    competitive_landscape: [],
+    market_structure: undefined,
+    strategic_gaps: undefined,
+    pm_planning_summary: undefined,
+    strategic_action_plan: undefined,
+  }
+  const compParseResult = safeParseAiJson<CompParsedSchema>(typeof text === 'string' ? text : '', {
+    fallback: { competitive_landscape: [], market_structure: undefined } as CompParsedSchema,
+    logFailures: true,
+    context: 'competition_analysis',
+  })
+  if (!compParseResult.ok) {
+    console.warn('[runCompetitionTask] 파싱 실패, fallback 사용', { keyword, preview: (typeof text === 'string' ? text : '').slice(0, 100) })
+    return {
+      competitionData: fallbackCompetition,
+      usedFallback: true,
+      primaryProviderError: '경쟁사 분석 결과 파싱 실패. 빈 결과로 진행합니다.',
+    }
+  }
+  return {
+    competitionData: materializeCompetitionDataFromParsed(compParseResult.data),
+    usedFallback,
+    primaryProviderError,
+  }
+}
+
+/** 시장 트렌드 + 경쟁 분석 — 단일 LLM 호출. 실패 시 기존 두 호출로 폴백. */
+async function runMarketCompetitionBundleTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  articles: ArticleForAnalysis[],
+  bundlePrimaryProvider: AIPrimaryModel,
+  webContext: string | undefined,
+  competitorWebContext: string | undefined,
+  articleRawContentTotalChars: number,
+  llmCtx?: LlmRecordingContext
+): Promise<{ trendResult: TrendTaskResult; compResult: CompetitionTaskResult }> {
+  const runSplit = async () => {
+    const [trendResult, compResult] = await Promise.all([
+      runTrendTask(geminiKey, groqKey, keyword, articles, bundlePrimaryProvider, webContext, articleRawContentTotalChars, llmCtx),
+      runCompetitionTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        articles,
+        bundlePrimaryProvider,
+        webContext,
+        competitorWebContext,
+        articleRawContentTotalChars,
+        llmCtx
+      ),
+    ])
+    return { trendResult, compResult }
+  }
+
+  const hasTrendData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
+  if (!hasTrendData) {
+    throw new Error('트렌드 분석에 필요한 데이터가 없습니다. 뉴스·웹 검색 결과를 확인해 주세요.')
+  }
+
+  const { prompt, sections } = buildMarketCompetitionBundlePromptParts(keyword, articles, webContext, competitorWebContext)
+  logDataDrivenPromptInjection({
+    phase: 'market_competition_bundle',
+    keyword,
+    prompt,
+    sections,
+    originalSourceChars: articleRawContentTotalChars,
+  })
+  if (!prompt.trim()) {
+    return runSplit()
+  }
+
+  try {
+    const completion = await runPipelineGeminiGroqText({
+      step: 'market_competition_bundle',
+      geminiKey,
+      groqKey,
+      primaryProvider: bundlePrimaryProvider,
+      systemInstruction: TASK_MARKET_COMPETITION_BUNDLE_SYSTEM,
+      prompt,
+      maxOutputTokens: 3200,
+      groqMaxTokens: 3200,
+      geminiModel: GEMINI_MODEL,
+      ctx: llmCtx,
+    })
+    const text = typeof completion.text === 'string' ? completion.text : ''
+    type BundleRoot = { trends?: Record<string, unknown>; competition?: CompParsedSchema }
+    const br = safeParseAiJson<BundleRoot>(text, {
+      fallback: {} as BundleRoot,
+      logFailures: true,
+      context: 'market_competition_bundle',
+    })
+    if (!br.ok) return runSplit()
+    const trendsRaw = br.data?.trends
+    if (!trendsRaw || typeof trendsRaw !== 'object') return runSplit()
+    const trendResult = buildTrendTaskResultFromTrendJson(
+      trendsRaw,
+      completion.usedFallback,
+      completion.primaryProviderError
+    )
+    const compRaw = br.data?.competition
+    const competitionData =
+      compRaw && typeof compRaw === 'object'
+        ? materializeCompetitionDataFromParsed(compRaw)
+        : { competitive_landscape: [] as CompetitionDataShape['competitive_landscape'], market_structure: undefined }
+    const compResult: CompetitionTaskResult = {
+      competitionData,
+      usedFallback: completion.usedFallback,
+      primaryProviderError: completion.primaryProviderError,
+    }
+    return { trendResult, compResult }
+  } catch (err) {
+    console.warn('[runMarketCompetitionBundleTask] 번들 실패, 분리 호출로 폴백', { keyword, err })
+    return runSplit()
+  }
 }
 
 export type CoreInsightItem = {
@@ -956,6 +1110,32 @@ function normalizeThreeLineActions(raw: unknown): string[] | undefined {
   return lines.length > 0 ? lines : undefined
 }
 
+function finalizeStrategicRecommendationData(
+  parsed: StrategicRecommendationResult,
+  marketOverview: string,
+  extractedInsights: InsightExtractionResult
+): StrategicRecommendationResult {
+  const fallbackOpp = flattenOpportunitySignalsForPrompt(extractedInsights.opportunity_signals)
+  const fallbackRisk = flattenRiskSignalsForPrompt(extractedInsights.risk_signals)
+  const bg = typeof parsed.background_rationale === 'string' ? parsed.background_rationale.trim() : ''
+  const three = normalizeThreeLineActions(parsed.three_line_actions)
+  const summary = typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary.trim() : ''
+  const mergedSummary = summary || bg || marketOverview
+  return {
+    opportunities: Array.isArray(parsed.opportunities)
+      ? parsed.opportunities.filter((s): s is string => typeof s === 'string')
+      : fallbackOpp,
+    risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : fallbackRisk,
+    strategy_summary: mergedSummary,
+    market_summary: typeof parsed.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
+    key_strategic_insights: Array.isArray(parsed.key_strategic_insights)
+      ? parsed.key_strategic_insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
+      : undefined as string[] | undefined,
+    three_line_actions: three,
+    background_rationale: bg || undefined,
+  }
+}
+
 /** Step 4: Strategic Recommendation - structured JSON */
 async function runStrategicRecommendationTask(
   geminiKey: string,
@@ -1000,26 +1180,8 @@ async function runStrategicRecommendationTask(
     fallbackStrategy,
     'strategy_generation'
   )
-  const bg =
-    typeof parsed.background_rationale === 'string' ? parsed.background_rationale.trim() : ''
-  const three = normalizeThreeLineActions(parsed.three_line_actions)
-  const summary =
-    typeof parsed.strategy_summary === 'string' ? parsed.strategy_summary.trim() : ''
-  const mergedSummary = summary || bg || marketOverview
   return {
-    data: {
-      opportunities: Array.isArray(parsed.opportunities)
-        ? parsed.opportunities.filter((s): s is string => typeof s === 'string')
-        : fallbackOpp,
-      risks: Array.isArray(parsed.risks) ? parsed.risks.filter((s): s is string => typeof s === 'string') : fallbackRisk,
-      strategy_summary: mergedSummary,
-      market_summary: typeof parsed.market_summary === 'string' ? parsed.market_summary.trim() : undefined,
-      key_strategic_insights: Array.isArray(parsed.key_strategic_insights)
-        ? parsed.key_strategic_insights.filter((s): s is string => typeof s === 'string').slice(0, 5)
-        : undefined as string[] | undefined,
-      three_line_actions: three,
-      background_rationale: bg || undefined,
-    },
+    data: finalizeStrategicRecommendationData(parsed, marketOverview, extractedInsights),
     usedFallback,
     primaryProviderError,
   }
@@ -1133,42 +1295,7 @@ async function runPMActionPlanTask(
       text = await ensureKoreanText(text)
     }
   }
-  type ParsedShape = {
-    priority_action?: { action?: string; reasoning?: string; expected_outcome?: string }
-    product_actions?: Array<{ action?: string; priority?: string; reasoning?: string }>
-    feature_ideas?: string[]
-    go_to_market_steps?: string[]
-    steps?: string[]
-    priority?: string
-    goal?: string
-    risk?: string
-    product_idea?: string
-    target_customer?: string
-    monetization?: string
-    pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string; category?: string }>
-    strategic_decision_layer?: {
-      opportunity_score_reason_text?: string
-      market_opportunity_explanation?: string
-      competition_intensity?: string
-      competition_explanation?: string
-      product_market_fit?: string
-      product_market_fit_explanation?: string
-      entry_strategy?: string
-      entry_explanation?: string
-    }
-    swot_analysis?: { strengths?: unknown[]; weaknesses?: unknown[]; opportunities?: unknown[]; threats?: unknown[] }
-    jtbd?: {
-      main_jobs?: unknown[]
-      pains?: unknown[]
-      gains?: unknown[]
-      functional_jobs?: unknown[]
-      social_jobs?: unknown[]
-      emotional_jobs?: unknown[]
-    }
-    porter_5_forces?: Record<string, unknown>
-    next_actions_pm?: Array<{ action?: string; why?: string; how_to_execute?: string; priority?: string; estimated_effort?: string }>
-  }
-  const fallbackPm: ParsedShape = {
+  const fallbackPm: PmPlanParsedShape = {
     product_actions: [],
     feature_ideas: [],
     go_to_market_steps: [],
@@ -1177,7 +1304,7 @@ async function runPMActionPlanTask(
     goal: '',
     risk: '',
   }
-  let parsed = parseAiJson<ParsedShape>(typeof text === 'string' ? text : '', fallbackPm, 'execution_layer')
+  let parsed = parseAiJson<PmPlanParsedShape>(typeof text === 'string' ? text : '', fallbackPm, 'execution_layer')
   const toStrArr = (arr: unknown): string[] =>
     Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : []
   const stepsArr = toStrArr(parsed?.steps)
@@ -1195,7 +1322,7 @@ async function runPMActionPlanTask(
   if (!hasValidPlan && typeof text === 'string' && text.trim().length > 20) {
     try {
       const retryText = await getText()
-      const retryParsed = parseAiJson<ParsedShape>(retryText, fallbackPm, 'execution_layer')
+      const retryParsed = parseAiJson<PmPlanParsedShape>(retryText, fallbackPm, 'execution_layer')
       const retrySteps = toStrArr(retryParsed?.steps).slice(0, 6)
       const retryPa =
         retryParsed?.priority_action && typeof retryParsed.priority_action === 'object' && typeof retryParsed.priority_action.action === 'string'
@@ -1210,186 +1337,158 @@ async function runPMActionPlanTask(
       // keep first parse
     }
   }
-  const stepsFinal = toStrArr(parsed?.steps).slice(0, 6)
-  const paFinal = parsed?.priority_action && typeof parsed.priority_action === 'object' ? parsed.priority_action : null
-  const paActionFinal = paFinal && typeof paFinal.action === 'string' ? paFinal.action.trim() : ''
-
-  let actions = Array.isArray(parsed?.product_actions)
-    ? parsed.product_actions
-        .filter((a): a is { action: string; priority?: string; reasoning?: string } => typeof (a as { action?: string })?.action === 'string')
-        .map((a) => ({ action: String((a as { action: string }).action), priority: (a as { priority?: string }).priority, reasoning: (a as { reasoning?: string }).reasoning }))
-    : []
-  let pmPlan: PMActionPlanItem[] = Array.isArray(parsed?.pm_action_plan)
-    ? parsed.pm_action_plan
-        .map((a) => {
-          const raw = a as Record<string, unknown>
-          const title = typeof raw?.action_title === 'string' ? raw.action_title.trim() : typeof raw?.action === 'string' ? raw.action.trim() : ''
-          return title ? { ...raw, action_title: title } : null
-        })
-        .filter((a): a is NonNullable<typeof a> => a != null)
-        .map((a): PMActionPlanItem => ({
-          action_title: String((a as { action_title: string }).action_title),
-          description: typeof (a as Record<string, unknown>).description === 'string' ? String((a as Record<string, unknown>).description) : undefined,
-          expected_outcome: typeof (a as Record<string, unknown>).expected_outcome === 'string' ? String((a as Record<string, unknown>).expected_outcome) : undefined,
-          priority: (['high', 'medium', 'low'] as const).includes((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
-            ? ((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
-            : undefined,
-          category: (['mvp_experiment', 'user_interview', 'feature_prioritization', 'go_to_market'] as const).includes((a as Record<string, unknown>).category as 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market')
-            ? ((a as Record<string, unknown>).category as 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market')
-            : undefined,
-        }))
-    : []
-  if (pmPlan.length === 0 && (paActionFinal.length > 0 || stepsFinal.length > 0)) {
-    if (paActionFinal) {
-      pmPlan.push({
-        action_title: paActionFinal,
-        description: typeof paFinal?.reasoning === 'string' ? paFinal.reasoning.trim() : undefined,
-        expected_outcome: typeof paFinal?.expected_outcome === 'string' ? paFinal.expected_outcome.trim() : undefined,
-        priority: 'high',
-      })
-    }
-    for (const step of stepsFinal) {
-      pmPlan.push({ action_title: step, priority: 'medium' })
-    }
-  }
-  if (actions.length === 0 && pmPlan.length > 0) {
-    actions = pmPlan.map((p) => ({
-      action: p.action_title,
-      priority: p.priority,
-      reasoning: [p.description, p.expected_outcome].filter((x): x is string => typeof x === 'string' && x.trim().length > 0).join(' — ') || undefined,
-    }))
-  }
-  const napm = Array.isArray(parsed?.next_actions_pm)
-    ? parsed.next_actions_pm
-        .filter((a): a is { action: string } => typeof (a as { action?: string })?.action === 'string')
-        .slice(0, 5)
-        .map((a) => ({
-          action: String((a as { action: string }).action).trim(),
-          why: typeof (a as Record<string, unknown>).why === 'string' ? String((a as Record<string, unknown>).why).trim() : undefined,
-          how_to_execute: typeof (a as Record<string, unknown>).how_to_execute === 'string' ? String((a as Record<string, unknown>).how_to_execute).trim() : undefined,
-          priority: (['high', 'medium', 'low'] as const).includes((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
-            ? ((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
-            : undefined,
-          estimated_effort: typeof (a as Record<string, unknown>).estimated_effort === 'string' ? String((a as Record<string, unknown>).estimated_effort).trim() : undefined,
-        }))
-    : []
-  const swot = parsed?.swot_analysis && typeof parsed.swot_analysis === 'object'
-    ? {
-        strengths: toStrArr(parsed.swot_analysis.strengths),
-        weaknesses: toStrArr(parsed.swot_analysis.weaknesses),
-        opportunities: toStrArr(parsed.swot_analysis.opportunities),
-        threats: toStrArr(parsed.swot_analysis.threats),
-      }
-    : undefined
-  const clampPorterScore = (v: unknown): number | undefined => {
-    const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(String(v), 10) : NaN
-    if (!Number.isFinite(n)) return undefined
-    return Math.min(5, Math.max(1, Math.round(n)))
-  }
-  const parsePorterFromParsed = (): Porter5ForcesShape | undefined => {
-    const raw = parsed?.porter_5_forces
-    if (!raw || typeof raw !== 'object') return undefined
-    const o = raw as Record<string, unknown>
-    const rivalry = toStrArr(o.rivalry)
-    const supplier_power = toStrArr(o.supplier_power)
-    const buyer_power = toStrArr(o.buyer_power)
-    const substitutes = toStrArr(o.substitutes)
-    const new_entrants = toStrArr(o.new_entrants)
-    const sc = o.scores && typeof o.scores === 'object' ? (o.scores as Record<string, unknown>) : null
-    const scores =
-      sc != null
-        ? {
-            new_entrants: clampPorterScore(sc.new_entrants),
-            supplier_power: clampPorterScore(sc.supplier_power),
-            buyer_power: clampPorterScore(sc.buyer_power),
-            substitutes: clampPorterScore(sc.substitutes),
-            rivalry: clampPorterScore(sc.rivalry),
-          }
-        : undefined
-    const scoresClean = scores
-      ? (Object.fromEntries(Object.entries(scores).filter(([, v]) => v != null)) as Porter5ForcesShape['scores'])
-      : undefined
-    const hasBullets =
-      rivalry.length +
-        supplier_power.length +
-        buyer_power.length +
-        substitutes.length +
-        new_entrants.length >
-      0
-    const hasScores = scoresClean && Object.keys(scoresClean).length > 0
-    if (!hasBullets && !hasScores) return undefined
-    return {
-      rivalry: rivalry.length ? rivalry : undefined,
-      supplier_power: supplier_power.length ? supplier_power : undefined,
-      buyer_power: buyer_power.length ? buyer_power : undefined,
-      substitutes: substitutes.length ? substitutes : undefined,
-      new_entrants: new_entrants.length ? new_entrants : undefined,
-      scores: scoresClean && Object.keys(scoresClean).length > 0 ? scoresClean : undefined,
-    }
-  }
-  const porterParsed = parsePorterFromParsed()
-
-  const jtbdObj = parsed?.jtbd && typeof parsed.jtbd === 'object' ? parsed.jtbd : null
-  const jtbdRaw = jtbdObj
-    ? {
-        main_jobs: toStrArr(jtbdObj.main_jobs),
-        pains: toStrArr(jtbdObj.pains),
-        gains: toStrArr(jtbdObj.gains),
-        functional_jobs: toStrArr(jtbdObj.functional_jobs),
-        social_jobs: toStrArr(jtbdObj.social_jobs),
-        emotional_jobs: toStrArr(jtbdObj.emotional_jobs),
-      }
-    : undefined
-  const jtbdFiltered =
-    jtbdRaw &&
-    (
-      jtbdRaw.main_jobs.length +
-        jtbdRaw.pains.length +
-        jtbdRaw.gains.length +
-        jtbdRaw.functional_jobs.length +
-        jtbdRaw.social_jobs.length +
-        jtbdRaw.emotional_jobs.length >
-      0
-    )
-      ? jtbdRaw
-      : undefined
   return {
-    executionData: {
-      product_actions: actions,
-      feature_ideas: toStrArr(parsed?.feature_ideas),
-      go_to_market_steps: toStrArr(parsed?.go_to_market_steps),
-      product_idea: typeof parsed?.product_idea === 'string' ? parsed.product_idea.trim() : undefined,
-      target_customer: typeof parsed?.target_customer === 'string' ? parsed.target_customer.trim() : undefined,
-      monetization: typeof parsed?.monetization === 'string' ? parsed.monetization.trim() : undefined,
-      pm_action_plan: pmPlan.length > 0 ? pmPlan : undefined,
-      strategic_decision_layer: (() => {
-        if (!parsed?.strategic_decision_layer || typeof parsed.strategic_decision_layer !== 'object') return undefined
-        const layer = { ...(parsed.strategic_decision_layer as Record<string, unknown>) }
-        const a = typeof layer.opportunity_score_reason_text === 'string' ? layer.opportunity_score_reason_text.trim() : ''
-        const b = typeof layer.market_opportunity_explanation === 'string' ? layer.market_opportunity_explanation.trim() : ''
-        const mergedReason = sanitizeForKoreanDisplay(a || b)?.trim() || ''
-        if (mergedReason.length >= 12) {
-          layer.market_opportunity_explanation = mergedReason
-          layer.opportunity_score_reason_text = mergedReason
-        }
-        return layer as {
-          opportunity_score_reason_text?: string
-          market_opportunity_explanation?: string
-          competition_intensity?: 'low' | 'medium' | 'high'
-          competition_explanation?: string
-          product_market_fit?: 'low' | 'medium' | 'high'
-          product_market_fit_explanation?: string
-          entry_strategy?: string
-          entry_explanation?: string
-        }
-      })(),
-      swot_analysis: swot,
-      jtbd: jtbdFiltered,
-      porter_5_forces: porterParsed,
-      next_actions_pm: napm.length > 0 ? napm : undefined,
-    },
+    executionData: materializePmExecutionFromParsed(parsed),
     usedFallback,
     primaryProviderError,
+  }
+}
+
+/** 전략 추천 + PM 액션 — 단일 LLM(전략·실행 패키지). 실패 시 기존 순차 2회 호출로 폴백. */
+async function runStrategyExecutionBundleTask(
+  geminiKey: string,
+  groqKey: string | null | undefined,
+  keyword: string,
+  marketOverview: string,
+  competitionSummary: string,
+  insightData: InsightExtractionResult,
+  strategyPrimaryProvider: AIPrimaryModel,
+  actionPrimaryProvider: AIPrimaryModel,
+  llmCtx: LlmRecordingContext | undefined,
+  anthropicKey: string | null | undefined,
+  pmOpportunityFacts: PmActionOpportunityFacts
+): Promise<{
+  strategy: { data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }
+  execution: { executionData: ReturnType<typeof materializePmExecutionFromParsed>; usedFallback: boolean; primaryProviderError?: string }
+}> {
+  const runSplit = async () => {
+    const strat = await runStrategicRecommendationTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      marketOverview,
+      competitionSummary,
+      insightData,
+      strategyPrimaryProvider,
+      llmCtx,
+      anthropicKey
+    )
+    const pmFactsAdjusted: PmActionOpportunityFacts = {
+      ...pmOpportunityFacts,
+      strategy_opportunities_count: strat.data.opportunities.length,
+      strategy_risks_count: strat.data.risks.length,
+    }
+    const pm = await runPMActionPlanTask(
+      geminiKey,
+      groqKey,
+      keyword,
+      strat.data.strategy_summary,
+      strat.data.opportunities.join('. '),
+      strat.data.risks.join('. '),
+      actionPrimaryProvider,
+      llmCtx,
+      pmFactsAdjusted
+    )
+    return { strategy: strat, execution: pm }
+  }
+
+  const prompt = buildStrategyExecutionBundlePrompt(
+    keyword,
+    marketOverview,
+    competitionSummary,
+    insightData,
+    pmOpportunityFacts
+  )
+  if (!prompt.trim()) return runSplit()
+
+  try {
+    const completion = await runPipelineGeminiGroqText({
+      step: 'strategy_execution_bundle',
+      geminiKey,
+      groqKey,
+      anthropicKey,
+      primaryProvider: strategyPrimaryProvider,
+      systemInstruction: STRATEGY_EXECUTION_BUNDLE_SYSTEM,
+      prompt,
+      maxOutputTokens: 3500,
+      groqMaxTokens: 3500,
+      geminiModel: GEMINI_MODEL,
+      ctx: llmCtx,
+    })
+    const text = typeof completion.text === 'string' ? completion.text : ''
+    const root = parseAiJson<Record<string, unknown>>(text, {}, 'strategy_execution_bundle')
+    const stratObj = root.strategy
+    const execObj = root.execution
+    if (!stratObj || typeof stratObj !== 'object' || !execObj || typeof execObj !== 'object') {
+      return runSplit()
+    }
+    const fallbackOpp = flattenOpportunitySignalsForPrompt(insightData.opportunity_signals)
+    const fallbackRisk = flattenRiskSignalsForPrompt(insightData.risk_signals)
+    const fallbackStrategy: StrategicRecommendationResult = {
+      opportunities: fallbackOpp,
+      risks: fallbackRisk,
+      strategy_summary: marketOverview,
+    }
+    const stratParsed = parseAiJson<StrategicRecommendationResult>(
+      JSON.stringify(stratObj),
+      fallbackStrategy,
+      'strategy_execution_bundle.strategy'
+    )
+    const stratData = finalizeStrategicRecommendationData(stratParsed, marketOverview, insightData)
+
+    const fallbackPm: PmPlanParsedShape = {
+      product_actions: [],
+      feature_ideas: [],
+      go_to_market_steps: [],
+      steps: [],
+      priority: '',
+      goal: '',
+      risk: '',
+    }
+    const execParsed = parseAiJson<PmPlanParsedShape>(JSON.stringify(execObj), fallbackPm, 'strategy_execution_bundle.execution')
+    const executionData = materializePmExecutionFromParsed(execParsed)
+
+    return {
+      strategy: {
+        data: stratData,
+        usedFallback: completion.usedFallback,
+        primaryProviderError: completion.primaryProviderError,
+      },
+      execution: {
+        executionData,
+        usedFallback: completion.usedFallback,
+        primaryProviderError: completion.primaryProviderError,
+      },
+    }
+  } catch (err) {
+    console.warn('[runStrategyExecutionBundleTask] 번들 실패, 순차 호출로 폴백', { keyword, err })
+    try {
+      return await runSplit()
+    } catch (e2) {
+      console.error('[runStrategyExecutionBundleTask] 순차 폴백도 실패', { keyword, err: e2 })
+      const fallbackOpp = flattenOpportunitySignalsForPrompt(insightData.opportunity_signals)
+      const fallbackRisk = flattenRiskSignalsForPrompt(insightData.risk_signals)
+      return {
+        strategy: {
+          data: {
+            opportunities: fallbackOpp,
+            risks: fallbackRisk,
+            strategy_summary: marketOverview,
+          },
+          usedFallback: false,
+        },
+        execution: {
+          executionData: {
+            product_actions: [],
+            feature_ideas: [],
+            go_to_market_steps: [],
+            pm_action_plan: [],
+            next_actions_pm: [],
+          },
+          usedFallback: false,
+        },
+      }
+    }
   }
 }
 
@@ -2831,22 +2930,22 @@ export async function* runResearch(
   // Article summarization (AI) — 배치당 1 LLM 호출, 배치 병렬 최대 3; 429 시 백오프 후 해당 배치만 재시도
   let articlesForAnalysis: ArticleForAnalysis[]
   try {
-    if (articlesWithContent.length > 0) {
-      yield {
-        type: 'task',
-        task: 'article_summary',
-        status: 'running',
-        provider: 'gemini',
-        fallback_used: false,
-        currentArticleTitle:
-          articlesWithContent.length <= 4
-            ? articlesWithContent[0].title.slice(0, 60)
-            : `요약 배치 (${Math.ceil(articlesWithContent.length / 4)}회·동시 최대 3)`,
-      }
+    const summaryGen = summarizeArticlesWithAIBatchedGen(articlesWithContent, geminiKey, llmCtx)
+    let sumStep = await summaryGen.next()
+    while (!sumStep.done) {
+      yield sumStep.value as ResearchStreamEvent
+      sumStep = await summaryGen.next()
     }
-    const { merged, backoffs } = await summarizeArticlesWithAIBatched(articlesWithContent, geminiKey, llmCtx)
-    for (const ev of backoffs) {
-      yield ev
+    const summaryBundle = sumStep.value as {
+      merged: ArticleForAnalysis[]
+      usedLocalSnippetDueToQuota: boolean
+    }
+    const { merged, usedLocalSnippetDueToQuota } = summaryBundle
+    if (usedLocalSnippetDueToQuota) {
+      yield {
+        type: 'article_summary_quality_notice',
+        message: '무료 한도 초과 → 요약 품질이 낮을 수 있습니다. (Gemini 대신 본문 발췌를 사용합니다.)',
+      }
     }
     articlesForAnalysis = merged
     console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
@@ -2855,7 +2954,7 @@ export async function* runResearch(
       task: 'article_summary',
       status: 'completed',
       provider: 'gemini',
-      fallback_used: false,
+      fallback_used: usedLocalSnippetDueToQuota,
       progressMeta: { newsCount: articlesForAnalysis.length, sourceLabel: '기사 요약 완료' },
     }
   } catch (err) {
@@ -2899,7 +2998,7 @@ export async function* runResearch(
     console.warn('[AI Timeline] competitor web search failed (continuing without)', { keyword, err })
   }
 
-  // Phase 2: 시장 트렌드 + 경쟁 분석 — 동일 입력만 필요하므로 Promise.allSettled 병렬 (쿨다운 1회 후 동시 LLM)
+  // Phase 2: 시장 트렌드 + 경쟁 분석 — 단일 LLM(시장·경쟁 컨텍스트). 실패 시 분리 호출로 폴백.
   const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
   const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
 
@@ -2926,71 +3025,38 @@ export async function* runResearch(
 
   await sleep(PIPELINE_LLM_COOLDOWN_MS)
 
-  const [trendSettled, compSettled] = await Promise.allSettled([
-    runTrendTask(
+  let trendResult: TrendTaskResult
+  let compResult: CompetitionTaskResult
+  try {
+    const bundleOut = await runMarketCompetitionBundleTask(
       geminiKey,
       groqKey,
       keyword,
       articlesForAnalysis,
       marketProvider,
       webContext,
-      articleRawContentTotalChars,
-      llmCtx
-    ),
-    runCompetitionTask(
-      geminiKey,
-      groqKey,
-      keyword,
-      articlesForAnalysis,
-      competitorProvider,
-      webContext,
       competitorWebContext || undefined,
       articleRawContentTotalChars,
       llmCtx
-    ),
-  ])
-
-  if (trendSettled.status === 'rejected') {
-    const msg = toUserFriendlyError(trendSettled.reason, '트렌드 분석 중 오류가 발생했습니다.')
-    log('trend_analysis', 'failed', { error: msg, err: trendSettled.reason })
+    )
+    trendResult = bundleOut.trendResult
+    compResult = bundleOut.compResult
+  } catch (err) {
+    const msg = toUserFriendlyError(err, '시장·경쟁 분석 중 오류가 발생했습니다.')
+    log('trend_analysis', 'failed', { error: msg, err })
+    log('competition_analysis', 'failed', { error: msg, err })
     await upsertAnalysisTask('trend_analysis', 'failed', { errorMessage: msg, provider: marketProvider, fallback_used: false })
-    if (compSettled.status === 'fulfilled') {
-      await upsertAnalysisTask('competition_analysis', 'failed', {
-        errorMessage: '트렌드 단계 실패로 경쟁 분석 결과는 사용하지 않습니다.',
-        provider: competitorProvider,
-        fallback_used: false,
-      })
-    } else if (compSettled.status === 'rejected') {
-      const cmsg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
-      await upsertAnalysisTask('competition_analysis', 'failed', {
-        errorMessage: cmsg,
-        provider: competitorProvider,
-        fallback_used: false,
-      })
-    }
+    await upsertAnalysisTask('competition_analysis', 'failed', {
+      errorMessage: msg,
+      provider: competitorProvider,
+      fallback_used: false,
+    })
     await updateProgress(1, 'failed')
     yield { type: 'task', task: 'trend_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: marketProvider, fallback_used: false }
+    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: competitorProvider, fallback_used: false }
     yield { type: 'error', message: msg, step: 'trend_analysis' }
     return
   }
-
-  if (compSettled.status === 'rejected') {
-    const msg = toUserFriendlyError(compSettled.reason, '경쟁 환경 분석 중 오류가 발생했습니다.')
-    log('competition_analysis', 'failed', { error: msg, err: compSettled.reason })
-    await upsertAnalysisTask('competition_analysis', 'failed', { errorMessage: msg, provider: competitorProvider, fallback_used: false })
-    await upsertAnalysisTask('trend_analysis', 'failed', {
-      errorMessage: '경쟁 분석 실패로 파이프라인을 중단합니다.',
-      provider: marketProvider,
-      fallback_used: false,
-    })
-    await updateProgress(2, 'failed')
-    yield { type: 'task', task: 'competition_analysis', status: 'failed', error: msg, fallbackMessage: msg, provider: competitorProvider, fallback_used: false }
-    yield { type: 'error', message: msg, step: 'competition_analysis' }
-    return
-  }
-
-  const trendResult = trendSettled.value
-  const compResult = compSettled.value
   trendData = trendResult.trendData
   competitionData = compResult.competitionData
 
@@ -3134,7 +3200,7 @@ export async function* runResearch(
   // Rate-limit guard: 인사이트 직후 Gemini RPM 완화
   await sleep(PIPELINE_STRATEGY_PRE_DELAY_MS)
 
-  // Step 4: Strategic Recommendation
+  // Step 4+5: 전략·실행 패키지 (단일 LLM) — 태스크·DB 키는 strategy_generation / execution_layer 유지
   const step4StartMs = Date.now()
   log('strategic_recommendation', 'running', {
     elapsedSinceStart: Date.now() - pipelineStartMs,
@@ -3143,72 +3209,23 @@ export async function* runResearch(
     primaryProvider,
   })
   const strategyProvider = resolveAIForStep(effectiveStepSettings, 'strategy')
+  const actionProviderResolved = resolveAIForStep(effectiveStepSettings, 'action')
   const hasStrategyProviderKey = strategyProvider === 'groq' ? !!groqKey : !!geminiKey
-  const effectiveStrategyProvider = hasStrategyProviderKey ? strategyProvider : (groqKey ? 'groq' : 'gemini')
+  const effectiveStrategyProvider = hasStrategyProviderKey ? strategyProvider : groqKey ? 'groq' : 'gemini'
   await upsertAnalysisTask('strategy_generation', 'running', { provider: effectiveStrategyProvider, fallback_used: false })
   yield { type: 'task', task: 'strategy_generation', status: 'running', provider: effectiveStrategyProvider, fallback_used: false }
+  await upsertAnalysisTask('execution_layer', 'running', { provider: actionProviderResolved, fallback_used: false })
+  yield { type: 'task', task: 'execution_layer', status: 'running', provider: actionProviderResolved, fallback_used: false }
+
+  const pmFactsForBundle: PmActionOpportunityFacts = {
+    positive_signals_count: trendData.positive_signals.length,
+    neutral_signals_count: trendData.neutral_signals.length,
+    competitor_count: competitionData.competitive_landscape.length,
+    strategy_opportunities_count: flattenOpportunitySignalsForPrompt(insightData.opportunity_signals).length,
+    strategy_risks_count: flattenRiskSignalsForPrompt(insightData.risk_signals).length,
+  }
+
   let strategyData: StrategicRecommendationResult
-  try {
-    const stratResult = await runStrategicRecommendationTask(
-      geminiKey,
-      groqKey,
-      keyword,
-      marketOverview,
-      competitionSummary,
-      insightData,
-      effectiveStrategyProvider,
-      llmCtx,
-      anthropicKey ?? null
-    )
-    strategyData = stratResult.data
-    const stratProvider = effectiveStrategyProvider === 'gemini' ? (stratResult.usedFallback ? 'groq' : 'gemini') : (stratResult.usedFallback ? 'gemini' : 'groq')
-    await upsertAnalysisTask('strategy_generation', 'completed', {
-      outputData: strategyData,
-      provider: stratProvider,
-      fallback_used: stratResult.usedFallback,
-      primary_provider_error: stratResult.usedFallback ? stratResult.primaryProviderError ?? null : null,
-    })
-    log('strategic_recommendation', 'completed', { durationMs: Date.now() - step4StartMs, usedFallback: stratResult.usedFallback })
-    yield { type: 'task', task: 'strategy_generation', status: 'completed', data: strategyData, provider: stratProvider, fallback_used: stratResult.usedFallback }
-  } catch (err) {
-    const msg = toUserFriendlyError(err, '전략 추천 생성 중 오류가 발생했습니다.')
-    const cause = err instanceof Error ? err.message : String(err)
-    const stackSnippet = err instanceof Error && err.stack ? err.stack.split('\n').slice(0, 4).join(' ') : undefined
-    console.error('[AI Pipeline] strategy_generation failed (continuing with fallback)', {
-      step: 'strategy_generation',
-      error: msg,
-      cause,
-      stack: stackSnippet,
-    })
-    log('strategy_generation', 'failed', {
-      error: msg,
-      durationMs: Date.now() - step4StartMs,
-      elapsedSinceStart: Date.now() - pipelineStartMs,
-      stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
-    })
-    const errorForUi = cause && cause !== msg ? `전략 추천: ${cause}` : msg
-    await upsertAnalysisTask('strategy_generation', 'failed', { errorMessage: errorForUi, provider: effectiveStrategyProvider, fallback_used: false })
-    strategyData = {
-      opportunities: flattenOpportunitySignalsForPrompt(insightData.opportunity_signals),
-      risks: flattenRiskSignalsForPrompt(insightData.risk_signals),
-      strategy_summary: marketOverview,
-      market_summary: undefined,
-      key_strategic_insights: undefined,
-    }
-    yield { type: 'task', task: 'strategy_generation', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: effectiveStrategyProvider, fallback_used: false }
-  }
-
-  if (checkAborted(signal)) {
-    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'strategy_generation' }
-    return
-  }
-
-  // Rate-limit guard: 전략 직후 실행 단계 LLM 호출 간격
-  await sleep(PIPELINE_LLM_COOLDOWN_MS)
-
-  // Step 5: PM Action Plan
-  const opportunitiesSummary = strategyData.opportunities.join('. ')
-  const risksSummary = strategyData.risks.join('. ')
   let executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
     feature_ideas: string[]
@@ -3239,71 +3256,68 @@ export async function* runResearch(
     porter_5_forces?: Porter5ForcesShape
     next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
   }
-  const actionProviderResolved = resolveAIForStep(effectiveStepSettings, 'action')
-  await upsertAnalysisTask('execution_layer', 'running', { provider: actionProviderResolved, fallback_used: false })
-  yield { type: 'task', task: 'execution_layer', status: 'running', provider: actionProviderResolved, fallback_used: false }
-  try {
-    const pmOpportunityFacts: PmActionOpportunityFacts = {
-      positive_signals_count: trendData.positive_signals.length,
-      neutral_signals_count: trendData.neutral_signals.length,
-      competitor_count: competitionData.competitive_landscape.length,
-      strategy_opportunities_count: strategyData.opportunities.length,
-      strategy_risks_count: strategyData.risks.length,
-    }
-    const pmResult = await runPMActionPlanTask(
-      geminiKey,
-      groqKey,
-      keyword,
-      strategyData.strategy_summary,
-      opportunitiesSummary,
-      risksSummary,
-      actionProviderResolved,
-      llmCtx,
-      pmOpportunityFacts
-    )
-    executionData = { ...pmResult.executionData }
 
-    const executionProvider = actionProviderResolved === 'gemini' ? (pmResult.usedFallback ? 'groq' : 'gemini') : (pmResult.usedFallback ? 'gemini' : 'groq')
-    await upsertAnalysisTask('execution_layer', 'completed', {
-      outputData: executionData,
-      provider: executionProvider,
-      fallback_used: pmResult.usedFallback,
-      primary_provider_error: pmResult.usedFallback ? pmResult.primaryProviderError ?? null : null,
-    })
-    log('pm_action_plan', 'completed', { usedFallback: pmResult.usedFallback })
-    await updateProgress(5, 'analyzing')
+  const pack = await runStrategyExecutionBundleTask(
+    geminiKey,
+    groqKey,
+    keyword,
+    marketOverview,
+    competitionSummary,
+    insightData,
+    effectiveStrategyProvider,
+    actionProviderResolved,
+    llmCtx,
+    anthropicKey ?? null,
+    pmFactsForBundle
+  )
+  strategyData = pack.strategy.data
+  executionData = { ...pack.execution.executionData }
 
-    yield {
-      type: 'task',
-      task: 'execution_layer',
-      status: 'completed',
-      data: executionData,
-      provider: executionProvider,
-      fallback_used: pmResult.usedFallback,
-      primaryProviderError: pmResult.usedFallback ? pmResult.primaryProviderError : undefined,
-    }
-  } catch (err) {
-    const msg = toUserFriendlyError(err, 'PM 액션 플랜 생성 중 오류가 발생했습니다.')
-    const cause = err instanceof Error ? err.message : String(err)
-    const stackSnippet = err instanceof Error && err.stack ? err.stack.split('\n').slice(0, 4).join(' ') : undefined
-    console.error('[AI Pipeline] execution_layer (PM action plan) failed (continuing with fallback)', {
-      step: 'execution_layer',
-      error: msg,
-      cause,
-      stack: stackSnippet,
-    })
-    log('pm_action_plan', 'failed', { error: msg, err })
-    const errorForUi = cause && cause !== msg ? `PM 액션 플랜: ${cause}` : msg
-    await upsertAnalysisTask('execution_layer', 'failed', { errorMessage: errorForUi, provider: actionProviderResolved, fallback_used: false })
-    executionData = {
-      product_actions: [],
-      feature_ideas: [],
-      go_to_market_steps: [],
-      pm_action_plan: [],
-      next_actions_pm: [],
-    }
-    yield { type: 'task', task: 'execution_layer', status: 'failed', error: errorForUi, fallbackMessage: errorForUi, provider: actionProviderResolved, fallback_used: false }
+  const stratProvider =
+    effectiveStrategyProvider === 'gemini' ? (pack.strategy.usedFallback ? 'groq' : 'gemini') : pack.strategy.usedFallback ? 'gemini' : 'groq'
+  const executionProvider =
+    actionProviderResolved === 'gemini' ? (pack.execution.usedFallback ? 'groq' : 'gemini') : pack.execution.usedFallback ? 'gemini' : 'groq'
+
+  await upsertAnalysisTask('strategy_generation', 'completed', {
+    outputData: strategyData,
+    provider: stratProvider,
+    fallback_used: pack.strategy.usedFallback,
+    primary_provider_error: pack.strategy.usedFallback ? pack.strategy.primaryProviderError ?? null : null,
+  })
+  await upsertAnalysisTask('execution_layer', 'completed', {
+    outputData: executionData,
+    provider: executionProvider,
+    fallback_used: pack.execution.usedFallback,
+    primary_provider_error: pack.execution.usedFallback ? pack.execution.primaryProviderError ?? null : null,
+  })
+  log('strategic_recommendation', 'completed', { durationMs: Date.now() - step4StartMs, usedFallback: pack.strategy.usedFallback })
+  log('pm_action_plan', 'completed', { usedFallback: pack.execution.usedFallback })
+  await updateProgress(5, 'analyzing')
+  yield {
+    type: 'task',
+    task: 'strategy_generation',
+    status: 'completed',
+    data: strategyData,
+    provider: stratProvider,
+    fallback_used: pack.strategy.usedFallback,
+    primaryProviderError: pack.strategy.usedFallback ? pack.strategy.primaryProviderError : undefined,
   }
+  yield {
+    type: 'task',
+    task: 'execution_layer',
+    status: 'completed',
+    data: executionData,
+    provider: executionProvider,
+    fallback_used: pack.execution.usedFallback,
+    primaryProviderError: pack.execution.usedFallback ? pack.execution.primaryProviderError : undefined,
+  }
+
+  if (checkAborted(signal)) {
+    yield { type: 'error', message: TIMEOUT_MESSAGE, step: 'strategy_generation' }
+    return
+  }
+
+  await sleep(PIPELINE_LLM_COOLDOWN_MS)
 
   const pos = trendData.positive_signals
   const neu = trendData.neutral_signals

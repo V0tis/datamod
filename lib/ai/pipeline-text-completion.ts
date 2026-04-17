@@ -126,10 +126,11 @@ export async function runPipelineGeminiGroqText(options: {
    * 전략 단계: Gemini 쿼터(429) 시 대기 없이 Groq로 넘기기 위해 Gemini 쪽 재시도 루프를 생략.
    * PM 액션(Groq 우선): Groq 재시도 없이 빠르게 Gemini 폴백.
    */
+  const strategyLikeStep = step === 'strategy_generation' || step === 'strategy_execution_bundle'
   const maxPrimaryRetries =
-    step === 'strategy_generation' && primaryIsGemini && groqKey?.trim()
+    strategyLikeStep && primaryIsGemini && groqKey?.trim()
       ? 0
-      : step === 'execution_layer' && !primaryIsGemini
+      : (step === 'execution_layer' || step === 'strategy_execution_bundle') && !primaryIsGemini
         ? 0
         : AI_MAX_RETRIES
   let usedFallback = false
@@ -165,16 +166,16 @@ export async function runPipelineGeminiGroqText(options: {
       if (!groqKey) throw new Error('Groq key not available')
       let userContent = prompt
       let groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
-      if (groqRes.payloadTooLarge && step === 'execution_layer') {
-        console.warn('[pipeline] Groq 413 on execution_layer: shrinking input, then retrying Groq')
+      if (groqRes.payloadTooLarge && (step === 'execution_layer' || step === 'strategy_execution_bundle')) {
+        console.warn(`[pipeline] Groq 413 on ${step}: shrinking input, then retrying Groq`)
         userContent = geminiKey
           ? await summarizeUserPromptForPmActionGemini(geminiKey, prompt)
           : compressTextForPmActionInput(prompt, 8000)
         groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
       }
-      if (groqRes.payloadTooLarge && step === 'execution_layer') {
+      if (groqRes.payloadTooLarge && (step === 'execution_layer' || step === 'strategy_execution_bundle')) {
         userContent = compressTextForPmActionInput(userContent, 6000)
-        console.warn('[pipeline] Groq still 413: hard-truncating user prompt to 6000 chars')
+        console.warn(`[pipeline] Groq still 413 on ${step}: hard-truncating user prompt to 6000 chars`)
         groqRes = await groqCompleteChat(groqKey, buildMessages(userContent), { maxTokens: groqMaxTokens })
       }
       /** 빈 응답·쿼터는 폴백 트리거로 던져야 Gemini로 이어짐 (제네릭 'Groq failed'는 isFallbackTriggerError 미통과) */
@@ -231,7 +232,8 @@ export async function runPipelineGeminiGroqText(options: {
             return { text, usedFallback: true, primaryProviderError }
           }
           if (!primaryIsGemini) {
-            const geminiFallbackModel = step === 'execution_layer' ? GEMINI_LONG_CONTEXT_MODEL : geminiModel
+            const geminiFallbackModel =
+              step === 'execution_layer' || step === 'strategy_execution_bundle' ? GEMINI_LONG_CONTEXT_MODEL : geminiModel
             const r = await generateTextWithUsage({
               apiKey: geminiKey,
               prompt,
@@ -254,7 +256,7 @@ export async function runPipelineGeminiGroqText(options: {
           }
         } catch {
           if (
-            step === 'strategy_generation' &&
+            strategyLikeStep &&
             primaryIsGemini &&
             typeof anthropicKey === 'string' &&
             anthropicKey.trim().length > 0
