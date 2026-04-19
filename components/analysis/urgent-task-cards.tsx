@@ -30,7 +30,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
       hint: highCount > 0 ? '우선 실행이 필요한 GTM·출시 과제입니다.' : '실행 대기 중인 전략 과제를 확인하세요.',
       icon: ClipboardList,
       cta: '실행 테이블로',
-      sectionId: 'action',
+      sectionId: 'action-section',
     },
     {
       key: 'risk',
@@ -39,7 +39,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
       hint: riskCount > 0 ? '의사결정·규제·경쟁 리스크에 대한 점검 항목입니다.' : '리스크 시그널이 충분히 수집되지 않았습니다.',
       icon: AlertTriangle,
       cta: '액션 플랜으로',
-      sectionId: 'action',
+      sectionId: 'action-section',
     },
     {
       key: 'monitor',
@@ -48,7 +48,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
       hint: monitorCount > 0 ? '시장·지표 추적이 필요한 체크포인트입니다.' : '모니터링 항목이 비어 있습니다.',
       icon: Radar,
       cta: '인사이트 섹션',
-      sectionId: 'insights',
+      sectionId: 'insight-strategy-section',
     },
   ] as const
 

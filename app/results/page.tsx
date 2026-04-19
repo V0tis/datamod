@@ -37,6 +37,7 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { SuggestedAnalyses } from '@/components/research/SuggestedAnalyses'
 import { ResultLDashboard } from '@/components/analysis/result-l-dashboard'
+import { AnalysisSidebar } from '@/components/analysis/AnalysisSidebar'
 import { getDepthEstimates, formatEstimatedTime, DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
@@ -1173,10 +1174,11 @@ function ResultsContent() {
   if (showTabs) {
     return (
       <div className="w-full min-h-screen bg-background px-3 py-1.5 rin-doc sm:px-4 sm:py-2 md:px-5 md:py-2.5 lg:px-6">
-        <div className="mx-auto flex min-w-0 w-full max-w-[min(100%,1920px)]">
-          <main className="min-h-[320px] min-w-0 flex-1">
+        <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-[min(100%,1920px)]">
+          <AnalysisSidebar className="sticky top-14 z-20 max-h-[calc(100vh-3.5rem)] self-start overflow-y-auto" />
+          <main className="min-h-[320px] min-w-0 flex-1 px-4 py-4 sm:px-6">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
-        <div className="mx-auto w-full max-w-[min(100%,1920px)] px-2 sm:px-3 md:px-4 lg:px-5">
+        <div className="mx-auto w-full max-w-[min(100%,1200px)]">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
         {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">

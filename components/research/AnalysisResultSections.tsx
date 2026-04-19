@@ -35,6 +35,8 @@ import { DEFAULT_KEY_METRICS_LOADING } from '@/lib/research-defaults'
 import { motionConfig } from '@/lib/motion-config'
 import { sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import type { SectionStatus } from '@/components/research/ProductStrategySection'
+import { breakdownDimensionTo10 } from '@/lib/score-display'
+import { DimensionScoreBar } from '@/components/analysis/dimension-score-bar'
 
 type TaskOutput = Record<string, unknown>
 type AnalysisTask = {
@@ -88,68 +90,61 @@ function EvidenceChip({ children }: { children: ReactNode }) {
   )
 }
 
-function MarketSizeEvidenceCard({
-  loading,
-  score,
-  reasoning,
-  newsCount,
-}: {
-  loading: boolean
-  score: number | null
-  reasoning?: string
-  newsCount: number
-}) {
-  const r = reasoning?.replace(/\s+/g, ' ').trim()
-  return (
-    <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">시장 규모</p>
-      <p className="text-xl font-semibold tabular-nums text-foreground">
-        {loading ? '산출 중...' : score != null ? `${score}/100` : '—'}
-      </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">시장 매력도</p>
-      <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">왜 이 점수인가?</p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {r ? (
-          <EvidenceChip>
-            {r.length > 110 ? `${r.slice(0, 110).trim()}…` : r}
-          </EvidenceChip>
-        ) : (
-          !loading && <EvidenceChip>통합 리서치·RSS·검색 시그널을 종합한 매력도입니다.</EvidenceChip>
-        )}
-        {newsCount > 0 ? <EvidenceChip>뉴스·언급 시그널 {newsCount}건 반영</EvidenceChip> : null}
-      </div>
-    </div>
-  )
-}
-
-function GrowthPotentialEvidenceCard({
+/** 시장 차원: breakdown의 시장 성장·트렌드 모멘텀을 /10 + 막대로 표시 (주 점수 /100와 분리) */
+function MarketGrowthDimensionCards({
   marketGrowth,
   trendMomentum,
   growthSignalCount,
   trendSummary,
+  loading,
 }: {
   marketGrowth: number | null
   trendMomentum: number | null
   growthSignalCount: number
   trendSummary?: string
+  loading?: boolean
 }) {
-  const mg = marketGrowth ?? null
-  const tm = trendMomentum ?? null
-  const display = mg ?? tm ?? null
+  const mg10 = breakdownDimensionTo10(marketGrowth ?? undefined)
+  const tm10 = breakdownDimensionTo10(trendMomentum ?? undefined)
+  if (!loading && mg10 == null && tm10 == null) return null
   return (
-    <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">성장 잠재력</p>
-      <p className="text-xl font-semibold tabular-nums text-foreground">{display != null ? `${display}/100` : '—'}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">성장·트렌드 잠재력</p>
-      <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">왜 이 점수인가?</p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {mg != null ? <EvidenceChip>시장 성장 지표 {mg}점</EvidenceChip> : null}
-        {tm != null ? <EvidenceChip>검색·트렌드 모멘텀 {tm}점</EvidenceChip> : null}
-        {growthSignalCount > 0 ? <EvidenceChip>성장 시그널 {growthSignalCount}개 추출</EvidenceChip> : null}
-        {trendSummary ? (
-          <EvidenceChip>{trendSummary.length > 100 ? `${trendSummary.slice(0, 100)}…` : trendSummary}</EvidenceChip>
-        ) : null}
-      </div>
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      {(loading || mg10 != null) && (
+        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">시장 성장성</p>
+          {loading && mg10 == null ? (
+            <p className="mt-2 text-xl font-semibold tabular-nums text-muted-foreground">산출 중...</p>
+          ) : mg10 != null ? (
+            <DimensionScoreBar value10={mg10} className="mt-2" />
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">—</p>
+          )}
+          <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">근거</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {marketGrowth != null ? <EvidenceChip>원시 지표 반영</EvidenceChip> : null}
+            {growthSignalCount > 0 ? <EvidenceChip>성장 시그널 {growthSignalCount}개</EvidenceChip> : null}
+          </div>
+        </div>
+      )}
+      {(loading || tm10 != null) && (
+        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">검색·트렌드 모멘텀</p>
+          {loading && tm10 == null ? (
+            <p className="mt-2 text-xl font-semibold tabular-nums text-muted-foreground">산출 중...</p>
+          ) : tm10 != null ? (
+            <DimensionScoreBar value10={tm10} className="mt-2" />
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">—</p>
+          )}
+          <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">근거</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {trendMomentum != null ? <EvidenceChip>트렌드 데이터 반영</EvidenceChip> : null}
+            {trendSummary ? (
+              <EvidenceChip>{trendSummary.length > 100 ? `${trendSummary.slice(0, 100)}…` : trendSummary}</EvidenceChip>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -390,7 +385,10 @@ export function AnalysisResultSections({
     }
     lines.push('## 시장 기회')
     if (opportunityScore != null) lines.push(`- 시장 규모/기회 점수: ${opportunityScore}/100`)
-    if (marketGrowth != null) lines.push(`- Growth: ${marketGrowth}/100`)
+    if (marketGrowth != null) {
+      const g10 = breakdownDimensionTo10(marketGrowth)
+      if (g10 != null) lines.push(`- 시장 성장(차원): ${g10}/10`)
+    }
     keyTrends.forEach((t) => lines.push(`- ${t}`))
     lines.push('')
     lines.push('## 핵심 인사이트')
@@ -402,7 +400,6 @@ export function AnalysisResultSections({
     lines.push('')
     lines.push('## 전략 추천')
     strategyBullets.forEach((b) => lines.push(`- ${b}`))
-    if (opportunityReason) lines.push('', `**이 기회가 존재하는 이유:** ${opportunityReason}`)
     lines.push('')
     lines.push('## 실행 아이디어')
     allActionItems.forEach((a) => lines.push(`- ${a}`))
@@ -444,28 +441,15 @@ export function AnalysisResultSections({
             keyword={keyword}
             radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
           />
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 lg:grid-cols-3">
-            {(opportunityScore != null || loading) && (
-              <MarketSizeEvidenceCard
-                loading={loading && opportunityScore == null}
-                score={opportunityScore}
-                reasoning={opportunityScoreSummaryLine}
-                newsCount={
-                  Array.isArray(signalOutput?.news_activity) ? (signalOutput.news_activity as unknown[]).length : 0
-                }
-              />
-            )}
-            {(marketGrowth != null || trendMomentum != null) && (
-              <GrowthPotentialEvidenceCard
-                marketGrowth={marketGrowth}
-                trendMomentum={trendMomentum}
-                growthSignalCount={growthSignals.length}
-                trendSummary={
-                  typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined
-                }
-              />
-            )}
-          </div>
+          <MarketGrowthDimensionCards
+            marketGrowth={marketGrowth}
+            trendMomentum={trendMomentum}
+            growthSignalCount={growthSignals.length}
+            trendSummary={
+              typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined
+            }
+            loading={loading}
+          />
           <AnalysisCharts
             opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
             chartInsights={km.chart_insights}
@@ -496,6 +480,7 @@ export function AnalysisResultSections({
               <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
               <CompetitorBubbleQuadrant
                 competitors={competitiveLandscape}
+                keyword={keyword}
                 pmCaption={
                   layout === 'pm-analytics' && competitiveLandscape.length > 0
                     ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
@@ -737,26 +722,13 @@ export function AnalysisResultSections({
                   : null
               }
             />
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(opportunityScore != null || loading) && (
-                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">시장 규모</p>
-                  <p className="text-xl font-semibold text-foreground tabular-nums">
-                    {loading && opportunityScore == null ? '산출 중...' : opportunityScore != null ? `${opportunityScore}/100` : '—'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">시장 매력도</p>
-                </div>
-              )}
-              {(marketGrowth != null || trendMomentum != null) && (
-                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">성장 잠재력</p>
-                  <p className="text-xl font-semibold text-foreground tabular-nums">
-                    {(marketGrowth ?? trendMomentum ?? '—')}/100
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">성장·트렌드 잠재력</p>
-                </div>
-              )}
-            </div>
+            <MarketGrowthDimensionCards
+              marketGrowth={marketGrowth}
+              trendMomentum={trendMomentum}
+              growthSignalCount={growthSignals.length}
+              trendSummary={typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined}
+              loading={loading}
+            />
             <AnalysisCharts
               opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
               chartInsights={km.chart_insights}
@@ -872,13 +844,14 @@ export function AnalysisResultSections({
                   loading={loading}
                 />
                 <CompetitorBubbleQuadrant
-                competitors={competitiveLandscape}
-                pmCaption={
-                  layout === 'pm-analytics' && competitiveLandscape.length > 0
-                    ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
-                    : null
-                }
-              />
+                  competitors={competitiveLandscape}
+                  keyword={keyword}
+                  pmCaption={
+                    layout === 'pm-analytics' && competitiveLandscape.length > 0
+                      ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                      : null
+                  }
+                />
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
                   <div className="flex flex-wrap gap-2">

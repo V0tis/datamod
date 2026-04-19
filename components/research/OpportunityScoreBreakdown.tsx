@@ -4,6 +4,7 @@ import { Target, Info, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
+import { chartFontFamily, formatChartInt } from '@/lib/chartTheme'
 
 const LABELS: Record<string, string> = {
   trend_momentum: '검색 수요',
@@ -17,10 +18,6 @@ const LABELS: Record<string, string> = {
   market_timing: '시장 타이밍',
 }
 
-/** @deprecated Use LABELS directly – now always Korean */
-const LABELS_KO = LABELS
-
-/** Order: Search Demand → Market Growth → Competition → Funding → Risk */
 const ORDER: readonly string[] = [
   'trend_momentum',
   'market_growth',
@@ -32,11 +29,8 @@ const ORDER: readonly string[] = [
 
 export interface OpportunityScoreBreakdownProps {
   score: number | null
-  /** While analysis is running, show "산출 중..." instead of numeric score */
   loading?: boolean
-  /** 이전에 확정된 점수 (부분 실패 시 표시 유지) */
   stableScore?: number | null
-  /** 단계 실패 등으로 점수가 신뢰 불가일 때 배지 */
   analysisFailed?: boolean
   breakdown?: {
     market_growth?: number
@@ -49,29 +43,24 @@ export interface OpportunityScoreBreakdownProps {
     product_differentiation?: number
     market_timing?: number
   } | null
-  /** Show Korean labels instead of English */
   useKoreanLabels?: boolean
-  /** Compact layout (e.g. inside cards) */
   compact?: boolean
   className?: string
 }
 
 const BASE = 50
 
-/**
- * Opportunity Score Breakdown – Waterfall visualization.
- * Shows how the final score is derived: Base 50 → each factor → Final Score.
- */
 export function OpportunityScoreBreakdown({
   score,
   loading = false,
   stableScore = null,
   analysisFailed = false,
   breakdown,
-  useKoreanLabels = false,
+  useKoreanLabels: _useKoreanLabels = false,
   compact = false,
   className,
 }: OpportunityScoreBreakdownProps) {
+  void _useKoreanLabels
   const effectiveBreakdown = breakdown && Object.keys(breakdown).length > 0 ? breakdown : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
   const resolvedRaw =
     score != null && Number.isFinite(score)
@@ -89,7 +78,9 @@ export function OpportunityScoreBreakdown({
           k === 'competition_density' || k === 'risk_factors'
             ? raw
             : k === 'competition_pressure'
-              ? (raw === 0 || Number.isNaN(raw) ? 0 : BASE - raw)
+              ? raw === 0 || Number.isNaN(raw)
+                ? 0
+                : BASE - raw
               : raw
         return {
           key: k,
@@ -99,11 +90,9 @@ export function OpportunityScoreBreakdown({
       })
     : []
 
-  /** Max absolute delta for bar scaling (excluding base) */
   const maxAbs = Math.max(15, ...items.map((i) => Math.abs(i.value)), 1)
   const scaleMax = maxAbs * 1.2
 
-  /** Explanation lines for low score: use breakdown to describe why score is low */
   const explanationLines: string[] = []
   if (!loading && effectiveBreakdown) {
     const compD = Number(effectiveBreakdown.competition_density)
@@ -130,86 +119,98 @@ export function OpportunityScoreBreakdown({
         compact ? 'p-4' : 'p-5 sm:p-6',
         className
       )}
+      style={{ fontFamily: chartFontFamily }}
       aria-label="기회 점수 분해"
     >
       <div className="flex items-center gap-2 mb-4">
         <Target className="h-5 w-5 text-primary shrink-0" />
-        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          기회 점수 분해
-        </h3>
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">기회 점수 분해 · 워터폴</h3>
       </div>
       <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
-        기본 50점에서 각 요인을 순차적으로 반영해 최종 점수가 산출됩니다.
+        기본 50점에서 각 요인의 가감(Δ)을 순차 반영해 최종 점수가 산출됩니다. 파랑은 기준·합계, 녹색은 가점, 빨강은 감점입니다.
       </p>
 
-      {/* Waterfall: Base → Factors → Final */}
-      <div className="space-y-3">
-        {/* 1. Base score */}
-        <div className="flex items-center gap-3 sm:gap-4">
+      <div className="space-y-0">
+        <div className="flex items-center gap-3 sm:gap-4 pb-1">
           <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{baseLabel}</span>
-          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-blue-100/90 flex items-center justify-center min-w-0 dark:bg-blue-950/50">
-            <span className="text-sm font-bold tabular-nums text-blue-900 dark:text-blue-100">{BASE}</span>
+          <div className="flex-1 h-9 rounded-lg overflow-hidden flex items-center justify-center min-w-0 border border-[#3B5BDB]/40 bg-[#4F6EF7] shadow-sm">
+            <span className="text-sm font-bold tabular-nums text-white">{formatChartInt(BASE)}</span>
           </div>
-          <span className="text-sm font-bold tabular-nums text-muted-foreground w-10 text-right shrink-0">{BASE}</span>
+          <span className="text-sm font-bold tabular-nums text-muted-foreground w-12 text-right shrink-0">
+            {formatChartInt(BASE)}
+          </span>
         </div>
 
-        {/* 2. Each factor: waterfall delta bar (green = positive, red = negative) */}
-        {items.map(({ key, label, value }) => {
+        <div className="flex justify-center py-0.5" aria-hidden>
+          <svg width="2" height="14" className="text-slate-300 dark:text-zinc-600">
+            <line x1="1" y1="0" x2="1" y2="14" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
+          </svg>
+        </div>
+
+        {items.map(({ key, label, value }, idx) => {
           const isPositive = value >= 0
-          const displayValue = value > 0 ? `+${value}` : String(value)
+          const displayValue = value > 0 ? `+${formatChartInt(value)}` : formatChartInt(value)
           const barWidthPct = Math.min(50, (Math.abs(value) / scaleMax) * 50)
 
           return (
-            <div key={key} className="flex items-center gap-3 sm:gap-4">
-              <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{label}</span>
-              <div className="flex-1 h-8 rounded-lg overflow-hidden bg-muted/30 flex items-center relative min-w-0">
-                {/* Center line (zero) */}
-                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border z-0" aria-hidden />
-                {/* Delta bar: positive → right from center, negative → left from center */}
-                <div
-                  className={cn(
-                    'absolute top-0 bottom-0 h-full rounded transition-all duration-500 flex items-center justify-center z-10',
-                    isPositive ? 'bg-blue-600/90 dark:bg-blue-500/85' : 'bg-red-500/90 dark:bg-red-500/85'
-                  )}
-                  style={{
-                    width: `${barWidthPct}%`,
-                    ...(isPositive ? { left: '50%' } : { right: '50%', left: 'auto' }),
-                  }}
-                >
-                  <span className="text-xs font-bold tabular-nums text-white drop-shadow-sm whitespace-nowrap">
-                    {displayValue}
-                  </span>
+            <div key={key}>
+              <div className="flex items-center gap-3 sm:gap-4 py-1">
+                <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{label}</span>
+                <div className="flex-1 h-9 rounded-lg overflow-hidden bg-muted/25 flex items-center relative min-w-0 border border-border/40">
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border z-0" aria-hidden />
+                  <div
+                    className={cn(
+                      'absolute top-0 bottom-0 h-full rounded-md flex items-center justify-center z-10 border border-white/20',
+                      isPositive ? 'bg-[#10B981]' : 'bg-[#EF4444]'
+                    )}
+                    style={{
+                      width: `${barWidthPct}%`,
+                      ...(isPositive ? { left: '50%' } : { right: '50%', left: 'auto' }),
+                    }}
+                  >
+                    <span className="text-xs font-bold tabular-nums text-white drop-shadow-sm px-1">{displayValue}</span>
+                  </div>
                 </div>
+                <span
+                  className={cn(
+                    'text-sm font-bold tabular-nums w-12 text-right shrink-0',
+                    isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                  )}
+                >
+                  {displayValue}
+                </span>
               </div>
-              <span
-                className={cn(
-                  'text-sm font-bold tabular-nums w-10 text-right shrink-0',
-                  isPositive ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'
-                )}
-              >
-                {displayValue}
-              </span>
+              <div className="flex justify-center py-0.5" aria-hidden>
+                <svg width="2" height={idx === items.length - 1 ? 14 : 12} className="text-slate-300 dark:text-zinc-600">
+                  <line x1="1" y1="0" x2="1" y2={idx === items.length - 1 ? 14 : 12} stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
+                </svg>
+              </div>
             </div>
           )
         })}
 
-        {/* 3. Final score */}
-        <div className="pt-2 mt-4 border-t border-border/80">
+        <div className="pt-3 mt-1 border-t border-border/80">
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <span className="text-sm font-semibold text-foreground w-28 sm:w-32 shrink-0">{finalLabel}</span>
-            <div className="flex-1 h-10 rounded-lg bg-primary/15 dark:bg-primary/20 border-2 border-primary/40 flex items-center justify-center gap-2 min-w-0 px-2">
+            <div
+              className={cn(
+                'flex-1 min-h-[44px] rounded-xl flex items-center justify-center gap-2 min-w-0 px-2',
+                'border-[3px] border-[#3B5BDB] bg-[#4F6EF7] shadow-md text-white'
+              )}
+            >
               {loading && normScore == null ? (
                 <span className="flex items-center gap-2 w-full max-w-[200px]">
-                  <span className="h-6 flex-1 rounded-md bg-primary/20 animate-pulse" aria-hidden />
+                  <span className="h-7 flex-1 rounded-md bg-white/25 animate-pulse" aria-hidden />
                 </span>
               ) : normScore != null ? (
                 <>
-                  <span className={cn('text-xl font-bold tabular-nums text-primary', analysisFailed && 'opacity-90')}>
-                    {normScore} / 100
+                  <span className={cn('text-xl font-bold tabular-nums', analysisFailed && 'opacity-90')}>
+                    {formatChartInt(normScore)} / 100
                   </span>
+                  <span className="text-xs font-semibold text-white/90">누적 반영 후</span>
                   {analysisFailed ? (
                     <span
-                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200 shrink-0"
+                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-200/50 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100 shrink-0"
                       title="일부 분석 단계가 실패했습니다. 마지막으로 유효한 점수를 표시합니다."
                     >
                       <AlertTriangle className="h-3 w-3" aria-hidden />
@@ -218,11 +219,13 @@ export function OpportunityScoreBreakdown({
                   ) : null}
                 </>
               ) : (
-                <span className="text-xl font-bold tabular-nums text-muted-foreground/70">0 / 100</span>
+                <span className="text-xl font-bold tabular-nums text-white/80">0 / 100</span>
               )}
             </div>
             {normScore != null && !loading && (
-              <span className="text-lg font-bold tabular-nums text-primary w-14 text-right shrink-0">{normScore}</span>
+              <span className="text-lg font-bold tabular-nums w-14 text-right shrink-0 text-[#4F6EF7] dark:text-[#7B93F8]">
+                {formatChartInt(normScore)}
+              </span>
             )}
           </div>
         </div>

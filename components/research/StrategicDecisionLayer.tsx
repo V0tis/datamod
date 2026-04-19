@@ -7,18 +7,18 @@ import { SectionContentSkeleton } from './SectionContentSkeleton'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { MarkdownBody } from '@/components/ui/markdown-body'
 
-function competitionToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
+function competitionToLabel(v: 'low' | 'medium' | 'high' | undefined): string | null {
   if (v === 'low') return '낮음'
   if (v === 'medium') return '보통'
   if (v === 'high') return '높음'
-  return '데이터 없음'
+  return null
 }
 
-function pmfToLabel(v: 'low' | 'medium' | 'high' | undefined): string {
+function pmfToLabel(v: 'low' | 'medium' | 'high' | undefined): string | null {
   if (v === 'low') return '낮음'
   if (v === 'medium') return '보통'
   if (v === 'high') return '높음'
-  return '데이터 없음'
+  return null
 }
 
 export interface StrategicDecisionLayerProps {
@@ -71,24 +71,17 @@ export function StrategicDecisionLayer({
   const entryStrategy = sanitizeForKoreanDisplay(sdl?.entry_strategy) || null
   const entryExplanation = sanitizeForKoreanDisplay(sdl?.entry_explanation) || null
 
-  const hasContent =
-    opportunityScore != null ||
-    competitionIntensity ||
-    productMarketFit ||
-    entryStrategy ||
-    marketOpportunityExplanation ||
-    competitionExplanation ||
-    productMarketFitExplanation ||
-    entryExplanation
-
-  if (!hasContent && !loading) return null
-
   const cards = [
     {
       id: 'market-opportunity',
       icon: TrendingUp,
       label: '시장 기회도',
-      value: loading && opportunityScore == null ? '산출 중...' : (opportunityScore != null ? `${opportunityScore}/100` : '데이터 없음'),
+      value:
+        loading && opportunityScore == null
+          ? '산출 중...'
+          : opportunityScore != null
+            ? `${Math.round(opportunityScore).toLocaleString('ko-KR')}/100`
+            : null,
       explanation: marketOpportunityExplanation,
       className: 'border-emerald-500/30 bg-emerald-500/5',
     },
@@ -117,11 +110,27 @@ export function StrategicDecisionLayer({
       id: 'entry',
       icon: Clock,
       label: '진입 전략',
-      value: entryStrategy ?? '데이터 없음',
+      value: entryStrategy?.trim() || null,
       explanation: entryExplanation,
       className: 'border-blue-500/30 bg-blue-500/5',
     },
-  ]
+  ].filter((c) => {
+    if (loading) return true
+    const v = c.value
+    if (v == null || String(v).trim() === '') return false
+    return true
+  })
+
+  const hasContent =
+    cards.length > 0 ||
+    marketOpportunityExplanation ||
+    competitionExplanation ||
+    productMarketFitExplanation ||
+    entryExplanation
+
+  if (!hasContent && !loading) return null
+
+  if (embedded && flatTable && !loading && cards.length === 0) return null
 
   if (embedded) {
     return loading && !hasContent ? (

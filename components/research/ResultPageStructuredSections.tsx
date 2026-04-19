@@ -43,6 +43,8 @@ export interface ResultPageStructuredSectionsProps {
   keyword?: string
   /** 부분 실패 시에도 마지막 기회 점수·근거 UI 유지 */
   analysisFailed?: boolean
+  /** `execution_layer`만 재실행 — 핵심 인사이트 하단 우선순위·예상 성과 누락 시 */
+  onRetryExecutionLayer?: () => void
 }
 
 const SECTION_IDS = {
@@ -113,6 +115,7 @@ export function ResultPageStructuredSections({
   loading = false,
   keyword = '',
   livePipelineStepId = null,
+  onRetryExecutionLayer,
 }: ResultPageStructuredSectionsProps) {
   const effectiveResult = displayResult ?? result
   const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
@@ -230,6 +233,7 @@ export function ResultPageStructuredSections({
           consensusData={consensusData}
           loading={loading}
           keyword={keyword}
+          onRetryExecutionLayer={onRetryExecutionLayer}
         />
       </ResultPageSection>
       </motion.div>

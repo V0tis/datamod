@@ -10,6 +10,7 @@ import {
   type Porter5ForcesShape,
   type PorterFiveScores,
 } from '@/lib/strategy-framework-mapper'
+import { porterFiveScoreTo10 } from '@/lib/score-display'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import {
   Tooltip as InfoTooltip,
@@ -24,7 +25,7 @@ type JtbdShape = NonNullable<ResearchResponse['key_metrics']>['jtbd']
 const PORTER_BAR_FILL = 'hsl(199 89% 48%)'
 
 const PORTER_CHART_INFO_TOOLTIP =
-  'Porter 5 Forces 가로 막대입니다. 점수는 AI 추정(1~5)과 기회 점수 breakdown, 경쟁 강도, 전략 평가를 합성합니다. 높을수록 해당 힘이 강합니다. 막대 옆 문구는 AI·시장 신호에서 도출한 핵심 근거(또는 신호 부족 시 추정 설명)입니다.'
+  'Porter 5 Forces 가로 막대입니다. 내부 원천은 1~5 척도를 쓰며, 화면에는 /10으로 환산해 표시합니다. 높을수록 해당 힘이 강합니다.'
 
 function clampPorterInt(v: number): number {
   const n = Math.round(Number.isFinite(v) ? v : 0)
@@ -90,7 +91,8 @@ function PorterHorizontalMultiBar({
   return (
     <div className="mt-3 w-full min-w-0 space-y-3.5" role="img" aria-label="Porter 5 Forces 가로 막대">
       {rows.map((row) => {
-        const pct = Math.min(100, Math.max(0, (row.v / 5) * 100))
+        const v10 = porterFiveScoreTo10(row.v)
+        const pct = Math.min(100, Math.max(0, (v10 / 10) * 100))
         const reason = porterReasonLine(porter, row.key, row.v)
         return (
           <div
@@ -107,8 +109,8 @@ function PorterHorizontalMultiBar({
                   style={{ width: `${pct}%`, backgroundColor: PORTER_BAR_FILL }}
                 />
               </div>
-              <span className="w-9 shrink-0 tabular-nums text-right text-[11px] font-medium text-foreground">
-                {row.v}/5
+              <span className="w-10 shrink-0 tabular-nums text-right text-[11px] font-medium text-foreground">
+                {v10}/10
               </span>
             </div>
             <p className="min-w-0 flex-[1.2] text-xs leading-relaxed text-slate-600 dark:text-zinc-400 sm:pt-0.5">
@@ -122,7 +124,7 @@ function PorterHorizontalMultiBar({
 }
 
 function BulletList({ items, bulletClass }: { items: string[]; bulletClass: string }) {
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">항목이 없습니다.</p>
+  if (items.length === 0) return null
   return (
     <ul className="list-none space-y-1.5 pl-0 text-sm">
       {items.map((s, i) => (
@@ -192,6 +194,9 @@ export function StrategyFrameworkPanel({
     jtbdTriad.functional.length + jtbdTriad.social.length + jtbdTriad.emotional.length > 0
   const hasPorterChart = scores != null && Object.values(scores).every((n) => typeof n === 'number')
 
+  const hasFullFrameworkContent = hasSwot || hasJtbd || hasPorterChart
+  if (!summaryRadarOnly && !hasFullFrameworkContent) return null
+
   if (summaryRadarOnly) {
     return (
       <div
@@ -241,11 +246,9 @@ export function StrategyFrameworkPanel({
   return (
     <div key={instanceKey} className={cn('rounded-xl border border-slate-100 bg-card dark:border-zinc-800', className)}>
       <div className="space-y-10 p-4 sm:p-5">
-        <section id="report-framework-swot" className="scroll-mt-24">
-          <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">SWOT</h4>
-          {!hasSwot ? (
-            <p className="text-sm text-muted-foreground">SWOT 데이터가 없습니다.</p>
-          ) : (
+        {hasSwot ? (
+          <section id="report-framework-swot" className="scroll-mt-24">
+            <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">SWOT</h4>
             <div className="space-y-3 text-sm">
               {swot!.strengths?.length ? (
                 <div>
@@ -272,8 +275,8 @@ export function StrategyFrameworkPanel({
                 </div>
               ) : null}
             </div>
-          )}
-        </section>
+          </section>
+        ) : null}
 
         <section id="report-framework-porter" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
           <TooltipProvider delayDuration={200}>
@@ -305,11 +308,9 @@ export function StrategyFrameworkPanel({
           )}
         </section>
 
-        <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
-          <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">JTBD</h4>
-          {!hasJtbd ? (
-            <p className="text-sm text-muted-foreground">JTBD 데이터가 없습니다.</p>
-          ) : (
+        {hasJtbd ? (
+          <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
+            <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">JTBD</h4>
             <div className="grid gap-8 sm:grid-cols-3 sm:gap-6">
               <div className="border-b border-border/50 pb-6 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
                 <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">기능적 (Functional)</p>
@@ -327,8 +328,8 @@ export function StrategyFrameworkPanel({
                 <BulletList items={jtbdTriad.emotional} bulletClass="text-rose-500" />
               </div>
             </div>
-          )}
-        </section>
+          </section>
+        ) : null}
       </div>
     </div>
   )

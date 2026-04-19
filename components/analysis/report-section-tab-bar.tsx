@@ -1,135 +1,139 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  REPORT_SECTION_IDS,
-  REPORT_STICKY_TAB_IDS,
-  REPORT_STICKY_TAB_LABELS,
-  type ReportSectionId,
-  type ReportStickyTabId,
+  REPORT_SCROLL_SPY_TAB_ORDER,
+  REPORT_SCROLL_SPY_TAB_LABELS,
+  type ReportScrollSpyTabId,
 } from '@/lib/report-section-ids'
-import { useResultsMainScrolledPast } from '@/hooks/use-results-main-scroll'
 
 function scrollToSection(id: string) {
   const el = document.getElementById(id)
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function sectionToStickyTab(id: ReportSectionId): ReportStickyTabId | null {
-  if (id === 'summary') return null
-  if (id === 'action') return 'strategic'
-  return REPORT_STICKY_TAB_IDS.includes(id as ReportStickyTabId) ? (id as ReportStickyTabId) : null
+const ACTIVE = 'border-b-2 border-[#4F6EF7] text-[#4F6EF7] font-semibold dark:border-[#6B8AFF] dark:text-[#6B8AFF]'
+const INACTIVE =
+  'border-b-2 border-transparent text-[#6B7280] font-normal dark:text-zinc-400 dark:border-transparent'
+
+type ReportSectionTabBarProps = {
+  className?: string
+  /** 뷰포트 상단 기준 sticky top (px) — 고정 헤더 + 파이프라인 높이 합 */
+  stickyTopPx: number
+  /** 앵커 스크롤 시 본문이 가리지 않도록 부모에서 scroll-margin 계산용 */
+  onTabBarHeight?: (heightPx: number) => void
 }
 
 /**
- * 분석 리포트 전용 상단 탭(시장·경쟁·인사이트·전략). 글로벌 헤더 숨김 시 top-0.
- * IntersectionObserver + 가시 비율로 활성 탭 동기화.
+ * 단일 스크롤 페이지용 앵커 네비: IntersectionObserver + 스크롤로 활성 탭 1개만 강조,
+ * 클릭 시 해당 섹션으로 smooth-scroll.
  */
-export function ReportSectionTabBar({ className }: { className?: string }) {
-  const hideGlobalHeader = useResultsMainScrolledPast(28)
-  const [activeStickyId, setActiveStickyId] = useState<ReportStickyTabId | null>(null)
+export function ReportSectionTabBar({ className, stickyTopPx, onTabBarHeight }: ReportSectionTabBarProps) {
+  const navRef = useRef<HTMLElement>(null)
+  const [activeId, setActiveId] = useState<ReportScrollSpyTabId>(REPORT_SCROLL_SPY_TAB_ORDER[0])
 
-  const pickActiveFromObserver = useCallback(() => {
-    const root = document.querySelector('main')
-    if (!root) return
+  useLayoutEffect(() => {
+    const el = navRef.current
+    if (!el || !onTabBarHeight) return
+    const ro = new ResizeObserver(() => {
+      onTabBarHeight(Math.round(el.getBoundingClientRect().height))
+    })
+    ro.observe(el)
+    onTabBarHeight(Math.round(el.getBoundingClientRect().height))
+    return () => ro.disconnect()
+  }, [onTabBarHeight])
 
-    const ratios = new Map<string, number>()
-    for (const id of REPORT_SECTION_IDS) {
-      const el = document.getElementById(id)
-      if (!el) continue
-      const r = el.getBoundingClientRect()
-      const rootRect = root.getBoundingClientRect()
-      const interTop = Math.max(r.top, rootRect.top)
-      const interBottom = Math.min(r.bottom, rootRect.bottom)
-      const h = Math.max(0, interBottom - interTop)
-      const visible = h / Math.min(r.height, rootRect.height || 1)
-      ratios.set(id, visible)
+  const computeActive = useCallback(() => {
+    const nav = navRef.current
+    if (!nav) return
+    const tabH = nav.getBoundingClientRect().height
+    const line = stickyTopPx + tabH + 2
+
+    let next: ReportScrollSpyTabId = REPORT_SCROLL_SPY_TAB_ORDER[0]
+    for (const id of REPORT_SCROLL_SPY_TAB_ORDER) {
+      const section = document.getElementById(id)
+      if (!section) continue
+      const top = section.getBoundingClientRect().top
+      if (top <= line) next = id
     }
-    let best: ReportSectionId = REPORT_SECTION_IDS[0]
-    let bestScore = -1
-    for (const id of REPORT_SECTION_IDS) {
-      const sc = ratios.get(id) ?? 0
-      if (sc > bestScore) {
-        bestScore = sc
-        best = id
-      }
-    }
-    if (bestScore <= 0.02) return
-    setActiveStickyId(sectionToStickyTab(best))
-  }, [])
+    setActiveId((prev) => (prev === next ? prev : next))
+  }, [stickyTopPx])
 
   useEffect(() => {
-    const root = document.querySelector('main')
-    if (!root) return
+    const main = document.querySelector('main')
+    if (!main) return
 
     const obs = new IntersectionObserver(
       () => {
-        pickActiveFromObserver()
+        computeActive()
       },
       {
-        root,
-        rootMargin: '-18% 0px -55% 0px',
-        threshold: [0, 0.05, 0.15, 0.35, 0.55, 0.75, 1],
+        root: main,
+        rootMargin: '0px',
+        threshold: [0, 0.02, 0.06, 0.12, 0.2, 0.35, 0.5, 0.65, 0.8, 1],
       }
     )
 
-    for (const id of REPORT_SECTION_IDS) {
+    for (const id of REPORT_SCROLL_SPY_TAB_ORDER) {
       const el = document.getElementById(id)
       if (el) obs.observe(el)
     }
 
-    pickActiveFromObserver()
-    root.addEventListener('scroll', pickActiveFromObserver, { passive: true })
-    window.addEventListener('resize', pickActiveFromObserver, { passive: true })
+    computeActive()
+    main.addEventListener('scroll', computeActive, { passive: true })
+    window.addEventListener('resize', computeActive, { passive: true })
 
     return () => {
       obs.disconnect()
-      root.removeEventListener('scroll', pickActiveFromObserver)
-      window.removeEventListener('resize', pickActiveFromObserver)
+      main.removeEventListener('scroll', computeActive)
+      window.removeEventListener('resize', computeActive)
     }
-  }, [pickActiveFromObserver])
+  }, [computeActive])
 
   return (
-    <>
-      <nav
-        className={cn(
-          'fixed left-0 right-0 z-[60] border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/90',
-          'md:px-4 lg:px-6',
-          /* 글로벌 헤더(3.5rem) 아래 고정 — 상단 보조 버튼 제거 후에도 동일 오프셋 유지 */
-          hideGlobalHeader ? 'top-0' : 'top-14',
-          'transition-[top] duration-200 ease-out',
-          className
-        )}
-        aria-label="분석 리포트 섹션"
-      >
-        <div className="mx-auto flex w-full max-w-[min(100%,1920px)] justify-center sm:justify-start">
-          <div className="flex max-w-full gap-1 overflow-x-auto pb-0.5 sm:gap-1.5">
-            {REPORT_STICKY_TAB_IDS.map((id) => {
-              const active = activeStickyId === id
+    <nav
+      ref={navRef}
+      className={cn(
+        'sticky z-40 border-b border-zinc-200/80 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/90',
+        'dark:border-zinc-800',
+        className
+      )}
+      style={{ top: stickyTopPx }}
+      aria-label="리포트 섹션 앵커"
+    >
+      <div className="relative md:static">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-8 bg-gradient-to-r from-background via-background/90 to-transparent md:hidden"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-background via-background/90 to-transparent md:hidden"
+          aria-hidden
+        />
+        <div className="overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="mx-auto flex w-full min-w-min max-w-[min(100%,1920px)] gap-0 px-1 sm:px-2">
+            {REPORT_SCROLL_SPY_TAB_ORDER.map((id) => {
+              const isActive = activeId === id
               return (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => {
-                    scrollToSection(id)
-                    setActiveStickyId(id)
-                  }}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => scrollToSection(id)}
                   className={cn(
-                    'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-[13px]',
-                    active
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    'shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors sm:px-4 sm:text-[13px]',
+                    isActive ? ACTIVE : INACTIVE
                   )}
                 >
-                  {REPORT_STICKY_TAB_LABELS[id]}
+                  {REPORT_SCROLL_SPY_TAB_LABELS[id]}
                 </button>
               )
             })}
           </div>
         </div>
-      </nav>
-      <div className="h-[52px] shrink-0" aria-hidden />
-    </>
+      </div>
+    </nav>
   )
 }

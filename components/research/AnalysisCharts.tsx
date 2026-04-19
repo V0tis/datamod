@@ -1,25 +1,28 @@
 'use client'
 
 import {
-  BarChart,
   Bar,
-  XAxis,
-  YAxis,
+  BarChart,
+  Cell,
+  LabelList,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
-  Cell,
+  XAxis,
+  YAxis,
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
-import { CHART_GRAY_AXIS, CHART_MINT } from '@/lib/chart-theme'
-
-const CHART_COLORS = [CHART_MINT, '#94a3b8', '#64748b', '#cbd5e1', '#2dd4bf', '#475569', '#99f6e4', '#334155']
+import { chartAxisMuted, chartFontFamily, divergingFillFromDelta, formatChartInt } from '@/lib/chartTheme'
 
 export interface BreakdownItem {
   name: string
   value: number
   label: string
+  delta: number
+  arrow: '↑' | '↓' | '→'
+  rightLabel: string
 }
 
 function breakdownToData(breakdown: Record<string, number | undefined>): BreakdownItem[] {
@@ -36,11 +39,20 @@ function breakdownToData(breakdown: Record<string, number | undefined>): Breakdo
   }
   return Object.entries(breakdown)
     .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({
-      name: labels[k] ?? k,
-      value: v as number,
-      label: labels[k] ?? k,
-    }))
+    .map(([k, v]) => {
+      const value = Math.round(v as number)
+      const delta = value - 50
+      const arrow: BreakdownItem['arrow'] = delta > 0 ? '↑' : delta < 0 ? '↓' : '→'
+      const sign = delta > 0 ? '+' : ''
+      return {
+        name: labels[k] ?? k,
+        value,
+        label: labels[k] ?? k,
+        delta,
+        arrow,
+        rightLabel: `${formatChartInt(value)} ${arrow} (${sign}${formatChartInt(delta)})`,
+      }
+    })
     .slice(0, 8)
 }
 
@@ -50,37 +62,83 @@ export interface AnalysisChartsProps {
   className?: string
 }
 
-export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<string, number | undefined>; className?: string }) {
-  const data = breakdownToData(breakdown)
-  if (data.length === 0) return null
+function DivergingBreakdownChart({ data }: { data: BreakdownItem[] }) {
+  const maxAbsDelta = Math.max(8, ...data.map((d) => Math.abs(d.delta)), 1)
+  const pad = Math.ceil(maxAbsDelta * 0.08)
+  const lim = Math.min(50, maxAbsDelta + pad)
+  const chartStyle = { fontFamily: chartFontFamily } as const
+
   return (
-    <div className={cn('aspect-video w-full min-h-[200px] max-h-[380px] sm:min-h-[220px]', className)}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
-          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
-          <Tooltip
-            formatter={(v: number) => [`${v}/100`, '점수']}
-            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-            cursor={false}
+    <div className="w-full min-h-[220px] max-h-[420px]" style={chartStyle}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 52, left: 4, bottom: 20 }} style={chartStyle}>
+          <XAxis
+            type="number"
+            domain={[-lim, lim]}
+            tick={{ fontSize: 10, fill: chartAxisMuted }}
+            tickFormatter={(x) => formatChartInt(x + 50)}
           />
-          <Bar
-            dataKey="value"
-            radius={[0, 4, 4, 0]}
-            maxBarSize={24}
-            isAnimationActive
-            animationDuration={850}
-            animationEasing="ease-out"
-          >
-            {data.map((_, i) => (
-              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
+          <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fill: chartAxisMuted }} />
+          <ReferenceLine
+            x={0}
+            stroke="#4F6EF7"
+            strokeWidth={2.5}
+            strokeOpacity={0.9}
+            label={{ value: '기준 50 (Δ=0)', position: 'top', fill: '#4F6EF7', fontSize: 10, fontWeight: 600 }}
+          />
+          <Tooltip
+            cursor={{ fill: 'rgba(79,110,247,0.07)' }}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null
+              const p = payload[0].payload as BreakdownItem
+              const sign = p.delta >= 0 ? '+' : ''
+              return (
+                <div
+                  className="rounded-lg border border-zinc-200 bg-white/98 px-3 py-2 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+                  style={{ fontFamily: chartFontFamily }}
+                >
+                  <p className="font-semibold text-foreground">{p.name}</p>
+                  <p className="mt-1 tabular-nums text-muted-foreground">
+                    점수 <span className="font-semibold text-foreground">{formatChartInt(p.value)}</span> / 100 · 50
+                    대비{' '}
+                    <span className="font-semibold text-foreground">
+                      {sign}
+                      {formatChartInt(p.delta)}
+                    </span>
+                  </p>
+                </div>
+              )
+            }}
+          />
+          <Bar dataKey="delta" radius={[0, 4, 4, 0]} maxBarSize={24} isAnimationActive animationDuration={800}>
+            {data.map((d, i) => (
+              <Cell key={`cell-${d.name}-${i}`} fill={divergingFillFromDelta(d.delta, lim)} />
             ))}
+            <LabelList
+              dataKey="rightLabel"
+              position="right"
+              style={{ fill: '#374151', fontSize: 11, fontWeight: 600 }}
+              className="dark:fill-zinc-200"
+            />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
   )
 }
+
+export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<string, number | undefined>; className?: string }) {
+  const data = breakdownToData(breakdown)
+  if (data.length === 0) return null
+  return (
+    <div className={cn('w-full', className)}>
+      <DivergingBreakdownChart data={data} />
+    </div>
+  )
+}
+
+const SCORE_DIST_DESCRIPTION =
+  '요인별 점수(0~100). 가운데 세로선은 중립(50)이며, 막대는 50 대비 편차(Δ)입니다. 빨강 계열은 상대적 약세, 파랑·녹색은 상대적 강세를 뜻합니다.'
 
 export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, className }: AnalysisChartsProps) {
   const breakdown =
@@ -94,36 +152,13 @@ export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, class
 
   return (
     <ChartWithInsight
-      title="시장 점수 분포"
+      title="시장 점수 분포 · 0~100 척도 (50 기준 발산)"
+      description={SCORE_DIST_DESCRIPTION}
       insight={sd?.insight}
       takeaway={sd?.takeaway}
       className={className}
     >
-      <div className="aspect-video w-full min-h-[200px] max-h-[380px] sm:min-h-[220px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
-            <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }} />
-            <Tooltip
-              formatter={(v: number) => [`${v}/100`, '점수']}
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-              cursor={false}
-            />
-            <Bar
-              dataKey="value"
-              radius={[0, 4, 4, 0]}
-              maxBarSize={24}
-              isAnimationActive
-              animationDuration={850}
-              animationEasing="ease-out"
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <DivergingBreakdownChart data={data} />
     </ChartWithInsight>
   )
 }

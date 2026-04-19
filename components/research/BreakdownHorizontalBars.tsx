@@ -5,12 +5,21 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT } from '@/lib/chart-theme'
+import {
+  chartAxisMuted,
+  chartGridMuted,
+  chartFontFamily,
+  formatChartInt,
+  mixTealBar,
+} from '@/lib/chartTheme'
+import { porterFiveScoreTo10 } from '@/lib/score-display'
 import { cn } from '@/lib/utils'
 import { ChartSourceFooter } from '@/components/research/chart-source-footer'
 
@@ -30,18 +39,16 @@ export function BreakdownHorizontalBars({
   valueLabel = '점수',
   maxDomain,
   className,
-  heightClass = 'min-h-[220px] max-h-[380px]',
+  heightClass = 'min-h-[220px] max-h-[400px]',
   showSource = true,
   variant = 'default',
 }: {
   rows: BreakdownBarRow[]
   valueLabel?: string
-  /** 기본: 데이터 최댓값 기준 + 패딩 */
   maxDomain?: number
   className?: string
   heightClass?: string
   showSource?: boolean
-  /** 리스크: 값이 클수록 붉은 톤 */
   variant?: 'default' | 'risk'
 }) {
   const data = rows.map((r) => ({
@@ -50,42 +57,81 @@ export function BreakdownHorizontalBars({
   }))
   const vmax = Math.max(...data.map((d) => d.v), 1)
   const cap = maxDomain ?? Math.min(100, Math.ceil(vmax * 1.08 + 2))
+  const avg = data.length ? data.reduce((s, d) => s + d.v, 0) / data.length : 0
+
+  const chartStyle = { fontFamily: chartFontFamily } as const
 
   return (
     <div className={cn('w-full', className)}>
       <div className={cn('w-full', heightClass)}>
-        <ResponsiveContainer width="100%" height="100%" minHeight={200} debounce={32}>
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ left: 8, right: 16, top: 8, bottom: 8 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} horizontal={false} />
+        <ResponsiveContainer width="100%" height="100%" minHeight={220} debounce={32}>
+          <BarChart data={data} layout="vertical" margin={{ left: 8, right: 44, top: 8, bottom: 8 }} style={chartStyle}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chartGridMuted} horizontal={false} />
             <XAxis
               type="number"
               domain={[0, cap]}
-              tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
+              tick={{ fontSize: 11, fill: chartAxisMuted }}
               tickLine={false}
-              axisLine={{ stroke: CHART_GRAY_GRID }}
+              axisLine={{ stroke: chartGridMuted }}
             />
             <YAxis
               type="category"
               dataKey="label"
-              width={88}
-              tick={{ fontSize: 11, fill: CHART_GRAY_AXIS }}
+              width={100}
+              tick={{ fontSize: 11, fill: chartAxisMuted }}
               tickLine={false}
               axisLine={false}
             />
+            {variant === 'default' ? (
+              <ReferenceLine
+                x={avg}
+                stroke="#00796B"
+                strokeDasharray="5 4"
+                strokeWidth={1.5}
+                label={{
+                  value: '평균',
+                  position: 'top',
+                  fill: '#00796B',
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}
+              />
+            ) : null}
             <Tooltip
-              formatter={(v: number) => [`${v}${data[0]?.fullMark === 5 ? '/5' : ''}`, valueLabel]}
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }}
+              formatter={(v: number) => {
+                const isPorter5 = data[0]?.fullMark === 5
+                const display = isPorter5 ? porterFiveScoreTo10(Number(v)) : formatChartInt(v)
+                const suffix = isPorter5 ? '/10' : ''
+                return [`${display}${suffix}`, valueLabel]
+              }}
+              contentStyle={{
+                fontFamily: chartFontFamily,
+                fontSize: 12,
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+              }}
             />
-            <Bar dataKey="v" fill={variant === 'risk' ? '#ea580c' : CHART_MINT} radius={[0, 6, 6, 0]} maxBarSize={18} name={valueLabel}>
+            <Bar
+              dataKey="v"
+              radius={[0, 6, 6, 0]}
+              maxBarSize={22}
+              name={valueLabel}
+              isAnimationActive
+              animationDuration={700}
+              fill={variant === 'risk' ? '#ea580c' : mixTealBar(0.5)}
+            >
               {variant === 'risk'
-                ? data.map((d, i) => (
-                    <Cell key={`risk-${d.label}-${i}`} fill={riskSeverityFill(d.v, vmax)} />
-                  ))
-                : null}
+                ? data.map((d, i) => <Cell key={`risk-${d.label}-${i}`} fill={riskSeverityFill(d.v, vmax)} />)
+                : data.map((d, i) => (
+                    <Cell key={`teal-${d.label}-${i}`} fill={mixTealBar(cap > 0 ? d.v / cap : 0)} />
+                  ))}
+              <LabelList
+                dataKey="v"
+                position="right"
+                formatter={(v: number) => formatChartInt(v)}
+                style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+                className="dark:fill-zinc-300"
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

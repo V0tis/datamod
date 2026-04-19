@@ -380,6 +380,8 @@ interface ResearchState {
   }> | null
   /** 최근 스트리밍 활동 로그 (단계별 stepId, 최대 150행) */
   streamingActivityLog: Array<{ ts: number; message: string; kind?: 'error'; type?: 'error'; stepId?: string }>
+  /** 서버가 `cached` 스트림으로 즉시 완료한 경우(캐시 히트 UI용) */
+  pipelineServedFromServerCache: boolean
   /** 마지막 분석 실행 국가 (인사이트 제안 API 등) */
   analysisCountryCode: string
   /** 실시간 인사이트 제안(코호트 DB 집계 아님, 현재 분석 컨텍스트 기반) */
@@ -622,6 +624,7 @@ const initialState: ResearchState = {
   analysisId: null,
   analysisTasks: null,
   streamingActivityLog: [],
+  pipelineServedFromServerCache: false,
   analysisCountryCode: 'KR',
   liveInsightSuggestion: null,
   liveInsightSuggestionLoading: false,
@@ -658,6 +661,7 @@ export const useResearchStore = create<ResearchStore>()(
         set({
           error: null,
           streamingState: createIdleState(),
+          pipelineServedFromServerCache: false,
           ...(isNewSelection
             ? {
                 result: null,
@@ -1066,6 +1070,7 @@ export const useResearchStore = create<ResearchStore>()(
           status: 'loading',
           analysisStatus: 'analyzing',
           analysisMode: mode,
+          pipelineServedFromServerCache: false,
           streamingState: createRunningState(mode, startStepIdx, startStepId),
           currentStep: startStepIdx,
           totalSteps: getStepCount(mode),
@@ -1491,7 +1496,10 @@ export const useResearchStore = create<ResearchStore>()(
                     analysis_depth: depth ?? undefined,
                     serper_used: serperUsed,
                   })
-                  set({ streamingState: createCompletedState(event.reportId ?? null) })
+                  set({
+                    streamingState: createCompletedState(event.reportId ?? null),
+                    pipelineServedFromServerCache: false,
+                  })
                   shouldHydrateFromHistoryAfterDone = true
                   streamEnded = true
                   break
@@ -1501,6 +1509,7 @@ export const useResearchStore = create<ResearchStore>()(
                     analysisStatus: 'completed',
                     streamingState: createCompletedState(null),
                     error: null,
+                    pipelineServedFromServerCache: true,
                   })
                   await get().loadFromHistory(k, countryCode)
                   streamEnded = true
@@ -1555,7 +1564,10 @@ export const useResearchStore = create<ResearchStore>()(
                   analysis_depth: depth ?? undefined,
                   serper_used: serperUsed,
                 })
-                set({ streamingState: createCompletedState(event.reportId ?? null) })
+                set({
+                  streamingState: createCompletedState(event.reportId ?? null),
+                  pipelineServedFromServerCache: false,
+                })
                 shouldHydrateFromHistoryAfterDone = true
               } else if (event?.type === 'error') {
                 const errMsg = event.message ?? '분석 중 오류가 발생했습니다.'

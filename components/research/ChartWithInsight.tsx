@@ -27,6 +27,8 @@ export interface ChartWithInsightProps {
   variant?: 'default' | 'flat'
   /** 산출 로직 요약 — [i] 툴팁 */
   logicHint?: string | null
+  /** 차트 제목 바로 아래 한 줄 설명 (13px, 회색) */
+  description?: string | null
 }
 
 /**
@@ -42,10 +44,12 @@ export function ChartWithInsight({
   headerActions,
   variant = 'default',
   logicHint,
+  description,
 }: ChartWithInsightProps) {
   const hasInsight = Boolean(insight?.trim() || takeaway?.trim())
   const flat = variant === 'flat'
   const hint = logicHint?.trim()
+  const desc = description?.trim()
 
   const cap = pmCaption?.trim()
 
@@ -92,6 +96,9 @@ export function ChartWithInsight({
         </div>
         {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
       </div>
+      {desc ? (
+        <p className="mb-3 text-[13px] leading-snug text-[#6B7280] dark:text-zinc-400">{desc}</p>
+      ) : null}
       <div className="mb-3">{children}</div>
       {hasInsight && (
         <div className="mt-3 pt-3 border-t border-border/60 space-y-2">

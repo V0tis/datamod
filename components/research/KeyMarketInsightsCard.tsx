@@ -2,8 +2,17 @@
 
 import { StructuredInsightCard, type StructuredInsight } from '@/components/research/StructuredInsightCard'
 import { InsightsRichBlocks } from '@/components/research/insights-rich-blocks'
+import { extractNextActionItems } from '@/components/research/NextActionsForPM'
+import {
+  buildOutcomeMetricItems,
+  isExecutionLayerBusy,
+  isExecutionLayerComplete,
+  isExecutionLayerFailed,
+  urgencyToPriorityLevel,
+} from '@/lib/research-priority-outcomes'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { breakdownDimensionTo10 } from '@/lib/score-display'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
 type CoreInsightItem = {
@@ -147,6 +156,12 @@ export interface KeyMarketInsightsCardProps {
   } | null
   loading?: boolean
   keyword?: string
+  /** `execution_layer` 단계만 재실행 — 우선순위·예상 성과 데이터 누락 시 버튼에 연결 */
+  onRetryExecutionLayer?: () => void
+  /** full: 인사이트 카드 + 하단 블록 / footer-only: 우선순위·예상 성과·리스크 블록만 */
+  variant?: 'full' | 'footer-only'
+  /** variant가 full일 때 하단(우선순위·성과·리스크) 표시 여부 */
+  withFooterBlocks?: boolean
 }
 
 /**
@@ -163,6 +178,9 @@ export function KeyMarketInsightsCard({
   consensusData,
   loading = false,
   keyword = '',
+  onRetryExecutionLayer,
+  variant = 'full',
+  withFooterBlocks = true,
 }: KeyMarketInsightsCardProps) {
   const km = result?.key_metrics ?? {}
   const signalOutput = getTaskOutput('signal_layer', taskData, analysisTasks)
@@ -192,11 +210,15 @@ export function KeyMarketInsightsCard({
   const summaryInsights = (km.summary_insights ?? '').trim()
   const trendSummary = typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary : ''
 
+  const growthDim =
+    marketGrowth != null || trendMomentum != null
+      ? breakdownDimensionTo10((marketGrowth ?? trendMomentum) as number)
+      : null
   const growthPotential =
     opportunityScore != null
-      ? `시장 매력도 ${opportunityScore}/100점`
-      : marketGrowth != null || trendMomentum != null
-        ? `성장 잠재력 ${(marketGrowth ?? trendMomentum) ?? ''}/100`
+      ? `시장 매력도 ${opportunityScore.toLocaleString('ko-KR')}/100점`
+      : growthDim != null
+        ? `성장 잠재력 ${growthDim}/10`
         : trendSummary?.slice(0, 80) || summaryInsights?.slice(0, 80) || '-'
 
   const marketTrends =
@@ -281,27 +303,126 @@ export function KeyMarketInsightsCard({
     return [...neg, ...rs].slice(0, 12)
   }, [km])
 
-  const priorityItems = useMemo(
-    () =>
-      (km.pm_actions?.recommended_actions ?? [])
-        .slice(0, 10)
-        .map((a) => ({
-          title: (a.title ?? '').trim(),
-          detail: (a.reasoning ?? a.related_risk ?? '').trim() || undefined,
-        }))
-        .filter((p) => p.title.length > 0),
-    [km]
+  const priorityItems = useMemo(() => {
+    const raw = extractNextActionItems(result, taskData, analysisTasks, { maxItems: 12 })
+    return raw
+      .filter((a) => a.action?.trim())
+      .map((a) => ({
+        priority: urgencyToPriorityLevel(a.priority),
+        title: a.action.trim(),
+        description:
+          (a.how_to_execute ?? '').trim() ||
+          (a.why ?? '').trim() ||
+          '상세는 실행 단계(pm_action_plan) 출력을 참고하세요.',
+        timeline: (a.estimated_effort ?? '').trim() || '예상 기간: 미기재',
+        impact:
+          (a.why ?? '').trim() ||
+          ((a.how_to_execute ?? '').trim() ? '실행 중심 과제' : '임팩트: 미기재'),
+      }))
+      .sort((a, b) => a.priority - b.priority)
+  }, [result, taskData, analysisTasks])
+
+  const outcomeMetrics = useMemo(
+    () => buildOutcomeMetricItems(result, taskData, analysisTasks),
+    [result, taskData, analysisTasks]
   )
 
-  const expectedOutcomeLines = useMemo(
-    () =>
-      (km.key_strategic_insights ?? [])
-        .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-        .slice(0, 6),
-    [km]
-  )
+  const executionBusy = isExecutionLayerBusy(analysisTasks)
+  const executionComplete = isExecutionLayerComplete(analysisTasks, result)
+  const executionFailed = isExecutionLayerFailed(analysisTasks)
+
+  const { priorityBlock, outcomesBlock } = useMemo(() => {
+    const hasP = priorityItems.length > 0
+    const hasO = outcomeMetrics.length > 0
+    const choose = (has: boolean): 'data' | 'loading' | 'missing' => {
+      if (has) return 'data'
+      if (executionBusy) return 'loading'
+      if (executionComplete || executionFailed) return 'missing'
+      if ((analysisTasks?.length ?? 0) > 0) return 'loading'
+      if (result?.reportId) return 'missing'
+      return 'loading'
+    }
+    return {
+      priorityBlock: choose(hasP),
+      outcomesBlock: choose(hasO),
+    }
+  }, [
+    priorityItems.length,
+    outcomeMetrics.length,
+    executionBusy,
+    executionComplete,
+    executionFailed,
+    analysisTasks?.length,
+    result?.reportId,
+  ])
+
+  const devEmptyInsightWarnedRef = useRef<string | null>(null)
+  useEffect(() => {
+    devEmptyInsightWarnedRef.current = null
+  }, [result?.reportId])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    if (!executionComplete && !executionFailed) return
+    if (!result?.reportId) return
+    if (priorityItems.length > 0 && outcomeMetrics.length > 0) return
+    const dedupeKey = `${result.reportId}:${priorityItems.length}:${outcomeMetrics.length}`
+    if (devEmptyInsightWarnedRef.current === dedupeKey) return
+    devEmptyInsightWarnedRef.current = dedupeKey
+    const execOut = getTaskOutput('execution_layer', taskData, analysisTasks)
+    const kmm = result.key_metrics
+    const recLen = kmm?.pm_actions?.recommended_actions?.length ?? 0
+    const planLen = Array.isArray((kmm as { pm_action_plan?: unknown[] } | undefined)?.pm_action_plan)
+      ? (((kmm as { pm_action_plan: unknown[] }).pm_action_plan?.length ?? 0) as number)
+      : 0
+    const insightLen = Array.isArray(kmm?.key_strategic_insights) ? kmm.key_strategic_insights.length : 0
+    console.warn(
+      '[KeyMarketInsights] execution_layer 완료(또는 실패) 후에도 우선순위·예상 성과 바인딩이 비어 있습니다. task output·key_metrics 필드를 확인하세요.',
+      {
+        reportId: result.reportId,
+        priorityCount: priorityItems.length,
+        outcomesCount: outcomeMetrics.length,
+        key_metrics_pm_actions_recommended: recLen,
+        key_metrics_pm_action_plan: planLen,
+        key_metrics_key_strategic_insights: insightLen,
+        execution_layer_output_keys: execOut ? Object.keys(execOut) : null,
+      }
+    )
+  }, [
+    executionComplete,
+    executionFailed,
+    result,
+    priorityItems.length,
+    outcomeMetrics.length,
+    taskData,
+    analysisTasks,
+  ])
 
   if (!hasContent && !loading) return null
+
+  const isFooterOnly = variant === 'footer-only'
+
+  if (isFooterOnly) {
+    return (
+      <div className="space-y-0">
+        {loading && !hasEarlyData ? (
+          <div className="space-y-3 py-4 animate-pulse">
+            <div className="h-10 rounded-md bg-muted/50" />
+            <div className="h-10 rounded-md bg-muted/40" />
+          </div>
+        ) : (
+          <InsightsRichBlocks
+            strategicRisks={strategicRisksLines}
+            priorityItems={priorityItems}
+            outcomeMetrics={outcomeMetrics}
+            priorityBlock={priorityBlock}
+            outcomesBlock={outcomesBlock}
+            onRetrySection={onRetryExecutionLayer}
+          />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-0">
@@ -332,12 +453,17 @@ export function KeyMarketInsightsCard({
               />
             ))}
           </div>
-          <InsightsRichBlocks
-            strategicRisks={strategicRisksLines}
-            priorityItems={priorityItems}
-            expectedOutcomes={expectedOutcomeLines}
-            className="mt-2"
-          />
+          {withFooterBlocks ? (
+            <InsightsRichBlocks
+              strategicRisks={strategicRisksLines}
+              priorityItems={priorityItems}
+              outcomeMetrics={outcomeMetrics}
+              priorityBlock={priorityBlock}
+              outcomesBlock={outcomesBlock}
+              onRetrySection={onRetryExecutionLayer}
+              className="mt-2"
+            />
+          ) : null}
         </>
       )}
     </div>

@@ -31,6 +31,10 @@ export function taskIdToResearchRunOptions(
       return { retry_pipeline_step: 'risk_opportunity' }
     case 'post_processing':
       return { retry_pipeline_step: 'risk_opportunity' }
+    case 'analysis_prep':
+    case 'article_extraction':
+    case 'article_summary':
+      return { force_reanalyze: true }
     default:
       return null
   }

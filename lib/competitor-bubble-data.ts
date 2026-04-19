@@ -70,6 +70,8 @@ export type ScatterPayload = {
   size: number
   tier: Tier
   fill: string
+  /** 분석 키워드(자사)와 이름이 일치할 때 */
+  isOurCompany?: boolean
 }
 
 /** 시장 존재감·혁신 점수 + 추정 위치 + 티어 색 + 규모(버블 반경 스케일) */
