@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import { chartAxisMuted, chartFontFamily, chartGridMuted } from '@/lib/chartTheme'
+import { cn } from '@/lib/utils'
 import { ChartWithInsight } from '@/components/research/ChartWithInsight'
 import { ChartSourceFooter } from '@/components/research/chart-source-footer'
 import { type CompetitorScatterRow, type ScatterPayload, toScatterPayload } from '@/lib/competitor-bubble-data'
@@ -61,6 +62,13 @@ const QUADRANT = {
   br: '우위 · 저성장',
 } as const
 
+const X_AXIS_CAPTION = '시장 점유 · 존재감 (1–10)'
+
+/** 상·하단 4분면 캡션 + 축 제목을 같은 열 정렬로 맞춤 */
+const quadrantCaptionGrid =
+  'grid w-full grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] gap-x-2 px-2 sm:px-3'
+const quadrantCaptionText = 'text-[10px] font-medium leading-snug text-muted-foreground/95 [word-break:keep-all]'
+
 function truncateName(s: string, max: number): string {
   const t = s.trim()
   if (t.length <= max) return t
@@ -102,10 +110,20 @@ export function CompetitorBubbleQuadrant({
         className={className}
       >
         <div className="rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/30">
-          <div className="relative h-[min(420px,62vw)] w-full min-h-[220px]">
-            {/* 4분면 배경 (약 5% 투명) — 차트 플롯 영역 근사 */}
+          <div className="flex min-w-0 flex-col">
             <div
-              className="pointer-events-none absolute left-[10%] right-[8%] top-10 bottom-12 z-[1] grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg"
+              className={cn(quadrantCaptionGrid, 'pointer-events-none min-h-[2.25rem] items-center border-b border-transparent pb-2')}
+              aria-hidden
+            >
+              <span className={cn(quadrantCaptionText, 'justify-self-start text-left')}>{QUADRANT.tl}</span>
+              {/* 하단 중앙 축 제목과 같은 열 폭을 맞추기 위한 자리 표시 */}
+              <span className="min-w-[min(100%,10rem)] shrink-0 justify-self-center" aria-hidden />
+              <span className={cn(quadrantCaptionText, 'justify-self-end text-right')}>{QUADRANT.tr}</span>
+            </div>
+            <div className="relative h-[min(420px,62vw)] w-full min-h-[220px]">
+            {/* 4분면 배경 — 캡션은 차트 밖 그리드로 배치 */}
+            <div
+              className="pointer-events-none absolute left-[12%] right-[10%] top-2 bottom-4 z-[1] grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg"
               aria-hidden
             >
               <div className="bg-sky-500/[0.05] dark:bg-sky-400/[0.06]" title={QUADRANT.tl} />
@@ -113,17 +131,8 @@ export function CompetitorBubbleQuadrant({
               <div className="bg-zinc-500/[0.05] dark:bg-zinc-400/[0.06]" title={QUADRANT.bl} />
               <div className="bg-amber-400/[0.05] dark:bg-amber-300/[0.06]" title={QUADRANT.br} />
             </div>
-            <div
-              className="pointer-events-none absolute left-[14%] right-[10%] top-10 bottom-14 z-[5] text-[10px] font-medium text-muted-foreground/90"
-              aria-hidden
-            >
-              <span className="absolute left-0 top-1 max-w-[7rem] leading-snug">{QUADRANT.tl}</span>
-              <span className="absolute right-0 top-1 max-w-[7rem] text-right leading-snug">{QUADRANT.tr}</span>
-              <span className="absolute left-0 bottom-1 max-w-[7rem] leading-snug">{QUADRANT.bl}</span>
-              <span className="absolute right-0 bottom-1 max-w-[7rem] text-right leading-snug">{QUADRANT.br}</span>
-            </div>
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 12, right: 16, left: 8, bottom: 44 }} style={{ fontFamily: chartFontFamily }}>
+              <ScatterChart margin={{ top: 10, right: 20, left: 28, bottom: 36 }} style={{ fontFamily: chartFontFamily }}>
                 <CartesianGrid stroke={chartGridMuted} strokeDasharray="4 4" />
                 <XAxis
                   type="number"
@@ -133,13 +142,6 @@ export function CompetitorBubbleQuadrant({
                   tick={{ fontSize: 11, fill: chartAxisMuted }}
                   tickLine={false}
                   axisLine={{ stroke: chartAxisMuted, strokeOpacity: 0.5 }}
-                  label={{
-                    value: '시장 점유 · 존재감 (1–10)',
-                    position: 'bottom',
-                    offset: 28,
-                    fill: chartAxisMuted,
-                    fontSize: 11,
-                  }}
                 />
                 <YAxis
                   type="number"
@@ -173,6 +175,7 @@ export function CompetitorBubbleQuadrant({
                   animationDuration={600}
                   shape={(props: unknown) => {
                     const p = props as Record<string, unknown>
+                    const cellIndex = Number(p.index ?? 0)
                     const cx = Number(p.cx ?? 0)
                     const cy = Number(p.cy ?? 0)
                     const payload = p.payload as ScatterPayload
@@ -180,8 +183,12 @@ export function CompetitorBubbleQuadrant({
                     const fill = payload?.fill ?? '#10b981'
                     const isUs = payload?.isOurCompany
                     const name = payload?.name ?? ''
-                    const fs = Math.max(9, Math.min(13, r / 2.4))
-                    const label = truncateName(name, r > 28 ? 14 : 10)
+                    const fs = Math.max(9, Math.min(12, r / 2.6))
+                    /** 원 안에 들어가는 글자 수(한글 기준 대략 폭) — 넘치면 clipPath로 잘라냄 */
+                    const approxChar = fs * 0.92
+                    const maxChars = Math.max(4, Math.min(16, Math.floor(((2 * r - 10) / approxChar) * 0.95)))
+                    const label = truncateName(name, maxChars)
+                    const clipId = `bubble-txt-${cellIndex}-${Math.round(cx)}-${Math.round(cy)}`
                     return (
                       <g
                         className="cursor-pointer outline-none"
@@ -191,6 +198,11 @@ export function CompetitorBubbleQuadrant({
                           setOpen(true)
                         }}
                       >
+                        <defs>
+                          <clipPath id={clipId}>
+                            <circle cx={cx} cy={cy} r={Math.max(4, r - 3)} />
+                          </clipPath>
+                        </defs>
                         <circle
                           cx={cx}
                           cy={cy}
@@ -206,11 +218,18 @@ export function CompetitorBubbleQuadrant({
                           x={cx}
                           y={cy + (isUs ? -3 : 0)}
                           textAnchor="middle"
-                          dominantBaseline="middle"
+                          dominantBaseline="central"
                           fill="#fff"
                           fontWeight={700}
                           fontSize={fs}
-                          style={{ pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
+                          clipPath={`url(#${clipId})`}
+                          style={{
+                            pointerEvents: 'none',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                            paintOrder: 'stroke fill',
+                          }}
+                          stroke="rgba(15,23,42,0.35)"
+                          strokeWidth={2}
                         >
                           {label}
                         </text>
@@ -234,6 +253,23 @@ export function CompetitorBubbleQuadrant({
                 />
               </ScatterChart>
             </ResponsiveContainer>
+            </div>
+            <div
+              className={cn(
+                quadrantCaptionGrid,
+                'pointer-events-none items-end gap-y-0.5 border-t border-zinc-200/60 pt-2.5 pb-0.5 dark:border-zinc-700/60'
+              )}
+              aria-hidden
+            >
+              <span className={cn(quadrantCaptionText, 'justify-self-start pb-0.5 text-left')}>{QUADRANT.bl}</span>
+              <span
+                className="justify-self-center px-1 pb-0.5 text-center text-[11px] font-medium leading-tight text-muted-foreground [word-break:keep-all]"
+                style={{ fontFamily: chartFontFamily }}
+              >
+                {X_AXIS_CAPTION}
+              </span>
+              <span className={cn(quadrantCaptionText, 'justify-self-end pb-0.5 text-right')}>{QUADRANT.br}</span>
+            </div>
           </div>
           <ChartSourceFooter className="px-1" />
         </div>

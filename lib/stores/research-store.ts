@@ -467,8 +467,8 @@ function composeResultFromSections(
   }
 }
 
-/** strategy_generation 스트림 payload → conclusion_three_lines */
-function threeLinesFromStrategyTaskOutput(data: unknown): string[] | undefined {
+/** strategy_generation 태스크 output_data의 three_line_actions → UI/저장용 1~3줄 */
+export function threeLinesFromStrategyTaskOutput(data: unknown): string[] | undefined {
   if (!data || typeof data !== 'object') return undefined
   const raw = (data as { three_line_actions?: unknown }).three_line_actions
   if (!Array.isArray(raw) || raw.length === 0) return undefined
@@ -482,6 +482,35 @@ function threeLinesFromStrategyTaskOutput(data: unknown): string[] | undefined {
     .filter((s) => s.length > 0)
     .slice(0, 3)
   return lines.length > 0 ? lines : undefined
+}
+
+/** DB key_metrics에 전략 3줄이 없을 때 analysis_tasks의 strategy_generation 출력으로 보강 */
+function enrichKeyMetricsFromPipelineTaskData(
+  km: ResearchResponse['key_metrics'] | undefined,
+  taskData: Partial<Record<string, unknown>>
+): ResearchResponse['key_metrics'] | undefined {
+  const hasTask = taskData && typeof taskData === 'object' && Object.keys(taskData).length > 0
+  if (!km && !hasTask) return km
+  let m = { ...(km && typeof km === 'object' ? km : {}) } as NonNullable<ResearchResponse['key_metrics']>
+  const stratRaw = taskData['strategy_generation']
+  const three = threeLinesFromStrategyTaskOutput(stratRaw)
+  if (three?.length && !(m.conclusion_three_lines && m.conclusion_three_lines.length > 0)) {
+    m = { ...m, conclusion_three_lines: three }
+  }
+  if (stratRaw && typeof stratRaw === 'object') {
+    const so = stratRaw as Record<string, unknown>
+    const ms = typeof so.market_summary === 'string' ? so.market_summary.trim() : ''
+    const prevMs = typeof m.market_summary === 'string' ? m.market_summary.trim() : ''
+    if (ms.length > 8 && prevMs.length < 9) {
+      m = { ...m, market_summary: ms }
+    }
+    const prevKi = m.key_strategic_insights
+    if (!(Array.isArray(prevKi) && prevKi.length > 0) && Array.isArray(so.key_strategic_insights)) {
+      const ki = (so.key_strategic_insights as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      if (ki.length) m = { ...m, key_strategic_insights: ki }
+    }
+  }
+  return Object.keys(m as object).length > 0 ? (m as ResearchResponse['key_metrics']) : km
 }
 
 /** loadFromHistory 반환: 'cached' = 캐시 있음 사용함, 'empty' = 기록 있으나 내용 없음, 'none' = 기록 없음, 'error' = 요청 실패(스트림 시작 금지) */
@@ -1738,6 +1767,17 @@ export const useResearchStore = create<ResearchStore>()(
             analysisStatus = 'failed'
           }
           if (data.reportId) {
+            const pipelineTasks = pipelineTasksEarly
+            const taskDataFromPipeline: Partial<Record<string, unknown>> = {}
+            if (pipelineTasks && pipelineTasks.length > 0) {
+              for (const t of pipelineTasks) {
+                if (t.status === 'completed' && t.output_data != null && typeof t.step_name === 'string') {
+                  taskDataFromPipeline[t.step_name] = t.output_data
+                }
+              }
+            }
+            const kmForStore = enrichKeyMetricsFromPipelineTaskData(km, taskDataFromPipeline) ?? km
+
             const statusFromBackend =
               analysisStatus === 'completed' ? 'done' as const
               : analysisStatus === 'failed' ? 'error' as const
@@ -1773,7 +1813,7 @@ export const useResearchStore = create<ResearchStore>()(
               neutralSignals: (km?.neutral_signals ?? []) as string[],
               negativeRisks: (km?.negative_risks ?? []) as string[],
             }
-            const pa = km?.pm_actions
+            const pa = kmForStore?.pm_actions
             const recommendedActionsSection: RecommendedActionsSection = {
               actions: (pa?.recommended_actions ?? []).map((a: unknown) => typeof a === 'object' && a != null && typeof (a as { title?: string }).title === 'string' ? { title: (a as { title: string }).title, reasoning: (a as { reasoning?: string }).reasoning, urgency_level: (a as { urgency_level?: string }).urgency_level as 'low' | 'medium' | 'high' | undefined, related_risk: (a as { related_risk?: string }).related_risk } : { title: String(a) }),
               monitoring_points: (pa?.monitoring_points ?? []) as string[],
@@ -1797,21 +1837,12 @@ export const useResearchStore = create<ResearchStore>()(
               analysis_groq: (data.analysis_groq && typeof data.analysis_groq === 'object') ? data.analysis_groq : undefined,
               analysis_gemini: (data.analysis_gemini && typeof data.analysis_gemini === 'object') ? data.analysis_gemini : undefined,
               analysis_results: ar,
-              key_metrics: km,
+              key_metrics: kmForStore,
             } as ResearchResponse
-            const pipelineTasks = pipelineTasksEarly
             const pipelineAnalysisId =
               typeof data.pipeline_analysis_id === 'string' && data.pipeline_analysis_id.length > 0
                 ? data.pipeline_analysis_id
                 : null
-            const taskDataFromPipeline: Partial<Record<string, unknown>> = {}
-            if (pipelineTasks && pipelineTasks.length > 0) {
-              for (const t of pipelineTasks) {
-                if (t.status === 'completed' && t.output_data != null && typeof t.step_name === 'string') {
-                  taskDataFromPipeline[t.step_name] = t.output_data
-                }
-              }
-            }
             const normalizedPipelineTasks =
               pipelineTasks && pipelineTasks.length > 0
                 ? pipelineTasks.map((t) => ({

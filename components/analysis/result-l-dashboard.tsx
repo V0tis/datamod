@@ -24,7 +24,6 @@ import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionL
 import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
 import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
-import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { MotionReveal } from '@/components/common/MotionReveal'
@@ -282,22 +281,6 @@ export function ResultLDashboard({
     return [...new Set(list)].slice(0, 12)
   }, [keyword, km])
 
-  const frameworkExecOutput = useMemo(() => {
-    const execTask = analysisTasks?.find((t) => t.step_name === 'execution_layer')
-    const raw =
-      execTask?.output_data && typeof execTask.output_data === 'object'
-        ? execTask.output_data
-        : taskData?.execution_layer
-    return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
-  }, [analysisTasks, taskData])
-
-  const kmF = effectiveResult?.key_metrics ?? {}
-  const swotF = kmF.swot_analysis ?? (frameworkExecOutput?.swot_analysis as typeof kmF.swot_analysis)
-  const jtbdF = kmF.jtbd ?? (frameworkExecOutput?.jtbd as typeof kmF.jtbd)
-  const porter5F = kmF.porter_5_forces ?? (frameworkExecOutput?.porter_5_forces as typeof kmF.porter_5_forces)
-  const breakdownF = kmF.opportunity_score_breakdown
-  const frameworkPanelKeyF = `${effectiveResult?.reportId ?? 'live'}:${keyword}`
-
   const trendDone = isStepComplete(analysisTasks, 'trend_analysis')
   const competitionDone = isStepComplete(analysisTasks, 'competition_analysis')
   const insightDone = isStepComplete(analysisTasks, 'insight_extraction')
@@ -491,7 +474,11 @@ export function ResultLDashboard({
                               >
                                 핵심 결론
                               </h3>
-                              <ConclusionActionStrip result={effectiveResult ?? null} />
+                              <ConclusionActionStrip
+                                result={effectiveResult ?? null}
+                                taskData={taskData}
+                                analysisTasks={analysisTasks}
+                              />
                               <Collapsible defaultOpen={false} className="mt-6 border-t border-slate-100 pt-5 dark:border-zinc-800">
                                 <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-3 py-2.5 text-left text-sm font-medium text-slate-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-200 [&[data-state=open]_svg]:rotate-180">
                                   배경 및 근거 자세히 보기
@@ -614,17 +601,6 @@ export function ResultLDashboard({
                         keyword={keyword}
                         onRetryExecutionLayer={() => handleRetryPipelineStep('execution_layer')}
                         withFooterBlocks={false}
-                      />
-                      <StrategyFrameworkPanel
-                        key={frameworkPanelKeyF}
-                        instanceKey={frameworkPanelKeyF}
-                        swot={swotF}
-                        jtbd={jtbdF}
-                        porter={porter5F}
-                        opportunityBreakdown={breakdownF ?? undefined}
-                        strategicDecisionLayer={kmF.strategic_decision_layer}
-                        strategyEvaluation={kmF.strategy_evaluation}
-                        className="border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                       />
                       <AnalysisResultSections
                         key={`${sectionKeyPrefix}-ars-strategic`}

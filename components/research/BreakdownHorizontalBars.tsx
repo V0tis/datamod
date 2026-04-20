@@ -60,12 +60,14 @@ export function BreakdownHorizontalBars({
   const avg = data.length ? data.reduce((s, d) => s + d.v, 0) / data.length : 0
 
   const chartStyle = { fontFamily: chartFontFamily } as const
+  /** ReferenceLine `평균` 라벨(position: top)이 잘리지 않도록 — 인사이트 박스 바로 아래에서도 보이게 */
+  const marginTop = variant === 'default' ? 42 : 10
 
   return (
     <div className={cn('w-full', className)}>
       <div className={cn('w-full', heightClass)}>
         <ResponsiveContainer width="100%" height="100%" minHeight={220} debounce={32}>
-          <BarChart data={data} layout="vertical" margin={{ left: 8, right: 44, top: 8, bottom: 8 }} style={chartStyle}>
+          <BarChart data={data} layout="vertical" margin={{ left: 36, right: 52, top: marginTop, bottom: 10 }} style={chartStyle}>
             <CartesianGrid strokeDasharray="3 3" stroke={chartGridMuted} horizontal={false} />
             <XAxis
               type="number"
@@ -77,10 +79,11 @@ export function BreakdownHorizontalBars({
             <YAxis
               type="category"
               dataKey="label"
-              width={100}
+              width={128}
               tick={{ fontSize: 11, fill: chartAxisMuted }}
               tickLine={false}
               axisLine={false}
+              interval={0}
             />
             {variant === 'default' ? (
               <ReferenceLine

@@ -71,14 +71,20 @@ function DivergingBreakdownChart({ data }: { data: BreakdownItem[] }) {
   return (
     <div className="w-full min-h-[220px] max-h-[420px]" style={chartStyle}>
       <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 52, left: 4, bottom: 20 }} style={chartStyle}>
+        <BarChart data={data} layout="vertical" margin={{ top: 10, right: 56, left: 52, bottom: 22 }} style={chartStyle}>
           <XAxis
             type="number"
             domain={[-lim, lim]}
             tick={{ fontSize: 10, fill: chartAxisMuted }}
             tickFormatter={(x) => formatChartInt(x + 50)}
           />
-          <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fill: chartAxisMuted }} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={118}
+            tick={{ fontSize: 11, fill: chartAxisMuted }}
+            interval={0}
+          />
           <ReferenceLine
             x={0}
             stroke="#4F6EF7"

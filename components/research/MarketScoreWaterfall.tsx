@@ -39,12 +39,15 @@ export function MarketScoreWaterfall({
     })
   }
 
-  const w = 360
-  const h = 188
-  const padL = 40
-  const padR = 16
-  const padB = 40
-  const padT = 22
+  const w = 400
+  const h = 216
+  const padL = 44
+  const padR = 20
+  const padB = 44
+  /** 상단 누적·델타 라벨 여유 */
+  const padT = 44
+  /** 가산/감산 막대가 너무 얇을 때 최소 표시 높이(px) — 숫자 가독성 */
+  const MIN_FLOAT_BAR_H = 22
   const plotW = w - padL - padR
   const plotH = h - padT - padB
   const maxY = 100
@@ -67,12 +70,21 @@ export function MarketScoreWaterfall({
           const x = padL + i * (barW + gap)
           const yTop = yAt(s.end)
           const yBot = yAt(s.start)
-          const bh = Math.max(4, yBot - yTop)
+          const rawBh = Math.max(1, yBot - yTop)
           const delta = s.end - s.start
+          let yRect = yTop
+          let hRect = rawBh
+          if (i > 0 && delta !== 0 && rawBh < MIN_FLOAT_BAR_H) {
+            hRect = MIN_FLOAT_BAR_H
+            yRect = yBot - hRect
+          }
           const fill = barFill(i, delta)
           const stroke = i === 0 ? chartColors.primary : fill
           const isLast = i === segments.length - 1
           const isFinalBar = isLast && segments.length > 1
+          const deltaInside = i > 0 && delta !== 0 && hRect >= 20 && barW >= 26
+          const deltaTextY = deltaInside ? yRect + hRect / 2 : yRect - 6
+          const cumY = Math.min(yRect, yTop) - (deltaInside ? 10 : 12)
 
           return (
             <g key={`${s.label}-${i}`}>
@@ -88,9 +100,9 @@ export function MarketScoreWaterfall({
               ) : null}
               <rect
                 x={x}
-                y={yTop}
+                y={yRect}
                 width={barW}
-                height={bh}
+                height={hRect}
                 rx={5}
                 fill={fill}
                 stroke={stroke}
@@ -101,13 +113,22 @@ export function MarketScoreWaterfall({
               {delta !== 0 && i > 0 ? (
                 <text
                   x={x + barW / 2}
-                  y={yTop + bh / 2}
-                  dominantBaseline="middle"
+                  y={deltaInside ? deltaTextY : deltaTextY - 1}
+                  dominantBaseline={deltaInside ? 'middle' : 'ideographic'}
                   textAnchor="middle"
-                  fontSize={11}
+                  fontSize={deltaInside ? 12 : 11}
                   fontWeight={700}
-                  fill="#fff"
+                  fill={deltaInside ? '#fff' : '#14532d'}
                   className="select-none"
+                  style={
+                    deltaInside
+                      ? undefined
+                      : {
+                          paintOrder: 'stroke fill',
+                          stroke: 'rgba(255,255,255,0.92)',
+                          strokeWidth: 3,
+                        }
+                  }
                 >
                   {delta > 0 ? '+' : ''}
                   {formatChartInt(delta)}
@@ -116,7 +137,7 @@ export function MarketScoreWaterfall({
               <text x={x + barW / 2} y={h - 12} fontSize={10} fill={chartAxisMuted} textAnchor="middle" className="select-none">
                 {s.label}
               </text>
-              <text x={x + barW / 2} y={yTop - 5} fontSize={10} fill={chartAxisMuted} textAnchor="middle">
+              <text x={x + barW / 2} y={cumY} fontSize={11} fill={chartAxisMuted} textAnchor="middle" className="select-none">
                 {formatChartInt(Math.round(s.end))}
               </text>
               {!isLast ? (

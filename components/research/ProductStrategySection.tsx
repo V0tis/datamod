@@ -15,7 +15,7 @@ export interface ProductStrategySectionProps {
   /** 분석 상태 - 카드 헤더에 표시 (PM 분석 도구용) */
   status?: SectionStatus
   loading?: boolean
-  /** 스트리밍 완료 시 "✓ 생성 완료" 표시 (Progressive Streaming UX) */
+  /** 스트리밍 완료 시 체크 아이콘 + "생성 완료" 표시 (Progressive Streaming UX) */
   streamingComplete?: boolean
   /** 대시보드형 리포트: 이중 카드·그림자 최소화 */
   variant?: 'default' | 'flat'
@@ -57,7 +57,7 @@ export function ProductStrategySection({
   variant = 'default',
 }: ProductStrategySectionProps) {
   const showStatus = status != null || streamingComplete
-  const displayLabel = streamingComplete ? '✓ 생성 완료' : status != null ? STATUS_LABELS[status] : null
+  const displayLabel = streamingComplete ? '생성 완료' : status != null ? STATUS_LABELS[status] : null
   const displayIcon = streamingComplete ? <Check className="h-3.5 w-3.5 text-primary" /> : status != null ? <StatusIcon status={status} loading={status === 'running'} /> : null
   const flat = variant === 'flat'
   return (

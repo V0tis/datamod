@@ -1178,7 +1178,7 @@ function ResultsContent() {
           <AnalysisSidebar className="sticky top-14 z-20 max-h-[calc(100vh-3.5rem)] self-start overflow-y-auto" />
           <main className="min-h-[320px] min-w-0 flex-1 px-4 py-4 sm:px-6">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
-        <div className="mx-auto w-full max-w-[min(100%,1200px)]">
+        <div className="mx-auto w-full max-w-[min(100%,1680px)]">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
         {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">

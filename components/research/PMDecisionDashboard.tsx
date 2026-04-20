@@ -137,6 +137,8 @@ export function PMDecisionDashboard({
       {analysisComplete && (displayResult ?? result) && (
         <ConclusionActionStrip
           result={displayResult ?? result}
+          taskData={taskData}
+          analysisTasks={effectiveAnalysisTasks}
           className="rounded-[12px] border border-zinc-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/60"
         />
       )}
