@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-/** Related market ideas - AI-focused suggestions */
+/** 관련 시장 키워드 제안 */
 const RELATED_MARKET_IDEAS = [
-  'AI Automation for HR',
-  'AI Sales Assistant',
-  'AI Legal Tools',
-  'AI Marketing Automation',
-  'AI Customer Support',
-  'AI Document Analysis',
+  'HR 자동화 AI 도구',
+  'AI 영업 지원 플랫폼',
+  'AI 법률 서비스',
+  'AI 마케팅 자동화',
+  'AI 고객 응대 솔루션',
+  'AI 문서 분석 도구',
 ] as const
 
 export interface NextExplorationSectionProps {
@@ -144,7 +144,7 @@ export function NextExplorationSection({
             <form onSubmit={handleSubmit} className="flex gap-2">
               <Input
                 type="text"
-                placeholder="새로운 시장 아이디어 입력 (예: AI Contract Review)"
+                placeholder="새로운 시장 아이디어 입력 (예: AI 계약서 검토)"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 autoComplete="off"

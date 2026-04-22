@@ -3,15 +3,15 @@ import { getPhase2CompetitionRowStatus, getPhase2TrendRowStatus } from '@/lib/an
 import type { ResearchResponse } from '@/lib/stores/research-store'
 
 export const PIPELINE_TIMELINE_UI_STAGES = [
-  { id: 'cache', label: '캐시 조회', icon: '💾', eta: '<1초' },
-  { id: 'collect', label: '시장 데이터 수집', icon: '🌐', eta: '~10초' },
-  { id: 'issues', label: '핵심 이슈 정리', icon: '📋', eta: '~8초' },
-  { id: 'trend', label: '시장 흐름 분석', icon: '📈', eta: '~12초' },
-  { id: 'competitor', label: '경쟁사 분석', icon: '⚔️', eta: '~12초' },
-  { id: 'insight', label: '인사이트 제안', icon: '💡', eta: '~10초' },
-  { id: 'strategy', label: '전략 추천', icon: '🎯', eta: '~10초' },
-  { id: 'action', label: 'PM 액션 플랜', icon: '✅', eta: '~8초' },
-  { id: 'risk', label: '리스크·기회 평가', icon: '⚠️', eta: '~8초' },
+  { id: 'cache', label: '캐시 조회', eta: '<1초' },
+  { id: 'collect', label: '시장 데이터 수집', eta: '~10초' },
+  { id: 'issues', label: '핵심 이슈 정리', eta: '~8초' },
+  { id: 'trend', label: '시장 흐름 분석', eta: '~12초' },
+  { id: 'competitor', label: '경쟁사 분석', eta: '~12초' },
+  { id: 'insight', label: '인사이트 제안', eta: '~10초' },
+  { id: 'strategy', label: '전략 추천', eta: '~10초' },
+  { id: 'action', label: 'PM 액션 플랜', eta: '~8초' },
+  { id: 'risk', label: '리스크·기회 평가', eta: '~8초' },
 ] as const
 
 export type PipelineTimelineUiStageId = (typeof PIPELINE_TIMELINE_UI_STAGES)[number]['id']

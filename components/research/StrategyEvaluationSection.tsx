@@ -1,6 +1,6 @@
 'use client'
 
-import { TrendingUp, Shield, Zap, BarChart3, Star, Scale, Target } from 'lucide-react'
+import { TrendingUp, Shield, Zap, BarChart3, Scale, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { SectionContentSkeleton } from './SectionContentSkeleton'
@@ -27,7 +27,7 @@ type StrategyEval = {
 const DIMENSIONS = [
   {
     id: 'market_attractiveness' as const,
-    label: 'Market Attractiveness',
+    label: '시장 매력도',
     labelKo: '시장 매력도',
     icon: TrendingUp,
     higherIsBetter: true,
@@ -35,7 +35,7 @@ const DIMENSIONS = [
   },
   {
     id: 'competition_risk' as const,
-    label: 'Competition Risk',
+    label: '경쟁 리스크',
     labelKo: '경쟁 리스크',
     icon: Shield,
     higherIsBetter: false,
@@ -43,7 +43,7 @@ const DIMENSIONS = [
   },
   {
     id: 'execution_difficulty' as const,
-    label: 'Execution Difficulty',
+    label: '실행 난이도',
     labelKo: '실행 난이도',
     icon: Zap,
     higherIsBetter: false,
@@ -51,7 +51,7 @@ const DIMENSIONS = [
   },
   {
     id: 'growth_potential' as const,
-    label: 'Growth Potential',
+    label: '성장 잠재력',
     labelKo: '성장 잠재력',
     icon: BarChart3,
     higherIsBetter: true,
@@ -81,21 +81,21 @@ function DifficultyBadge({ level }: { level: string }) {
   )
 }
 
-/** 1–10 스코어를 5점 만점 별로 환산 (시각적 직관) */
-function StarRow5({ score10 }: { score10: number }) {
-  const filled = Math.min(5, Math.max(0, Math.round(score10 / 2)))
+function ScoreBar10({
+  score10,
+  higherIsBetter,
+}: {
+  score10: number
+  higherIsBetter: boolean
+}) {
+  const pct = Math.min(100, Math.max(0, (score10 / 10) * 100))
+  const barClass = higherIsBetter ? 'bg-[#2AC1BC]' : 'bg-amber-500'
   return (
-    <div className="mt-2 flex gap-0.5" aria-label={`5점 만점 ${filled}점`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <Star
-          key={i}
-          className={cn(
-            'h-3.5 w-3.5',
-            i < filled ? 'fill-[#2AC1BC] text-[#2AC1BC]' : 'fill-none text-muted-foreground/35'
-          )}
-          strokeWidth={i < filled ? 0 : 1.5}
-        />
-      ))}
+    <div className="flex items-center gap-2 w-full max-w-[220px]">
+      <div className="h-1.5 min-w-[5rem] flex-1 overflow-hidden rounded-full bg-muted">
+        <div className={cn('h-full rounded-full transition-all', barClass)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{score10}/10</span>
     </div>
   )
 }
@@ -169,12 +169,15 @@ export interface StrategyEvaluationSectionProps {
   loading?: boolean
   /** 상위 카드 안에 넣을 때: 외곽 섹션·이중 카드 제거 */
   embedded?: boolean
+  /** embedded일 때 상단 제목·설명 줄 숨김(상위 섹션에서 이미 표시할 때) */
+  showEmbeddedHeading?: boolean
 }
 
 export function StrategyEvaluationSection({
   result,
   loading = false,
   embedded = false,
+  showEmbeddedHeading = true,
 }: StrategyEvaluationSectionProps) {
   const km = result?.key_metrics ?? {}
   const se = (km as { strategy_evaluation?: StrategyEval }).strategy_evaluation
@@ -233,22 +236,7 @@ export function StrategyEvaluationSection({
                       </td>
                       <td className="align-top px-3 py-3 tabular-nums font-semibold">{score != null ? `${score}/10` : '—'}</td>
                       <td className="align-top px-3 py-3">
-                        {score != null ? (
-                          <div className="flex flex-col gap-1.5 max-w-[200px]">
-                            <StarRow5 score10={score} />
-                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full transition-all',
-                                  d.higherIsBetter ? 'bg-[#2AC1BC]' : 'bg-amber-500'
-                                )}
-                                style={{ width: `${(score / 10) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                        {score != null ? <ScoreBar10 score10={score} higherIsBetter={d.higherIsBetter} /> : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 text-xs leading-relaxed">
                         {reason ?? '—'}
@@ -297,18 +285,9 @@ export function StrategyEvaluationSection({
                     {score != null ? `${score}/10` : '—'}
                   </p>
                   {score != null && (
-                    <>
-                      <StarRow5 score10={score} />
-                      <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={cn(
-                            'h-full rounded-full transition-all',
-                            d.higherIsBetter ? 'bg-[#2AC1BC]' : 'bg-amber-500'
-                          )}
-                          style={{ width: `${(score / 10) * 100}%` }}
-                        />
-                      </div>
-                    </>
+                    <div className="mt-2">
+                      <ScoreBar10 score10={score} higherIsBetter={d.higherIsBetter} />
+                    </div>
                   )}
                   {reason && (
                     <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-2.5">
@@ -327,12 +306,14 @@ export function StrategyEvaluationSection({
   if (embedded) {
     return (
       <div id="section-strategy-evaluation" className="scroll-mt-24 space-y-2">
-        <div className="px-0.5">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">리스크 및 기회 평가</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            정량·정성 교차검증 신뢰도, 리스크 완화·기회 실행 난이도, 축별 스코어(1–10)
-          </p>
-        </div>
+        {showEmbeddedHeading ? (
+          <div className="px-0.5">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">리스크 및 기회 평가</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              정량·정성 교차검증 신뢰도, 리스크 완화·기회 실행 난이도, 축별 스코어(1–10)
+            </p>
+          </div>
+        ) : null}
         {body}
       </div>
     )

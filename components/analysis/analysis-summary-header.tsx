@@ -8,6 +8,29 @@ import { urgencyToPriorityLevel } from '@/lib/research-priority-outcomes'
 import { breakdownDimensionTo10, formatPrimaryScore100 } from '@/lib/score-display'
 import { DimensionScoreBar } from '@/components/analysis/dimension-score-bar'
 
+function competitionIntensityTo10(level?: 'low' | 'medium' | 'high' | null): number | null {
+  if (!level) return null
+  const m: Record<'low' | 'medium' | 'high', number> = { low: 3, medium: 6, high: 9 }
+  return m[level] ?? null
+}
+
+/** breakdown에 의미 있는 값이 있으면 우선, 로딩 기본값 0·누락일 때만 strategic_decision_layer 경쟁 강도로 보조 */
+export function resolveCompetitionScore10(
+  b: NonNullable<ResearchResponse['key_metrics']>['opportunity_score_breakdown'] | undefined,
+  intensity?: 'low' | 'medium' | 'high' | null
+): number | null {
+  const raw =
+    typeof b?.competition_density === 'number'
+      ? b.competition_density
+      : typeof b?.competition_pressure === 'number'
+        ? b.competition_pressure
+        : undefined
+  if (raw != null && Number.isFinite(raw) && raw !== 0) {
+    return breakdownDimensionTo10(raw)
+  }
+  return competitionIntensityTo10(intensity ?? undefined)
+}
+
 const P_BADGE: Record<0 | 1 | 2, string> = {
   0: 'border-rose-300/80 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-100',
   1: 'border-amber-300/80 bg-amber-100 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100',
@@ -54,13 +77,10 @@ export function SummaryStatPills({ result }: { result: ResearchResponse | null }
   const growth10 = breakdownDimensionTo10(typeof b.market_growth === 'number' ? b.market_growth : undefined)
   const trend10 = breakdownDimensionTo10(typeof b.trend_momentum === 'number' ? b.trend_momentum : undefined)
   const marketDim = growth10 ?? trend10
-  const compRaw =
-    typeof b.competition_density === 'number'
-      ? b.competition_density
-      : typeof b.competition_pressure === 'number'
-        ? b.competition_pressure
-        : undefined
-  const competition10 = breakdownDimensionTo10(compRaw)
+  const competition10 = resolveCompetitionScore10(
+    km.opportunity_score_breakdown,
+    km.strategic_decision_layer?.competition_intensity
+  )
   const opp = typeof km.opportunity_score === 'number' && Number.isFinite(km.opportunity_score) ? km.opportunity_score : null
 
   return (

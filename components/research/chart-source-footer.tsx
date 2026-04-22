@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-export const DEFAULT_CHART_SOURCE_TAG = 'Data Source: RSS Feed & AI Synthesis'
+export const DEFAULT_CHART_SOURCE_TAG = '데이터 출처: RSS 피드 및 AI 종합'
 
 export function ChartSourceFooter({
   text = DEFAULT_CHART_SOURCE_TAG,

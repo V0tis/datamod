@@ -15,6 +15,9 @@ import { ProductStrategySection } from '@/components/research/ProductStrategySec
 import { StrategyFrameworkPanel } from '@/components/research/StrategyFrameworkPanel'
 import { AnalysisCharts } from '@/components/research/AnalysisCharts'
 import { MarketGrowthCharts } from '@/components/research/MarketGrowthCharts'
+import { MarketStatsRow } from '@/components/research/MarketStatsRow'
+import { KeyTrendsChipsSection } from '@/components/research/KeyTrendsChipsSection'
+import { MarketPositioningInsightsCards } from '@/components/research/MarketPositioningInsightsCards'
 import { CompetitorLandscapeTable } from '@/components/research/CompetitorLandscapeTable'
 import { StartupConceptCard } from '@/components/research/StartupConceptCard'
 import { KeyInsightBulletCard } from '@/components/research/KeyInsightBulletCard'
@@ -166,6 +169,8 @@ export interface AnalysisResultSectionsProps {
   layout?: AnalysisResultLayout
   /** When set, render only this section's content (for structured collapsible layout) */
   sectionOnly?: 'market-trends' | 'competition' | 'strategic' | 'action'
+  /** `sectionOnly="strategic"`일 때 제품 전략 프레임워크(SWOT/Porter/JTBD) 블록 생략 — 탭 패널 등과 중복 방지 */
+  strategicOmitFrameworks?: boolean
 }
 
 export function AnalysisResultSections({
@@ -178,6 +183,7 @@ export function AnalysisResultSections({
   onSaveToWorkspace,
   layout = 'default',
   sectionOnly,
+  strategicOmitFrameworks = false,
 }: AnalysisResultSectionsProps) {
   /** 분석 중에도 차트/기회점수 표시: key_metrics 없으면 default 사용 */
   const km = result?.key_metrics ?? (loading ? DEFAULT_KEY_METRICS_LOADING : {})
@@ -425,94 +431,97 @@ export function AnalysisResultSections({
   if (!hasAnyContent && !loading && !showProgressiveSections) return null
 
   /** For sectionOnly mode: render only the requested block (content only, no ProductStrategySection) */
-  const renderMarketTrends = () => (
-    <>
-      {(loading && !opportunityScore && keyTrends.length === 0 && Object.keys(breakdown).length === 0) ? (
-        <SectionContentSkeleton variant="grid" />
-      ) : (
-        <div className="space-y-6">
-          <MarketGrowthCharts
-            opportunityScore={opportunityScore ?? undefined}
-            breakdown={breakdown}
-            growthSignalsCount={growthSignals.length}
-            marketTemperatureScore={typeof trendOutput?.market_temperature_score === 'number' ? trendOutput.market_temperature_score : km.market_temperature_score ?? undefined}
-            chartInsights={km.chart_insights}
-            opportunityScoreReasoning={opportunityScoreChartDialogText}
-            keyword={keyword}
-            radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
-          />
-          <MarketGrowthDimensionCards
-            marketGrowth={marketGrowth}
-            trendMomentum={trendMomentum}
-            growthSignalCount={growthSignals.length}
-            trendSummary={
-              typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined
-            }
-            loading={loading}
-          />
-          <AnalysisCharts
-            opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
-            chartInsights={km.chart_insights}
-            className="mb-4"
-          />
-          {keyTrends.length > 0 && (
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">핵심 트렌드</p>
-              <StreamingBulletList items={keyTrends} streaming={loading} skipAnimation={!loading} revealDelayMs={320} />
-            </div>
-          )}
-          {!opportunityScore && keyTrends.length === 0 && !loading && (
-            <p className="text-sm text-muted-foreground">—</p>
-          )}
-        </div>
-      )}
-    </>
-  )
+  const renderMarketTrends = () => {
+    const mg10 = breakdownDimensionTo10(marketGrowth ?? undefined)
+    const tm10 = breakdownDimensionTo10(trendMomentum ?? undefined)
+    const trendChipSub =
+      typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 72) : undefined
+    const confidenceRaw = typeof km.confidence_score === 'number' ? km.confidence_score : null
 
-  const renderCompetition = () => (
-    <>
-      {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
-        <SectionContentSkeleton variant="mixed" />
-      ) : (
-        <div className="space-y-4">
-          {competitiveLandscape.length > 0 && (
-            <>
-              <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
-              <CompetitorBubbleQuadrant
-                competitors={competitiveLandscape}
-                keyword={keyword}
-                pmCaption={
-                  layout === 'pm-analytics' && competitiveLandscape.length > 0
-                    ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
-                    : null
-                }
-              />
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
-                <div className="flex flex-wrap gap-2">
-                  {competitiveLandscape.slice(0, 8).map((c, i) => (
-                    <div key={i} className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm">
-                      <span className="font-medium text-foreground">{c.name}</span>
-                      {c.positioning && <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>}
-                    </div>
-                  ))}
-                </div>
+    return (
+      <>
+        {(loading && !opportunityScore && keyTrends.length === 0 && Object.keys(breakdown).length === 0) ? (
+          <SectionContentSkeleton variant="grid" />
+        ) : (
+          <div className="space-y-6">
+            <MarketGrowthCharts
+              opportunityScore={opportunityScore ?? undefined}
+              breakdown={breakdown}
+              growthSignalsCount={growthSignals.length}
+              marketTemperatureScore={
+                typeof trendOutput?.market_temperature_score === 'number'
+                  ? trendOutput.market_temperature_score
+                  : km.market_temperature_score ?? undefined
+              }
+              chartInsights={km.chart_insights}
+              opportunityScoreReasoning={opportunityScoreChartDialogText}
+              keyword={keyword}
+              radarSkeleton={loading && opportunityScore == null && keyTrends.length === 0}
+            />
+            <MarketGrowthDimensionCards
+              marketGrowth={marketGrowth}
+              trendMomentum={trendMomentum}
+              growthSignalCount={growthSignals.length}
+              trendSummary={
+                typeof trendOutput?.trend_summary === 'string' ? trendOutput.trend_summary.slice(0, 120) : undefined
+              }
+              loading={loading}
+            />
+            <MarketStatsRow
+              growth10={mg10}
+              trend10={tm10}
+              trendCount={keyTrends.length}
+              confidencePct={confidenceRaw}
+              trendSub={trendChipSub}
+            />
+            <AnalysisCharts
+              opportunityScoreBreakdown={Object.keys(breakdown).length > 0 ? breakdown : undefined}
+              chartInsights={km.chart_insights}
+              className="mb-4"
+            />
+            {keyTrends.length > 0 ? <KeyTrendsChipsSection trends={keyTrends} /> : null}
+            {!opportunityScore && keyTrends.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">—</p>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const renderCompetition = () => {
+    const positioningBullets = [...competitorTrendsBullets, ...marketStructureBullets].filter(Boolean)
+
+    return (
+      <>
+        {loading && competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 ? (
+          <SectionContentSkeleton variant="mixed" />
+        ) : (
+          <div className="space-y-6">
+            {competitiveLandscape.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
+                <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
+                <CompetitorBubbleQuadrant
+                  embedded
+                  competitors={competitiveLandscape}
+                  keyword={keyword}
+                  pmCaption={
+                    layout === 'pm-analytics' && competitiveLandscape.length > 0
+                      ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                      : null
+                  }
+                />
               </div>
-            </>
-          )}
-          {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>
-              <StreamingBulletList items={competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets} streaming={loading} skipAnimation={!loading} revealDelayMs={280} />
-            </div>
-          )}
-          {competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 && marketStructureBullets.length === 0 && !loading && (
-            <p className="text-sm text-muted-foreground">경쟁 구도 데이터가 없습니다.</p>
-          )}
-        </div>
-      )}
-    </>
-  )
+            ) : null}
+            <MarketPositioningInsightsCards bullets={positioningBullets} />
+            {competitiveLandscape.length === 0 && positioningBullets.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground">경쟁 구도 데이터가 없습니다.</p>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
 
   if (sectionOnly === 'market-trends') return <div className="animate-in fade-in duration-300">{renderMarketTrends()}</div>
   if (sectionOnly === 'competition') return <div className="animate-in fade-in duration-300">{renderCompetition()}</div>
@@ -521,7 +530,7 @@ export function AnalysisResultSections({
   if (sectionOnly === 'strategic') {
     return (
       <div className="space-y-10 animate-in fade-in duration-300">
-        {(hasFrameworks || loading) && (
+        {!strategicOmitFrameworks && (hasFrameworks || loading) && (
           <ProductStrategySection
             title="제품 전략 프레임워크"
             icon={<LayoutGrid className="h-5 w-5" />}
@@ -839,48 +848,69 @@ export function AnalysisResultSections({
                     ) : null}
                   </div>
                 )}
-                <CompetitorLandscapeTable
-                  competitors={competitiveLandscape}
-                  loading={loading}
-                />
-                <CompetitorBubbleQuadrant
-                  competitors={competitiveLandscape}
-                  keyword={keyword}
-                  pmCaption={
-                    layout === 'pm-analytics' && competitiveLandscape.length > 0
-                      ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
-                      : null
-                  }
-                />
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
-                  <div className="flex flex-wrap gap-2">
-                    {competitiveLandscape.slice(0, 8).map((c, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm"
-                      >
-                        <span className="font-medium text-foreground">{c.name}</span>
-                        {c.positioning && (
-                          <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>
-                        )}
-                      </div>
-                    ))}
+                {isPmAnalytics ? (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
+                    <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
+                    <CompetitorBubbleQuadrant
+                      embedded
+                      competitors={competitiveLandscape}
+                      keyword={keyword}
+                      pmCaption={
+                        competitiveLandscape.length > 0
+                          ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                          : null
+                      }
+                    />
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <CompetitorLandscapeTable competitors={competitiveLandscape} loading={loading} />
+                    <CompetitorBubbleQuadrant
+                      competitors={competitiveLandscape}
+                      keyword={keyword}
+                      pmCaption={
+                        competitiveLandscape.length > 0
+                          ? `${competitiveLandscape.length}개 주체 기준 상대 점유·성장성을 읽고, 호버로 좌표 근거를 확인하세요.`
+                          : null
+                      }
+                    />
+                    <div>
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">주요 경쟁사</p>
+                      <div className="flex flex-wrap gap-2">
+                        {competitiveLandscape.slice(0, 8).map((c, i) => (
+                          <div
+                            key={i}
+                            className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm"
+                          >
+                            <span className="font-medium text-foreground">{c.name}</span>
+                            {c.positioning && (
+                              <span className="text-muted-foreground text-xs ml-1">· {c.positioning}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
             <StrategicActionPlanSection plan={strategicActionPlan} />
-            {(competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>
-                <StreamingBulletList
-                  items={competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets}
-                  streaming={loading}
-                  skipAnimation={!loading}
-                  revealDelayMs={280}
-                />
-              </div>
+            {isPmAnalytics ? (
+              <MarketPositioningInsightsCards
+                bullets={[...competitorTrendsBullets, ...marketStructureBullets].filter(Boolean)}
+              />
+            ) : (
+              (competitorTrendsBullets.length > 0 || marketStructureBullets.length > 0) && (
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">시장 포지셔닝</p>
+                  <StreamingBulletList
+                    items={competitorTrendsBullets.length > 0 ? competitorTrendsBullets : marketStructureBullets}
+                    streaming={loading}
+                    skipAnimation={!loading}
+                    revealDelayMs={280}
+                  />
+                </div>
+              )
             )}
             {competitiveLandscape.length === 0 && competitorTrendsBullets.length === 0 && marketStructureBullets.length === 0 && !loading && (
               <p className="text-sm text-muted-foreground">경쟁 구도 데이터가 없습니다.</p>

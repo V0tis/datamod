@@ -119,7 +119,7 @@ function takeKeyConclusionLines(result: ResearchResponse | null): string[] {
 }
 
 /** conclusion_three_lines + 전략 태스크 출력 + PM 액션·인사이트로 3줄 구성 */
-function takeThreeActionLines(
+export function takeThreeActionLines(
   result: ResearchResponse | null,
   taskData?: Partial<Record<string, unknown>>,
   analysisTasks?: ConclusionActionStripTaskRow[] | null

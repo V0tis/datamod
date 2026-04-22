@@ -1,27 +1,18 @@
 'use client'
 
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { OpportunityChartSourceDialog } from '@/components/analysis/opportunity-chart-source-dialog'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 import { breakdownToRadarDisplayRows } from '@/lib/chart/opportunity-radar-display'
-import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT, CHART_MINT_SOFT } from '@/lib/chart-theme'
+import { CHART_GRAY_AXIS, CHART_GRAY_GRID, CHART_MINT } from '@/lib/chart-theme'
 import { chartCardClassName, chartFontFamily } from '@/lib/chartTheme'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
 import { BreakdownHorizontalBars } from '@/components/research/BreakdownHorizontalBars'
 import { MarketScoreWaterfall } from '@/components/research/MarketScoreWaterfall'
 import { ChartSourceFooter } from '@/components/research/chart-source-footer'
+import { SearchTrendGrowthChart } from '@/components/research/SearchTrendGrowthChart'
 
 const CHART_GRAY_FILL = '#94a3b8'
 
@@ -132,13 +123,6 @@ export function MarketGrowthCharts({
   const score = Math.min(100, Math.max(0, opportunityScore ?? 0))
 
   const searchData = buildSearchTrendData(trendMomentum, marketGrowth, marketTemperatureScore ?? 50)
-  const searchVals = searchData.map((d) => d.value)
-  const sMin = Math.min(...searchVals)
-  const sMax = Math.max(...searchVals)
-  const span = Math.max(4, sMax - sMin)
-  const pad = Math.max(2, span * 0.12)
-  const yLow = Math.max(0, Math.floor(sMin - pad))
-  const yHigh = Math.min(100, Math.ceil(sMax + pad))
 
   const adoptionData = buildAdoptionData(growthSignalsCount, trendMomentum)
   const adoptionRates = adoptionData.map((d) => d.rate)
@@ -161,187 +145,146 @@ export function MarketGrowthCharts({
       {radarSkeleton ? (
         <SectionContentSkeleton variant="chart" className="rounded-xl border border-border/40 bg-card/30 p-3" />
       ) : (
-        <ChartWithInsight
-          pmCaption={pmSectionCaption}
-          title="시장 다각도 분석 (막대) · 0~100 강도 점수"
-          description="각 막대는 동일 척도(0~100)로 환산된 상대 강도이며, 색이 진할수록 값이 큽니다. 세로 점선은 항목 평균입니다."
-          logicHint="기회 점수 breakdown의 각 축을 동일 스케일(0~100)로 환산한 뒤, 막대 길이로 상대 강도를 비교합니다."
-          insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
-          takeaway={ma?.takeaway}
-          variant="flat"
-          className={chartCardClassName}
-          headerActions={
-            <OpportunityChartSourceDialog
-              reasoning={
-                [opportunityScoreReasoning?.trim(), chartInsightNarrative(ma?.insight, ma?.takeaway)]
-                  .filter(Boolean)
-                  .join('\n\n') || undefined
+        <>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-stretch">
+            <ChartWithInsight
+              pmCaption={pmSectionCaption}
+              title="검색 트렌드 성장"
+              description="시장 성장·트렌드 모멘텀을 반영한 월별 상대 검색 관심도 추정(0~100)."
+              logicHint="시장 성장·트렌드 모멘텀을 반영해 월별 상대 검색 관심도 추정치를 구성합니다."
+              insight={st?.insight}
+              takeaway={st?.takeaway}
+              variant="flat"
+              className={chartCardClassName}
+              headerActions={
+                <OpportunityChartSourceDialog
+                  title="검색 트렌드 — 데이터 출처"
+                  variant="chart_insight"
+                  reasoning={chartInsightNarrative(st?.insight, st?.takeaway)}
+                />
               }
-              breakdown={effectiveBreakdown as Record<string, number | undefined>}
-              variant="breakdown"
-            />
-          }
-        >
-          <div className="mb-3 rounded-md border border-slate-100 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-300">
-              이 차트가 의미하는 핵심 인사이트
-            </p>
-            <p className="mt-1 text-sm leading-snug text-slate-800 dark:text-zinc-100">
-              {ma?.takeaway?.trim() ||
-                ma?.insight?.trim() ||
-                '각 축은 기회 점수 산출에 쓰인 요인의 상대 강도를 보여 주며, 강한 축을 우선 과제로 두는 것이 유리합니다.'}
-            </p>
+            >
+              <SearchTrendGrowthChart data={searchData} />
+              <ChartSourceFooter />
+            </ChartWithInsight>
+
+            <ChartWithInsight
+              title="시장 규모 · 잠재력 (워터폴)"
+              description="기준 50에서 시장·트렌드·보정을 순차 반영한 누적 흐름입니다."
+              logicHint="기준 가중치에서 시장·트렌드·보정 항을 순차 반영해 최종 기회 점수에 가깝게 누적합니다."
+              insight={ms?.insight}
+              takeaway={ms?.takeaway}
+              variant="flat"
+              className={chartCardClassName}
+              headerActions={
+                <OpportunityChartSourceDialog
+                  title="시장 규모 — 데이터 출처"
+                  variant="chart_insight"
+                  reasoning={chartInsightNarrative(ms?.insight, ms?.takeaway)}
+                />
+              }
+            >
+              <div className="flex min-h-[140px] w-full flex-col justify-center">
+                <MarketScoreWaterfall
+                  opportunityScore={score}
+                  marketGrowth={marketGrowth}
+                  trendMomentum={trendMomentum}
+                />
+              </div>
+              <ChartSourceFooter />
+            </ChartWithInsight>
           </div>
-          <BreakdownHorizontalBars
-            rows={multiRows}
-            valueLabel="점수"
-            maxDomain={100}
-            heightClass="min-h-[220px] max-h-[400px]"
-            showSource
-          />
-        </ChartWithInsight>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
+            <ChartWithInsight
+              title="요인별 강도"
+              description="각 막대는 동일 척도(0~100)로 환산된 상대 강도입니다. 색은 점수 구간별로 구분됩니다."
+              logicHint="기회 점수 breakdown의 각 축을 동일 스케일(0~100)로 환산한 뒤 비교합니다."
+              insight={ma?.insight ?? '기회 점수를 구성하는 축별 상대 강도를 한 화면에서 비교합니다.'}
+              takeaway={ma?.takeaway}
+              variant="flat"
+              className={chartCardClassName}
+              headerActions={
+                <OpportunityChartSourceDialog
+                  reasoning={
+                    [opportunityScoreReasoning?.trim(), chartInsightNarrative(ma?.insight, ma?.takeaway)]
+                      .filter(Boolean)
+                      .join('\n\n') || undefined
+                  }
+                  breakdown={effectiveBreakdown as Record<string, number | undefined>}
+                  variant="breakdown"
+                />
+              }
+            >
+              <BreakdownHorizontalBars
+                rows={multiRows}
+                valueLabel="점수"
+                maxDomain={100}
+                heightClass="min-h-[220px] max-h-[400px]"
+                showSource
+              />
+            </ChartWithInsight>
+
+            <ChartWithInsight
+              title="시장 도입 추이"
+              description="성장 시그널 건수와 트렌드 강도를 반영한 S곡선형 단계별 도입률(%) 추정입니다."
+              logicHint="성장 시그널 건수와 트렌드 강도를 반영한 S곡선 형태의 단계별 도입률 추정입니다."
+              insight={ar?.insight}
+              takeaway={ar?.takeaway}
+              variant="flat"
+              className={chartCardClassName}
+              headerActions={
+                <OpportunityChartSourceDialog
+                  title="시장 도입 추이 — 데이터 출처"
+                  variant="chart_insight"
+                  reasoning={chartInsightNarrative(ar?.insight, ar?.takeaway)}
+                />
+              }
+            >
+              <div className="h-[220px] w-full min-h-[200px] sm:h-[240px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+                  <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} style={{ fontFamily: chartFontFamily }}>
+                    <defs>
+                      <linearGradient id="market-growth-adoption-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_MINT} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={CHART_MINT} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
+                    <XAxis dataKey="stage" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
+                    <YAxis
+                      domain={[adoptionYLow, adoptionYHigh]}
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => [`${v}%`, '도입률']}
+                      contentStyle={{
+                        fontSize: 12,
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                      }}
+                      cursor={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="rate"
+                      stroke={CHART_GRAY_FILL}
+                      strokeWidth={1.5}
+                      fill="url(#market-growth-adoption-grad)"
+                      isAnimationActive
+                      animationDuration={1000}
+                      animationEasing="ease-out"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <ChartSourceFooter />
+            </ChartWithInsight>
+          </div>
+        </>
       )}
-
-      <div className="flex flex-col gap-5">
-        <ChartWithInsight
-          title="검색 트렌드 성장"
-          description="시장 성장·트렌드 모멘텀을 반영한 월별 상대 검색 관심도 추정(0~100). Y축은 데이터가 잘 보이도록 자동 확대됩니다."
-          logicHint="시장 성장·트렌드 모멘텀을 반영해 월별 상대 검색 관심도 추정치를 구성합니다. Y축은 데이터 범위에 맞춰 확대됩니다."
-          insight={st?.insight}
-          takeaway={st?.takeaway}
-          variant="flat"
-          className={chartCardClassName}
-          headerActions={
-            <OpportunityChartSourceDialog
-              title="검색 트렌드 — 데이터 출처"
-              variant="chart_insight"
-              reasoning={chartInsightNarrative(st?.insight, st?.takeaway)}
-            />
-          }
-        >
-          <div className="aspect-[21/9] w-full min-h-[220px] max-h-[400px] sm:min-h-[240px]">
-            <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-              <LineChart data={searchData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} style={{ fontFamily: chartFontFamily }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
-                <YAxis
-                  domain={[yLow, yHigh]}
-                  allowDecimals={false}
-                  tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 32 }}
-                />
-                <Tooltip
-                  formatter={(v: number) => [`${v}`, '검색 관심도']}
-                  contentStyle={{
-                    fontSize: 12,
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  }}
-                  cursor={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke={CHART_MINT}
-                  strokeWidth={2}
-                  dot={{ fill: CHART_MINT, r: 3 }}
-                  activeDot={{ r: 5, fill: CHART_MINT }}
-                  isAnimationActive
-                  animationDuration={1000}
-                  animationEasing="ease-out"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <ChartSourceFooter />
-        </ChartWithInsight>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-        <ChartWithInsight
-          title="시장 규모 · 잠재력 (워터폴)"
-          description="기준 50에서 시장·트렌드·보정을 순차 반영한 누적 흐름입니다. 막대 색은 가산(녹)·감산(적)·기준(청)을 구분합니다."
-          logicHint="기준 가중치(파랑)에서 시장·트렌드·보정 항을 순차 반영해 최종 기회 점수에 가깝게 누적합니다. 파랑=가산·기준, 빨강=감산 흐름입니다."
-          insight={ms?.insight}
-          takeaway={ms?.takeaway}
-          variant="flat"
-          className={chartCardClassName}
-          headerActions={
-            <OpportunityChartSourceDialog
-              title="시장 규모 — 데이터 출처"
-              variant="chart_insight"
-              reasoning={chartInsightNarrative(ms?.insight, ms?.takeaway)}
-            />
-          }
-        >
-          <div className="flex min-h-[220px] flex-col justify-center">
-            <MarketScoreWaterfall
-              opportunityScore={score}
-              marketGrowth={marketGrowth}
-              trendMomentum={trendMomentum}
-            />
-          </div>
-          <ChartSourceFooter />
-        </ChartWithInsight>
-
-        <ChartWithInsight
-          title="시장 도입 추이"
-          description="성장 시그널 건수와 트렌드 강도를 반영한 S곡선형 단계별 도입률(%) 추정입니다."
-          logicHint="성장 시그널 건수와 트렌드 강도를 반영한 S곡선 형태의 단계별 도입률 추정입니다."
-          insight={ar?.insight}
-          takeaway={ar?.takeaway}
-          variant="flat"
-          className={chartCardClassName}
-          headerActions={
-            <OpportunityChartSourceDialog
-              title="시장 도입 추이 — 데이터 출처"
-              variant="chart_insight"
-              reasoning={chartInsightNarrative(ar?.insight, ar?.takeaway)}
-            />
-          }
-        >
-          <div className="aspect-video w-full min-h-[220px] max-h-[360px] sm:min-h-[220px]">
-            <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-              <AreaChart data={adoptionData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} style={{ fontFamily: chartFontFamily }}>
-                <defs>
-                  <linearGradient id="market-growth-adoption-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={CHART_MINT} stopOpacity={0.35} />
-                    <stop offset="100%" stopColor={CHART_MINT} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRAY_GRID} />
-                <XAxis dataKey="stage" tick={{ fontSize: 10, fill: CHART_GRAY_AXIS }} />
-                <YAxis
-                  domain={[adoptionYLow, adoptionYHigh]}
-                  allowDecimals={false}
-                  tick={{ fontSize: 10, fill: CHART_GRAY_AXIS, width: 28 }}
-                />
-                <Tooltip
-                  formatter={(v: number) => [`${v}%`, '도입률']}
-                  contentStyle={{
-                    fontSize: 12,
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  }}
-                  cursor={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="rate"
-                  stroke={CHART_GRAY_FILL}
-                  strokeWidth={1.5}
-                  fill="url(#market-growth-adoption-grad)"
-                  isAnimationActive
-                  animationDuration={1000}
-                  animationEasing="ease-out"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <ChartSourceFooter />
-        </ChartWithInsight>
-        </div>
-      </div>
     </div>
   )
 }

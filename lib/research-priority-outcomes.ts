@@ -10,6 +10,14 @@ export type PriorityInsightItem = {
   impact: string
 }
 
+/** UI 표시용: "예상 기간:" 중복·미기재 문구 정리 */
+export function normalizeActionTimeline(raw?: string | null): string {
+  if (!raw?.trim()) return '미정'
+  let s = raw.trim().replace(/^예상\s*기간\s*[:：]\s*/i, '').trim()
+  if (!s || s === '미기재') return '미정'
+  return s
+}
+
 export type OutcomeMetricItem = {
   value: string
   label: string

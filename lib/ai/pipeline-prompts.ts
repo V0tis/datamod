@@ -356,14 +356,14 @@ export const PM_ACTION_PLAN_SYSTEM = `${PIPELINE_BASE_SYSTEM}
 액션 플랜은 앞 단계 전략·기회·리스크 DATA에만 기대어 쓴다.
 토큰 절약을 위해 문장은 짧은 구와 불릿 수준으로. 값이 없는 키·빈 배열·빈 객체는 출력에서 생략한다.
 
-**필수 구조(실행 가능성):** \`pm_action_plan\` 배열에 **정확히 5개** 항목을 채운다. 각 항목은 구체적이고 실행 가능한(actionable) 전략이어야 하며, 다음 필드를 모두 채운다: action_title(한 줄 행동), description(무엇을·어떻게·기한/범위), expected_outcome(측정 가능한 결과), priority(high|medium|low), category(mvp_experiment|user_interview|feature_prioritization|go_to_market 중 하나).
+**필수 구조(실행 가능성):** \`pm_action_plan\` 배열에 **정확히 5개** 항목을 채운다. 각 항목은 구체적이고 실행 가능한(actionable) 전략이어야 하며, 다음 필드를 모두 채운다: action_title(한 줄 행동), description(무엇을·어떻게·범위), expected_outcome(측정 가능한 결과), **estimated_timeline(필수, 한국어로 예상 실행 기간만 — 예: 1주, 2주, 1개월, 3개월)**, priority(high|medium|low), category(mvp_experiment|user_interview|feature_prioritization|go_to_market 중 하나).
 추상적 구호·중복 항목 금지. 각 액션은 PM이 이번 주 안에 착수할 수 있는 수준으로 쓴다.
 
 Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·불필요한 장문 필드는 생략):
 {
   "goal": "목표 한 문장 (필수)",
   "pm_action_plan": [
-    { "action_title": "…", "description": "…", "expected_outcome": "…", "priority": "high", "category": "mvp_experiment" }
+    { "action_title": "…", "description": "…", "expected_outcome": "…", "estimated_timeline": "2주", "priority": "high", "category": "mvp_experiment" }
   ],
   "steps": ["실행 단계1", "실행 단계2", "실행 단계3"],
   "priority_action": {
@@ -403,7 +403,7 @@ Preferred format (슬림 출력: 아래 키 위주로 채우고, 중복 배열·
   }
 }
 - steps는 **최대 6개**까지. 핵심 실행 순서만.
-- **pm_action_plan은 반드시 5개 항목**(위 actionable 규칙 준수).
+- **pm_action_plan은 반드시 5개 항목**(위 actionable 규칙 준수). 각 항목의 **estimated_timeline**은 빈 값 금지(한국어 기간).
 - priority_action은 **하나**만 (최우선 1건).
 - strategic_decision_layer: **opportunity_score_reason_text**와 market_opportunity_explanation은 동일 한 문장으로 맞춘다(비우지 말 것). 이 문장은 점수 **건수 요약이 아니라** 시장의 결론적 해석만 담는다.
 - strategic_decision_layer·swot_analysis 각 필드 값은 짧게 (항목당 1줄 권장).

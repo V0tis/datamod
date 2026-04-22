@@ -57,7 +57,7 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
 
 const QUADRANT = {
   tl: '니치 · 고성장',
-  tr: '우위 · 고성장',
+  tr: '우위 · 고성장 ✅',
   bl: '저존재 · 저성장',
   br: '우위 · 저성장',
 } as const
@@ -67,7 +67,8 @@ const X_AXIS_CAPTION = '시장 점유 · 존재감 (1–10)'
 /** 상·하단 4분면 캡션 + 축 제목을 같은 열 정렬로 맞춤 */
 const quadrantCaptionGrid =
   'grid w-full grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] gap-x-2 px-2 sm:px-3'
-const quadrantCaptionText = 'text-[10px] font-medium leading-snug text-muted-foreground/95 [word-break:keep-all]'
+const quadrantCaptionText =
+  'text-[11px] font-medium leading-snug text-slate-300 [word-break:keep-all] dark:text-zinc-500'
 
 function truncateName(s: string, max: number): string {
   const t = s.trim()
@@ -75,17 +76,22 @@ function truncateName(s: string, max: number): string {
   return `${t.slice(0, max - 1)}…`
 }
 
+const OUR_FILL = '#1B64DA'
+
 export function CompetitorBubbleQuadrant({
   competitors,
   className,
   pmCaption,
   keyword,
+  embedded = false,
 }: {
   competitors: CompetitorScatterRow[]
   className?: string
   pmCaption?: string | null
   /** 자사(우리 회사) 버블 강조: 키워드와 경쟁사 이름 일치 시 */
   keyword?: string
+  /** true면 ChartWithInsight 래퍼 없이 카드만 (상위 섹션 제목과 병치) */
+  embedded?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<ScatterPayload | null>(null)
@@ -100,36 +106,37 @@ export function CompetitorBubbleQuadrant({
     }))
   }, [competitors, keyword])
 
-  return (
-    <>
-      <ChartWithInsight
-        pmCaption={pmCaption}
-        title="경쟁사 버블 매트릭스 · 시장 점유·성장성 (1–10)"
-        description="가로·세로 5를 기준으로 네 구간을 나눕니다. 버블 안 이름으로 주체를 구분하고, 호버 시 좌표·설명을 확인합니다."
-        insight="가로 시장 점유(1–10), 세로 성장성(1–10). 중앙 (5,5) 기준 4분면으로 포지션을 읽습니다."
-        className={className}
-      >
-        <div className="rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/30">
-          <div className="flex min-w-0 flex-col">
-            <div
-              className={cn(quadrantCaptionGrid, 'pointer-events-none min-h-[2.25rem] items-center border-b border-transparent pb-2')}
-              aria-hidden
-            >
-              <span className={cn(quadrantCaptionText, 'justify-self-start text-left')}>{QUADRANT.tl}</span>
-              {/* 하단 중앙 축 제목과 같은 열 폭을 맞추기 위한 자리 표시 */}
-              <span className="min-w-[min(100%,10rem)] shrink-0 justify-self-center" aria-hidden />
-              <span className={cn(quadrantCaptionText, 'justify-self-end text-right')}>{QUADRANT.tr}</span>
-            </div>
-            <div className="relative h-[min(420px,62vw)] w-full min-h-[220px]">
-            {/* 4분면 배경 — 캡션은 차트 밖 그리드로 배치 */}
+  const chartCard = (
+    <div
+      className={cn(
+        'rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/30',
+        embedded && 'h-full border-border bg-card shadow-sm dark:bg-zinc-950/80'
+      )}
+    >
+      <div className="flex min-w-0 flex-col">
+        {embedded ? (
+          <div className="mb-2 border-b border-border/60 px-1 pb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">버블 매트릭스</h3>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">시장 점유·성장성 (1–10), 중앙 (5,5) 기준 4분면</p>
+          </div>
+        ) : null}
+        <div
+          className={cn(quadrantCaptionGrid, 'pointer-events-none min-h-[2.25rem] items-center border-b border-transparent pb-2')}
+          aria-hidden
+        >
+          <span className={cn(quadrantCaptionText, 'justify-self-start text-left')}>{QUADRANT.tl}</span>
+          <span className="min-w-[min(100%,10rem)] shrink-0 justify-self-center" aria-hidden />
+          <span className={cn(quadrantCaptionText, 'justify-self-end text-right')}>{QUADRANT.tr}</span>
+        </div>
+        <div className="relative h-[min(420px,62vw)] w-full min-h-[220px]">
             <div
               className="pointer-events-none absolute left-[12%] right-[10%] top-2 bottom-4 z-[1] grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg"
               aria-hidden
             >
-              <div className="bg-sky-500/[0.05] dark:bg-sky-400/[0.06]" title={QUADRANT.tl} />
-              <div className="bg-emerald-500/[0.05] dark:bg-emerald-400/[0.06]" title={QUADRANT.tr} />
-              <div className="bg-zinc-500/[0.05] dark:bg-zinc-400/[0.06]" title={QUADRANT.bl} />
-              <div className="bg-amber-400/[0.05] dark:bg-amber-300/[0.06]" title={QUADRANT.br} />
+              <div className="dark:bg-[rgba(27,100,218,0.08)]" style={{ background: 'rgba(27, 100, 218, 0.05)' }} title={QUADRANT.tl} />
+              <div className="dark:bg-[rgba(13,159,110,0.08)]" style={{ background: 'rgba(13, 159, 110, 0.05)' }} title={QUADRANT.tr} />
+              <div className="dark:bg-[rgba(255,255,255,0.04)]" style={{ background: 'rgba(0, 0, 0, 0.02)' }} title={QUADRANT.bl} />
+              <div className="dark:bg-[rgba(217,119,6,0.08)]" style={{ background: 'rgba(217, 119, 6, 0.05)' }} title={QUADRANT.br} />
             </div>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 20, left: 28, bottom: 36 }} style={{ fontFamily: chartFontFamily }}>
@@ -180,19 +187,24 @@ export function CompetitorBubbleQuadrant({
                     const cy = Number(p.cy ?? 0)
                     const payload = p.payload as ScatterPayload
                     const r = Math.max(14, Math.min(44, ((payload?.size ?? 60) / 120) * 30 + 12))
-                    const fill = payload?.fill ?? '#10b981'
+                    const tierFill = payload?.fill ?? '#10b981'
                     const isUs = payload?.isOurCompany
+                    const fill = isUs ? OUR_FILL : tierFill
                     const name = payload?.name ?? ''
+                    const dPx = 2 * r
+                    const labelInside = dPx > 60
                     const fs = Math.max(9, Math.min(12, r / 2.6))
-                    /** 원 안에 들어가는 글자 수(한글 기준 대략 폭) — 넘치면 clipPath로 잘라냄 */
                     const approxChar = fs * 0.92
                     const maxChars = Math.max(4, Math.min(16, Math.floor(((2 * r - 10) / approxChar) * 0.95)))
-                    const label = truncateName(name, maxChars)
+                    const labelIn = truncateName(name, maxChars)
+                    const labelOut = truncateName(name, 22)
                     const clipId = `bubble-txt-${cellIndex}-${Math.round(cx)}-${Math.round(cy)}`
+                    /** 자사: 금색 별 (간단 폴리곤) */
+                    const starY = isUs ? cy - r * 0.15 : cy
                     return (
                       <g
                         className="cursor-pointer outline-none"
-                        style={{ filter: 'drop-shadow(0 2px 6px rgba(15,23,42,0.2))' }}
+                        style={{ filter: 'drop-shadow(0 2px 6px rgba(15,23,42,0.18))' }}
                         onClick={() => {
                           setSelected(payload)
                           setOpen(true)
@@ -209,71 +221,111 @@ export function CompetitorBubbleQuadrant({
                           r={r}
                           fill={fill}
                           fillOpacity={isUs ? 1 : 0.92}
-                          stroke={isUs ? '#F59E0B' : '#0f172a'}
-                          strokeOpacity={isUs ? 1 : 0.35}
-                          strokeWidth={isUs ? 3 : 2.5}
+                          stroke="#ffffff"
+                          strokeWidth={2}
                           className="transition-transform duration-200 ease-out hover:scale-[1.03]"
                         />
-                        <text
-                          x={cx}
-                          y={cy + (isUs ? -3 : 0)}
-                          textAnchor="middle"
-                          dominantBaseline="central"
-                          fill="#fff"
-                          fontWeight={700}
-                          fontSize={fs}
-                          clipPath={`url(#${clipId})`}
-                          style={{
-                            pointerEvents: 'none',
-                            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                            paintOrder: 'stroke fill',
-                          }}
-                          stroke="rgba(15,23,42,0.35)"
-                          strokeWidth={2}
-                        >
-                          {label}
-                        </text>
                         {isUs ? (
+                          <g
+                            pointerEvents="none"
+                            transform={`translate(${cx - 7}, ${starY - 10})`}
+                            style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.35))' }}
+                          >
+                            <polygon
+                              points="7,0 8.5,5 14,5.5 10,9 11.5,14 7,11 2.5,14 4,9 0,5.5 5.5,5"
+                              fill="#FBBF24"
+                              stroke="#fff"
+                              strokeWidth={0.4}
+                            />
+                          </g>
+                        ) : null}
+                        {labelInside ? (
                           <text
                             x={cx}
-                            y={cy + fs * 0.75}
+                            y={cy + (isUs ? r * 0.12 : 0)}
                             textAnchor="middle"
-                            dominantBaseline="middle"
-                            fill="#FEF3C7"
-                            fontSize={Math.max(10, fs * 0.55)}
-                            fontWeight={800}
-                            style={{ pointerEvents: 'none' }}
+                            dominantBaseline="central"
+                            fill="#fff"
+                            fontWeight={700}
+                            fontSize={fs}
+                            clipPath={`url(#${clipId})`}
+                            style={{
+                              pointerEvents: 'none',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.45)',
+                              paintOrder: 'stroke fill',
+                            }}
+                            stroke="rgba(15,23,42,0.25)"
+                            strokeWidth={1.5}
                           >
-                            자사
+                            {labelIn}
                           </text>
-                        ) : null}
+                        ) : (
+                          <g>
+                            <line
+                              x1={cx}
+                              y1={cy + r}
+                              x2={cx}
+                              y2={cy + r + 7}
+                              stroke="#94a3b8"
+                              strokeWidth={1}
+                              strokeOpacity={0.9}
+                            />
+                            <text
+                              x={cx}
+                              y={cy + r + 20}
+                              textAnchor="middle"
+                              fill="#475569"
+                              fontSize={10}
+                              fontWeight={600}
+                              style={{ pointerEvents: 'none' }}
+                            >
+                              {labelOut}
+                            </text>
+                          </g>
+                        )}
                       </g>
                     )
                   }}
                 />
               </ScatterChart>
             </ResponsiveContainer>
-            </div>
-            <div
-              className={cn(
-                quadrantCaptionGrid,
-                'pointer-events-none items-end gap-y-0.5 border-t border-zinc-200/60 pt-2.5 pb-0.5 dark:border-zinc-700/60'
-              )}
-              aria-hidden
-            >
-              <span className={cn(quadrantCaptionText, 'justify-self-start pb-0.5 text-left')}>{QUADRANT.bl}</span>
-              <span
-                className="justify-self-center px-1 pb-0.5 text-center text-[11px] font-medium leading-tight text-muted-foreground [word-break:keep-all]"
-                style={{ fontFamily: chartFontFamily }}
-              >
-                {X_AXIS_CAPTION}
-              </span>
-              <span className={cn(quadrantCaptionText, 'justify-self-end pb-0.5 text-right')}>{QUADRANT.br}</span>
-            </div>
-          </div>
-          <ChartSourceFooter className="px-1" />
         </div>
-      </ChartWithInsight>
+        <div
+          className={cn(
+            quadrantCaptionGrid,
+            'pointer-events-none items-end gap-y-0.5 border-t border-zinc-200/60 pt-2.5 pb-0.5 dark:border-zinc-700/60'
+          )}
+          aria-hidden
+        >
+          <span className={cn(quadrantCaptionText, 'justify-self-start pb-0.5 text-left')}>{QUADRANT.bl}</span>
+          <span
+            className="justify-self-center px-1 pb-0.5 text-center text-[11px] font-medium leading-tight text-muted-foreground [word-break:keep-all]"
+            style={{ fontFamily: chartFontFamily }}
+          >
+            {X_AXIS_CAPTION}
+          </span>
+          <span className={cn(quadrantCaptionText, 'justify-self-end pb-0.5 text-right')}>{QUADRANT.br}</span>
+        </div>
+      </div>
+      <ChartSourceFooter className="px-1 pt-2" />
+    </div>
+  )
+
+  return (
+    <>
+      {embedded ? (
+        <div className={cn('min-w-0', className)}>{chartCard}</div>
+      ) : (
+        <ChartWithInsight
+          pmCaption={pmCaption}
+          title="경쟁사 버블 매트릭스 · 시장 점유·성장성 (1–10)"
+          description="가로·세로 5를 기준으로 네 구간을 나눕니다. 버블에 이름이 표시되며, 호버 시 상세를 확인합니다."
+          insight="가로 시장 점유(1–10), 세로 성장성(1–10). 중앙 (5,5) 기준 4분면으로 포지션을 읽습니다."
+          className={className}
+        >
+          {chartCard}
+        </ChartWithInsight>
+      )}
 
       <Dialog
         open={open}

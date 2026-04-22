@@ -52,13 +52,13 @@ function StepDot({
   kind: StepUiKind
   small?: boolean
 }) {
-  const size = small ? 'h-6 w-6' : 'h-7 w-7'
-  const iconSm = small ? 'h-3 w-3' : 'h-4 w-4'
+  const size = small ? 'h-7 w-7' : 'h-8 w-8'
+  const iconSm = small ? 'h-3.5 w-3.5' : 'h-4 w-4'
   if (kind === 'done') {
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary',
+          'flex shrink-0 items-center justify-center rounded-full bg-green-500 text-white dark:bg-green-600',
           size
         )}
       >
@@ -68,13 +68,19 @@ function StepDot({
   }
   if (kind === 'running') {
     return (
-      <div
-        className={cn(
-          'flex shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary ring-2 ring-primary/35',
-          size
-        )}
-      >
-        <Loader2 className={cn(iconSm, 'animate-spin')} strokeWidth={2} aria-hidden />
+      <div className={cn('relative flex shrink-0 items-center justify-center', size)}>
+        <div
+          className="absolute inset-0 rounded-full border-2 border-blue-400 opacity-50 motion-safe:animate-ping dark:border-sky-400"
+          aria-hidden
+        />
+        <div
+          className={cn(
+            'relative flex items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/50',
+            size
+          )}
+        >
+          <Loader2 className={cn(iconSm, 'animate-spin text-blue-500 dark:text-sky-400')} strokeWidth={2} aria-hidden />
+        </div>
       </div>
     )
   }
@@ -82,7 +88,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full border-2 border-destructive bg-destructive/10 text-destructive',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-red-600 bg-red-500 text-white dark:border-red-500',
           size
         )}
       >
@@ -94,7 +100,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 bg-muted/30 text-muted-foreground',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gray-300 bg-white text-muted-foreground dark:border-zinc-600 dark:bg-zinc-900',
           size
         )}
       >
@@ -106,7 +112,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full bg-muted/40 text-muted-foreground opacity-50',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground opacity-50 dark:border-zinc-700 dark:bg-zinc-900',
           size
         )}
       >
@@ -117,7 +123,7 @@ function StepDot({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full bg-muted/60 text-muted-foreground',
+        'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground dark:border-zinc-600 dark:bg-zinc-900',
         size
       )}
     >
@@ -126,9 +132,40 @@ function StepDot({
   )
 }
 
-function connectorFilled(progressIndex: number, segmentStartIndex: number): boolean {
-  // segment between dot segmentStartIndex and segmentStartIndex+1 is "filled" when left step is done
-  return segmentStartIndex < progressIndex
+function ConnectorSegment({
+  progressIndex,
+  segmentStartIndex,
+  isRunning,
+}: {
+  progressIndex: number
+  segmentStartIndex: number
+  isRunning: boolean
+}) {
+  const leftDone = segmentStartIndex < progressIndex
+  const rightRunning = segmentStartIndex + 1 === progressIndex && isRunning
+
+  if (leftDone && rightRunning) {
+    return (
+      <div
+        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-gradient-to-r from-green-400 to-blue-300 motion-safe:animate-pulse dark:from-green-500 dark:to-blue-400"
+        aria-hidden
+      />
+    )
+  }
+  if (leftDone) {
+    return (
+      <div
+        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-green-400 dark:bg-green-500"
+        aria-hidden
+      />
+    )
+  }
+  return (
+    <div
+      className="mt-[15px] h-px min-w-[2px] flex-1 border-t-2 border-dashed border-gray-200 dark:border-zinc-600"
+      aria-hidden
+    />
+  )
 }
 
 export function AnalysisPipelineDesktopStepper({
@@ -162,25 +199,22 @@ export function AnalysisPipelineDesktopStepper({
             skippedIndices,
           })
           const lineLeft = i > 0
-          const filled = connectorFilled(progressIndex, i - 1)
           return (
             <Fragment key={_.id}>
               {lineLeft ? (
-                <div
-                  className={cn(
-                    'mt-[13px] h-[3px] min-w-[2px] flex-1 rounded-full transition-colors duration-300',
-                    filled ? 'bg-primary' : 'bg-border'
-                  )}
-                  aria-hidden
+                <ConnectorSegment
+                  progressIndex={progressIndex}
+                  segmentStartIndex={i - 1}
+                  isRunning={isRunning && !refiningPhase}
                 />
               ) : null}
-              <div className="flex w-10 shrink-0 flex-col items-center sm:w-11">
+              <div className="flex w-[72px] shrink-0 flex-col items-center">
                 <StepDot kind={kind} />
                 <span
                   title={PROGRESS_STEPS[i].labelKo}
                   className={cn(
-                    'mt-1.5 max-w-[4.5rem] text-center text-[9px] font-medium leading-tight sm:text-[10px]',
-                    kind === 'running' && 'text-foreground',
+                    'mt-2 line-clamp-2 max-w-[72px] text-center text-[10px] font-medium leading-tight text-gray-700 dark:text-zinc-200',
+                    kind === 'running' && 'font-semibold text-blue-800 dark:text-sky-200',
                     kind === 'done' && 'text-foreground/90',
                     (kind === 'pending' || kind === 'after_failure') && 'text-muted-foreground',
                     kind === 'failed' && 'text-destructive',

@@ -17,7 +17,7 @@ import {
   chartGridMuted,
   chartFontFamily,
   formatChartInt,
-  mixTealBar,
+  getFactorStrengthBarColor,
 } from '@/lib/chartTheme'
 import { porterFiveScoreTo10 } from '@/lib/score-display'
 import { cn } from '@/lib/utils'
@@ -88,13 +88,13 @@ export function BreakdownHorizontalBars({
             {variant === 'default' ? (
               <ReferenceLine
                 x={avg}
-                stroke="#00796B"
-                strokeDasharray="5 4"
-                strokeWidth={1.5}
+                stroke="#64748B"
+                strokeDasharray="4 4"
+                strokeWidth={1.25}
                 label={{
-                  value: '평균',
+                  value: `평균 ${formatChartInt(Math.round(avg))}`,
                   position: 'top',
-                  fill: '#00796B',
+                  fill: '#64748B',
                   fontSize: 11,
                   fontWeight: 600,
                 }}
@@ -116,17 +116,17 @@ export function BreakdownHorizontalBars({
             />
             <Bar
               dataKey="v"
-              radius={[0, 6, 6, 0]}
-              maxBarSize={22}
+              radius={[0, 4, 4, 0]}
+              maxBarSize={28}
               name={valueLabel}
               isAnimationActive
               animationDuration={700}
-              fill={variant === 'risk' ? '#ea580c' : mixTealBar(0.5)}
+              fill={variant === 'risk' ? '#ea580c' : getFactorStrengthBarColor(50)}
             >
               {variant === 'risk'
                 ? data.map((d, i) => <Cell key={`risk-${d.label}-${i}`} fill={riskSeverityFill(d.v, vmax)} />)
                 : data.map((d, i) => (
-                    <Cell key={`teal-${d.label}-${i}`} fill={mixTealBar(cap > 0 ? d.v / cap : 0)} />
+                    <Cell key={`strength-${d.label}-${i}`} fill={getFactorStrengthBarColor(d.v)} />
                   ))}
               <LabelList
                 dataKey="v"

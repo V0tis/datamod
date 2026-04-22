@@ -76,7 +76,6 @@ export function AppSidebar() {
         <ul className="space-y-0.5" role="list">
           {navItems.map((item) => {
             const active = isActive(item)
-            const Icon = item.icon
             return (
               <li key={item.href + item.label} className="relative">
                 <motion.span
@@ -94,18 +93,13 @@ export function AppSidebar() {
                       transition: motionConfig.navHover.transition,
                     }}
                     className={cn(
-                      'relative flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200',
+                      'relative flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200',
                       'border-l-2 border-transparent pl-[11px]',
                       active
                         ? 'border-sky-600 bg-white/10 text-sky-600'
                         : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                     )}
                   >
-                    <Icon
-                      size={ICON_NAV}
-                      className="shrink-0 transition-colors duration-200"
-                      aria-hidden
-                    />
                     {item.label}
                   </motion.span>
                 </Link>
@@ -174,24 +168,18 @@ export function AppSidebar() {
         >
           {navItems.map((item) => {
             const active = isActive(item)
-            const Icon = item.icon
             return (
               <Link
                 key={item.href + item.label}
                 href={item.href}
                 title={item.tooltip}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors duration-200 sm:px-3',
+                  'flex shrink-0 items-center rounded-lg px-2.5 py-2 text-sm font-medium transition-colors duration-200 sm:px-3',
                   active
                     ? 'bg-slate-100 text-sky-600 dark:bg-zinc-800 dark:text-sky-400'
                     : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
                 )}
               >
-                <Icon
-                  size={ICON_NAV}
-                  className={cn('shrink-0 transition-colors duration-200', active ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400')}
-                  aria-hidden
-                />
                 <span className="whitespace-nowrap">{item.label}</span>
               </Link>
             )

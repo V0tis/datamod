@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Lightbulb, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { InsightDataFreshness } from '@/components/insights/InsightDataFreshness'
@@ -31,9 +31,17 @@ export interface StructuredInsight {
 export interface StructuredInsightCardProps {
   insight: StructuredInsight
   className?: string
-  /** 리스트형(구분선·여백) — 카드 테두리·그림자 없음 */
-  variant?: 'card' | 'list'
+  /** 리스트형(구분선·여백) — 카드 테두리·그림자 없음 · masonry: 2열 우선순위 카드 */
+  variant?: 'card' | 'list' | 'masonry'
 }
+
+const PRIORITY_STYLE: Record<'high' | 'mid' | 'low', { badge: string; label: string }> = {
+  high: { badge: '#EF4444', label: '높은 우선순위' },
+  mid: { badge: '#F59E0B', label: '중간 우선순위' },
+  low: { badge: '#10B981', label: '낮은 우선순위' },
+}
+
+const PRIORITY_NEUTRAL = { badge: '#6B7280', label: '우선순위 미지정' }
 
 /** Extract key metrics (numbers, scores) from text for highlighting */
 function extractKeyMetrics(text: string): string[] {
@@ -58,11 +66,11 @@ function PriorityBadge({ priority }: { priority: 'high' | 'mid' | 'low' }) {
     mid: 'border-amber-200/90 bg-amber-50 text-amber-950 dark:border-amber-900/45 dark:bg-amber-950/40 dark:text-amber-100',
     low: 'border-slate-200/90 bg-slate-100 text-slate-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
   } as const
-  const labels = { high: 'High', mid: 'Mid', low: 'Low' } as const
+  const labels = { high: '높음', mid: '중간', low: '낮음' } as const
   return (
     <span
       className={cn(
-        'inline-flex rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+        'inline-flex rounded-md border px-2 py-0.5 text-[10px] font-semibold tracking-wide',
         styles[priority]
       )}
     >
@@ -82,6 +90,7 @@ export function StructuredInsightCard({
 }: StructuredInsightCardProps) {
   const [expanded, setExpanded] = useState(false)
   const isList = variant === 'list'
+  const isMasonry = variant === 'masonry'
   const impact = insight.impact ?? insight.whyItMatters ?? ''
   const reason = insight.reason ?? insight.implicationForProduct ?? ''
   const hasExtraSections = Boolean(impact || reason || insight.whyItMatters || insight.implicationForProduct)
@@ -306,6 +315,98 @@ export function StructuredInsightCard({
   )
 
   const inner = isList ? listInner : cardInner
+
+  const priorityVisual = insight.priority ? PRIORITY_STYLE[insight.priority] : PRIORITY_NEUTRAL
+
+  const masonryShellClass = cn(
+    'rounded-xl border p-5 transition-shadow hover:shadow-md border-l-4',
+    insight.priority === 'high' &&
+      'border-rose-200 bg-[#FFF1F0] border-l-rose-500 dark:border-rose-900/45 dark:bg-rose-950/30 dark:border-l-rose-500',
+    insight.priority === 'mid' &&
+      'border-amber-200 bg-[#FFFBEB] border-l-amber-500 dark:border-amber-900/45 dark:bg-amber-950/25 dark:border-l-amber-400',
+    insight.priority === 'low' &&
+      'border-emerald-200 bg-[#F0FFF4] border-l-emerald-500 dark:border-emerald-900/45 dark:bg-emerald-950/25 dark:border-l-emerald-500',
+    !insight.priority && 'border-gray-200 bg-[#F9FAFB] border-l-gray-500 dark:border-zinc-700 dark:bg-zinc-950/90 dark:border-l-zinc-500',
+    listExpandable && 'cursor-pointer'
+  )
+
+  const masonryInner = (
+    <>
+      <div
+        className={masonryShellClass}
+        role={listExpandable ? 'button' : undefined}
+        tabIndex={listExpandable ? 0 : undefined}
+        onClick={listExpandable ? () => setExpanded((e) => !e) : undefined}
+        onKeyDown={
+          listExpandable
+            ? (ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault()
+                  setExpanded((e) => !e)
+                }
+              }
+            : undefined
+        }
+      >
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+              style={{ background: priorityVisual.badge }}
+            >
+              {priorityVisual.label}
+            </span>
+            {insight.sourceTimestamp ? (
+              <InsightDataFreshness iso={insight.sourceTimestamp} className="text-[11px] text-gray-400 dark:text-zinc-500" />
+            ) : null}
+          </div>
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-gray-300 dark:text-zinc-600" aria-hidden />
+        </div>
+        {!titleSameAsContents && (
+          <h3 className="mb-2 text-base font-semibold leading-snug text-gray-900 dark:text-zinc-50">{displayTitle}</h3>
+        )}
+        <div className="mb-3 text-sm leading-relaxed text-gray-600 dark:text-zinc-400 [&_.rin-doc]:text-sm">
+          <MarkdownBody className="text-sm leading-relaxed">{displaySummary}</MarkdownBody>
+        </div>
+        {hasMetrics ? (
+          <div className="mb-1 flex flex-wrap gap-1.5">
+            {metrics.map((m, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white/80 px-2 py-1 text-xs text-gray-600 dark:border-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300"
+              >
+                <Paperclip className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                {m}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {listExpandable ? (
+          <button
+            type="button"
+            className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400 dark:hover:text-sky-300"
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded((v) => !v)
+            }}
+            aria-expanded={expanded}
+          >
+            근거·지표 보기
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        ) : null}
+      </div>
+      {expanded && listExpandable ? expandedPanel(true) : null}
+    </>
+  )
+
+  if (isMasonry) {
+    return (
+      <article className={cn('break-inside-avoid', className)}>
+        {masonryInner}
+      </article>
+    )
+  }
 
   if (isList) {
     return (

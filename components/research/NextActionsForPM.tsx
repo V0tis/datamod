@@ -79,7 +79,7 @@ export function extractNextActionItems(
         why: a.expected_outcome,
         how_to_execute: a.description,
         priority: (a.priority ?? 'medium') as 'high' | 'medium' | 'low',
-        estimated_effort: undefined,
+        estimated_effort: a.estimated_timeline?.trim() || undefined,
       }))
     }
     if (actions.length > 0) {

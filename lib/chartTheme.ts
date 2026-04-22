@@ -52,7 +52,7 @@ export function mixTealBar(t: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`
 }
 
-/** 50 기준 편차에 따른 발산 색 (음수 빨강, 양수 청록) */
+/** 50 기준 편차에 따른 발산 색 (레거시·기타 차트용) */
 export function divergingFillFromDelta(delta: number, maxAbs: number): string {
   const m = Math.max(1, maxAbs)
   const t = Math.min(1, Math.abs(delta) / m)
@@ -67,4 +67,18 @@ export function divergingFillFromDelta(delta: number, maxAbs: number): string {
     return chartColors.divergePos
   }
   return chartColors.neutral
+}
+
+/** 요인 강도·점수 분포 — 실제 점수(0~100) 기준 (편차 아님) */
+export function getFactorStrengthBarColor(value: number): string {
+  if (value >= 70) return '#0D9F6E'
+  if (value >= 55) return '#34D399'
+  if (value >= 45) return '#93C5FD'
+  if (value >= 30) return '#FCD34D'
+  return '#F87171'
+}
+
+/** @deprecated — getFactorStrengthBarColor 사용 권장 */
+export function getBreakdownBarColor(score: number): string {
+  return getFactorStrengthBarColor(score)
 }

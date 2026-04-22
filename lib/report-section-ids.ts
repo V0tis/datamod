@@ -21,11 +21,11 @@ export const REPORT_SCROLL_SPY_TAB_ORDER = [
 export type ReportScrollSpyTabId = (typeof REPORT_SCROLL_SPY_TAB_ORDER)[number]
 
 export const REPORT_SCROLL_SPY_TAB_LABELS: Record<ReportScrollSpyTabId, string> = {
-  'summary-section': '📊 종합 요약',
-  'market-section': '📈 시장 분석',
-  'competitor-section': '⚔️ 경쟁사 분석',
-  'insight-strategy-section': '💡 인사이트·전략',
-  'action-section': '🎯 PM 액션',
+  'summary-section': '종합 요약',
+  'market-section': '시장 분석',
+  'competitor-section': '경쟁사',
+  'insight-strategy-section': '인사이트',
+  'action-section': 'PM 액션',
 }
 
 export const REPORT_TAB_LABELS: Record<ReportSectionId, string> = {

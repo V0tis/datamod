@@ -5,6 +5,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
 import { chartFontFamily, formatChartInt } from '@/lib/chartTheme'
+import {
+  OpportunityWaterfallSvg,
+  type WaterfallSegment,
+} from '@/components/research/OpportunityWaterfallSvg'
 
 const LABELS: Record<string, string> = {
   trend_momentum: '검색 수요',
@@ -32,6 +36,8 @@ export interface OpportunityScoreBreakdownProps {
   loading?: boolean
   stableScore?: number | null
   analysisFailed?: boolean
+  /** true면 섹션 제목·설명 숨김(상위「시장 분석」헤더만 사용) */
+  embedded?: boolean
   breakdown?: {
     market_growth?: number
     trend_momentum?: number
@@ -50,11 +56,51 @@ export interface OpportunityScoreBreakdownProps {
 
 const BASE = 50
 
+function buildWaterfallSegments(
+  items: { label: string; value: number }[],
+  target: number | null
+): WaterfallSegment[] {
+  const t = target != null ? Math.round(Math.min(100, Math.max(0, target))) : BASE
+  const totalDelta = t - BASE
+  const segs: WaterfallSegment[] = [{ label: '기준선', start: 0, end: BASE, kind: 'total' }]
+  if (items.length === 0) {
+    segs.push({ label: '최종 점수', start: 0, end: t, kind: 'final' })
+    return segs
+  }
+  const weights = items.map((i) => Math.max(0.1, Math.abs(i.value)))
+  const sumW = weights.reduce((a, b) => a + b, 0)
+  let running = BASE
+  for (let i = 0; i < items.length; i++) {
+    const mag = sumW > 0 ? (Math.abs(totalDelta) * weights[i]) / sumW : 0
+    const sign = items[i].value >= 0 ? 1 : -1
+    const d = sign * mag
+    const next = Math.round((running + d) * 10) / 10
+    const clamped = Math.min(100, Math.max(0, next))
+    segs.push({
+      label: items[i].label,
+      start: running,
+      end: clamped,
+      kind: 'floating',
+    })
+    running = clamped
+  }
+  const drift = t - running
+  if (Math.abs(drift) > 0.2 && segs.length > 1) {
+    const lastFloat = segs[segs.length - 1]!
+    if (lastFloat.kind === 'floating') {
+      lastFloat.end = Math.round(Math.min(100, Math.max(0, lastFloat.end + drift)) * 10) / 10
+    }
+  }
+  segs.push({ label: '최종 점수', start: 0, end: t, kind: 'final' })
+  return segs
+}
+
 export function OpportunityScoreBreakdown({
   score,
   loading = false,
   stableScore = null,
   analysisFailed = false,
+  embedded = false,
   breakdown,
   useKoreanLabels: _useKoreanLabels = false,
   compact = false,
@@ -90,8 +136,7 @@ export function OpportunityScoreBreakdown({
       })
     : []
 
-  const maxAbs = Math.max(15, ...items.map((i) => Math.abs(i.value)), 1)
-  const scaleMax = maxAbs * 1.2
+  const waterfallSegments = buildWaterfallSegments(items, normScore)
 
   const explanationLines: string[] = []
   if (!loading && effectiveBreakdown) {
@@ -109,9 +154,6 @@ export function OpportunityScoreBreakdown({
   }
   const hasExplanation = explanationLines.length > 0
 
-  const baseLabel = '기본 점수'
-  const finalLabel = '최종 점수'
-
   return (
     <section
       className={cn(
@@ -122,113 +164,32 @@ export function OpportunityScoreBreakdown({
       style={{ fontFamily: chartFontFamily }}
       aria-label="기회 점수 분해"
     >
-      <div className="flex items-center gap-2 mb-4">
-        <Target className="h-5 w-5 text-primary shrink-0" />
-        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">기회 점수 분해 · 워터폴</h3>
-      </div>
-      <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
-        기본 50점에서 각 요인의 가감(Δ)을 순차 반영해 최종 점수가 산출됩니다. 파랑은 기준·합계, 녹색은 가점, 빨강은 감점입니다.
-      </p>
-
-      <div className="space-y-0">
-        <div className="flex items-center gap-3 sm:gap-4 pb-1">
-          <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{baseLabel}</span>
-          <div className="flex-1 h-9 rounded-lg overflow-hidden flex items-center justify-center min-w-0 border border-[#3B5BDB]/40 bg-[#4F6EF7] shadow-sm">
-            <span className="text-sm font-bold tabular-nums text-white">{formatChartInt(BASE)}</span>
+      {!embedded ? (
+        <>
+          <div className="mb-4 flex items-center gap-2">
+            <Target className="h-5 w-5 shrink-0 text-primary" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">기회 점수 분해 · 워터폴</h3>
           </div>
-          <span className="text-sm font-bold tabular-nums text-muted-foreground w-12 text-right shrink-0">
-            {formatChartInt(BASE)}
-          </span>
-        </div>
+          <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
+            기본 50점에서 각 요인의 가감(Δ)을 순차 반영해 최종 점수가 산출됩니다. 파랑은 기준·최종 합계, 녹색은 가점, 빨강은 감점입니다.
+          </p>
+        </>
+      ) : null}
 
-        <div className="flex justify-center py-0.5" aria-hidden>
-          <svg width="2" height="14" className="text-slate-300 dark:text-zinc-600">
-            <line x1="1" y1="0" x2="1" y2="14" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-          </svg>
-        </div>
-
-        {items.map(({ key, label, value }, idx) => {
-          const isPositive = value >= 0
-          const displayValue = value > 0 ? `+${formatChartInt(value)}` : formatChartInt(value)
-          const barWidthPct = Math.min(50, (Math.abs(value) / scaleMax) * 50)
-
-          return (
-            <div key={key}>
-              <div className="flex items-center gap-3 sm:gap-4 py-1">
-                <span className="text-sm font-medium text-foreground w-28 sm:w-32 shrink-0">{label}</span>
-                <div className="flex-1 h-9 rounded-lg overflow-hidden bg-muted/25 flex items-center relative min-w-0 border border-border/40">
-                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border z-0" aria-hidden />
-                  <div
-                    className={cn(
-                      'absolute top-0 bottom-0 h-full rounded-md flex items-center justify-center z-10 border border-white/20',
-                      isPositive ? 'bg-[#10B981]' : 'bg-[#EF4444]'
-                    )}
-                    style={{
-                      width: `${barWidthPct}%`,
-                      ...(isPositive ? { left: '50%' } : { right: '50%', left: 'auto' }),
-                    }}
-                  >
-                    <span className="text-xs font-bold tabular-nums text-white drop-shadow-sm px-1">{displayValue}</span>
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    'text-sm font-bold tabular-nums w-12 text-right shrink-0',
-                    isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                  )}
-                >
-                  {displayValue}
-                </span>
-              </div>
-              <div className="flex justify-center py-0.5" aria-hidden>
-                <svg width="2" height={idx === items.length - 1 ? 14 : 12} className="text-slate-300 dark:text-zinc-600">
-                  <line x1="1" y1="0" x2="1" y2={idx === items.length - 1 ? 14 : 12} stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-                </svg>
-              </div>
-            </div>
-          )
-        })}
-
-        <div className="pt-3 mt-1 border-t border-border/80">
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <span className="text-sm font-semibold text-foreground w-28 sm:w-32 shrink-0">{finalLabel}</span>
-            <div
-              className={cn(
-                'flex-1 min-h-[44px] rounded-xl flex items-center justify-center gap-2 min-w-0 px-2',
-                'border-[3px] border-[#3B5BDB] bg-[#4F6EF7] shadow-md text-white'
-              )}
-            >
-              {loading && normScore == null ? (
-                <span className="flex items-center gap-2 w-full max-w-[200px]">
-                  <span className="h-7 flex-1 rounded-md bg-white/25 animate-pulse" aria-hidden />
-                </span>
-              ) : normScore != null ? (
-                <>
-                  <span className={cn('text-xl font-bold tabular-nums', analysisFailed && 'opacity-90')}>
-                    {formatChartInt(normScore)} / 100
-                  </span>
-                  <span className="text-xs font-semibold text-white/90">누적 반영 후</span>
-                  {analysisFailed ? (
-                    <span
-                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-200/50 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100 shrink-0"
-                      title="일부 분석 단계가 실패했습니다. 마지막으로 유효한 점수를 표시합니다."
-                    >
-                      <AlertTriangle className="h-3 w-3" aria-hidden />
-                      오류
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <span className="text-xl font-bold tabular-nums text-white/80">0 / 100</span>
-              )}
-            </div>
-            {normScore != null && !loading && (
-              <span className="text-lg font-bold tabular-nums w-14 text-right shrink-0 text-[#4F6EF7] dark:text-[#7B93F8]">
-                {formatChartInt(normScore)}
-              </span>
-            )}
+      <div className="w-full min-w-0">
+        {loading && normScore == null && !analysisFailed ? (
+          <div className="flex h-[140px] w-full items-center justify-center rounded-lg border border-dashed border-border/60 bg-muted/20">
+            <span className="text-sm text-muted-foreground">점수 산출 중…</span>
           </div>
-        </div>
+        ) : (
+          <OpportunityWaterfallSvg segments={waterfallSegments} height={140} finalLabel="최종 점수" />
+        )}
+        {normScore != null && !loading && analysisFailed ? (
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            일부 분석 단계가 실패했습니다. 마지막으로 유효한 점수를 반영했습니다.
+          </p>
+        ) : null}
       </div>
 
       {hasExplanation && (

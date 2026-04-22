@@ -15,7 +15,14 @@ export type PmPlanParsedShape = {
   product_idea?: string
   target_customer?: string
   monetization?: string
-  pm_action_plan?: Array<{ action_title?: string; description?: string; expected_outcome?: string; priority?: string; category?: string }>
+  pm_action_plan?: Array<{
+    action_title?: string
+    description?: string
+    expected_outcome?: string
+    estimated_timeline?: string
+    priority?: string
+    category?: string
+  }>
   strategic_decision_layer?: {
     opportunity_score_reason_text?: string
     market_opportunity_explanation?: string
@@ -102,6 +109,10 @@ export function materializePmExecutionFromParsed(parsed: PmPlanParsedShape): PmA
           action_title: String((a as { action_title: string }).action_title),
           description: typeof (a as Record<string, unknown>).description === 'string' ? String((a as Record<string, unknown>).description) : undefined,
           expected_outcome: typeof (a as Record<string, unknown>).expected_outcome === 'string' ? String((a as Record<string, unknown>).expected_outcome) : undefined,
+          estimated_timeline:
+            typeof (a as Record<string, unknown>).estimated_timeline === 'string'
+              ? String((a as Record<string, unknown>).estimated_timeline).trim()
+              : undefined,
           priority: (['high', 'medium', 'low'] as const).includes((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
             ? ((a as Record<string, unknown>).priority as 'high' | 'medium' | 'low')
             : undefined,

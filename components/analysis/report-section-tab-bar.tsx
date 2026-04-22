@@ -1,6 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  BarChart2,
+  CheckSquare,
+  LayoutDashboard,
+  Lightbulb,
+  Target,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   REPORT_SCROLL_SPY_TAB_ORDER,
@@ -13,42 +21,34 @@ function scrollToSection(id: string) {
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const ACTIVE = 'border-b-2 border-[#4F6EF7] text-[#4F6EF7] font-semibold dark:border-[#6B8AFF] dark:text-[#6B8AFF]'
-const INACTIVE =
-  'border-b-2 border-transparent text-[#6B7280] font-normal dark:text-zinc-400 dark:border-transparent'
+const TAB_ICONS: Record<ReportScrollSpyTabId, LucideIcon> = {
+  'summary-section': LayoutDashboard,
+  'market-section': BarChart2,
+  'competitor-section': Target,
+  'insight-strategy-section': Lightbulb,
+  'action-section': CheckSquare,
+}
 
 type ReportSectionTabBarProps = {
   className?: string
-  /** 뷰포트 상단 기준 sticky top (px) — 고정 헤더 + 파이프라인 높이 합 */
-  stickyTopPx: number
-  /** 앵커 스크롤 시 본문이 가리지 않도록 부모에서 scroll-margin 계산용 */
-  onTabBarHeight?: (heightPx: number) => void
+  /**
+   * 뷰포트 상단부터 스크롤 스파이 기준선까지의 픽셀 거리 (고정 네비 56px + 스티키 스택 높이).
+   */
+  scrollAnchorTopPx: number
 }
 
 /**
- * 단일 스크롤 페이지용 앵커 네비: IntersectionObserver + 스크롤로 활성 탭 1개만 강조,
- * 클릭 시 해당 섹션으로 smooth-scroll.
+ * 분석 리포트 앵커 탭: IntersectionObserver 스크롤 스파이 + 아이콘 (부모 스티키 컨테이너 안에서 배치)
  */
-export function ReportSectionTabBar({ className, stickyTopPx, onTabBarHeight }: ReportSectionTabBarProps) {
+export function ReportSectionTabBar({ className, scrollAnchorTopPx }: ReportSectionTabBarProps) {
   const navRef = useRef<HTMLElement>(null)
-  const [activeId, setActiveId] = useState<ReportScrollSpyTabId>(REPORT_SCROLL_SPY_TAB_ORDER[0])
 
-  useLayoutEffect(() => {
-    const el = navRef.current
-    if (!el || !onTabBarHeight) return
-    const ro = new ResizeObserver(() => {
-      onTabBarHeight(Math.round(el.getBoundingClientRect().height))
-    })
-    ro.observe(el)
-    onTabBarHeight(Math.round(el.getBoundingClientRect().height))
-    return () => ro.disconnect()
-  }, [onTabBarHeight])
+  const [activeId, setActiveId] = useState<ReportScrollSpyTabId>(REPORT_SCROLL_SPY_TAB_ORDER[0])
 
   const computeActive = useCallback(() => {
     const nav = navRef.current
     if (!nav) return
-    const tabH = nav.getBoundingClientRect().height
-    const line = stickyTopPx + tabH + 2
+    const line = scrollAnchorTopPx + 2
 
     let next: ReportScrollSpyTabId = REPORT_SCROLL_SPY_TAB_ORDER[0]
     for (const id of REPORT_SCROLL_SPY_TAB_ORDER) {
@@ -58,7 +58,7 @@ export function ReportSectionTabBar({ className, stickyTopPx, onTabBarHeight }: 
       if (top <= line) next = id
     }
     setActiveId((prev) => (prev === next ? prev : next))
-  }, [stickyTopPx])
+  }, [scrollAnchorTopPx])
 
   useEffect(() => {
     const main = document.querySelector('main')
@@ -91,30 +91,34 @@ export function ReportSectionTabBar({ className, stickyTopPx, onTabBarHeight }: 
     }
   }, [computeActive])
 
+  const activeClass =
+    'border-[var(--dm-color-primary)] text-[var(--dm-color-primary)] dark:border-[#58a6ff] dark:text-[#58a6ff]'
+  const inactiveClass =
+    'border-transparent text-[var(--dm-color-text-muted)] hover:border-[var(--dm-color-border-strong)] hover:text-[var(--dm-color-text-secondary)] dark:hover:border-zinc-600'
+
   return (
     <nav
       ref={navRef}
       className={cn(
-        'sticky z-40 border-b border-zinc-200/80 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/90',
-        'dark:border-zinc-800',
+        'border-b border-[var(--dm-color-border)] bg-[var(--dm-color-surface)] px-4 sm:px-6',
         className
       )}
-      style={{ top: stickyTopPx }}
-      aria-label="리포트 섹션 앵커"
+      aria-label="리포트 섹션"
     >
       <div className="relative md:static">
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-8 bg-gradient-to-r from-background via-background/90 to-transparent md:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-6 bg-gradient-to-r from-[var(--dm-color-surface)] to-transparent md:hidden"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-background via-background/90 to-transparent md:hidden"
+          className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-6 bg-gradient-to-l from-[var(--dm-color-surface)] to-transparent md:hidden"
           aria-hidden
         />
         <div className="overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="mx-auto flex w-full min-w-min max-w-[min(100%,1920px)] gap-0 px-1 sm:px-2">
+          <div className="flex w-full min-w-min gap-1">
             {REPORT_SCROLL_SPY_TAB_ORDER.map((id) => {
               const isActive = activeId === id
+              const Icon = TAB_ICONS[id]
               return (
                 <button
                   key={id}
@@ -123,10 +127,11 @@ export function ReportSectionTabBar({ className, stickyTopPx, onTabBarHeight }: 
                   aria-selected={isActive}
                   onClick={() => scrollToSection(id)}
                   className={cn(
-                    'shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors sm:px-4 sm:text-[13px]',
-                    isActive ? ACTIVE : INACTIVE
+                    'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4',
+                    isActive ? activeClass : inactiveClass
                   )}
                 >
+                  <Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
                   {REPORT_SCROLL_SPY_TAB_LABELS[id]}
                 </button>
               )

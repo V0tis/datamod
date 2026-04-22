@@ -14,47 +14,135 @@ import {
 import { cn } from '@/lib/utils'
 import { ChartWithInsight } from './ChartWithInsight'
 import { DEFAULT_OPPORTUNITY_BREAKDOWN } from '@/lib/research-defaults'
-import { chartAxisMuted, chartFontFamily, divergingFillFromDelta, formatChartInt } from '@/lib/chartTheme'
+import { breakdownValueToRadarDisplay } from '@/lib/chart/opportunity-radar-display'
+import { chartAxisMuted, chartFontFamily, formatChartInt, getFactorStrengthBarColor } from '@/lib/chartTheme'
 
-export interface BreakdownItem {
-  name: string
-  value: number
-  label: string
-  delta: number
-  arrow: '↑' | '↓' | '→'
-  rightLabel: string
+const LABELS: Record<string, string> = {
+  market_growth: '시장 성장',
+  trend_momentum: '트렌드 모멘텀',
+  competition_density: '경쟁 밀도',
+  competition_pressure: '경쟁 압력',
+  funding_signals: '투자 신호',
+  risk_factors: '리스크 요인',
+  user_demand: '수요',
+  product_differentiation: '차별화',
+  market_timing: '시장 타이밍',
 }
 
-function breakdownToData(breakdown: Record<string, number | undefined>): BreakdownItem[] {
-  const labels: Record<string, string> = {
-    market_growth: '시장 성장',
-    trend_momentum: '트렌드 모멘텀',
-    competition_density: '경쟁 밀도',
-    competition_pressure: '경쟁 압력',
-    funding_signals: '투자 신호',
-    risk_factors: '리스크 요인',
-    user_demand: '수요',
-    product_differentiation: '차별화',
-    market_timing: '시장 타이밍',
+function breakdownToDisplayRows(breakdown: Record<string, number | undefined>): { name: string; v: number }[] {
+  const rows: { name: string; v: number }[] = []
+  for (const [k, raw] of Object.entries(breakdown)) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue
+    const disp = breakdownValueToRadarDisplay(k, raw)
+    if (disp == null) continue
+    rows.push({ name: LABELS[k] ?? k, v: disp })
   }
-  return Object.entries(breakdown)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => {
-      const value = Math.round(v as number)
-      const delta = value - 50
-      const arrow: BreakdownItem['arrow'] = delta > 0 ? '↑' : delta < 0 ? '↓' : '→'
-      const sign = delta > 0 ? '+' : ''
-      return {
-        name: labels[k] ?? k,
-        value,
-        label: labels[k] ?? k,
-        delta,
-        arrow,
-        rightLabel: `${formatChartInt(value)} ${arrow} (${sign}${formatChartInt(delta)})`,
-      }
-    })
-    .slice(0, 8)
+  return rows.slice(0, 8)
 }
+
+function ScoreDistributionBars({ data }: { data: { name: string; v: number }[] }) {
+  const chartStyle = { fontFamily: chartFontFamily } as const
+  const avg = data.length ? data.reduce((s, d) => s + d.v, 0) / data.length : 0
+
+  return (
+    <div className="w-full min-h-[220px] max-h-[420px]" style={chartStyle}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 42, right: 48, left: 4, bottom: 8 }}
+          style={chartStyle}
+        >
+          <XAxis
+            type="number"
+            domain={[0, 100]}
+            tick={{ fontSize: 10, fill: chartAxisMuted }}
+            tickLine={false}
+            axisLine={{ stroke: 'rgba(148,163,184,0.4)' }}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={118}
+            tick={{ fontSize: 11, fill: chartAxisMuted }}
+            tickLine={false}
+            axisLine={false}
+            interval={0}
+          />
+          <ReferenceLine
+            x={avg}
+            stroke="#64748B"
+            strokeDasharray="4 4"
+            strokeWidth={1.25}
+            label={{
+              value: `평균 ${formatChartInt(Math.round(avg))}`,
+              position: 'top',
+              fill: '#64748B',
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          />
+          <Tooltip
+            formatter={(v: number) => [`${formatChartInt(v)} / 100`, '환산 점수']}
+            contentStyle={{
+              fontFamily: chartFontFamily,
+              fontSize: 12,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+            }}
+          />
+          <Bar dataKey="v" radius={[0, 4, 4, 0]} maxBarSize={28} isAnimationActive animationDuration={800}>
+            {data.map((d, i) => (
+              <Cell key={`score-${d.name}-${i}`} fill={getFactorStrengthBarColor(d.v)} />
+            ))}
+            <LabelList
+              dataKey="v"
+              position="right"
+              formatter={(v: number) => formatChartInt(v)}
+              style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
+              className="dark:fill-zinc-200"
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500 dark:text-zinc-400">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-[#0D9F6E]" aria-hidden />
+          70+ 강한 긍정
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-[#34D399]" aria-hidden />
+          55~69
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-[#93C5FD]" aria-hidden />
+          45~54
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-[#FCD34D]" aria-hidden />
+          30~44
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-3 rounded bg-[#F87171]" aria-hidden />
+          30 미만
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<string, number | undefined>; className?: string }) {
+  const data = breakdownToDisplayRows(breakdown)
+  if (data.length === 0) return null
+  return (
+    <div className={cn('w-full', className)}>
+      <ScoreDistributionBars data={data} />
+    </div>
+  )
+}
+
+const SCORE_DIST_DESCRIPTION =
+  '원시 breakdown을 동일 척도(0~100)로 환산한 실제 점수입니다. 막대 색은 절대 수준에 따라 결정됩니다.'
 
 export interface AnalysisChartsProps {
   opportunityScoreBreakdown?: Record<string, number | undefined>
@@ -62,109 +150,25 @@ export interface AnalysisChartsProps {
   className?: string
 }
 
-function DivergingBreakdownChart({ data }: { data: BreakdownItem[] }) {
-  const maxAbsDelta = Math.max(8, ...data.map((d) => Math.abs(d.delta)), 1)
-  const pad = Math.ceil(maxAbsDelta * 0.08)
-  const lim = Math.min(50, maxAbsDelta + pad)
-  const chartStyle = { fontFamily: chartFontFamily } as const
-
-  return (
-    <div className="w-full min-h-[220px] max-h-[420px]" style={chartStyle}>
-      <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-        <BarChart data={data} layout="vertical" margin={{ top: 10, right: 56, left: 52, bottom: 22 }} style={chartStyle}>
-          <XAxis
-            type="number"
-            domain={[-lim, lim]}
-            tick={{ fontSize: 10, fill: chartAxisMuted }}
-            tickFormatter={(x) => formatChartInt(x + 50)}
-          />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={118}
-            tick={{ fontSize: 11, fill: chartAxisMuted }}
-            interval={0}
-          />
-          <ReferenceLine
-            x={0}
-            stroke="#4F6EF7"
-            strokeWidth={2.5}
-            strokeOpacity={0.9}
-            label={{ value: '기준 50 (Δ=0)', position: 'top', fill: '#4F6EF7', fontSize: 10, fontWeight: 600 }}
-          />
-          <Tooltip
-            cursor={{ fill: 'rgba(79,110,247,0.07)' }}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null
-              const p = payload[0].payload as BreakdownItem
-              const sign = p.delta >= 0 ? '+' : ''
-              return (
-                <div
-                  className="rounded-lg border border-zinc-200 bg-white/98 px-3 py-2 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
-                  style={{ fontFamily: chartFontFamily }}
-                >
-                  <p className="font-semibold text-foreground">{p.name}</p>
-                  <p className="mt-1 tabular-nums text-muted-foreground">
-                    점수 <span className="font-semibold text-foreground">{formatChartInt(p.value)}</span> / 100 · 50
-                    대비{' '}
-                    <span className="font-semibold text-foreground">
-                      {sign}
-                      {formatChartInt(p.delta)}
-                    </span>
-                  </p>
-                </div>
-              )
-            }}
-          />
-          <Bar dataKey="delta" radius={[0, 4, 4, 0]} maxBarSize={24} isAnimationActive animationDuration={800}>
-            {data.map((d, i) => (
-              <Cell key={`cell-${d.name}-${i}`} fill={divergingFillFromDelta(d.delta, lim)} />
-            ))}
-            <LabelList
-              dataKey="rightLabel"
-              position="right"
-              style={{ fill: '#374151', fontSize: 11, fontWeight: 600 }}
-              className="dark:fill-zinc-200"
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-export function MarketGrowthChart({ breakdown, className }: { breakdown: Record<string, number | undefined>; className?: string }) {
-  const data = breakdownToData(breakdown)
-  if (data.length === 0) return null
-  return (
-    <div className={cn('w-full', className)}>
-      <DivergingBreakdownChart data={data} />
-    </div>
-  )
-}
-
-const SCORE_DIST_DESCRIPTION =
-  '요인별 점수(0~100). 가운데 세로선은 중립(50)이며, 막대는 50 대비 편차(Δ)입니다. 빨강 계열은 상대적 약세, 파랑·녹색은 상대적 강세를 뜻합니다.'
-
 export function AnalysisCharts({ opportunityScoreBreakdown, chartInsights, className }: AnalysisChartsProps) {
   const breakdown =
     opportunityScoreBreakdown && Object.keys(opportunityScoreBreakdown).length > 0
       ? opportunityScoreBreakdown
       : { ...DEFAULT_OPPORTUNITY_BREAKDOWN }
-  const data = breakdownToData(breakdown)
+  const data = breakdownToDisplayRows(breakdown as Record<string, number | undefined>)
   if (data.length === 0) return null
 
   const sd = chartInsights?.score_distribution
 
   return (
     <ChartWithInsight
-      title="시장 점수 분포 · 0~100 척도 (50 기준 발산)"
+      title="시장 요인별 점수 (0~100)"
       description={SCORE_DIST_DESCRIPTION}
       insight={sd?.insight}
       takeaway={sd?.takeaway}
       className={className}
     >
-      <DivergingBreakdownChart data={data} />
+      <ScoreDistributionBars data={data} />
     </ChartWithInsight>
   )
 }

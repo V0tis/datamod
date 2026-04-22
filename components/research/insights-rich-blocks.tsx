@@ -2,11 +2,15 @@
 
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { AlertTriangle, ListOrdered, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ChevronRight, ListOrdered, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarkdownBody } from '@/components/ui/markdown-body'
 import { Button } from '@/components/ui/button'
-import type { OutcomeMetricItem, PriorityInsightItem } from '@/lib/research-priority-outcomes'
+import {
+  normalizeActionTimeline,
+  type OutcomeMetricItem,
+  type PriorityInsightItem,
+} from '@/lib/research-priority-outcomes'
 
 export type InsightsRichBlocksProps = {
   /** 전략적 리스크 — 문자열 또는 마크다운 */
@@ -70,10 +74,10 @@ function BlockSkeleton() {
   )
 }
 
-const priorityBadgeClass: Record<0 | 1 | 2, string> = {
-  0: 'border-rose-300/80 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-100',
-  1: 'border-amber-300/80 bg-amber-100 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100',
-  2: 'border-border bg-muted text-muted-foreground dark:bg-zinc-800 dark:text-zinc-200',
+const prioritySquareClass: Record<0 | 1 | 2, string> = {
+  0: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300',
+  1: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300',
+  2: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
 }
 
 /**
@@ -117,24 +121,31 @@ export function InsightsRichBlocks({
             {priorityItems.map((item, i) => (
               <div
                 key={`${item.title}-${i}`}
-                className="priority-card rounded-xl border border-border/70 bg-card/80 px-4 py-3 shadow-sm dark:border-zinc-700/80 dark:bg-zinc-900/40"
+                className="group flex items-start gap-3 rounded-xl border border-gray-100 bg-card/50 p-4 transition-all hover:border-blue-200 hover:bg-blue-50/40 dark:border-zinc-700/80 dark:bg-zinc-900/30 dark:hover:border-blue-800 dark:hover:bg-blue-950/20 sm:gap-4"
               >
-                <div className="flex flex-wrap items-start gap-2">
-                  <span
-                    className={cn(
-                      'badge inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
-                      priorityBadgeClass[item.priority]
-                    )}
-                  >
-                    P{item.priority}
-                  </span>
-                  <h4 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-foreground">{item.title}</h4>
+                <div
+                  className={cn(
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold',
+                    prioritySquareClass[item.priority]
+                  )}
+                >
+                  P{item.priority}
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.description}</p>
-                <div className="meta mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>예상 기간: {item.timeline}</span>
-                  <span>임팩트: {item.impact}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <h4 className="text-sm font-semibold leading-snug text-gray-900 dark:text-zinc-50">{item.title}</h4>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-4 sm:justify-end">
+                      <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-zinc-800 dark:text-zinc-400">
+                        기간 {normalizeActionTimeline(item.timeline)}
+                      </span>
+                      <span className="max-w-[14rem] truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-zinc-800 dark:text-zinc-400" title={item.impact}>
+                        임팩트: {item.impact}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm leading-relaxed text-gray-600 dark:text-zinc-400">{item.description}</p>
                 </div>
+                <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-blue-500 dark:text-zinc-600 dark:group-hover:text-blue-400" aria-hidden />
               </div>
             ))}
           </div>
@@ -147,22 +158,39 @@ export function InsightsRichBlocks({
 
       <BlockShell icon={TrendingUp} title="예상 성과">
         {outcomesBlock === 'data' ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {outcomeMetrics.map((metric, i) => (
-              <div
-                key={`${metric.label}-${i}`}
-                className="metric-card rounded-xl border border-border/60 bg-muted/10 px-3 py-3 dark:border-zinc-700/70 dark:bg-zinc-900/30"
-              >
-                <div className="metric-value text-lg font-semibold tabular-nums tracking-tight text-foreground">
-                  {metric.value}
-                </div>
-                <div className="metric-label mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {metric.label}
-                </div>
-                <div className="metric-basis mt-2 text-[13px] leading-snug text-muted-foreground">{metric.basis}</div>
+          outcomeMetrics.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border/60 bg-muted/15 px-4 py-6 text-center text-sm text-muted-foreground">
+              예상 성과 지표가 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {outcomeMetrics.slice(0, 3).map((metric, i) => (
+                  <div
+                    key={`primary-${metric.label}-${i}`}
+                    className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 dark:border-blue-900/40 dark:from-blue-950/40 dark:to-indigo-950/30"
+                  >
+                    <div className="mb-1 text-2xl font-bold tabular-nums text-blue-700 dark:text-blue-300">{metric.value}</div>
+                    <div className="mb-1 text-sm font-medium text-blue-900 dark:text-blue-100">{metric.label}</div>
+                    <div className="text-xs leading-snug text-blue-600/90 dark:text-blue-400/90">{metric.basis}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {outcomeMetrics.length > 3 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {outcomeMetrics.slice(3).map((metric, i) => (
+                    <div
+                      key={`compact-${metric.label}-${i}`}
+                      className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/50"
+                    >
+                      <div className="text-lg font-bold tabular-nums text-gray-800 dark:text-zinc-100">{metric.value}</div>
+                      <div className="text-xs text-gray-600 dark:text-zinc-400">{metric.label}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )
         ) : outcomesBlock === 'loading' ? (
           <BlockSkeleton />
         ) : (

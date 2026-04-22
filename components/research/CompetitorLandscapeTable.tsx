@@ -1,6 +1,6 @@
 'use client'
 
-import { Users } from 'lucide-react'
+import { Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type CompetitorTableEntry = {
@@ -10,9 +10,7 @@ export type CompetitorTableEntry = {
   key_feature?: string
   pricing?: string
   differentiation?: string
-  /** 경쟁사 미집중 영역 */
   competitor_gap?: string
-  /** 우리 차별화 */
   our_differentiation?: string
   strength?: string
   weakness?: string
@@ -24,15 +22,7 @@ export interface CompetitorLandscapeTableProps {
   className?: string
 }
 
-const COLUMNS = [
-  { key: 'name', label: 'COMPETITOR', className: 'font-semibold' },
-  { key: 'target_market', label: 'TARGET MARKET' },
-  { key: 'key_feature', label: 'KEY FEATURE' },
-  { key: 'pricing', label: 'PRICING' },
-  { key: 'differentiation', label: 'DIFFERENTIATION' },
-] as const
-
-/** 모델이 모든 행에 반복하는 범용 마케팅 문구 제거(행별 고유 인사이트만 남기기 위한 보조) */
+/** 모델이 모든 행에 반복하는 범용 마케팅 문구 제거 */
 function scrubDifferentiationFluff(s: string): string {
   const patterns = [
     /이용자(?:의)?\s*니즈를\s*충족(?:시킬\s*수\s*있(?:습니다|다)|합니다)/gi,
@@ -46,6 +36,8 @@ function scrubDifferentiationFluff(s: string): string {
   return out || s.trim()
 }
 
+const HEADERS = ['경쟁사', '타겟 시장', '핵심 기능', '가격', '경쟁 격차', '우리 대응'] as const
+
 export function CompetitorLandscapeTable({
   competitors,
   loading = false,
@@ -58,92 +50,73 @@ export function CompetitorLandscapeTable({
   return (
     <section
       className={cn(
-        'max-w-full min-w-0 rounded-xl border border-border/60 bg-card overflow-hidden',
+        'max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80',
         className
       )}
-      aria-label="Competitor Landscape"
+      aria-label="경쟁사 분석 테이블"
     >
-      <div className="px-4 sm:px-5 py-4 border-b border-border/60">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          Competitor Landscape
+      <div className="border-b border-border px-4 py-3 sm:px-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-foreground">
+          <Target className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+          경쟁사 분석
         </h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          행마다 해당 경쟁사 기준 경쟁 공백·우리 대응(또는 요약)
-        </p>
       </div>
       {loading && filtered.length === 0 ? (
         <div className="p-4">
-          <div className="h-32 rounded-lg bg-muted/30 animate-pulse" />
+          <div className="h-32 animate-pulse rounded-lg bg-muted/30" />
         </div>
       ) : (
         <div className="rin-table-scroll">
-          <table className="min-w-[640px] w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b border-border/60 bg-muted/30">
-                {COLUMNS.map((col) => (
+              <tr className="border-b border-border">
+                {HEADERS.map((h) => (
                   <th
-                    key={col.key}
-                    className={cn(
-                      'px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap',
-                      col.key === 'name' && 'sticky left-0 bg-muted/30 z-10'
-                    )}
+                    key={h}
+                    className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   >
-                    {col.label}
+                    {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {filtered.map((c, i) => {
-                const gap = c.competitor_gap ? scrubDifferentiationFluff(c.competitor_gap) : ''
-                const ours = c.our_differentiation ? scrubDifferentiationFluff(c.our_differentiation) : ''
-                const diffOnly = c.differentiation ? scrubDifferentiationFluff(c.differentiation) : ''
+                const gapRaw = c.competitor_gap || c.weakness || ''
+                const gap = gapRaw ? scrubDifferentiationFluff(gapRaw) : ''
+                const oursRaw = c.our_differentiation || ''
+                const ours = oursRaw ? scrubDifferentiationFluff(oursRaw) : ''
+                const fallbackGap = !gap && c.differentiation ? scrubDifferentiationFluff(c.differentiation) : ''
                 return (
                   <tr
                     key={`competitor-row-${String(c.name ?? 'x')}-${i}`}
-                    className="border-b border-border/40 hover:bg-muted/20 transition-colors"
+                    className="group transition-colors hover:bg-muted/30"
                   >
-                    <td
-                      className={cn(
-                        'px-4 py-3 font-medium text-foreground align-top',
-                        'sticky left-0 bg-card z-[1] hover:bg-muted/20'
-                      )}
-                    >
-                      {c.name ?? '—'}
-                      {c.positioning && (
-                        <span className="block text-xs text-muted-foreground font-normal mt-0.5">
-                          {c.positioning}
-                        </span>
-                      )}
+                    <td className="px-3 py-4 align-top">
+                      <div className="font-medium text-foreground">{c.name ?? '—'}</div>
+                      {c.positioning ? (
+                        <div className="mt-0.5 text-xs text-muted-foreground">{c.positioning}</div>
+                      ) : null}
                     </td>
-                    <td className="px-4 py-3 text-foreground align-top max-w-[160px]">
-                      {c.target_market || '—'}
+                    <td className="px-3 py-4 align-top text-muted-foreground">{c.target_market?.trim() || '—'}</td>
+                    <td className="px-3 py-4 align-top text-muted-foreground">{c.key_feature?.trim() || '—'}</td>
+                    <td className="px-3 py-4 align-top">
+                      <span className="inline-flex rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                        {c.pricing?.trim() || '—'}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-foreground align-top max-w-[180px]">
-                      {c.key_feature || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-foreground align-top max-w-[120px]">
-                      {c.pricing || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-foreground align-top max-w-[min(360px,45vw)]">
-                      {gap || ours ? (
-                        <div className="space-y-2 text-xs leading-relaxed">
-                          {gap ? (
-                            <p>
-                              <span className="font-semibold text-rose-600/90 dark:text-rose-400">경쟁 공백 </span>
-                              <span className="text-foreground/90">{gap}</span>
-                            </p>
-                          ) : null}
-                          {ours ? (
-                            <p>
-                              <span className="font-semibold text-emerald-700/90 dark:text-emerald-400">우리 대응 </span>
-                              <span className="text-foreground/90">{ours}</span>
-                            </p>
-                          ) : null}
-                        </div>
+                    <td className="max-w-[200px] px-3 py-4 align-top">
+                      {gap || fallbackGap ? (
+                        <span className="text-xs font-medium text-red-600 dark:text-red-400">{gap || fallbackGap}</span>
                       ) : (
-                        <span className="text-xs">{diffOnly || '—'}</span>
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="max-w-[200px] px-3 py-4 align-top">
+                      {ours ? (
+                        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{ours}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>

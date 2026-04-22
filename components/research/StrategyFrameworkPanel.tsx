@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Info } from 'lucide-react'
+import { AlertTriangle, Info, Sparkles, TrendingDown, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ChartSourceFooter } from '@/components/research/chart-source-footer'
 import {
@@ -137,6 +137,75 @@ function BulletList({ items, bulletClass }: { items: string[]; bulletClass: stri
   )
 }
 
+function SwotMatrixList({ items, dotClass, textClass }: { items: string[]; dotClass: string; textClass: string }) {
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground">해당 항목 없음</p>
+  }
+  return (
+    <ul className="space-y-2">
+      {items.map((s, i) => (
+        <li key={i} className="flex items-start gap-2">
+          <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', dotClass)} aria-hidden />
+          <span className={cn('text-sm leading-relaxed', textClass)}>{s}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SwotMatrix({ swot }: { swot: NonNullable<SwotShape> }) {
+  const strengths = swot.strengths ?? []
+  const weaknesses = swot.weaknesses ?? []
+  const opportunities = swot.opportunities ?? []
+  const threats = swot.threats ?? []
+
+  return (
+    <div className="relative pt-5">
+      <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] text-gray-400 dark:text-zinc-500">
+        내부 요인 ← → 외부 요인
+      </div>
+      <div className="grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl border border-gray-200 dark:border-zinc-700">
+        <div className="bg-emerald-50 p-4 dark:bg-emerald-950/35">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500">
+              <TrendingUp className="h-3.5 w-3.5 text-white" aria-hidden />
+            </span>
+            <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">강점 (S)</span>
+          </div>
+          <SwotMatrixList items={strengths} dotClass="bg-emerald-400" textClass="text-emerald-900 dark:text-emerald-100" />
+        </div>
+        <div className="bg-red-50 p-4 dark:bg-red-950/30">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500">
+              <TrendingDown className="h-3.5 w-3.5 text-white" aria-hidden />
+            </span>
+            <span className="text-sm font-semibold text-red-800 dark:text-red-200">약점 (W)</span>
+          </div>
+          <SwotMatrixList items={weaknesses} dotClass="bg-red-400" textClass="text-red-900 dark:text-red-100" />
+        </div>
+        <div className="bg-blue-50 p-4 dark:bg-blue-950/35">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500">
+              <Sparkles className="h-3.5 w-3.5 text-white" aria-hidden />
+            </span>
+            <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">기회 (O)</span>
+          </div>
+          <SwotMatrixList items={opportunities} dotClass="bg-blue-400" textClass="text-blue-900 dark:text-blue-100" />
+        </div>
+        <div className="bg-amber-50 p-4 dark:bg-amber-950/30">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500">
+              <AlertTriangle className="h-3.5 w-3.5 text-white" aria-hidden />
+            </span>
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">위협 (T)</span>
+          </div>
+          <SwotMatrixList items={threats} dotClass="bg-amber-400" textClass="text-amber-950 dark:text-amber-100" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export type StrategyFrameworkPanelProps = {
   swot: SwotShape | null | undefined
   jtbd: JtbdShape | null | undefined
@@ -249,32 +318,7 @@ export function StrategyFrameworkPanel({
         {hasSwot ? (
           <section id="report-framework-swot" className="scroll-mt-24">
             <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">SWOT</h4>
-            <div className="space-y-3 text-sm">
-              {swot!.strengths?.length ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">강점</p>
-                  <BulletList items={swot!.strengths!} bulletClass="text-emerald-500" />
-                </div>
-              ) : null}
-              {swot!.weaknesses?.length ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">약점</p>
-                  <BulletList items={swot!.weaknesses!} bulletClass="text-amber-500" />
-                </div>
-              ) : null}
-              {swot!.opportunities?.length ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-blue-600 dark:text-blue-400">기회</p>
-                  <BulletList items={swot!.opportunities!} bulletClass="text-blue-500" />
-                </div>
-              ) : null}
-              {swot!.threats?.length ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">위협</p>
-                  <BulletList items={swot!.threats!} bulletClass="text-rose-500" />
-                </div>
-              ) : null}
-            </div>
+            <SwotMatrix swot={swot!} />
           </section>
         ) : null}
 

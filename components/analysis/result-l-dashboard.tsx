@@ -13,35 +13,32 @@ import {
 import type { ResearchResponse } from '@/lib/stores/research-store'
 import { cn } from '@/lib/utils'
 import { analysisPageBg } from '@/components/analysis/analysis-card'
-import { OpportunityScoreGauge } from '@/components/analysis/opportunity-score-gauge'
 import { UrgentTaskCards } from '@/components/analysis/urgent-task-cards'
-import { StrategyExecutionTable } from '@/components/analysis/strategy-execution-table'
 import { AnalysisSourceButton } from '@/components/analysis/analysis-source-button'
 import type { ResultPageStructuredSectionsProps } from '@/components/research/ResultPageStructuredSections'
 import { OpportunityScoreBreakdown } from '@/components/research/OpportunityScoreBreakdown'
 import { ResultSummaryCards } from '@/components/research/ResultSummaryCards'
 import { StrategicDecisionLayer } from '@/components/research/StrategicDecisionLayer'
-import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 import { AnalysisResultSections } from '@/components/research/AnalysisResultSections'
-import { KeyMarketInsightsCard } from '@/components/research/KeyMarketInsightsCard'
-import { ConclusionActionStrip } from '@/components/research/ConclusionActionStrip'
+import { InsightStrategyTabsPanel } from '@/components/research/InsightStrategyTabsPanel'
+import { PmActionPlanSection } from '@/components/analysis/pm-action-plan/pm-action-plan-section'
+import { SummaryExecutiveThreeZones } from '@/components/analysis/results/SummaryExecutiveThreeZones'
 import { sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
 import { MotionReveal } from '@/components/common/MotionReveal'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { toast } from 'sonner'
-import { PipelineTimeline } from '@/components/analysis/PipelineTimeline'
 import { taskIdToResearchRunOptions } from '@/lib/analysis/pipeline-task-retry'
-import { buildPipelineTimelineStages, uiStageIdToRetryTaskId } from '@/lib/analysis/build-pipeline-timeline-stages'
+import { buildPipelineTimelineStages } from '@/lib/analysis/build-pipeline-timeline-stages'
+import { AnalysisResultHeaderBar, type AnalysisHeaderRunState } from '@/components/analysis/results/AnalysisResultHeaderBar'
+import { CompactPipelineBar } from '@/components/analysis/results/CompactPipelineBar'
 import { createIdleState, type StreamingState } from '@/lib/types/analysis-modes'
 import { scrollToReportSection } from '@/components/analysis/report-scroll-toc'
 import { ReportSectionTabBar } from '@/components/analysis/report-section-tab-bar'
 import { SectionContentSkeleton } from '@/components/research/SectionContentSkeleton'
-import { ConclusionStructuredBlocks } from '@/components/research/ConclusionStructuredBlocks'
 import { stripLeadingMarkdownHeadings } from '@/lib/strip-markdown-heading-markers'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown } from 'lucide-react'
-import { AnalysisMetaRow, SummaryStatPills, TopPmActionsStrip } from '@/components/analysis/analysis-summary-header'
-
+import { AnalysisMetaRow } from '@/components/analysis/analysis-summary-header'
 function isStepComplete(
   tasks: Array<{ step_name: string; status: string }> | null | undefined,
   step: string
@@ -295,44 +292,53 @@ export function ResultLDashboard({
   const skInsightStrategy = skInsights || skStrategic
   const skAction = loading && !executionDone
 
-  /** 파이프라인 래퍼와 동일 — `top-14`(3.5rem) 고정 헤더 오프셋 */
-  const pipelineStickyTopPx = 56
-  const pipelineRef = useRef<HTMLDivElement>(null)
-  const [pipelineBlockHeight, setPipelineBlockHeight] = useState(0)
-  const [tabBarHeight, setTabBarHeight] = useState(48)
+  /** 글로벌 네비 높이(h-14) + 스티키 스택(헤더·파이프라인·탭) — 스크롤 앵커·스파이 기준 */
+  const navOffsetPx = 56
+  const stickyStackRef = useRef<HTMLDivElement>(null)
+  const [stickyStackHeight, setStickyStackHeight] = useState(0)
 
   useLayoutEffect(() => {
-    const el = pipelineRef.current
+    const el = stickyStackRef.current
     if (!el) {
-      setPipelineBlockHeight(0)
+      setStickyStackHeight(0)
       return
     }
     const ro = new ResizeObserver(() => {
-      setPipelineBlockHeight(Math.round(el.offsetHeight))
+      setStickyStackHeight(Math.round(el.offsetHeight))
     })
     ro.observe(el)
-    setPipelineBlockHeight(Math.round(el.offsetHeight))
+    setStickyStackHeight(Math.round(el.offsetHeight))
     return () => ro.disconnect()
   }, [showPipeline, keyword, pipelineTimelineStages, reportId])
 
-  const tabStickyTopPx = pipelineStickyTopPx + pipelineBlockHeight
+  const scrollAnchorTopPx = navOffsetPx + stickyStackHeight
 
-  function renderAnalysisTimeline() {
+  const headerRunState: AnalysisHeaderRunState = pipelineHasError
+    ? 'error'
+    : pipelineInFlight
+      ? 'running'
+      : allCompleted && !!effectiveResult?.reportId
+        ? 'completed'
+        : 'idle'
+
+  function renderAnalysisStickyStack() {
     if (!showPipeline || !keyword.trim()) return null
     return (
       <div
-        ref={pipelineRef}
-        className="sticky top-14 z-30 -mx-1 border-b border-zinc-200/80 bg-background/95 px-1 pb-3 pt-1 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-md supports-[backdrop-filter]:bg-background/85 dark:border-zinc-800 dark:shadow-[0_1px_0_rgba(255,255,255,0.04)] sm:-mx-2 sm:px-2"
+        ref={stickyStackRef}
+        className="sticky top-14 z-30 -mx-1 shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)] sm:-mx-2"
       >
-        <PipelineTimeline
-          stages={pipelineTimelineStages}
-          onRetry={(stageId) => {
-            const taskId = uiStageIdToRetryTaskId(stageId)
-            handleRetryPipelineStep(taskId)
-          }}
+        <AnalysisResultHeaderBar
           keyword={keyword.trim()}
-          countryLabel={countryCode}
+          countryCode={countryCode}
+          runState={headerRunState}
+          aiPrimaryModel={aiPrimaryModel}
+          displayResult={effectiveResult ?? null}
+          taskData={taskData}
+          disabled={phaseRerunDisabled}
         />
+        <CompactPipelineBar stages={pipelineTimelineStages} isRunning={pipelineInFlight} />
+        <ReportSectionTabBar scrollAnchorTopPx={scrollAnchorTopPx} />
       </div>
     )
   }
@@ -352,8 +358,8 @@ export function ResultLDashboard({
         role="region"
         aria-label="분석 진행"
       >
-        <div id="analysis-live-region" className="mx-auto max-w-3xl space-y-4">
-          {renderAnalysisTimeline()}
+        <div id="analysis-live-region" className="mx-auto w-full max-w-none space-y-4 px-2 sm:px-4">
+          {renderAnalysisStickyStack()}
           <p className="text-center text-sm text-muted-foreground">
             분석 데이터를 불러오는 중입니다. 잠시 후 요약 카드가 표시됩니다.
           </p>
@@ -365,12 +371,12 @@ export function ResultLDashboard({
   return (
     <div
       id="analysis-live-region"
-      className={cn(analysisPageBg, 'rounded-xl px-1 py-3 sm:px-2 sm:py-4 overflow-visible')}
+      className={cn(analysisPageBg, 'dm-analytics-page rounded-xl px-1 py-3 sm:px-2 sm:py-4 overflow-visible')}
       role="region"
       aria-label="분석 결과 대시보드"
     >
       <div className="mx-auto flex w-full max-w-none flex-col gap-8">
-        {renderAnalysisTimeline()}
+        {renderAnalysisStickyStack()}
 
         <div className="flex min-h-0 flex-col gap-5 overflow-visible xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-6">
           <div className="w-full shrink-0 xl:sticky xl:top-28 xl:z-10 xl:w-[min(100%,18rem)] xl:max-w-none xl:self-start xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:overflow-x-visible">
@@ -386,11 +392,10 @@ export function ResultLDashboard({
             className="min-w-0 flex-1 space-y-3"
             style={
               {
-                ['--report-anchor-offset' as string]: `${Math.max(96, tabStickyTopPx + tabBarHeight)}px`,
+                ['--report-anchor-offset' as string]: `${Math.max(96, scrollAnchorTopPx)}px`,
               } as CSSProperties
             }
           >
-            <ReportSectionTabBar stickyTopPx={tabStickyTopPx} onTabBarHeight={setTabBarHeight} />
             <MotionReveal
               key={`main-${sectionKeyPrefix}`}
               staticLayout={loading}
@@ -400,16 +405,17 @@ export function ResultLDashboard({
               <section
                 key={`${sectionKeyPrefix}-summary`}
                 id="summary-section"
-                className={sectionScrollClass}
+                className={cn(sectionScrollClass, 'mb-12')}
               >
                 <MotionReveal staticLayout={loading} delay={0.04}>
                   <div className="space-y-8 motion-safe:will-change-transform">
-                    <div className="rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-                      <div className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
-                        <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-                          📊 종합 요약
-                        </h2>
-                        <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
+                    <div className="w-full rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                      <div className="border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
+                        <ReportSectionTitleRow
+                          title="종합 요약"
+                          badge="요약"
+                          right={<AnalysisSourceButton result={effectiveResult ?? null} label="출처" />}
+                        />
                       </div>
                       <div className="space-y-6 px-3 pb-5 pt-4 sm:space-y-8 sm:px-4 sm:pb-6 sm:pt-5">
                         {skSummary ? (
@@ -422,76 +428,36 @@ export function ResultLDashboard({
                               updatedAt={effectiveResult?.updated_at ?? null}
                               className="px-0.5"
                             />
-                            <div className="w-full rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-950">
-                              <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:gap-10">
-                                <div className="flex shrink-0 flex-col items-center justify-center border-b border-slate-100 pb-8 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10 dark:border-zinc-800">
-                                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                                    시장 기회 점수
-                                  </p>
-                                  <OpportunityScoreGauge
-                                    score={liveOppNum}
-                                    loading={loading && liveOppNum == null}
-                                    stableScore={stableOppScore}
-                                    analysisFailed={analysisFailed}
-                                    rationaleSummary={scoreSummaryLeft}
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1 space-y-5">
-                                  <SummaryStatPills result={effectiveResult ?? null} />
-                                  <TopPmActionsStrip
-                                    result={effectiveResult ?? null}
-                                    taskData={taskData}
-                                    analysisTasks={analysisTasks ?? undefined}
-                                  />
-                                  <Collapsible defaultOpen={false}>
-                                    <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100 dark:hover:bg-zinc-800/80 [&[data-state=open]_svg]:rotate-180">
-                                      기회 점수 산출 근거 보기
-                                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent className="pt-3">
-                                      {scoreReasonRight ? (
-                                        <p className="text-pretty text-sm font-medium leading-relaxed text-slate-800 dark:text-zinc-100">
-                                          {scoreReasonRight}
-                                        </p>
-                                      ) : (
-                                        <p className="text-pretty text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
-                                          점수 분해·시장 섹션의 차원 지표와 함께 확인하세요.
-                                        </p>
-                                      )}
-                                    </CollapsibleContent>
-                                  </Collapsible>
-                                </div>
-                              </div>
-                            </div>
+                            <SummaryExecutiveThreeZones
+                              result={effectiveResult ?? null}
+                              taskData={taskData}
+                              analysisTasks={analysisTasks}
+                              opportunityScore={stableOppScore}
+                              scoreLoading={loading && liveOppNum == null && !analysisFailed}
+                              analysisFailed={analysisFailed}
+                              conclusionBackgroundMarkdown={conclusionFull}
+                              highlightTerms={highlightTerms}
+                            />
 
-                            <div
-                              className="w-full space-y-5 rounded-lg border border-slate-100 bg-white px-3 py-5 sm:px-4 sm:py-6 dark:border-zinc-800 dark:bg-zinc-950"
-                              aria-labelledby={`${sectionKeyPrefix}-conclusion-heading`}
-                            >
-                              <h3
-                                id={`${sectionKeyPrefix}-conclusion-heading`}
-                                className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-400"
-                              >
-                                핵심 결론
-                              </h3>
-                              <ConclusionActionStrip
-                                result={effectiveResult ?? null}
-                                taskData={taskData}
-                                analysisTasks={analysisTasks}
-                              />
-                              <Collapsible defaultOpen={false} className="mt-6 border-t border-slate-100 pt-5 dark:border-zinc-800">
-                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-3 py-2.5 text-left text-sm font-medium text-slate-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-200 [&[data-state=open]_svg]:rotate-180">
-                                  배경 및 근거 자세히 보기
-                                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="pt-4">
-                                  <p className="mb-3 text-xs text-slate-500 dark:text-zinc-400">
-                                    시장·경쟁 데이터에 기반한 요약입니다. 위 &quot;3줄 요약 액션&quot;과 동일 문장을 반복하지 않습니다.
+                            <Collapsible defaultOpen={false}>
+                              <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100 dark:hover:bg-zinc-800/80 [&[data-state=open]_svg]:rotate-180">
+                                기회 점수 산출 근거 보기
+                                <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="pt-3">
+                                {scoreReasonRight ? (
+                                  <p className="text-pretty text-sm font-medium leading-relaxed text-slate-800 dark:text-zinc-100">
+                                    {scoreReasonRight}
                                   </p>
-                                  <ConclusionStructuredBlocks markdown={conclusionFull} highlightTerms={highlightTerms} />
-                                </CollapsibleContent>
-                              </Collapsible>
-                            </div>
+                                ) : scoreSummaryLeft ? (
+                                  <p className="text-pretty text-sm leading-relaxed text-slate-700 dark:text-zinc-300">{scoreSummaryLeft}</p>
+                                ) : (
+                                  <p className="text-pretty text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
+                                    점수 분해·시장 섹션의 차원 지표와 함께 확인하세요.
+                                  </p>
+                                )}
+                              </CollapsibleContent>
+                            </Collapsible>
 
                             <Collapsible defaultOpen={false}>
                               <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 [&[data-state=open]_svg]:rotate-180">
@@ -520,7 +486,8 @@ export function ResultLDashboard({
                 <InsightSectionShell
                   key={`${sectionKeyPrefix}-market`}
                   id="market-section"
-                  title="📈 시장 분석"
+                  title="시장 분석"
+                  badge="시장"
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={0}
@@ -530,6 +497,7 @@ export function ResultLDashboard({
                   ) : (
                     <div className="space-y-8">
                       <OpportunityScoreBreakdown
+                        embedded
                         score={effectiveResult?.key_metrics?.opportunity_score ?? null}
                         loading={loading}
                         stableScore={stableOppScore}
@@ -556,7 +524,8 @@ export function ResultLDashboard({
                 <InsightSectionShell
                   key={`${sectionKeyPrefix}-competition`}
                   id="competitor-section"
-                  title="⚔️ 경쟁사 분석"
+                  title="경쟁사 분석"
+                  badge="경쟁"
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={1}
@@ -581,7 +550,9 @@ export function ResultLDashboard({
                 <InsightSectionShell
                   key={`${sectionKeyPrefix}-insight-strat`}
                   id="insight-strategy-section"
-                  title="💡 인사이트 · 전략"
+                  title="인사이트 · 전략"
+                  badge="전략"
+                  hideTitle
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={2}
@@ -590,17 +561,14 @@ export function ResultLDashboard({
                     <SectionContentSkeleton variant="mixed" />
                   ) : (
                     <div className="space-y-12">
-                      <KeyMarketInsightsCard
-                        key={`${sectionKeyPrefix}-kmic`}
+                      <InsightStrategyTabsPanel
+                        key={`${sectionKeyPrefix}-istp`}
                         result={effectiveResult ?? null}
                         taskData={taskData}
                         analysisTasks={analysisTasks}
                         newsList={newsList}
                         consensusData={consensusData}
                         loading={loading}
-                        keyword={keyword}
-                        onRetryExecutionLayer={() => handleRetryPipelineStep('execution_layer')}
-                        withFooterBlocks={false}
                       />
                       <AnalysisResultSections
                         key={`${sectionKeyPrefix}-ars-strategic`}
@@ -612,6 +580,7 @@ export function ResultLDashboard({
                         keyword={keyword}
                         layout="pm-analytics"
                         sectionOnly="strategic"
+                        strategicOmitFrameworks
                       />
                       <Collapsible defaultOpen={false}>
                         <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-left text-sm font-medium text-slate-800 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100 [&[data-state=open]_svg]:rotate-180">
@@ -635,14 +604,12 @@ export function ResultLDashboard({
                 <section
                   key={`${sectionKeyPrefix}-action`}
                   id="action-section"
-                  className={sectionScrollClass}
+                  className={cn(sectionScrollClass, 'mb-12')}
                 >
                   <MotionReveal staticLayout={loading} delay={0.08}>
                     <div className="border-b border-slate-200/90 bg-white pb-8 dark:border-zinc-800 dark:bg-zinc-950">
-                      <div className="space-y-1 border-b border-slate-100 px-1 pb-3 pt-1 sm:px-0 dark:border-zinc-800">
-                        <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-                          🎯 PM 액션 플랜
-                        </h2>
+                      <div className="space-y-3 border-b border-slate-100 px-1 pb-4 pt-1 sm:px-0 dark:border-zinc-800">
+                        <ReportSectionTitleRow title="PM 액션 플랜" badge="실행" />
                         <p className="text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
                           우선순위·성과·리스크를 확인한 뒤 실행 테이블에서 과제를 다듬으세요. 상태는 이 브라우저에만 저장됩니다.
                         </p>
@@ -652,37 +619,15 @@ export function ResultLDashboard({
                           <SectionContentSkeleton variant="list" />
                         ) : (
                           <>
-                            <StrategyEvaluationSection
-                              key={`${sectionKeyPrefix}-sev`}
-                              result={effectiveResult ?? null}
-                              loading={loading}
-                              embedded
-                            />
-                            <div>
-                              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                                우선순위 · 예상 성과 · 전략적 리스크
-                              </h3>
-                              <KeyMarketInsightsCard
-                                key={`${sectionKeyPrefix}-kmic-footer`}
-                                result={effectiveResult ?? null}
-                                taskData={taskData}
-                                analysisTasks={analysisTasks}
-                                newsList={newsList}
-                                consensusData={consensusData}
-                                loading={loading}
-                                keyword={keyword}
-                                onRetryExecutionLayer={() => handleRetryPipelineStep('execution_layer')}
-                                variant="footer-only"
-                              />
-                            </div>
-                            <StrategyExecutionTable
-                              key={`${sectionKeyPrefix}-set`}
+                            <PmActionPlanSection
+                              key={`${sectionKeyPrefix}-pmap`}
                               result={effectiveResult ?? null}
                               taskData={taskData}
                               analysisTasks={analysisTasks}
+                              consensusData={consensusData}
                               loading={loading}
                               keyword={keyword}
-                              nested
+                              onRetryExecutionLayer={() => handleRetryPipelineStep('execution_layer')}
                             />
                           </>
                         )}
@@ -698,9 +643,35 @@ export function ResultLDashboard({
   )
 }
 
+function ReportSectionTitleRow({
+  title,
+  badge,
+  right,
+}: {
+  title: string
+  badge?: string
+  right?: ReactNode
+}) {
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="h-6 w-1 shrink-0 rounded-full bg-blue-500" aria-hidden />
+      <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-50">{title}</h2>
+      {badge ? (
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-zinc-800 dark:text-zinc-400">
+          {badge}
+        </span>
+      ) : null}
+      <div className="h-px min-w-[2rem] flex-1 bg-gray-100 dark:bg-zinc-800" />
+      {right ? <div className="shrink-0">{right}</div> : null}
+    </div>
+  )
+}
+
 function InsightSectionShell({
   id,
   title,
+  badge,
+  hideTitle = false,
   result,
   children,
   loading = false,
@@ -708,22 +679,27 @@ function InsightSectionShell({
 }: {
   id: string
   title: string
+  badge?: string
+  /** true면 바깥 H2·배지는 숨기고 출처만 표시(카드 내부에 제목이 있을 때) */
+  hideTitle?: boolean
   result: ResearchResponse | null
   children: ReactNode
   loading?: boolean
   animationIndex?: number
 }) {
+  const sourceBtn = <AnalysisSourceButton result={result} label="출처" />
   return (
     <MotionReveal staticLayout={loading} delay={0.08 + animationIndex * 0.05}>
       <section
         id={id}
-        className={cn(sectionScrollClass, 'border-b border-slate-200/80 pb-2 dark:border-zinc-800')}
+        className={cn(sectionScrollClass, 'mb-12 border-b border-slate-200/80 pb-8 dark:border-zinc-800')}
       >
-        <div className="flex flex-row flex-wrap items-center justify-between gap-2 px-0 py-3">
-          <h2 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-50">{title}</h2>
-          <AnalysisSourceButton result={result} label="출처" />
-        </div>
-        <div className="px-0 py-6">{children}</div>
+        {hideTitle ? (
+          <div className="mb-4 flex justify-end">{sourceBtn}</div>
+        ) : (
+          <ReportSectionTitleRow title={title} badge={badge} right={sourceBtn} />
+        )}
+        <div className="w-full px-0 pt-0">{children}</div>
       </section>
     </MotionReveal>
   )

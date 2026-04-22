@@ -157,6 +157,7 @@ export interface ResearchResponse {
       action_title: string
       description?: string
       expected_outcome?: string
+      estimated_timeline?: string
       priority?: 'high' | 'medium' | 'low'
       category?: 'mvp_experiment' | 'user_interview' | 'feature_prioritization' | 'go_to_market'
     }>

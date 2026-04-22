@@ -625,15 +625,10 @@ function ResultsContent() {
     streamingState.status === 'streaming' ||
     streamingState.status === 'completed'
 
-  const liveAnalysisBanner =
-    showAnalysisShell &&
-    !needsRunAction &&
-    hasKeyword &&
-    (loading ||
-      (canonicalStatus as string) === 'analyzing' ||
-      (polledStatus as string) === 'running' ||
-      streamingState.status === 'running' ||
-      streamingState.status === 'streaming')
+  /** 하단 고정 배너: 실제 파이프라인이 돌 때만 (완료·캐시 조회 시 숨김) */
+  const pipelineActive = loading || analysisPipelineBusy
+
+  const liveAnalysisBanner = showAnalysisShell && !needsRunAction && hasKeyword && pipelineActive
 
   /** reportId 변경 시 insight 초기화 */
   useEffect(() => {
@@ -1176,9 +1171,9 @@ function ResultsContent() {
       <div className="w-full min-h-screen bg-background px-3 py-1.5 rin-doc sm:px-4 sm:py-2 md:px-5 md:py-2.5 lg:px-6">
         <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-[min(100%,1920px)]">
           <AnalysisSidebar className="sticky top-14 z-20 max-h-[calc(100vh-3.5rem)] self-start overflow-y-auto" />
-          <main className="min-h-[320px] min-w-0 flex-1 px-4 py-4 sm:px-6">
+          <main className="min-h-[320px] min-w-0 flex-1 w-full px-4 py-4 sm:px-6">
         <div id="pm-dashboard-top" className="pb-3 md:pb-4 rin-reading reading-text">
-        <div className="mx-auto w-full max-w-[min(100%,1680px)]">
+        <div className="mx-auto w-full max-w-none px-0 sm:px-1">
         {/* Cached result notice: show only when we loaded from history and are NOT re-running (다시 분석하기 시 재분석 진행되므로 이때는 숨김) */}
         {hasCachedResult === true && !loading && (
           <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">

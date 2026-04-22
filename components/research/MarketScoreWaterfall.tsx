@@ -1,9 +1,15 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { chartAxisMuted, chartColors, chartFontFamily, formatChartInt } from '@/lib/chartTheme'
+import { chartAxisMuted, chartFontFamily, formatChartInt } from '@/lib/chartTheme'
 
 type Segment = { label: string; start: number; end: number }
+
+const BASE_FILL = '#5B7CFA'
+const POS = '#0D9F6E'
+const NEG = '#EF4444'
+const FINAL_FILL = '#1B64DA'
+const FINAL_STROKE = '#1547A8'
 
 export function MarketScoreWaterfall({
   opportunityScore,
@@ -39,124 +45,118 @@ export function MarketScoreWaterfall({
     })
   }
 
-  const w = 400
-  const h = 216
-  const padL = 44
-  const padR = 20
-  const padB = 44
-  /** 상단 누적·델타 라벨 여유 */
-  const padT = 44
-  /** 가산/감산 막대가 너무 얇을 때 최소 표시 높이(px) — 숫자 가독성 */
-  const MIN_FLOAT_BAR_H = 22
+  const w = 720
+  const h = 140
+  const padL = 8
+  const padR = 8
+  const padB = 30
+  const padT = 6
   const plotW = w - padL - padR
   const plotH = h - padT - padB
   const maxY = 100
   const yAt = (v: number) => padT + plotH - (v / maxY) * plotH
-  const n = segments.length
-  const gap = 8
-  const barW = (plotW - gap * (n - 1)) / n
 
-  const barFill = (i: number, delta: number) => {
-    if (i === 0) return chartColors.primary
-    if (delta >= 0) return chartColors.success
-    return chartColors.danger
-  }
+  const n = segments.length
+  const gap = 5
+  const totalUnits = (n - 1) + 1.5
+  const unit = (plotW - gap * Math.max(0, n - 1)) / totalUnits
+
+  let x = padL
+  const layouts = segments.map((s, i) => {
+    const isLast = i === n - 1
+    const bw = isLast ? unit * 1.5 : unit
+    const layout = { s, i, x, bw, isLast }
+    x += bw + (i < n - 1 ? gap : 0)
+    return layout
+  })
+
+  const MIN_FLOAT_H = 18
 
   return (
-    <div className={cn('w-full', className)} style={{ fontFamily: chartFontFamily }}>
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-auto w-full min-h-[220px] max-w-lg" aria-label="시장 잠재력 워터폴">
-        <line x1={padL} y1={yAt(0)} x2={w - padR} y2={yAt(0)} stroke={chartAxisMuted} strokeOpacity={0.35} />
-        {segments.map((s, i) => {
-          const x = padL + i * (barW + gap)
-          const yTop = yAt(s.end)
-          const yBot = yAt(s.start)
-          const rawBh = Math.max(1, yBot - yTop)
+    <div className={cn('w-full max-w-none', className)} style={{ fontFamily: chartFontFamily }}>
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-[140px] w-full" preserveAspectRatio="xMidYMid meet" aria-label="시장 잠재력 워터폴">
+        <line x1={padL} y1={yAt(0)} x2={w - padR} y2={yAt(0)} stroke="#E5E8EF" strokeWidth={1} className="dark:stroke-zinc-700" />
+        {layouts.map(({ s, i, x: bx, bw, isLast }) => {
+          const y0 = yAt(s.start)
+          const y1 = yAt(s.end)
+          const top = Math.min(y0, y1)
+          const rawH = Math.abs(y1 - y0)
           const delta = s.end - s.start
-          let yRect = yTop
-          let hRect = rawBh
-          if (i > 0 && delta !== 0 && rawBh < MIN_FLOAT_BAR_H) {
-            hRect = MIN_FLOAT_BAR_H
-            yRect = yBot - hRect
+          let hRect = Math.max(2, rawH)
+          let yRect = top
+          if (i > 0 && delta !== 0 && rawH < MIN_FLOAT_H) {
+            hRect = MIN_FLOAT_H
+            yRect = Math.max(yAt(s.start), yAt(s.end)) - hRect
           }
-          const fill = barFill(i, delta)
-          const stroke = i === 0 ? chartColors.primary : fill
-          const isLast = i === segments.length - 1
-          const isFinalBar = isLast && segments.length > 1
-          const deltaInside = i > 0 && delta !== 0 && hRect >= 20 && barW >= 26
-          const deltaTextY = deltaInside ? yRect + hRect / 2 : yRect - 6
-          const cumY = Math.min(yRect, yTop) - (deltaInside ? 10 : 12)
+          const fill =
+            isLast && segments.length > 1
+              ? FINAL_FILL
+              : i === 0
+                ? BASE_FILL
+                : delta >= 0
+                  ? POS
+                  : NEG
+          const stroke = isLast && segments.length > 1 ? FINAL_STROKE : fill
+          const showDeltaInside = i > 0 && !isLast && Math.abs(delta) >= 0.5 && hRect >= 14 && bw >= 22
+          const showFinalInside = isLast && segments.length > 1 && hRect >= 16
 
           return (
             <g key={`${s.label}-${i}`}>
               {i > 0 ? (
                 <path
-                  d={`M ${padL + (i - 1) * (barW + gap) + barW} ${yAt(segments[i - 1].end)} L ${x} ${yAt(segments[i - 1].end)}`}
+                  d={`M ${layouts[i - 1]!.x + layouts[i - 1]!.bw} ${yAt(layouts[i - 1]!.s.end)} L ${bx} ${yAt(layouts[i - 1]!.s.end)}`}
                   stroke={chartAxisMuted}
-                  strokeWidth={1.25}
-                  strokeDasharray="4 3"
+                  strokeWidth={1.1}
+                  strokeOpacity={0.55}
                   fill="none"
-                  opacity={0.85}
                 />
               ) : null}
               <rect
-                x={x}
+                x={bx}
                 y={yRect}
-                width={barW}
+                width={bw}
                 height={hRect}
-                rx={5}
+                rx={isLast ? 5 : 4}
                 fill={fill}
                 stroke={stroke}
-                strokeOpacity={isFinalBar ? 0.95 : 0.22}
-                strokeWidth={isFinalBar ? 3 : 1}
-                fillOpacity={isFinalBar ? 1 : 0.95}
+                strokeWidth={isLast ? 2 : 1}
+                strokeOpacity={isLast ? 1 : 0.35}
               />
-              {delta !== 0 && i > 0 ? (
+              {showDeltaInside ? (
                 <text
-                  x={x + barW / 2}
-                  y={deltaInside ? deltaTextY : deltaTextY - 1}
-                  dominantBaseline={deltaInside ? 'middle' : 'ideographic'}
+                  x={bx + bw / 2}
+                  y={yRect + hRect / 2}
+                  dominantBaseline="middle"
                   textAnchor="middle"
-                  fontSize={deltaInside ? 12 : 11}
+                  fontSize={13}
                   fontWeight={700}
-                  fill={deltaInside ? '#fff' : '#14532d'}
+                  fill="#fff"
                   className="select-none"
-                  style={
-                    deltaInside
-                      ? undefined
-                      : {
-                          paintOrder: 'stroke fill',
-                          stroke: 'rgba(255,255,255,0.92)',
-                          strokeWidth: 3,
-                        }
-                  }
                 >
                   {delta > 0 ? '+' : ''}
-                  {formatChartInt(delta)}
+                  {formatChartInt(Math.round(delta))}
                 </text>
               ) : null}
-              <text x={x + barW / 2} y={h - 12} fontSize={10} fill={chartAxisMuted} textAnchor="middle" className="select-none">
-                {s.label}
-              </text>
-              <text x={x + barW / 2} y={cumY} fontSize={11} fill={chartAxisMuted} textAnchor="middle" className="select-none">
-                {formatChartInt(Math.round(s.end))}
-              </text>
-              {!isLast ? (
-                <line
-                  x1={x + barW}
-                  y1={yAt(s.end)}
-                  x2={x + barW + gap}
-                  y2={yAt(s.end)}
-                  stroke={chartAxisMuted}
-                  strokeWidth={1.5}
-                  strokeOpacity={0.55}
-                />
+              {showFinalInside ? (
+                <text
+                  x={bx + bw / 2}
+                  y={yRect + hRect / 2}
+                  dominantBaseline="middle"
+                  textAnchor="middle"
+                  fontSize={13}
+                  fontWeight={800}
+                  fill="#fff"
+                  className="select-none"
+                >
+                  {formatChartInt(Math.round(s.end))}
+                </text>
               ) : null}
+              <text x={bx + bw / 2} y={h - 7} fontSize={9} fill={chartAxisMuted} textAnchor="middle" className="select-none">
+                {s.label.length > 9 ? `${s.label.slice(0, 8)}…` : s.label}
+              </text>
             </g>
           )
         })}
-        <text x={padL} y={14} fontSize={10} fill={chartAxisMuted}>
-          누적 흐름 → 목표 {formatChartInt(final)}
-        </text>
       </svg>
     </div>
   )
