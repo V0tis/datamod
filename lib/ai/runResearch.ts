@@ -61,6 +61,7 @@ import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/l
 import { enrichPorter5Forces, type Porter5ForcesShape } from '@/lib/strategy-framework-mapper'
 import { hasNonKoreanContent, ensureKoreanText } from '@/lib/ai/language-validate'
 import type { AnalysisProgressMeta } from '@/lib/types/analysis-modes'
+import { runCleanDataPipe, SIGNAL_LAYER_TOP_K, RSS_SIGNAL_LAYER_FETCH_CAP } from '@/lib/rss/clean-data-pipe'
 
 const AI_MAX_RETRIES = 2
 
@@ -2871,7 +2872,16 @@ export async function* runResearch(
   await upsertAnalysisTask('signal_layer', 'running', { provider: null, fallback_used: false })
   yield { type: 'task', task: 'signal_layer', status: 'running', provider: null, fallback_used: false }
   try {
-    news = await fetchNewsTitles(keyword, cacheKey.countryCode, Math.max(articleCount, 15))
+    const rssBeforeClean = await fetchNewsTitles(keyword, cacheKey.countryCode, RSS_SIGNAL_LAYER_FETCH_CAP)
+    const cleanResult = runCleanDataPipe(rssBeforeClean, { topK: SIGNAL_LAYER_TOP_K })
+    news = cleanResult.items
+    if (rssBeforeClean.length > 0) {
+      console.log('[CleanDataPipe] signal_layer 요약', {
+        rssFetched: rssBeforeClean.length,
+        kept: news.length,
+        removed: cleanResult.removals.length,
+      })
+    }
     logRssNewsCollectionCheck(news, keyword)
     const publishers = [...new Set(news.map((n) => n.publisher).filter(Boolean))] as string[]
     const signalSources = publishers.length > 0 ? publishers : ['Google News', 'RSS 피드']

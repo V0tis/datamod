@@ -2,6 +2,7 @@
  * Shared news fetching for research flows.
  */
 import Parser from 'rss-parser'
+import { runCleanDataPipe, RSS_SIGNAL_LAYER_FETCH_CAP, SIGNAL_LAYER_TOP_K } from '@/lib/rss/clean-data-pipe'
 
 const RSS_BASE = 'https://news.google.com/rss/search'
 const USER_AGENT =
@@ -28,7 +29,7 @@ export async function fetchNewsTitles(keyword: string, countryCode = 'KR'): Prom
   try {
     const xml = await res.text()
     const feed = await rssParser.parseString(xml)
-    const items = (feed.items ?? []).slice(0, 15).map((it) => {
+    const items = (feed.items ?? []).slice(0, RSS_SIGNAL_LAYER_FETCH_CAP).map((it) => {
       const title = (it.title ?? '').trim().slice(0, 300)
       const link = typeof it.link === 'string' ? it.link : ''
       let publisher = ''
@@ -44,7 +45,8 @@ export async function fetchNewsTitles(keyword: string, countryCode = 'KR'): Prom
         publishedAt: new Date().toISOString(),
       }
     })
-    return items.filter((i) => i.title.length > 0)
+    const withTitle = items.filter((i) => i.title.length > 0)
+    return runCleanDataPipe(withTitle, { topK: SIGNAL_LAYER_TOP_K, quiet: true }).items
   } catch {
     return []
   }
