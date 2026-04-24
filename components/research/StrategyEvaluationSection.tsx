@@ -171,6 +171,8 @@ export interface StrategyEvaluationSectionProps {
   embedded?: boolean
   /** embedded일 때 상단 제목·설명 줄 숨김(상위 섹션에서 이미 표시할 때) */
   showEmbeddedHeading?: boolean
+  /** deep: 교차검증·리스크 완화 블록을 더 강조(패딩·테두리) */
+  emphasis?: 'default' | 'deep'
 }
 
 export function StrategyEvaluationSection({
@@ -178,6 +180,7 @@ export function StrategyEvaluationSection({
   loading = false,
   embedded = false,
   showEmbeddedHeading = true,
+  emphasis = 'default',
 }: StrategyEvaluationSectionProps) {
   const km = result?.key_metrics ?? {}
   const se = (km as { strategy_evaluation?: StrategyEval }).strategy_evaluation
@@ -201,7 +204,13 @@ export function StrategyEvaluationSection({
     loading && !hasContent ? (
       <SectionContentSkeleton variant="grid" />
     ) : embedded ? (
-      <div className="space-y-4">
+      <div
+        className={cn(
+          'space-y-4',
+          emphasis === 'deep' &&
+            'rounded-xl border-2 border-indigo-200/60 bg-indigo-50/25 p-3 sm:p-5 dark:border-indigo-900/50 dark:bg-indigo-950/30'
+        )}
+      >
         {cvScore != null ? (
           <CrossValidationHeader score={cvScore} summary={se?.cross_validation_summary} />
         ) : null}

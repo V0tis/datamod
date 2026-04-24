@@ -1,8 +1,5 @@
 /**
- * Analysis Mode System for PM Strategy Console
- *
- * Defines different analysis modes with varying depth, steps, and expected outputs.
- * Used throughout the app to customize analysis behavior and UI presentation.
+ * 분석 모드(빠른·표준·심층) — 기획서와 동일: 의사결정 상황에 따라 분석 깊이가 달라 한 가지 방식만으로는 유연한 대응이 어려워 세 가지 타입을 둡니다.
  */
 
 export type AnalysisMode = 'standard' | 'quick' | 'deep' | 'competitive' | 'action'
@@ -19,12 +16,18 @@ export type AnalysisModeConfig = {
   labelKo: string
   description: string
   descriptionKo: string
+  /** PM용 한 줄 가치 제안(모드 선택 카드) */
+  taglineKo: string
+  /** 활용 시나리오(비즈니스 카피) */
+  purposeKo: string
+  /** 카드/배지용 짧은 키 */
+  qualityBadgeShortKo: string
   steps: AnalysisModeStep[]
   duration: string
   outputs: string[]
 }
 
-/** Product Strategy Engine - 5 layers */
+/** Product Strategy Engine — 5 layers (내부 파이프라인) */
 export const ENGINE_STAGE_IDS = [
   'signal_layer',
   'trend_analysis',
@@ -61,9 +64,9 @@ export const ANALYSIS_MODE_STEPS: Record<AnalysisMode, AnalysisModeStep[]> = {
 
 /** Hover tooltip descriptions for PM clarity */
 export const ANALYSIS_MODE_TOOLTIPS: Record<AnalysisMode, string> = {
-  standard: '전체 분석 파이프라인 실행 (추천)',
-  quick: '5분 내 시장 신호 개요',
-  deep: '시장 구조, 리스크, 전략 방향',
+  standard: '트렌드·경쟁·리스크를 밸런스 있게 — 비즈니스 의사결정에 쓰는 핵심을 균형 있게',
+  quick: '본격 기획 전, 왜 트렌드인지·가치 있는 시장인지 빠르게 확인',
+  deep: '사업 진입·피벗·가격 모델 등 실패 비용이 큰 결정 전, 근거로 리스크 검증',
   competitive: '경쟁사 포지셔닝과 차별화',
   action: '실행 가능한 액션 플랜',
 }
@@ -74,27 +77,39 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
     label: 'Standard Analysis',
     labelKo: '표준 분석',
     description: 'Full analysis pipeline – market structure, signals, actions',
-    descriptionKo: '전체 분석 파이프라인 실행',
+    descriptionKo: '트렌드 흐름·경쟁사 현황·잠재적 리스크 등을 밸런스 있게 분석',
+    taglineKo: '트렌드 흐름·경쟁사 현황·잠재적 리스크를 밸런스 있게',
+    purposeKo:
+      '비즈니스 의사결정에 필수적인 핵심 요소들을 밸런스 있게 분석할 때 사용합니다.',
+    qualityBadgeShortKo: 'Standard',
     steps: ANALYSIS_MODE_STEPS.standard,
     duration: '~2분',
     outputs: ['시장 점수', '시그널', '경쟁 환경', '전략 액션', '리포트'],
   },
   quick: {
     id: 'quick',
-    label: 'Quick Insight',
-    labelKo: '빠른 인사이트',
+    label: 'Fast Analysis',
+    labelKo: '빠른 분석',
     description: 'Short summary and key signals',
-    descriptionKo: '짧은 요약과 핵심 시그널',
+    descriptionKo: '트렌드인 이유·시장 가치를 빠르게 확인',
+    taglineKo: '왜 트렌드인지, 가치 있는 시장인지 빠르게 확인',
+    purposeKo:
+      '본격적인 기획 하기 전, 왜 트렌드인지·가치가 있는 시장인지 빠르게 확인할 때 사용합니다.',
+    qualityBadgeShortKo: 'Fast',
     steps: ANALYSIS_MODE_STEPS.quick,
     duration: '~30초',
     outputs: ['시장 요약', '핵심 신호'],
   },
   deep: {
     id: 'deep',
-    label: 'Deep Research',
-    labelKo: '심층 리서치',
+    label: 'Deep Analysis',
+    labelKo: '심층 분석',
     description: 'Extended analysis with more data sources and detailed insights',
-    descriptionKo: '더 많은 데이터 소스와 상세 인사이트 포함',
+    descriptionKo: '실패 비용이 큰 결정 전, 근거로 리스크 검증',
+    taglineKo: '사업 진입·피벗·가격 모델 등, 실패 비용이 큰 결정 전 리스크 검증',
+    purposeKo:
+      '신규 사업 진입·피벗·가격 모델 변경 등 실패 비용이 큰 결정을 내리기 전, 더 많은 근거로 리스크를 검증할 때 사용합니다.',
+    qualityBadgeShortKo: 'Deep',
     steps: ANALYSIS_MODE_STEPS.deep,
     duration: '~2분',
     outputs: ['시장 분석', '시장 온도', '인사이트', 'PM 액션', '모니터링 포인트'],
@@ -105,6 +120,9 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
     labelKo: '경쟁 분석',
     description: 'Competitor positioning and differentiation',
     descriptionKo: '경쟁사 포지셔닝과 차별화',
+    taglineKo: '경쟁 지형과 포지셔닝에 초점',
+    purposeKo: '빅테크·로컬 강자 대비 전술·포지셔닝을 세부적으로 볼 때.',
+    qualityBadgeShortKo: 'Competitive',
     steps: ANALYSIS_MODE_STEPS.competitive,
     duration: '~2분',
     outputs: ['경쟁사 동향', '시장 점유율', '차별화 포인트', '위협 요소'],
@@ -115,6 +133,9 @@ export const ANALYSIS_MODE_CONFIG: Record<AnalysisMode, AnalysisModeConfig> = {
     labelKo: '액션 중심',
     description: 'Execution-ready action plan',
     descriptionKo: '실행 가능한 액션 플랜',
+    taglineKo: '다음 주 실행에 바로 쓰는 액션 플랜',
+    purposeKo: '백로그·캡럽 정리, 분기 OKR에 연결할 실행 항목이 우선일 때.',
+    qualityBadgeShortKo: 'Action',
     steps: ANALYSIS_MODE_STEPS.action,
     duration: '~1분',
     outputs: ['우선순위 액션', '리스크 경고', '다음 단계'],

@@ -271,22 +271,35 @@ Format: {
 - risk_signals: risk는 한국어. severity·likelihood는 1~10 정수, DATA 근거로 산정. mitigation_level은 **상=완화 여지 큼, 하=완화 어려움**. mitigation_plan은 실행 가능한 한 줄.
 Return ONLY valid JSON. 본문 필드는 한국어.`
 
+export type InsightExtractionPromptOptions = {
+  /** rough character budget for prior-step text in COLLECTED_DATA */
+  context_limit?: number
+  /** shallow | standard | deep — injected for model calibration */
+  analysis_depth?: 'shallow' | 'standard' | 'deep'
+}
+
 export function buildInsightExtractionPrompt(
   keyword: string,
   marketOverview: string,
-  competitionSummary: string
+  competitionSummary: string,
+  options?: InsightExtractionPromptOptions
 ): string {
+  const cap = options?.context_limit ?? 12_000
+  const mo = marketOverview?.trim() ? compressTextForPmActionInput(marketOverview.trim(), cap) : ''
+  const cs = competitionSummary?.trim() ? compressTextForPmActionInput(competitionSummary.trim(), Math.min(cap, Math.floor(cap * 0.55))) : ''
+  const depth = options?.analysis_depth ?? 'standard'
   const collectedData = [
-    marketOverview?.trim() && `trend / market overview (from prior step):\n${marketOverview.trim()}`,
-    competitionSummary?.trim() && `competition summary (from prior step):\n${competitionSummary.trim()}`,
+    mo && `trend / market overview (from prior step):\n${mo}`,
+    cs && `competition summary (from prior step):\n${cs}`,
   ]
     .filter(Boolean)
     .join('\n\n')
   if (!collectedData.trim()) return ''
+  const depthLine = `[ANALYSIS_DEPTH=${depth}] [CONTEXT_BUDGET≈${cap}자] prior 데이터는 위 한도로 압축되었을 수 있다.`
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `위 COLLECTED_DATA만 근거로 core_insights 3~5개를 추출한다. 각 core_insight는 impact(파급)와 reason(다음 실행)에 DATA 인용 수준의 구체성을 넣는다. opportunity_signals·risk_signals에는 정량·정성 근거 쌍과(가능하면) 리스크의 mitigation_level·mitigation_plan을 반드시 채운다. 모호한 서술 금지.`,
+    task: `${depthLine} 위 COLLECTED_DATA만 근거로 core_insights 3~5개를 추출한다. 각 core_insight는 impact(파급)와 reason(다음 실행)에 DATA 인용 수준의 구체성을 넣는다. opportunity_signals·risk_signals에는 정량·정성 근거 쌍과(가능하면) 리스크의 mitigation_level·mitigation_plan을 반드시 채운다. analysis_depth가 shallow이면 핵심만, deep이면 근거 밀도를 높인다. 모호한 서술 금지.`,
     suffix: `Return ONLY the JSON object per system format. ${KOREAN_ONLY_SUFFIX}`,
   })
 }
@@ -566,31 +579,48 @@ Format: {
 - cross_validation_score: 근거가 강하고 정·정성 방향이 맞을수록 높게(80+), 정성만 약하거나 상충하면 낮게.
 All dimension scores integers 1-10. All _label and _reason in Korean with business meaning. Return ONLY valid JSON.`
 
+export type StrategyEvaluationPromptOptions = {
+  analysis_depth?: 'shallow' | 'standard' | 'deep'
+  /** true: 정량-정성 교차검증 리포트 형식을 사용자 프롬프트에 강제 (Deep 모드) */
+  forceCrossValidationReport?: boolean
+}
+
 export function buildStrategyEvaluationPrompt(
   keyword: string,
   strategySummary: string,
   opportunitiesSummary: string,
   risksSummary: string,
   competitionSummary: string,
-  productActions: string[]
+  productActions: string[],
+  options?: StrategyEvaluationPromptOptions
 ): string {
   const actionsBlock = productActions.length
     ? `product actions (from prior step):\n${productActions.slice(0, 5).map((a, i) => `${i + 1}. ${a}`).join('\n')}`
     : ''
+  const cap = 14_000
+  const sStrat = strategySummary?.trim() ? compressTextForPmActionInput(strategySummary.trim(), cap) : ''
+  const sOpp = opportunitiesSummary?.trim() ? compressTextForPmActionInput(opportunitiesSummary.trim(), Math.floor(cap * 0.35)) : ''
+  const sRisk = risksSummary?.trim() ? compressTextForPmActionInput(risksSummary.trim(), Math.floor(cap * 0.35)) : ''
+  const sComp = competitionSummary?.trim() ? compressTextForPmActionInput(competitionSummary.trim(), Math.floor(cap * 0.4)) : ''
   const collectedData = [
-    strategySummary?.trim() && `strategy:\n${strategySummary.trim()}`,
-    opportunitiesSummary?.trim() && `opportunities:\n${opportunitiesSummary.trim()}`,
-    risksSummary?.trim() && `risks:\n${risksSummary.trim()}`,
-    competitionSummary?.trim() && `competition:\n${competitionSummary.trim()}`,
+    sStrat && `strategy:\n${sStrat}`,
+    sOpp && `opportunities:\n${sOpp}`,
+    sRisk && `risks:\n${sRisk}`,
+    sComp && `competition:\n${sComp}`,
     actionsBlock,
   ]
     .filter(Boolean)
     .join('\n\n')
   if (!collectedData.trim()) return ''
+  const depth = options?.analysis_depth ?? 'standard'
+  const deepBlock =
+    options?.forceCrossValidationReport || depth === 'deep'
+      ? ` **[심층 리포트 형식]** JSON만 출력하되 내용은 **정량-정성 교차검증 리포트**이어야 한다. cross_validation_summary는 2~4문장으로, 어떤 수치·지표(정량)가 어떤 뉴스/행동/톤(정성)과 맞닿는지 대조한다. risk_items의 각 issue에 정량·정성이 한 덩어리로 드러나게 하고, plan은 그 연결에 따른 완화 행동. opportunity_items도 value에 동일 원칙 적용.`
+      : ''
   return buildDataDrivenPrompt({
     keyword,
     sections: { collectedData },
-    task: `위 DATA만으로 cross_validation_score·cross_validation_summary·risk_items·opportunity_items와 네 차원 점수·각 _reason을 채운다. 리스크·기회 항목은 정량·정성 신호를 issue/value 문장에 녹인다.`,
+    task: `[ANALYSIS_DEPTH=${depth}]${deepBlock} 위 DATA만으로 cross_validation_score·cross_validation_summary·risk_items·opportunity_items와 네 차원 점수·각 _reason을 채운다. 리스크·기회 항목은 정량·정성 신호를 issue/value 문장에 녹인다.`,
     suffix: `Return ONLY the JSON object. ${KOREAN_ONLY_SUFFIX}`,
   })
 }

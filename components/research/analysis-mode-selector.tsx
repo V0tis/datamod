@@ -47,7 +47,7 @@ export function AnalysisModeSelector({
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-foreground">분석 모드</span>
         <span className="text-xs text-muted-foreground">
-          결과물의 깊이와 속도를 선택하세요
+          의사결정에 맞는 분석 깊이를 선택하세요 · 빠른·표준·심층
         </span>
       </div>
       <div className={cn('grid gap-2', depthOnly ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
@@ -61,13 +61,16 @@ export function AnalysisModeSelector({
               onClick={() => onChange(mode.id)}
               disabled={disabled}
               className={cn(
-                'flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left transition-all',
+                'flex flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-all',
                 'hover:border-primary/50 hover:bg-muted/50',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 isSelected
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                  : 'border-border bg-card'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm'
+                  : 'border-border bg-card',
+                depthOnly && mode.id === 'quick' && 'border-l-4 border-l-amber-400/90',
+                depthOnly && mode.id === 'standard' && 'border-l-4 border-l-slate-400/80',
+                depthOnly && mode.id === 'deep' && 'border-l-4 border-l-indigo-500/90'
               )}
             >
               <div className="flex items-center gap-2 w-full">
@@ -85,7 +88,7 @@ export function AnalysisModeSelector({
                   <div className="flex items-center gap-1">
                     <span
                       className={cn(
-                        'text-sm font-medium truncate',
+                        'text-sm font-semibold truncate',
                         isSelected ? 'text-primary' : 'text-foreground'
                       )}
                     >
@@ -94,6 +97,14 @@ export function AnalysisModeSelector({
                   </div>
                 </div>
               </div>
+              {depthOnly ? (
+                <p className="text-xs font-medium leading-snug text-foreground/90 pl-0.5">{mode.taglineKo}</p>
+              ) : null}
+              {depthOnly ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground pl-0.5 line-clamp-3">
+                  {mode.purposeKo}
+                </p>
+              ) : null}
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3 shrink-0" />
                 <span>{mode.duration}</span>
@@ -121,8 +132,9 @@ export function AnalysisModeSelector({
                   {ANALYSIS_MODE_CONFIG[value].label}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {ANALYSIS_MODE_CONFIG[value].descriptionKo}
+              <p className="text-xs font-medium text-foreground/90 mt-1">{ANALYSIS_MODE_CONFIG[value].taglineKo}</p>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                {ANALYSIS_MODE_CONFIG[value].purposeKo}
               </p>
             </div>
           </div>

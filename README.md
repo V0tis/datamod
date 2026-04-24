@@ -1,13 +1,15 @@
 # Datamod
 
-키워드 기반 **시장 리서치 플랫폼**입니다.  
-최신 뉴스를 수집·분석해 리포트 요약, 감성/영향력 차트, 유저 반응 예측을 한 번에 제공합니다.
+**파편화된 시장 데이터를 비즈니스 액션으로 전환**하는 **AI 기반 시장 분석** 서비스입니다.  
+실시간·분산된 데이터를 수집·통합해 시장 분석부터 **전략·실행(액션)**까지 이어지는 **PM 의사결정**을 돕습니다.
+
+- 가치: 트렌드 이면의 **Why** 파악, **통합 리서치** 자동화, **다음 비즈니스 기회** 도출
+- 접속: [datamod.vercel.app](https://datamod.vercel.app) · 소스: [github.com/V0tis/datamod](https://github.com/V0tis/datamod)
 
 - **UI**: Next.js 16 (App Router), Tailwind CSS v4, shadcn/ui, Pretendard 웹폰트, 카드 기반 Dashlite 스타일
 - **AI**: Google Gemini 3 / Gemini 2.0 + Groq (Llama) 듀얼 엔진, Read-through 캐싱
 - **수집**: 구글 트렌드 RSS (국가별 트렌드), 뉴스·분석
 - **배포**: Vercel
-- **소스**: [github.com/V0tis/datamod](https://github.com/V0tis/datamod)
 
 ---
 

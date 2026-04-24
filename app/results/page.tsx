@@ -255,6 +255,11 @@ function ResultsContent() {
   /** URL 키워드와 현재 선택 키워드가 같을 때만 result 표시. URL에 keyword 있으면 해당 결과 뷰로 간주. */
   const isViewingActiveJob = urlKeyword === null || effectiveKeywordTrim === urlKeyword
   const displayResult = isViewingActiveJob ? result : null
+  const reportAnalysisDepth = useMemo((): 'fast' | 'standard' | 'deep' | null => {
+    const d = displayResult?.analysis_depth
+    if (d === 'fast' || d === 'deep' || d === 'standard') return d
+    return null
+  }, [displayResult?.analysis_depth])
   const displayStatus = isViewingActiveJob ? status : (urlKeyword ? 'loading' : status)
   const displayError = isViewingActiveJob ? error : null
   const canonicalStatus = isViewingActiveJob ? analysisStatus : (urlKeyword ? ('analyzing' as const) : analysisStatus)
@@ -1385,6 +1390,7 @@ function ResultsContent() {
                 loading={loading && !hasAnalysisStarted}
                 keyword={currentKeyword ?? ''}
                 analysisFailed={hasFailure && !!displayResult?.reportId}
+                analysisDepth={reportAnalysisDepth}
                 countryCode={countryFromUrl}
                 aiPrimaryModel={aiPrimaryModel}
                 phaseRerunDisabled={loading || analysisPipelineBusy}

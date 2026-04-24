@@ -937,7 +937,8 @@ function SettingsPageInner() {
               <div className="min-w-0">
                 <Label className="text-sm font-medium mb-2 block">분석 깊이</Label>
                 <p className="text-xs text-muted-foreground mb-3">
-                  빠른 분석은 결과를 신속히 제공하고, 심층 분석은 더 많은 소스와 상세 인사이트를 생성합니다.
+                  상황에 따라 필요한 분석 깊이가 달라 한 가지 방식만으로는 유연한 대응이 어려워, 빠른·표준·심층 세 가지
+                  유형을 제공합니다.
                 </p>
                 <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted/50 w-full sm:w-fit min-w-0">
                   {ANALYSIS_OPTIONS.map((opt) => (

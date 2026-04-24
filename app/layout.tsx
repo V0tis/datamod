@@ -14,7 +14,8 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Datamod",
-  description: "이메일 인증 기반 시장 리서치",
+  description:
+    "파편화된 시장 데이터를 비즈니스 액션으로 전환하는 AI 기반 시장 분석 · PM 의사결정 서비스",
   icons: {
     icon: [{ url: "/assets/logo_rin_ai.svg", type: "image/svg+xml" }],
     apple: "/assets/logo_rin_ai.svg",

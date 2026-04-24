@@ -39,6 +39,9 @@ import { stripLeadingMarkdownHeadings } from '@/lib/strip-markdown-heading-marke
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown } from 'lucide-react'
 import { AnalysisMetaRow } from '@/components/analysis/analysis-summary-header'
+import { AnalysisDepthQualityBadge, type ResultDepthLayout } from '@/components/analysis/AnalysisDepthQualityBadge'
+import { NineStagePipelineOverview } from '@/components/analysis/results/NineStagePipelineOverview'
+import { StrategyEvaluationSection } from '@/components/research/StrategyEvaluationSection'
 function isStepComplete(
   tasks: Array<{ step_name: string; status: string }> | null | undefined,
   step: string
@@ -47,6 +50,8 @@ function isStepComplete(
 }
 
 type ResultLDashboardProps = ResultPageStructuredSectionsProps & {
+  /** research_history.analysis_depth: fast | standard | deep */
+  analysisDepth?: 'fast' | 'standard' | 'deep' | null
   countryCode?: string
   aiPrimaryModel?: 'gemini' | 'groq'
   phaseRerunDisabled?: boolean
@@ -86,9 +91,12 @@ export function ResultLDashboard({
   pipelineErrorStepIndex = 0,
   pipelineLoading = false,
   pipelineGlobalErrorMessage = null,
+  analysisDepth = null,
 }: ResultLDashboardProps) {
   const streamingState = streamingStateProp ?? createIdleState()
   const effectiveResult = displayResult ?? result
+  const depthLayout: ResultDepthLayout =
+    analysisDepth === 'fast' || analysisDepth === 'deep' ? analysisDepth : 'standard'
   const hasResultData = !!(effectiveResult?.reportId ?? effectiveResult?.key_metrics)
   const hasPipelineContext =
     (analysisTasks?.length ?? 0) > 0 ||
@@ -378,8 +386,22 @@ export function ResultLDashboard({
       <div className="mx-auto flex w-full max-w-none flex-col gap-8">
         {renderAnalysisStickyStack()}
 
-        <div className="flex min-h-0 flex-col gap-5 overflow-visible xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-6">
-          <div className="w-full shrink-0 xl:sticky xl:top-28 xl:z-10 xl:w-[min(100%,18rem)] xl:max-w-none xl:self-start xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:overflow-x-visible">
+        {depthLayout === 'deep' && allCompleted && hasResultData ? (
+          <NineStagePipelineOverview className="mb-2" currentStageIndex={8} />
+        ) : null}
+
+        <div
+          className={cn(
+            'flex min-h-0 flex-col gap-5 overflow-visible xl:min-h-[calc(100dvh-5rem)] xl:flex-row xl:items-start xl:gap-6',
+            depthLayout === 'fast' && 'xl:gap-4'
+          )}
+        >
+          <div
+            className={cn(
+              'w-full shrink-0 xl:sticky xl:top-28 xl:z-10 xl:max-w-none xl:self-start xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:overflow-x-visible',
+              depthLayout === 'fast' ? 'xl:w-[min(100%,14rem)]' : 'xl:w-[min(100%,18rem)]'
+            )}
+          >
             <UrgentTaskCards
               result={effectiveResult ?? null}
               taskData={taskData}
@@ -399,25 +421,42 @@ export function ResultLDashboard({
             <MotionReveal
               key={`main-${sectionKeyPrefix}`}
               staticLayout={loading}
-              className="min-w-0 space-y-8"
+              className={cn('min-w-0', depthLayout === 'fast' ? 'space-y-4' : 'space-y-8')}
               delay={0.06}
             >
               <section
                 key={`${sectionKeyPrefix}-summary`}
                 id="summary-section"
-                className={cn(sectionScrollClass, 'mb-12')}
+                className={cn(sectionScrollClass, depthLayout === 'fast' ? 'mb-8' : 'mb-12')}
               >
                 <MotionReveal staticLayout={loading} delay={0.04}>
-                  <div className="space-y-8 motion-safe:will-change-transform">
+                  <div
+                    className={cn(
+                      'motion-safe:will-change-transform',
+                      depthLayout === 'fast' ? 'mx-auto max-w-3xl space-y-4' : 'space-y-8'
+                    )}
+                  >
                     <div className="w-full rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-950">
                       <div className="border-b border-slate-100 px-3 pb-3 pt-4 sm:px-4 dark:border-zinc-800">
                         <ReportSectionTitleRow
                           title="종합 요약"
                           badge="요약"
-                          right={<AnalysisSourceButton result={effectiveResult ?? null} label="출처" />}
+                          right={
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              {allCompleted && analysisDepth ? (
+                                <AnalysisDepthQualityBadge depth={depthLayout} />
+                              ) : null}
+                              <AnalysisSourceButton result={effectiveResult ?? null} label="출처" />
+                            </div>
+                          }
                         />
                       </div>
-                      <div className="space-y-6 px-3 pb-5 pt-4 sm:space-y-8 sm:px-4 sm:pb-6 sm:pt-5">
+                      <div
+                        className={cn(
+                          'px-3 pb-5 pt-4 sm:px-4 sm:pb-6 sm:pt-5',
+                          depthLayout === 'fast' ? 'space-y-4' : 'space-y-6 sm:space-y-8'
+                        )}
+                      >
                         {skSummary ? (
                           <SectionContentSkeleton variant="mixed" className="py-2" />
                         ) : (
@@ -491,6 +530,9 @@ export function ResultLDashboard({
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={0}
+                  qualityStamp={
+                    allCompleted && analysisDepth ? <AnalysisDepthQualityBadge depth={depthLayout} className="scale-90" /> : null
+                  }
                 >
                   {skMarket ? (
                     <SectionContentSkeleton variant="grid" />
@@ -529,6 +571,9 @@ export function ResultLDashboard({
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={1}
+                  qualityStamp={
+                    allCompleted && analysisDepth ? <AnalysisDepthQualityBadge depth={depthLayout} className="scale-90" /> : null
+                  }
                 >
                   {skCompetition ? (
                     <SectionContentSkeleton variant="mixed" />
@@ -556,11 +601,39 @@ export function ResultLDashboard({
                   result={effectiveResult ?? null}
                   loading={loading}
                   animationIndex={2}
+                  qualityStamp={
+                    allCompleted && analysisDepth ? <AnalysisDepthQualityBadge depth={depthLayout} className="scale-90" /> : null
+                  }
                 >
                   {skInsightStrategy ? (
                     <SectionContentSkeleton variant="mixed" />
                   ) : (
-                    <div className="space-y-12">
+                    <div className={depthLayout === 'deep' ? 'space-y-10' : 'space-y-12'}>
+                      {depthLayout === 'deep' ? (
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
+                            교차검증 근거 · 리스크 완화 전략
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            정량·정성 신호를 대조한 신뢰도와, 완화 가능성·실행 난이도·우선순위를 정리했습니다.
+                          </p>
+                          <StrategyEvaluationSection
+                            result={effectiveResult ?? null}
+                            loading={loading}
+                            embedded
+                            showEmbeddedHeading={false}
+                            emphasis="deep"
+                          />
+                        </div>
+                      ) : depthLayout === 'standard' ? (
+                        <StrategyEvaluationSection
+                          result={effectiveResult ?? null}
+                          loading={loading}
+                          embedded
+                          showEmbeddedHeading={false}
+                          emphasis="default"
+                        />
+                      ) : null}
                       <InsightStrategyTabsPanel
                         key={`${sectionKeyPrefix}-istp`}
                         result={effectiveResult ?? null}
@@ -609,7 +682,15 @@ export function ResultLDashboard({
                   <MotionReveal staticLayout={loading} delay={0.08}>
                     <div className="border-b border-slate-200/90 bg-white pb-8 dark:border-zinc-800 dark:bg-zinc-950">
                       <div className="space-y-3 border-b border-slate-100 px-1 pb-4 pt-1 sm:px-0 dark:border-zinc-800">
-                        <ReportSectionTitleRow title="PM 액션 플랜" badge="실행" />
+                        <ReportSectionTitleRow
+                          title="PM 액션 플랜"
+                          badge="실행"
+                          right={
+                            allCompleted && analysisDepth ? (
+                              <AnalysisDepthQualityBadge depth={depthLayout} className="scale-90" />
+                            ) : null
+                          }
+                        />
                         <p className="text-sm leading-relaxed text-slate-500 dark:text-zinc-400">
                           우선순위·성과·리스크를 확인한 뒤 실행 테이블에서 과제를 다듬으세요. 상태는 이 브라우저에만 저장됩니다.
                         </p>
@@ -676,6 +757,7 @@ function InsightSectionShell({
   children,
   loading = false,
   animationIndex = 0,
+  qualityStamp,
 }: {
   id: string
   title: string
@@ -686,6 +768,7 @@ function InsightSectionShell({
   children: ReactNode
   loading?: boolean
   animationIndex?: number
+  qualityStamp?: ReactNode
 }) {
   const sourceBtn = <AnalysisSourceButton result={result} label="출처" />
   return (
@@ -695,9 +778,21 @@ function InsightSectionShell({
         className={cn(sectionScrollClass, 'mb-12 border-b border-slate-200/80 pb-8 dark:border-zinc-800')}
       >
         {hideTitle ? (
-          <div className="mb-4 flex justify-end">{sourceBtn}</div>
+          <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+            {qualityStamp}
+            {sourceBtn}
+          </div>
         ) : (
-          <ReportSectionTitleRow title={title} badge={badge} right={sourceBtn} />
+          <ReportSectionTitleRow
+            title={title}
+            badge={badge}
+            right={
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {qualityStamp}
+                {sourceBtn}
+              </div>
+            }
+          />
         )}
         <div className="w-full px-0 pt-0">{children}</div>
       </section>

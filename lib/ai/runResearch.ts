@@ -55,6 +55,7 @@ import {
 } from './retry-with-backoff'
 import { extractGemini429RetryDelayMs } from '@/lib/ai/gemini-quota-error'
 import { chunkArray } from '@/lib/ai/concurrency-pool'
+import { getDepthLlmParams, clipContextText, type DepthLlmParams } from '@/lib/analysis/depth-llm-config'
 import { computeOpportunityScore, type OpportunityScoreOutput } from './opportunity-score-formula'
 import { buildChartDataFromAnalysis } from './chart-data-utils'
 import { sanitizeDeep, sanitizeStringArray, sanitizeForKoreanDisplay } from '@/lib/text-sanitize'
@@ -235,7 +236,7 @@ export type RunResearchParams = {
   anthropicKey?: string | null
   /** Serper API key for web search (user settings or env fallback) */
   serperKey?: string | null
-  /** 분석 깊이: quick(빠른 인사이트), standard(전체 리포트), deep(심층 리서치). 기본 standard */
+  /** 분석 깊이: quick(빠른 분석), standard(표준 분석), deep(심층 분석). 기본 standard */
   mode?: 'quick' | 'standard' | 'deep'
   /** AI 우선 분석. 기본 gemini. 실패 시 다른 모델로 폴백 */
   primaryProvider?: AIPrimaryModel
@@ -504,7 +505,8 @@ async function runTrendTask(
   primaryProvider: AIPrimaryModel,
   webContext?: string,
   prePromptArticleContentChars?: number,
-  llmCtx?: LlmRecordingContext
+  llmCtx?: LlmRecordingContext,
+  trendMaxOut?: number
 ): Promise<TrendTaskResult> {
   const hasData = articles.length > 0 || (webContext?.trim().length ?? 0) > 0
   if (!hasData) {
@@ -521,6 +523,7 @@ async function runTrendTask(
   if (!prompt.trim()) {
     throw new Error('트렌드 분석 프롬프트에 데이터가 포함되지 않았습니다.')
   }
+  const out = trendMaxOut ?? 800
   const completion = await runPipelineGeminiGroqText({
     step: 'trend_analysis',
     geminiKey,
@@ -528,8 +531,8 @@ async function runTrendTask(
     primaryProvider,
     systemInstruction: TASK_TRENDS_SYSTEM,
     prompt,
-    maxOutputTokens: 800,
-    groqMaxTokens: 800,
+    maxOutputTokens: out,
+    groqMaxTokens: out,
     geminiModel: GEMINI_MODEL,
     ctx: llmCtx,
   })
@@ -565,7 +568,9 @@ async function summarizeOneArticleBatchCall(
   geminiKey: string,
   groqKey: string | null | undefined,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext
+  llmCtx: LlmRecordingContext | undefined,
+  contentSlice: number,
+  maxOut: number
 ): Promise<{
   items: ArticleForAnalysis[]
   usedFallback: boolean
@@ -577,7 +582,7 @@ async function summarizeOneArticleBatchCall(
 ${articles
   .map(
     (a, i) =>
-      `[${i + 1}] title: ${a.title}\ncontent: ${a.content.slice(0, 1500)}${a.content.length > 1500 ? '...' : ''}`
+      `[${i + 1}] title: ${a.title}\ncontent: ${a.content.slice(0, contentSlice)}${a.content.length > contentSlice ? '...' : ''}`
   )
   .join('\n\n')}
 
@@ -590,8 +595,8 @@ Return ONLY: { "summaries": ["s1", "s2", ...] } same order.`
     primaryProvider,
     systemInstruction: ARTICLE_SUMMARY_SYSTEM,
     prompt,
-    maxOutputTokens: 1500,
-    groqMaxTokens: 1500,
+    maxOutputTokens: maxOut,
+    groqMaxTokens: maxOut,
     geminiModel: GEMINI_MODEL,
     ctx: llmCtx,
   })
@@ -632,13 +637,15 @@ async function* summarizeArticleBatchWithRetriesGen(
   groqKey: string | null | undefined,
   primaryProvider: AIPrimaryModel,
   llmCtx: LlmRecordingContext | undefined,
-  order: number
+  order: number,
+  contentSlice: number,
+  maxOut: number
 ): AsyncGenerator<QuotaBackoffEvent, ArticleBatchWorkResult, void> {
   const backoffs: QuotaBackoffEvent[] = []
   const maxRetries = 2
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const out = await summarizeOneArticleBatchCall(batch, geminiKey, groqKey, primaryProvider, llmCtx)
+      const out = await summarizeOneArticleBatchCall(batch, geminiKey, groqKey, primaryProvider, llmCtx, contentSlice, maxOut)
       return {
         order,
         items: out.items,
@@ -701,7 +708,8 @@ async function* summarizeArticlesWithAIBatchedGen(
   geminiKey: string,
   groqKey: string | null | undefined,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext
+  llmCtx: LlmRecordingContext | undefined,
+  depthLlm: DepthLlmParams
 ): AsyncGenerator<
   ResearchStreamEvent,
   {
@@ -717,11 +725,13 @@ async function* summarizeArticlesWithAIBatchedGen(
   }
   const totalChars = articles.reduce((acc, a) => acc + (a.content?.length ?? 0), 0)
   const maxSingleBatchArticles = 4
-  const maxCharsSingleCall = 9000
+  const maxCharsSingleCall = depthLlm.analysis_depth === 'shallow' ? 6500 : depthLlm.analysis_depth === 'deep' ? 12_000 : 9000
   const batches =
     articles.length <= maxSingleBatchArticles && totalChars <= maxCharsSingleCall
       ? [articles]
       : chunkArray(articles, maxSingleBatchArticles)
+  const contentSlice = depthLlm.articleBodySlice
+  const maxOut = depthLlm.articleSummaryMaxOut
 
   let usedLocalSnippetDueToQuota = false
   let anyLlmFallback = false
@@ -741,7 +751,7 @@ async function* summarizeArticlesWithAIBatchedGen(
           ? batch[0]!.title.slice(0, 60)
           : `요약 배치 ${i + 1}/${batches.length} (총 ${batches.length}회)`,
     }
-    const g = summarizeArticleBatchWithRetriesGen(batch, geminiKey, groqKey, primaryProvider, llmCtx, i)
+    const g = summarizeArticleBatchWithRetriesGen(batch, geminiKey, groqKey, primaryProvider, llmCtx, i, contentSlice, maxOut)
     while (true) {
       const step = await g.next()
       if (step.done) {
@@ -781,7 +791,8 @@ async function runCompetitionTask(
   webContext?: string,
   competitorWebContext?: string,
   prePromptArticleContentChars?: number,
-  llmCtx?: LlmRecordingContext
+  llmCtx?: LlmRecordingContext,
+  compMaxOut?: number
 ): Promise<CompetitionTaskResult> {
   const hasData =
     (competitorWebContext?.trim().length ?? 0) > 0 ||
@@ -802,6 +813,7 @@ async function runCompetitionTask(
     sections,
     originalSourceChars: prePromptArticleContentChars,
   })
+  const cOut = compMaxOut ?? 2200
   const completion = await runPipelineGeminiGroqText({
     step: 'competition_analysis',
     geminiKey,
@@ -809,8 +821,8 @@ async function runCompetitionTask(
     primaryProvider,
     systemInstruction: TASK_COMPETITION_SYSTEM,
     prompt,
-    maxOutputTokens: 2200,
-    groqMaxTokens: 2200,
+    maxOutputTokens: cOut,
+    groqMaxTokens: cOut,
     geminiModel: GEMINI_MODEL,
     ctx: llmCtx,
   })
@@ -854,11 +866,22 @@ async function runMarketCompetitionBundleTask(
   webContext: string | undefined,
   competitorWebContext: string | undefined,
   articleRawContentTotalChars: number,
-  llmCtx?: LlmRecordingContext
+  llmCtx: LlmRecordingContext | undefined,
+  depthLlm: DepthLlmParams
 ): Promise<{ trendResult: TrendTaskResult; compResult: CompetitionTaskResult }> {
   const runSplit = async () => {
     const [trendResult, compResult] = await Promise.all([
-      runTrendTask(geminiKey, groqKey, keyword, articles, bundlePrimaryProvider, webContext, articleRawContentTotalChars, llmCtx),
+      runTrendTask(
+        geminiKey,
+        groqKey,
+        keyword,
+        articles,
+        bundlePrimaryProvider,
+        webContext,
+        articleRawContentTotalChars,
+        llmCtx,
+        depthLlm.trendMaxOut
+      ),
       runCompetitionTask(
         geminiKey,
         groqKey,
@@ -868,7 +891,8 @@ async function runMarketCompetitionBundleTask(
         webContext,
         competitorWebContext,
         articleRawContentTotalChars,
-        llmCtx
+        llmCtx,
+        depthLlm.competitionMaxOut
       ),
     ])
     return { trendResult, compResult }
@@ -891,6 +915,7 @@ async function runMarketCompetitionBundleTask(
     return runSplit()
   }
 
+  const bOut = depthLlm.marketBundleMaxOut
   try {
     const completion = await runPipelineGeminiGroqText({
       step: 'market_competition_bundle',
@@ -899,8 +924,8 @@ async function runMarketCompetitionBundleTask(
       primaryProvider: bundlePrimaryProvider,
       systemInstruction: TASK_MARKET_COMPETITION_BUNDLE_SYSTEM,
       prompt,
-      maxOutputTokens: 3200,
-      groqMaxTokens: 3200,
+      maxOutputTokens: bOut,
+      groqMaxTokens: bOut,
       geminiModel: GEMINI_MODEL,
       ctx: llmCtx,
     })
@@ -1042,12 +1067,17 @@ async function runInsightExtractionTask(
   competitionSummary: string,
   primaryProvider: AIPrimaryModel,
   fallbackContext: { trendSignals: string[]; marketScore: number },
-  llmCtx?: LlmRecordingContext
+  llmCtx: LlmRecordingContext | undefined,
+  depthLlm: DepthLlmParams
 ): Promise<{ data: InsightExtractionResult; usedFallback: boolean; primaryProviderError?: string }> {
-  const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary)
+  const prompt = buildInsightExtractionPrompt(keyword, marketOverview, competitionSummary, {
+    context_limit: depthLlm.context_limit,
+    analysis_depth: depthLlm.analysis_depth,
+  })
   if (!prompt?.trim()) {
     throw new Error('인사이트 추출에 필요한 데이터가 없습니다. 트렌드·경쟁 분석 결과를 확인해 주세요.')
   }
+  const inOut = depthLlm.insightMaxOut
   const completion = await runPipelineGeminiGroqText({
     step: 'insight_extraction',
     geminiKey,
@@ -1055,8 +1085,8 @@ async function runInsightExtractionTask(
     primaryProvider,
     systemInstruction: INSIGHT_EXTRACTION_SYSTEM,
     prompt,
-    maxOutputTokens: 1200,
-    groqMaxTokens: 1200,
+    maxOutputTokens: inOut,
+    groqMaxTokens: inOut,
     geminiModel: GEMINI_MODEL,
     ctx: llmCtx,
   })
@@ -1173,8 +1203,9 @@ async function runStrategicRecommendationTask(
   competitionSummary: string,
   extractedInsights: InsightExtractionResult,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext,
-  anthropicKey?: string | null
+  llmCtx: LlmRecordingContext | undefined,
+  anthropicKey: string | null | undefined,
+  maxStrategyOut: number
 ): Promise<{ data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }> {
   const prompt = buildStrategicRecommendationPrompt(keyword, marketOverview, competitionSummary, extractedInsights)
   if (!prompt?.trim()) {
@@ -1188,8 +1219,8 @@ async function runStrategicRecommendationTask(
     primaryProvider,
     systemInstruction: STRATEGIC_RECOMMENDATION_SYSTEM,
     prompt,
-    maxOutputTokens: 1000,
-    groqMaxTokens: 1000,
+    maxOutputTokens: maxStrategyOut,
+    groqMaxTokens: maxStrategyOut,
     geminiModel: GEMINI_MODEL,
     ctx: llmCtx,
   })
@@ -1252,8 +1283,9 @@ async function runPMActionPlanTask(
   opportunitiesSummary: string,
   risksSummary: string,
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext,
-  opportunityFacts?: PmActionOpportunityFacts | null
+  llmCtx: LlmRecordingContext | undefined,
+  opportunityFacts: PmActionOpportunityFacts | null | undefined,
+  maxOutOverride?: number
 ): Promise<{
   executionData: {
     product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
@@ -1294,6 +1326,7 @@ async function runPMActionPlanTask(
   }
   let usedFallback = false
   let primaryProviderError: string | undefined
+  const pmOut = maxOutOverride ?? 2000
   const getText = async (): Promise<string> => {
     const r = await runPipelineGeminiGroqText({
       step: 'execution_layer',
@@ -1302,8 +1335,8 @@ async function runPMActionPlanTask(
       primaryProvider,
       systemInstruction: PM_ACTION_PLAN_SYSTEM,
       prompt,
-      maxOutputTokens: 2000,
-      groqMaxTokens: 2000,
+      maxOutputTokens: pmOut,
+      groqMaxTokens: pmOut,
       geminiModel: GEMINI_MODEL,
       ctx: llmCtx,
     })
@@ -1384,7 +1417,8 @@ async function runStrategyExecutionBundleTask(
   actionPrimaryProvider: AIPrimaryModel,
   llmCtx: LlmRecordingContext | undefined,
   anthropicKey: string | null | undefined,
-  pmOpportunityFacts: PmActionOpportunityFacts
+  pmOpportunityFacts: PmActionOpportunityFacts,
+  depthLlm: DepthLlmParams
 ): Promise<{
   strategy: { data: StrategicRecommendationResult; usedFallback: boolean; primaryProviderError?: string }
   execution: { executionData: ReturnType<typeof materializePmExecutionFromParsed>; usedFallback: boolean; primaryProviderError?: string }
@@ -1399,7 +1433,8 @@ async function runStrategyExecutionBundleTask(
       insightData,
       strategyPrimaryProvider,
       llmCtx,
-      anthropicKey
+      anthropicKey,
+      depthLlm.strategyOut
     )
     const pmFactsAdjusted: PmActionOpportunityFacts = {
       ...pmOpportunityFacts,
@@ -1415,7 +1450,8 @@ async function runStrategyExecutionBundleTask(
       strat.data.risks.join('. '),
       actionPrimaryProvider,
       llmCtx,
-      pmFactsAdjusted
+      pmFactsAdjusted,
+      depthLlm.pmActionMaxOut
     )
     return { strategy: strat, execution: pm }
   }
@@ -1430,6 +1466,7 @@ async function runStrategyExecutionBundleTask(
   if (!prompt.trim()) return runSplit()
 
   try {
+    const bu = depthLlm.strategyBundleMaxOut
     const completion = await runPipelineGeminiGroqText({
       step: 'strategy_execution_bundle',
       geminiKey,
@@ -1438,8 +1475,8 @@ async function runStrategyExecutionBundleTask(
       primaryProvider: strategyPrimaryProvider,
       systemInstruction: STRATEGY_EXECUTION_BUNDLE_SYSTEM,
       prompt,
-      maxOutputTokens: 3500,
-      groqMaxTokens: 3500,
+      maxOutputTokens: bu,
+      groqMaxTokens: bu,
       geminiModel: GEMINI_MODEL,
       ctx: llmCtx,
     })
@@ -1563,7 +1600,8 @@ async function runStrategyEvaluationTask(
   competitionSummary: string,
   executionData: { product_actions: Array<{ action: string }> },
   primaryProvider: AIPrimaryModel,
-  llmCtx?: LlmRecordingContext
+  llmCtx: LlmRecordingContext | undefined,
+  depthLlm: DepthLlmParams
 ): Promise<StrategyEvaluationResult> {
   const prompt = buildStrategyEvaluationPrompt(
     keyword,
@@ -1571,11 +1609,16 @@ async function runStrategyEvaluationTask(
     strategyData.opportunities.join('. '),
     strategyData.risks.join('. '),
     competitionSummary,
-    executionData.product_actions.map((a) => a.action)
+    executionData.product_actions.map((a) => a.action),
+    {
+      analysis_depth: depthLlm.analysis_depth,
+      forceCrossValidationReport: depthLlm.forceCrossValidationReport,
+    }
   )
   if (!prompt?.trim()) {
     throw new Error('전략 평가에 필요한 데이터가 없습니다.')
   }
+  const evOut = depthLlm.evalMaxOut
   let text: string
   try {
     const completion = await runPipelineGeminiGroqText({
@@ -1585,8 +1628,8 @@ async function runStrategyEvaluationTask(
       primaryProvider,
       systemInstruction: STRATEGY_EVALUATION_SYSTEM,
       prompt,
-      maxOutputTokens: 1200,
-      groqMaxTokens: 1200,
+      maxOutputTokens: evOut,
+      groqMaxTokens: evOut,
       geminiModel: GEMINI_MODEL,
       ctx: llmCtx,
     })
@@ -2102,6 +2145,7 @@ async function* runResearchRetrySingleStep(
   const analysisId = `${cacheKey.userId}|${cacheKey.keyword}|${cacheKey.countryCode}`
   const llmCtx: LlmRecordingContext = { supabase, userId, analysisId }
   const depthForDb = depthMode === 'quick' ? 'fast' : depthMode
+  const depthLlm = getDepthLlmParams(depthMode)
 
   const retryUpsertTask = async (
     step: AnalysisTaskId,
@@ -2240,7 +2284,8 @@ async function* runResearchRetrySingleStep(
         resume.competitionSummary,
         insightProviderResolved,
         { trendSignals: resume.trendData.positive_signals, marketScore: resume.trendData.market_score },
-        llmCtx
+        llmCtx,
+        depthLlm
       )
       const insightData = insightResult.data
       const insightProvider =
@@ -2315,7 +2360,8 @@ async function* runResearchRetrySingleStep(
         insightData,
         effectiveStrategyProvider,
         llmCtx,
-        anthropicKey ?? null
+        anthropicKey ?? null,
+        depthLlm.strategyOut
       )
       const strategyData = stratResult.data
       const stratProvider =
@@ -2421,7 +2467,8 @@ async function* runResearchRetrySingleStep(
         risksSummary,
         actionProviderResolved,
         llmCtx,
-        pmFactsRetry
+        pmFactsRetry,
+        depthLlm.pmActionMaxOut
       )
       const executionData = { ...pmResult.executionData }
       const executionProvider =
@@ -2564,7 +2611,8 @@ async function* runResearchRetrySingleStep(
         competitionSummary || ' ',
         { product_actions },
         effectiveRiskProvider,
-        llmCtx
+        llmCtx,
+        depthLlm
       )
 
       await retryUpsertTask('risk_opportunity', 'completed', { outputData: strategyEvaluation, provider: effectiveRiskProvider, fallback_used: false })
@@ -2686,6 +2734,7 @@ export async function* runResearch(
   } = params
   const webSearchOptions = (serperKey ?? '').trim() ? { apiKey: (serperKey ?? '').trim() } : {}
   const serperUsed = !!(serperKey && serperKey.trim())
+  const depthLlm: DepthLlmParams = getDepthLlmParams(depthMode)
   const primaryProvider: AIPrimaryModel = primaryProviderParam ?? 'gemini'
   const { resolveAIForStep } = await import('@/lib/ai/step-ai-resolver')
   const effectiveStepSettings: { ai_primary_model: AIPrimaryModel } = stepSettings
@@ -2790,10 +2839,11 @@ export async function* runResearch(
   let webContext = ''
   if (!skipDataCollection) {
     try {
-      const webResults = await searchWeb(keyword, { num: 10, ...webSearchOptions })
-      webContext = formatWebContext(webResults, 10)
+      const n = Math.min(20, Math.max(3, depthLlm.serperResultCap))
+      const webResults = await searchWeb(keyword, { num: n, ...webSearchOptions })
+      webContext = clipContextText(formatWebContext(webResults, n), depthLlm.webContextMaxChars)
       if (webResults.length > 0) {
-        log('web_grounding', 'completed', { sourcesCount: webResults.length })
+        log('web_grounding', 'completed', { sourcesCount: webResults.length, depthMode, serperCap: n })
       }
     } catch (err) {
       console.warn('[AI Timeline] web search failed (continuing without)', { keyword, err })
@@ -2977,7 +3027,8 @@ export async function* runResearch(
       geminiKey,
       groqKey,
       articleSummaryPrimary,
-      llmCtx
+      llmCtx,
+      depthLlm
     )
     let sumStep = await summaryGen.next()
     while (!sumStep.done) {
@@ -3053,7 +3104,8 @@ export async function* runResearch(
     }
     const merged = compResults.flat().slice(0, 12)
     if (merged.length > 0) {
-      competitorWebContext = formatWebContext(merged, 12)
+      const cap = Math.min(12, Math.max(4, depthLlm.serperResultCap + 2))
+      competitorWebContext = clipContextText(formatWebContext(merged, cap), depthLlm.webContextMaxChars)
       log('competition_analysis', 'competitor_search_done', { resultsCount: merged.length })
     }
   } catch (err) {
@@ -3096,7 +3148,8 @@ export async function* runResearch(
       webContext,
       competitorWebContext || undefined,
       articleRawContentTotalChars,
-      llmCtx
+      llmCtx,
+      depthLlm
     )
     trendResult = bundleOut.trendResult
     compResult = bundleOut.compResult
@@ -3209,7 +3262,8 @@ export async function* runResearch(
         trendSignals: trendData.positive_signals,
         marketScore: trendData.market_score,
       },
-      llmCtx
+      llmCtx,
+      depthLlm
     )
     insightData = insightResult.data
     const insightProvider =
@@ -3327,7 +3381,8 @@ export async function* runResearch(
     actionProviderResolved,
     llmCtx,
     anthropicKey ?? null,
-    pmFactsForBundle
+    pmFactsForBundle,
+    depthLlm
   )
   strategyData = pack.strategy.data
   executionData = { ...pack.execution.executionData }
@@ -3437,7 +3492,8 @@ export async function* runResearch(
       competitionSummary,
       executionData,
       effectiveRiskProvider,
-      llmCtx
+      llmCtx,
+      depthLlm
     )
     await upsertAnalysisTask('risk_opportunity', 'completed', { outputData: strategyEvaluation })
     yield { type: 'task', task: 'risk_opportunity', status: 'completed', data: strategyEvaluation }
