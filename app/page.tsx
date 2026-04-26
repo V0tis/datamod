@@ -23,7 +23,6 @@ import type { TrendItem } from '@/lib/trends-types'
 import { getAnalysisActivityMessage, getProgressStepIndex, PROGRESS_STEPS } from '@/lib/analysis-activity-messages'
 import { LandingPage } from '@/components/landing/landing-page'
 import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
-import { RinLogo } from '@/components/rin-logo'
 import type { SavedInsight } from '@/lib/insights-types'
 import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
 import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
@@ -175,6 +174,17 @@ function DatamodSearchInner() {
       setTrendCountry('KR')
     }
   }, [trendCountry])
+
+  /** 분석 페이지 JS를 미리 받아 트렌드→분석 이동 체감 대기를 줄임 */
+  useEffect(() => {
+    if (user) {
+      try {
+        router.prefetch('/results')
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [user, router])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -505,15 +515,6 @@ function DatamodSearchInner() {
 
   return (
     <div className={cn(dashboardPageBg, 'relative min-h-screen')}>
-      {navigatingFromTrend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" aria-label="이동 중">
-          <div className="flex flex-col items-center gap-4">
-            <RinLogo className="h-8 w-8 text-foreground" />
-            <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
-            <p className="text-sm text-muted-foreground">분석 페이지로 이동 중...</p>
-          </div>
-        </div>
-      )}
       <AnimatePresence mode="wait">
         {searching && !navigatingFromTrend ? (
           <motion.div

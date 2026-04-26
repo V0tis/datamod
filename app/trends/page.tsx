@@ -117,6 +117,14 @@ function TrendsPageInner() {
 
   useEffect(() => {
     try {
+      router.prefetch('/results')
+    } catch {
+      /* ignore */
+    }
+  }, [router])
+
+  useEffect(() => {
+    try {
       window.localStorage.setItem(TRENDS_COUNTRY_STORAGE_KEY, country)
     } catch {
       /* ignore */
