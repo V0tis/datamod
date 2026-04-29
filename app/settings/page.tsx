@@ -10,14 +10,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { User, KeyRound, Loader2, ExternalLink, Cpu, ChevronUp, ChevronDown, HelpCircle } from 'lucide-react'
+import { User, Loader2, ExternalLink, Cpu, HelpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 import { ChangePasswordForm } from '@/components/settings/change-password-form'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
-
-type LicenseOrigin = 'USER' | 'NONE'
 
 type StepAIModels = {
   ai_market_model: string | null
@@ -41,7 +39,6 @@ type SettingsData = {
   hasServerGemini?: boolean
   hasServerGroq?: boolean
   hasServerSerper?: boolean
-  licenseOrigin?: { gemini: LicenseOrigin; groq?: LicenseOrigin }
   geminiApiKey?: string
   groqApiKey?: string
   serperApiKey?: string
@@ -101,7 +98,7 @@ const AI_PRIMARY_OPTIONS: {
   },
 ]
 
-type SettingsTab = 'profile' | 'license' | 'ai-settings'
+type SettingsTab = 'profile' | 'ai-settings'
 type ProviderKey = 'gemini' | 'groq'
 type ConnectionStatus = 'unconfigured' | 'connected' | 'failed' | 'testing'
 
@@ -130,7 +127,6 @@ function SettingsPageInner() {
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
   const [serperApiKey, setSerperApiKey] = useState('')
-  const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [saving, setSaving] = useState<ProviderKey | null>(null)
   const [savingSerper, setSavingSerper] = useState(false)
   const [testing, setTesting] = useState<ProviderKey | null>(null)
@@ -145,13 +141,6 @@ function SettingsPageInner() {
     ai_action_model: null, ai_risk_model: null, ai_creative_model: null, ai_consensus_model: null,
   })
   const [savingStepAI, setSavingStepAI] = useState(false)
-  const [llmUsage, setLlmUsage] = useState<{
-    totalPromptTokens: number
-    totalCompletionTokens: number
-    totalTokens: number
-    callCount: number
-  } | null>(null)
-
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null))
@@ -167,30 +156,6 @@ function SettingsPageInner() {
       return
     }
     setLoading(true)
-    void fetch('/api/settings/llm-usage', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: unknown) => {
-        if (
-          j &&
-          typeof j === 'object' &&
-          'callCount' in j &&
-          typeof (j as { callCount: unknown }).callCount === 'number'
-        ) {
-          const o = j as {
-            totalPromptTokens: number
-            totalCompletionTokens: number
-            totalTokens: number
-            callCount: number
-          }
-          setLlmUsage({
-            totalPromptTokens: o.totalPromptTokens ?? 0,
-            totalCompletionTokens: o.totalCompletionTokens ?? 0,
-            totalTokens: o.totalTokens ?? 0,
-            callCount: o.callCount,
-          })
-        }
-      })
-      .catch(() => setLlmUsage(null))
     fetch('/api/settings', { credentials: 'include' })
       .then((res) => {
         if (res.status === 401) {
@@ -453,7 +418,6 @@ function SettingsPageInner() {
         <div className="flex gap-0">
           {[
             { id: 'profile' as const, label: '내 정보', icon: User },
-            { id: 'license' as const, label: '라이선스', icon: KeyRound },
             { id: 'ai-settings' as const, label: 'AI 분석 설정', icon: Cpu },
           ].map((tab) => (
             <button
@@ -484,51 +448,14 @@ function SettingsPageInner() {
             </div>
           </div>
           <div>
-            <button
-              type="button"
-              onClick={() => setShowPasswordChange((prev) => !prev)}
-              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              비밀번호 변경 {showPasswordChange ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-            {showPasswordChange && user && (
-              <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">비밀번호 변경</label>
+            {user && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
                 <ChangePasswordForm user={user} userEmail={(data?.email ?? user.email ?? '').trim()} />
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {activeTab === 'license' && (
-        <Card className="border border-border bg-card shadow-sm">
-          <CardContent className="space-y-3 p-5">
-            <p className="text-sm font-semibold text-foreground">라이선스</p>
-            <p className="text-sm text-muted-foreground">
-              현재 계정의 라이선스 및 사용량 정보를 확인합니다.
-            </p>
-            {llmUsage != null && (
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">총 토큰</p>
-                  <p className="font-semibold tabular-nums">{llmUsage.totalTokens.toLocaleString('ko-KR')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">프롬프트</p>
-                  <p className="font-semibold tabular-nums">{llmUsage.totalPromptTokens.toLocaleString('ko-KR')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">완성</p>
-                  <p className="font-semibold tabular-nums">{llmUsage.totalCompletionTokens.toLocaleString('ko-KR')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">LLM 호출</p>
-                  <p className="font-semibold tabular-nums">{llmUsage.callCount.toLocaleString('ko-KR')}회</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       )}
 
       {activeTab === 'ai-settings' && (
