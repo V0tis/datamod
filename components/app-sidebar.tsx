@@ -25,10 +25,10 @@ import { useResultsMainScrolledPast } from '@/hooks/use-results-main-scroll'
 const ICON_NAV = 20
 
 const navItems = [
-  { href: '/', label: '\uB300\uC2DC\uBCF4\uB4DC', icon: LayoutDashboard, tooltip: '\uC624\uB298 \uC2DC\uC7A5 \uD750\uB984\uACFC \uD575\uC2EC \uC9C0\uD45C\uB97C \uD655\uC778' },
-  { href: '/history', label: '\uBD84\uC11D \uAE30\uB85D', icon: History, tooltip: '\uC9C0\uB09C \uBD84\uC11D \uACB0\uACFC\uB97C \uC870\uD68C \uBC0F \uAD00\uB9AC' },
-  { href: '/insights', label: '\uC800\uC7A5\uD55C \uC778\uC0AC\uC774\uD2B8', icon: BookmarkCheck, tooltip: '\uBD81\uB9C8\uD06C\uD55C \uC778\uC0AC\uC774\uD2B8 \uBAA8\uC74C' },
-  { href: '/settings', label: '\uC124\uC815', icon: Settings, tooltip: 'API \uD0A4, \uACC4\uC815 \uBC0F \uD658\uACBD\uC124\uC815 \uAD00\uB9AC' },
+  { href: '/', label: '대시보드', icon: LayoutDashboard, tooltip: '오늘 시장 흐름과 핵심 지표를 확인' },
+  { href: '/history', label: '분석 기록', icon: History, tooltip: '지난 분석 결과를 조회 및 관리' },
+  { href: '/insights', label: '저장한 인사이트', icon: BookmarkCheck, tooltip: '북마크한 인사이트 모음' },
+  { href: '/settings', label: '설정', icon: Settings, tooltip: 'API 키, 계정 및 환경설정 관리' },
 ]
 
 const shellBorder = 'border-[#E5E8EF]'
@@ -66,14 +66,14 @@ export function AppSidebar() {
         <Link
           href="/"
           className="flex items-center gap-2 text-neutral-900 transition-opacity hover:opacity-90"
-          aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
+          aria-label="Datamod 홈으로 이동"
         >
           <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
           <DatamodWordmark className="text-sm" textClassName="text-neutral-900" />
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="\uC8FC\uC694 \uBA54\uB274">
+      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="주요 메뉴">
         <ul className="space-y-0.5" role="list">
           {navItems.map((item) => {
             const active = isActive(item)
@@ -110,24 +110,24 @@ export function AppSidebar() {
               type="button"
               onClick={() => void logout()}
               disabled={isLoggingOut}
-              title="\uB85C\uADF8\uC544\uC6C3"
+              title="로그아웃"
               className={cn(
                 'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
               <LogOut size={ICON_NAV} className="shrink-0 opacity-90" aria-hidden />
-              \uB85C\uADF8\uC544\uC6C3
+              로그아웃
             </button>
           </div>
         ) : (
           <Link
             href="/login"
-            title="\uB85C\uADF8\uC778"
+            title="로그인"
             className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <LogOut size={ICON_NAV} className="shrink-0 opacity-90" aria-hidden />
-            \uB85C\uADF8\uC778
+            로그인
           </Link>
         )}
       </div>
@@ -140,14 +140,14 @@ export function AppSidebar() {
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90"
-          aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
+          aria-label="Datamod 홈으로 이동"
         >
           <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
           <DatamodWordmark className="text-sm" textClassName="text-neutral-900" />
         </Link>
         <nav
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden"
-          aria-label="\uC8FC\uC694 \uBA54\uB274"
+          aria-label="주요 메뉴"
         >
           {navItems.map((item) => {
             const active = isActive(item)
@@ -180,7 +180,7 @@ export function AppSidebar() {
               type="button"
               onClick={() => void logout()}
               disabled={isLoggingOut}
-              title="\uB85C\uADF8\uC544\uC6C3"
+              title="로그아웃"
               className={cn(
                 'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
                 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
@@ -188,20 +188,20 @@ export function AppSidebar() {
               )}
             >
               <LogOut size={ICON_NAV} className="shrink-0 text-gray-400" aria-hidden />
-              <span className="hidden sm:inline">\uB85C\uADF8\uC544\uC6C3</span>
+              <span className="hidden sm:inline">로그아웃</span>
             </button>
           </>
         ) : (
           <Link
             href="/login"
-            title="\uB85C\uADF8\uC778"
+            title="로그인"
             className={cn(
               'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
               'text-gray-600 hover:bg-gray-100'
             )}
           >
             <LogOut size={ICON_NAV} className="shrink-0 text-gray-400" aria-hidden />
-            <span className="hidden sm:inline">\uB85C\uADF8\uC778</span>
+            <span className="hidden sm:inline">로그인</span>
           </Link>
         )}
       </div>
@@ -213,12 +213,12 @@ export function AppSidebar() {
       <Link
         href="/"
         className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-gray-50"
-        title="\uD648"
-        aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
+        title="홈"
+        aria-label="Datamod 홈으로 이동"
       >
         <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
       </Link>
-      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto px-0 py-1" aria-label="\uC8FC\uC694 \uBA54\uB274">
+      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto px-0 py-1" aria-label="주요 메뉴">
         {navItems.map((item) => {
           const active = isActive(item)
           const Icon = item.icon
@@ -244,23 +244,23 @@ export function AppSidebar() {
             type="button"
             onClick={() => void logout()}
             disabled={isLoggingOut}
-            title="\uB85C\uADF8\uC544\uC6C3"
+            title="로그아웃"
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900',
               'disabled:pointer-events-none disabled:opacity-50'
             )}
           >
             <LogOut size={ICON_NAV} className="shrink-0" aria-hidden />
-            <span className="sr-only">\uB85C\uADF8\uC544\uC6C3</span>
+            <span className="sr-only">로그아웃</span>
           </button>
         ) : (
           <Link
             href="/login"
-            title="\uB85C\uADF8\uC778"
+            title="로그인"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
           >
             <LogOut size={ICON_NAV} className="shrink-0" aria-hidden />
-            <span className="sr-only">\uB85C\uADF8\uC778</span>
+            <span className="sr-only">로그인</span>
           </Link>
         )}
       </div>
@@ -287,7 +287,7 @@ export function AppSidebar() {
         onClick={() => setMobileOpen((o) => !o)}
         className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E8EF] bg-white text-neutral-900 shadow-sm md:hidden"
         aria-expanded={mobileOpen}
-        aria-label={mobileOpen ? '\uBA54\uB274 \uB2EB\uAE30' : '\uBA54\uB274 \uC5F4\uAE30'}
+        aria-label={mobileOpen ? '메뉴 닫기' : '메뉴 열기'}
       >
         {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
@@ -308,7 +308,7 @@ export function AppSidebar() {
 
       <aside
         className="fixed left-0 top-0 z-30 hidden h-screen w-[4.5rem] flex-col border-r border-[#E5E8EF] bg-white md:flex lg:hidden"
-        aria-label="\uACB0\uACFC \uD398\uC774\uC9C0 \uBE60\uB978 \uBA54\uB274"
+        aria-label="결과 페이지 빠른 메뉴"
       >
         {sidebarIconRail}
       </aside>
