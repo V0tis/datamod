@@ -62,7 +62,7 @@ const DIMENSIONS = [
 function MitigationBadge({ level }: { level: string }) {
   const n = level.trim()
   const variant =
-    n === '상' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40' : n === '하' ? 'bg-destructive/10 text-destructive border-destructive/35' : 'bg-amber-500/12 text-amber-800 dark:text-amber-200 border-amber-500/35'
+    n === '상' ? 'bg-emerald-500/15 text-emerald-700  border-emerald-500/40' : n === '하' ? 'bg-destructive/10 text-destructive border-destructive/35' : 'bg-amber-500/12 text-amber-800  border-amber-500/35'
   return (
     <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', variant)}>
       완화 {n || '중'}
@@ -73,7 +73,7 @@ function MitigationBadge({ level }: { level: string }) {
 function DifficultyBadge({ level }: { level: string }) {
   const n = level.trim()
   const variant =
-    n === '저' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40' : n === '고' ? 'bg-destructive/10 text-destructive border-destructive/35' : 'bg-amber-500/12 text-amber-800 dark:text-amber-200 border-amber-500/35'
+    n === '저' ? 'bg-emerald-500/15 text-emerald-700  border-emerald-500/40' : n === '고' ? 'bg-destructive/10 text-destructive border-destructive/35' : 'bg-amber-500/12 text-amber-800  border-amber-500/35'
   return (
     <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', variant)}>
       실행난이도 {n || '중'}
@@ -123,7 +123,7 @@ function RiskOpportunityLists({ se }: { se: StrategyEval }) {
       {risks.length > 0 ? (
         <div className="rounded-lg border border-border/60 bg-muted/10 p-3 sm:p-4">
           <div className="mb-2 flex items-center gap-2">
-            <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
+            <Shield className="h-4 w-4 text-amber-600 " aria-hidden />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">리스크 · 완화 설계</h3>
           </div>
           <ul className="space-y-3">
@@ -208,7 +208,7 @@ export function StrategyEvaluationSection({
         className={cn(
           'space-y-4',
           emphasis === 'deep' &&
-            'rounded-xl border-2 border-indigo-200/60 bg-indigo-50/25 p-3 sm:p-5 dark:border-indigo-900/50 dark:bg-indigo-950/30'
+            'rounded-xl border-2 border-indigo-200/60 bg-indigo-50/25 p-3 sm:p-5  '
         )}
       >
         {cvScore != null ? (
@@ -247,7 +247,7 @@ export function StrategyEvaluationSection({
                       <td className="align-top px-3 py-3">
                         {score != null ? <ScoreBar10 score10={score} higherIsBetter={d.higherIsBetter} /> : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 text-xs leading-relaxed">
+                      <td className="align-top px-3 py-3 text-slate-600  text-xs leading-relaxed">
                         {reason ?? '—'}
                       </td>
                     </tr>

@@ -45,7 +45,7 @@ export function GlobalServiceError({
           <Button type="button" onClick={handleRetry} className="w-full sm:w-auto">
             다시 시도
           </Button>
-          <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
+          <Button type="button" variant="secondary" asChild className="w-full sm:w-auto">
             <Link href="/">홈으로</Link>
           </Button>
         </div>

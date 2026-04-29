@@ -66,14 +66,14 @@ export function tryParseConclusionTriad(text: string): { title: string; body: st
   return null
 }
 
-const bodyTypography = 'text-[15px] leading-[1.65] tracking-wide text-pretty text-slate-700 [word-break:keep-all] dark:text-zinc-300'
+const bodyTypography = 'text-[15px] leading-[1.65] tracking-wide text-pretty text-slate-700 [word-break:keep-all] '
 
 function renderInlineBold(text: string): ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
-        <strong key={i} className="font-semibold text-slate-900 dark:text-zinc-50">
+        <strong key={i} className="font-semibold text-slate-900 ">
           {part.slice(2, -2)}
         </strong>
       )
@@ -137,7 +137,7 @@ function TriadSectionBody({
     return (
       <dl className={cn('space-y-3', bodyTypography)}>
         {highlightedItems.map((line, i) => (
-          <div key={i} className="border-l-2 border-slate-200 pl-3 dark:border-zinc-700">
+          <div key={i} className="border-l-2 border-slate-200 pl-3 ">
             <dt className="sr-only">근거 {i + 1}</dt>
             <dd className="m-0">{renderInlineBold(line)}</dd>
           </div>
@@ -151,7 +151,7 @@ function TriadSectionBody({
       <ul className="m-0 list-none space-y-2.5 p-0">
         {highlightedItems.map((line, i) => (
           <li key={i} className={cn('flex gap-2.5', bodyTypography)}>
-            <span className="mt-0.5 shrink-0 font-mono text-xs font-bold text-sky-600 dark:text-sky-400" aria-hidden>
+            <span className="mt-0.5 shrink-0 font-mono text-xs font-bold text-sky-600 " aria-hidden>
               ·
             </span>
             <span className="min-w-0 flex-1">{renderInlineBold(line)}</span>
@@ -164,14 +164,14 @@ function TriadSectionBody({
   if (blockTitle === '기대 효과') {
     return (
       <aside
-        className="rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-4 py-3.5 dark:border-emerald-900/50 dark:bg-emerald-950/35"
+        className="rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-4 py-3.5  "
         aria-label="예상 효과"
       >
         <dl className={cn('m-0 space-y-2.5', bodyTypography)}>
           {highlightedItems.map((line, i) => (
             <div key={i}>
               <dt className="sr-only">효과 {i + 1}</dt>
-              <dd className="m-0 text-emerald-950 dark:text-emerald-100">{renderInlineBold(line)}</dd>
+              <dd className="m-0 text-emerald-950 ">{renderInlineBold(line)}</dd>
             </div>
           ))}
         </dl>
@@ -180,7 +180,7 @@ function TriadSectionBody({
   }
 
   return (
-    <MarkdownBody className={cn('prose-base max-w-none dark:prose-invert', bodyTypography)}>
+    <MarkdownBody className={cn('prose-base max-w-none ', bodyTypography)}>
       {injectKeywordBold(body, highlightTerms)}
     </MarkdownBody>
   )
@@ -203,7 +203,7 @@ export function ConclusionStructuredBlocks({
     return (
       <MarkdownBody
         className={cn(
-          'prose-base max-w-none text-slate-700 dark:prose-invert dark:text-zinc-300',
+          'prose-base max-w-none text-slate-700  ',
           'leading-[1.65] tracking-wide text-pretty [word-break:keep-all]',
           className
         )}
@@ -218,9 +218,9 @@ export function ConclusionStructuredBlocks({
       {triad.map((block, i) => (
         <section
           key={`${block.title}-${i}`}
-          className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/50"
+          className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm  "
         >
-          <h4 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold tracking-tight text-slate-900 dark:border-zinc-800 dark:text-zinc-50">
+          <h4 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold tracking-tight text-slate-900  ">
             {displayBlockTitle(block.title)}
           </h4>
           <TriadSectionBody blockTitle={block.title} body={block.body} highlightTerms={highlightTerms} />

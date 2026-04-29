@@ -76,7 +76,7 @@ export function ErrorState({
         </p>
       )}
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button variant="outline" size="sm" onClick={onRecovery}>
+        <Button variant="secondary" size="sm" onClick={onRecovery}>
           {recoveryLabel}
         </Button>
         {secondaryAction}

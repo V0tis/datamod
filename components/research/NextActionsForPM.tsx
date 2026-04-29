@@ -24,6 +24,29 @@ type StrategyGenerationOutput = {
   strategy_summary?: string
 }
 
+function parseActionItem(rawText: string): {
+  priority?: 'high' | 'medium' | 'low'
+  title: string
+  quantitative?: string
+  qualitative?: string
+} {
+  const raw = rawText.trim()
+  const priorityMatch = raw.match(/\[(High|Medium|Low)\]/i)
+  const p = priorityMatch?.[1]?.toLowerCase()
+  const priority = p === 'high' || p === 'medium' || p === 'low' ? p : undefined
+
+  const title = raw.split('—')[0].replace(/\[.*?\]/, '').trim()
+  const quantMatch = raw.match(/정량:\s*([^;]+)/)
+  const qualMatch = raw.match(/정성:\s*(.+)$/)
+
+  return {
+    priority,
+    title: title || raw.replace(/\[.*?\]/, '').trim(),
+    quantitative: quantMatch?.[1]?.trim(),
+    qualitative: qualMatch?.[1]?.trim(),
+  }
+}
+
 function strategyFallbackActions(
   result: ResearchResponse | null,
   maxItems: number,
@@ -97,13 +120,24 @@ export function extractNextActionItems(
     return km.next_actions_pm
       .filter((a): a is typeof a & { action: string } => !!a.action?.trim())
       .slice(0, maxItems)
-      .map((a) => ({
-        action: a.action,
-        why: a.why,
+      .map((a) => {
+        const parsed = parseActionItem(a.action)
+        const whyLine =
+          a.why?.trim() ||
+          [
+            parsed.quantitative ? `📊 ${parsed.quantitative}` : '',
+            parsed.qualitative ? `💬 ${parsed.qualitative}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        return {
+          action: parsed.title,
+          why: whyLine || undefined,
         how_to_execute: a.how_to_execute,
-        priority: a.priority,
+        priority: (a.priority ?? parsed.priority) as 'high' | 'medium' | 'low' | undefined,
         estimated_effort: a.estimated_effort,
-      }))
+        }
+      })
   }
   const fromPlan = fromPmActionPlan(km as NonNullable<ResearchResponse['key_metrics']>)
     .filter((a) => a.action?.trim())
@@ -114,7 +148,7 @@ export function extractNextActionItems(
 
 const PRIORITY_COLORS = {
   high: 'bg-destructive/15 text-destructive border-destructive/30',
-  medium: 'bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/30',
+  medium: 'bg-amber-500/15 text-amber-600  border-amber-500/30',
   low: 'bg-muted text-muted-foreground border-border',
 } as const
 
@@ -183,7 +217,7 @@ export function NextActionsForPM({ result, taskData, analysisTasks, loading = fa
                         PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.medium
                       )}
                     >
-                      {item.priority === 'high' ? '높음' : item.priority === 'medium' ? '보통' : '낮음'}
+                      {item.priority === 'high' ? '높음' : item.priority === 'medium' ? '중간' : '낮음'}
                     </span>
                   )}
                   {item.estimated_effort && (

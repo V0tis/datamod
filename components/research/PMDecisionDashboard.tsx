@@ -139,7 +139,7 @@ export function PMDecisionDashboard({
           result={displayResult ?? result}
           taskData={taskData}
           analysisTasks={effectiveAnalysisTasks}
-          className="rounded-[12px] border border-zinc-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/60"
+          className="rounded-[12px] border border-zinc-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]  "
         />
       )}
 
@@ -147,12 +147,12 @@ export function PMDecisionDashboard({
       {!hideTimeline && showResultSections && (polledProgressStep != null || polledStatus || streamingState.status !== 'idle' || displayResult != null || streamDone) && (
         <div
           id="section-timeline"
-          className="scroll-mt-24 rounded-[12px] border border-zinc-200/90 bg-zinc-50/50 p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/40"
+          className="scroll-mt-24 rounded-[12px] border border-zinc-200/90 bg-zinc-50/50 p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)]  "
         >
-          <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400 mb-1">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500  mb-1">
             AI 분석 파이프라인
           </h2>
-          <p className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-5">실시간 9단계 진행</p>
+          <p className="text-lg font-semibold tracking-tight text-zinc-900  mb-5">실시간 9단계 진행</p>
           <StrategyEnginePipeline
             keyword={keyword}
             currentStep={timelineStep}
@@ -203,10 +203,10 @@ export function PMDecisionDashboard({
         return (
           <div
             id="section-risks-opportunities"
-            className="scroll-mt-24 rounded-[12px] border border-zinc-200/90 bg-white p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] animate-in fade-in duration-300 dark:border-zinc-800 dark:bg-zinc-950/50"
+            className="scroll-mt-24 rounded-[12px] border border-zinc-200/90 bg-white p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] animate-in fade-in duration-300  "
           >
             <div className="flex items-center justify-between gap-2 mb-3">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500 ">
                 리스크 및 기회 평가
               </h2>
               {!isAnalyzing && showRiskBlock && (
@@ -217,11 +217,11 @@ export function PMDecisionDashboard({
             </div>
             <div className="space-y-4">
               {result && !isAnalyzing && (
-                <div className="rounded-[12px] border border-zinc-100 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400 mb-2">
+                <div className="rounded-[12px] border border-zinc-100 bg-zinc-50/80 p-4  ">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500  mb-2">
                     AI PM의 한 줄 평
                   </p>
-                  <p className="text-sm font-medium leading-relaxed text-zinc-800 dark:text-zinc-100">
+                  <p className="text-sm font-medium leading-relaxed text-zinc-800 ">
                     {summary?.trim() ||
                       (riskSignalItems.length > 0
                         ? `리스크 신호 ${riskSignalItems.length}건을 기준으로 완화 우선순위를 정하면 실행 리스크를 줄일 수 있습니다.`

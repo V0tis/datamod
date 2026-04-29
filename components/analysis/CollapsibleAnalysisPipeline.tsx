@@ -65,17 +65,17 @@ export function CollapsibleAnalysisPipeline({
   const statusIcon = hasError || hasFailedTask ? (
     <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
   ) : allCompleted ? (
-    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 " aria-hidden />
   ) : pipelineInFlight ? (
-    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-400" aria-hidden />
+    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600 " aria-hidden />
   ) : (
-    <Sparkles className="h-4 w-4 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
+    <Sparkles className="h-4 w-4 shrink-0 text-slate-500 " aria-hidden />
   )
 
   return (
     <div
       className={cn(
-        'relative z-[40] w-full rounded-xl border border-slate-200/90 bg-[#FFFFFF] shadow-sm dark:border-zinc-800 dark:bg-zinc-950'
+        'relative z-[40] w-full rounded-xl border border-slate-200/90 bg-[#FFFFFF] shadow-sm  '
       )}
     >
       <button
@@ -83,24 +83,24 @@ export function CollapsibleAnalysisPipeline({
         onClick={toggle}
         className={cn(
           'flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 sm:py-4',
-          'hover:bg-slate-50/90 dark:hover:bg-zinc-900/50',
+          'hover:bg-slate-50/90 ',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
         )}
         aria-expanded={expanded}
         aria-controls="analysis-pipeline-details"
         id="analysis-pipeline-toggle"
       >
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900/80">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50  ">
           {statusIcon}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+            <span className="text-sm font-semibold tracking-tight text-slate-900 ">
               분석 파이프라인
             </span>
-            <span className="text-sm font-medium text-slate-700 dark:text-zinc-200">{title}</span>
+            <span className="text-sm font-medium text-slate-700 ">{title}</span>
             {queueWaiting && !expanded ? (
-              <span className="inline-flex items-center rounded-full bg-sky-100/90 px-2 py-0.5 text-[10px] font-semibold text-sky-900 dark:bg-sky-950/60 dark:text-sky-100">
+              <span className="inline-flex items-center rounded-full bg-sky-100/90 px-2 py-0.5 text-[10px] font-semibold text-sky-900  ">
                 다음 단계 준비 중…
               </span>
             ) : null}
@@ -111,7 +111,7 @@ export function CollapsibleAnalysisPipeline({
           <span className="mt-3 block">
             <span className="sr-only">전체 진행률 {Math.round(progressPercent)}퍼센트</span>
             <span
-              className="relative block h-1.5 w-full overflow-hidden rounded-full bg-slate-200/90 dark:bg-zinc-800"
+              className="relative block h-1.5 w-full overflow-hidden rounded-full bg-slate-200/90 "
               aria-hidden
             >
               <motion.span
@@ -150,7 +150,7 @@ export function CollapsibleAnalysisPipeline({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden border-t border-slate-100 dark:border-zinc-800"
+            className="overflow-hidden border-t border-slate-100 "
           >
             <div className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5">{children}</div>
           </motion.div>

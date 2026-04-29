@@ -39,14 +39,14 @@ export function KeyInsightBulletCard({
         }
       }}
       className={cn(
-        'flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4 shadow-sm transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-900/80',
-        isLong && 'cursor-pointer hover:-translate-y-1 hover:border-slate-200 hover:shadow-md dark:hover:border-zinc-700',
+        'flex gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4 shadow-sm transition-transform duration-200  ',
+        isLong && 'cursor-pointer hover:-translate-y-1 hover:border-slate-200 hover:shadow-md ',
         className
       )}
     >
       {index != null && (
         <div
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700   "
           aria-hidden
         >
           {index}
@@ -55,7 +55,7 @@ export function KeyInsightBulletCard({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            'text-sm font-medium leading-snug text-slate-800 dark:text-zinc-100',
+            'text-sm font-medium leading-snug text-slate-800 ',
             !expanded && 'line-clamp-3'
           )}
         >
@@ -65,7 +65,7 @@ export function KeyInsightBulletCard({
           <Button
             variant="ghost"
             size="sm"
-            className="-ml-1 mt-2 h-6 text-xs font-medium text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+            className="-ml-1 mt-2 h-6 text-xs font-medium text-emerald-800 hover:bg-emerald-50  "
             onClick={(e) => {
               e.stopPropagation()
               setExpanded((v) => !v)
@@ -80,7 +80,7 @@ export function KeyInsightBulletCard({
           </Button>
         )}
       </div>
-      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-zinc-500" aria-hidden />
+      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 " aria-hidden />
     </motion.div>
   )
 }

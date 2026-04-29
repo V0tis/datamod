@@ -75,7 +75,7 @@ export function MarketScoreWaterfall({
   return (
     <div className={cn('w-full max-w-none', className)} style={{ fontFamily: chartFontFamily }}>
       <svg viewBox={`0 0 ${w} ${h}`} className="h-[140px] w-full" preserveAspectRatio="xMidYMid meet" aria-label="시장 잠재력 워터폴">
-        <line x1={padL} y1={yAt(0)} x2={w - padR} y2={yAt(0)} stroke="#E5E8EF" strokeWidth={1} className="dark:stroke-zinc-700" />
+        <line x1={padL} y1={yAt(0)} x2={w - padR} y2={yAt(0)} stroke="#E5E8EF" strokeWidth={1} className="" />
         {layouts.map(({ s, i, x: bx, bw, isLast }) => {
           const y0 = yAt(s.start)
           const y1 = yAt(s.end)

@@ -154,8 +154,8 @@ export function AnalysisResultHeaderBar({
               className={cn(
                 'rounded-md border px-2 py-0.5 font-medium',
                 aiPrimaryModel === 'gemini'
-                  ? 'border-blue-100 bg-blue-50 text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300'
-                  : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'
+                  ? 'border-blue-100 bg-blue-50 text-blue-600   '
+                  : 'border-slate-200 bg-slate-50 text-slate-500   '
               )}
             >
               Gemini
@@ -165,8 +165,8 @@ export function AnalysisResultHeaderBar({
               className={cn(
                 'rounded-md border px-2 py-0.5 font-medium',
                 aiPrimaryModel === 'groq'
-                  ? 'border-purple-100 bg-purple-50 text-purple-600 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300'
-                  : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'
+                  ? 'border-purple-100 bg-purple-50 text-purple-600   '
+                  : 'border-slate-200 bg-slate-50 text-slate-500   '
               )}
             >
               Groq

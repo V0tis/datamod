@@ -74,13 +74,13 @@ export function ResultHeroSecondaryActions({
   }
 
   const iconBtnClass =
-    'h-11 w-11 shrink-0 rounded-xl border border-border/80 bg-background shadow-sm hover:bg-muted/80 dark:border-border/60 dark:hover:bg-muted/40'
+    'h-11 w-11 shrink-0 rounded-xl border border-border/80 bg-background shadow-sm hover:bg-muted/80  '
 
   return (
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          'inline-flex items-center gap-1 rounded-2xl border border-border/70 bg-muted/20 p-1.5 shadow-sm dark:bg-muted/15',
+          'inline-flex items-center gap-1 rounded-2xl border border-border/70 bg-muted/20 p-1.5 shadow-sm ',
           className
         )}
         role="group"
@@ -100,7 +100,7 @@ export function ResultHeroSecondaryActions({
               {pdfPhase === 'loading' ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
               ) : pdfPhase === 'done' ? (
-                <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                <Check className="h-5 w-5 text-emerald-600 " aria-hidden />
               ) : (
                 <FileDown className="h-5 w-5 text-foreground" aria-hidden />
               )}
@@ -126,7 +126,7 @@ export function ResultHeroSecondaryActions({
               {insightSaving ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
               ) : insightPhase === 'saved' ? (
-                <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                <Check className="h-5 w-5 text-emerald-600 " aria-hidden />
               ) : (
                 <Bookmark className="h-5 w-5 text-foreground" aria-hidden />
               )}

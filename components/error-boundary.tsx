@@ -72,7 +72,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <AlertCircle className="w-8 h-8 text-destructive/80 mb-2" aria-hidden />
             <p className="text-sm font-medium text-foreground mb-1">{title}</p>
             <p className="text-xs text-muted-foreground mb-3">{desc}</p>
-            <Button variant="outline" size="sm" onClick={this.handleRetry} className="gap-1.5">
+            <Button variant="secondary" size="sm" onClick={this.handleRetry} className="gap-1.5">
               <RefreshCw className="w-3.5 h-3.5" />
               다시 시도
             </Button>
@@ -103,22 +103,22 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 <RefreshCw className="w-4 h-4" />
                 다시 시도
               </Button>
-              <Button variant="outline" onClick={this.handleReload} className="gap-2">
+              <Button variant="secondary" onClick={this.handleReload} className="gap-2">
                 새로고침
               </Button>
             </div>
             {(message || (process.env.NODE_ENV === 'development' && stack)) && (
-              <div className="text-left border-t border-border dark:border-[#2d2f34] pt-4 mt-4">
+              <div className="text-left border-t border-border  pt-4 mt-4">
                 <button
                   type="button"
                   onClick={this.toggleDetails}
-                  className="text-xs text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-slate-200 flex items-center gap-1"
+                  className="text-xs text-muted-foreground  hover:text-foreground  flex items-center gap-1"
                 >
                   {showDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   오류 내용 보기
                 </button>
                 {showDetails && (
-                  <pre className="mt-2 p-3 rounded-lg bg-muted/50 dark:bg-[#1a1c20] text-muted-foreground dark:text-slate-400 text-xs overflow-auto max-h-40 whitespace-pre-wrap break-words">
+                  <pre className="mt-2 p-3 rounded-lg bg-muted/50  text-muted-foreground  text-xs overflow-auto max-h-40 whitespace-pre-wrap break-words">
                     {message}
                     {process.env.NODE_ENV === 'development' && stack && `\n\n${stack}`}
                   </pre>

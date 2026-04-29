@@ -49,7 +49,7 @@ export default function SignupPage() {
         return
       }
 
-      window.location.href = `/auth/verify?email=${encodeURIComponent(trimmedEmail)}`
+      window.location.href = `/auth/verify-email?email=${encodeURIComponent(trimmedEmail)}`
     } catch {
       setError('요청 처리에 실패했습니다.')
     } finally {

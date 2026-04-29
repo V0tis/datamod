@@ -157,7 +157,7 @@ export function StrategicDecisionLayer({
                     </span>
                   </td>
                   <td className="align-top px-3 py-3 font-semibold tabular-nums text-foreground">{card.value}</td>
-                  <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400">
+                  <td className="align-top px-3 py-3 text-slate-600 ">
                     {card.explanation ? (
                       <MarkdownBody className="prose-base max-w-none text-sm leading-relaxed text-inherit [&_p]:my-0">
                         {card.explanation}

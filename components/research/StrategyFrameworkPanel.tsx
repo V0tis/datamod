@@ -113,7 +113,7 @@ function PorterHorizontalMultiBar({
                 {v10}/10
               </span>
             </div>
-            <p className="min-w-0 flex-[1.2] text-xs leading-relaxed text-slate-600 dark:text-zinc-400 sm:pt-0.5">
+            <p className="min-w-0 flex-[1.2] text-xs leading-relaxed text-slate-600  sm:pt-0.5">
               {reason}
             </p>
           </div>
@@ -161,45 +161,45 @@ function SwotMatrix({ swot }: { swot: NonNullable<SwotShape> }) {
 
   return (
     <div className="relative pt-5">
-      <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] text-gray-400 dark:text-zinc-500">
+      <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] text-gray-400 ">
         내부 요인 ← → 외부 요인
       </div>
-      <div className="grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl border border-gray-200 dark:border-zinc-700">
-        <div className="bg-emerald-50 p-4 dark:bg-emerald-950/35">
+      <div className="grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl border border-gray-200 ">
+        <div className="bg-emerald-50 p-4 ">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500">
               <TrendingUp className="h-3.5 w-3.5 text-white" aria-hidden />
             </span>
-            <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">강점 (S)</span>
+            <span className="text-sm font-semibold text-emerald-800 ">강점 (S)</span>
           </div>
-          <SwotMatrixList items={strengths} dotClass="bg-emerald-400" textClass="text-emerald-900 dark:text-emerald-100" />
+          <SwotMatrixList items={strengths} dotClass="bg-emerald-400" textClass="text-emerald-900 " />
         </div>
-        <div className="bg-red-50 p-4 dark:bg-red-950/30">
+        <div className="bg-red-50 p-4 ">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500">
               <TrendingDown className="h-3.5 w-3.5 text-white" aria-hidden />
             </span>
-            <span className="text-sm font-semibold text-red-800 dark:text-red-200">약점 (W)</span>
+            <span className="text-sm font-semibold text-red-800 ">약점 (W)</span>
           </div>
-          <SwotMatrixList items={weaknesses} dotClass="bg-red-400" textClass="text-red-900 dark:text-red-100" />
+          <SwotMatrixList items={weaknesses} dotClass="bg-red-400" textClass="text-red-900 " />
         </div>
-        <div className="bg-blue-50 p-4 dark:bg-blue-950/35">
+        <div className="bg-blue-50 p-4 ">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500">
               <Sparkles className="h-3.5 w-3.5 text-white" aria-hidden />
             </span>
-            <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">기회 (O)</span>
+            <span className="text-sm font-semibold text-blue-800 ">기회 (O)</span>
           </div>
-          <SwotMatrixList items={opportunities} dotClass="bg-blue-400" textClass="text-blue-900 dark:text-blue-100" />
+          <SwotMatrixList items={opportunities} dotClass="bg-blue-400" textClass="text-blue-900 " />
         </div>
-        <div className="bg-amber-50 p-4 dark:bg-amber-950/30">
+        <div className="bg-amber-50 p-4 ">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500">
               <AlertTriangle className="h-3.5 w-3.5 text-white" aria-hidden />
             </span>
-            <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">위협 (T)</span>
+            <span className="text-sm font-semibold text-amber-800 ">위협 (T)</span>
           </div>
-          <SwotMatrixList items={threats} dotClass="bg-amber-400" textClass="text-amber-950 dark:text-amber-100" />
+          <SwotMatrixList items={threats} dotClass="bg-amber-400" textClass="text-amber-950 " />
         </div>
       </div>
     </div>
@@ -271,11 +271,11 @@ export function StrategyFrameworkPanel({
       <div
         key={instanceKey}
         className={cn(
-          'rounded-xl border border-slate-100 bg-white shadow-none dark:border-zinc-800 dark:bg-zinc-950',
+          'rounded-xl border border-slate-100 bg-white shadow-none  ',
           className
         )}
       >
-        <div className="border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-zinc-800">
+        <div className="border-b border-slate-100 px-4 py-3 sm:px-5 ">
           <TooltipProvider delayDuration={200}>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold tracking-tight text-foreground">제품 전략 프레임워크</h3>
@@ -313,7 +313,7 @@ export function StrategyFrameworkPanel({
   }
 
   return (
-    <div key={instanceKey} className={cn('rounded-xl border border-slate-100 bg-card dark:border-zinc-800', className)}>
+    <div key={instanceKey} className={cn('rounded-xl border border-slate-100 bg-card ', className)}>
       <div className="space-y-10 p-4 sm:p-5">
         {hasSwot ? (
           <section id="report-framework-swot" className="scroll-mt-24">
@@ -322,7 +322,7 @@ export function StrategyFrameworkPanel({
           </section>
         ) : null}
 
-        <section id="report-framework-porter" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
+        <section id="report-framework-porter" className="scroll-mt-24 border-t border-slate-100 pt-8 ">
           <TooltipProvider delayDuration={200}>
             <div className="mb-3 flex items-center gap-2">
               <h4 className="text-sm font-semibold tracking-tight text-foreground">Porter 5 Forces</h4>
@@ -353,21 +353,21 @@ export function StrategyFrameworkPanel({
         </section>
 
         {hasJtbd ? (
-          <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-slate-100 pt-8 dark:border-zinc-800">
+          <section id="report-framework-jtbd" className="scroll-mt-24 border-t border-slate-100 pt-8 ">
             <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">JTBD</h4>
             <div className="grid gap-8 sm:grid-cols-3 sm:gap-6">
               <div className="border-b border-border/50 pb-6 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
-                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">기능적 (Functional)</p>
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-700 ">기능적 (Functional)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">업무·효율·성과로 측정되는 핵심 과제</p>
                 <BulletList items={jtbdTriad.functional} bulletClass="text-sky-500" />
               </div>
               <div className="border-b border-border/50 pb-6 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
-                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">사회적 (Social)</p>
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-violet-700 ">사회적 (Social)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">타인·조직·규범과의 관계에서의 니즈</p>
                 <BulletList items={jtbdTriad.social} bulletClass="text-violet-500" />
               </div>
               <div>
-                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:text-rose-300">정서적 (Emotional)</p>
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-rose-700 ">정서적 (Emotional)</p>
                 <p className="mb-2 text-[11px] text-muted-foreground">불안 완화·자신감·만족 등 정서 동기</p>
                 <BulletList items={jtbdTriad.emotional} bulletClass="text-rose-500" />
               </div>

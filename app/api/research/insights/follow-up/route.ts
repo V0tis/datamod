@@ -34,7 +34,6 @@ export async function POST(req: Request) {
       { status: 503 }
     )
   }
-  console.log('[Follow-up Route] AI provider:', { primaryModel, useGroq })
 
   let body: { keyword?: string; previousInsights?: string; question?: string }
   try {

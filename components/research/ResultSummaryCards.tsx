@@ -56,12 +56,12 @@ function SummaryCard({
       className={cn(
         'rounded-xl p-5 shadow-sm transition-colors',
         variant === 'saas'
-          ? 'border border-slate-100 bg-white shadow-sm hover:border-slate-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700'
+          ? 'border border-slate-100 bg-white shadow-sm hover:border-slate-200   '
           : 'border-2 border-primary/20 bg-gradient-to-br from-primary/8 to-transparent hover:border-primary/40 hover:from-primary/12'
       )}
     >
       <div className="flex items-center gap-2 mb-3">
-        <Icon className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
+        <Icon className="h-5 w-5 shrink-0 text-slate-500 " aria-hidden />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           {card.label}
         </span>
@@ -90,7 +90,7 @@ function SummaryCard({
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="mt-1 text-xs font-medium text-emerald-800 hover:text-emerald-900 dark:text-emerald-300"
+          className="mt-1 text-xs font-medium text-emerald-800 hover:text-emerald-900 "
         >
           {expanded ? '접기' : '더보기'}
         </button>

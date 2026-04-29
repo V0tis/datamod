@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { refreshGlobalTrends, TrendsFetchError } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
+import { filterAndRerankTrendRowsAllCountries } from '@/lib/filterTrendingKeywords'
 
 /** 트렌드 캐시 저장 테이블: global_trends (테이블명 통일) */
 const TRENDS_TABLE = 'global_trends'
@@ -23,7 +24,6 @@ export async function POST() {
       .order('rank', { ascending: true })
 
     if (error) {
-      if (isDev) console.log('[Dev] Trends update SELECT error:', error)
       console.error('[Trends update] SELECT after save', error)
       return NextResponse.json(
         { error: '저장 후 데이터를 불러오지 못했습니다.', success: true },
@@ -31,10 +31,9 @@ export async function POST() {
       )
     }
 
-    const data = buildTrendsResponse(rows ?? [])
+    const data = buildTrendsResponse(filterAndRerankTrendRowsAllCountries(rows ?? []))
     return NextResponse.json({ success: true, data }, { headers: JSON_HEADERS })
   } catch (err) {
-    if (isDev) console.log('[Dev] Trends update exception:', err, err instanceof Error ? err.stack : '')
     console.error('[Trends update]', err)
     const payload: {
       error: string

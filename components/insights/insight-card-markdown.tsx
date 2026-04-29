@@ -53,7 +53,7 @@ export function InsightCardMarkdown({
             </div>
           ),
           ul: ({ children: c, className: cl, ...rest }: MdProps) => (
-            <ul className={cn('my-2 list-disc space-y-1.5 pl-5 marker:text-sky-600/80 dark:marker:text-sky-400/80', cl)} {...rest}>
+            <ul className={cn('my-2 list-disc space-y-1.5 pl-5 marker:text-sky-600/80 ', cl)} {...rest}>
               {c}
             </ul>
           ),
@@ -73,13 +73,13 @@ export function InsightCardMarkdown({
             </strong>
           ),
           a: ({ href, children: c, ...props }: { href?: string; children?: ReactNode }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400" {...props}>
+            <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-sky-700 underline-offset-2 hover:underline " {...props}>
               {c}
             </a>
           ),
           blockquote: ({ children: c, className: cl, ...rest }: MdProps) => (
             <blockquote
-              className={cn('my-3 border-l-2 border-sky-300/80 pl-3 text-muted-foreground dark:border-sky-600/60', cl)}
+              className={cn('my-3 border-l-2 border-sky-300/80 pl-3 text-muted-foreground ', cl)}
               {...rest}
             >
               {c}

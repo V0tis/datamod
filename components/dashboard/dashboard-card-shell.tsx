@@ -46,7 +46,7 @@ export function DashboardCardShell({
       aria-label={ariaLabel}
       className={cn(
         dashboardCardClass,
-        emphasis === 'hero' && 'shadow-md ring-1 ring-slate-200/80 dark:ring-zinc-700',
+        emphasis === 'hero' && 'shadow-md ring-1 ring-slate-200/80 ',
         className
       )}
     >
@@ -61,8 +61,8 @@ export function DashboardCardShell({
                   'flex shrink-0 items-center justify-center rounded-lg',
                   compact ? 'h-9 w-9' : 'h-10 w-10',
                   emphasis === 'hero'
-                    ? 'bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400'
-                    : 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300'
+                    ? 'bg-sky-50 text-sky-600  '
+                    : 'bg-slate-100 text-slate-600  '
                 )}
                 aria-hidden
               >
@@ -73,7 +73,7 @@ export function DashboardCardShell({
               <h2
                 id={titleId}
                 className={cn(
-                  'font-semibold tracking-tight text-neutral-900 dark:text-zinc-50',
+                  'font-semibold tracking-tight text-neutral-900 ',
                   compact ? 'text-base' : emphasis === 'hero' ? 'text-xl sm:text-2xl' : 'text-lg'
                 )}
               >
@@ -82,7 +82,7 @@ export function DashboardCardShell({
               {description ? (
                 <p
                   className={cn(
-                    'leading-snug text-slate-600 dark:text-zinc-400',
+                    'leading-snug text-slate-600 ',
                     compact ? 'text-xs' : 'text-sm'
                   )}
                 >
@@ -94,10 +94,10 @@ export function DashboardCardShell({
           {headerRight != null ? <div className="shrink-0 sm:pt-0.5">{headerRight}</div> : null}
         </div>
 
-        <div className="min-w-0 text-sm leading-normal text-neutral-800 dark:text-zinc-200">{children}</div>
+        <div className="min-w-0 text-sm leading-normal text-neutral-800 ">{children}</div>
 
         {footer != null && footer !== false ? (
-          <div className="min-w-0 text-sm text-slate-600 dark:text-zinc-400">{footer}</div>
+          <div className="min-w-0 text-sm text-slate-600 ">{footer}</div>
         ) : null}
       </div>
     </section>

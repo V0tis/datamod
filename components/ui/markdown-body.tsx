@@ -25,7 +25,7 @@ export function MarkdownBody({
   return (
     <div
       className={cn(
-        'rin-doc prose prose-sm max-w-none dark:prose-invert',
+        'rin-doc prose prose-sm max-w-none ',
         'prose-headings:!font-bold prose-headings:!text-foreground prose-headings:!mb-0',
         'prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground',
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',

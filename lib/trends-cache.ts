@@ -364,7 +364,6 @@ export async function refreshTrendsForCountry(countryCode: string): Promise<Tren
   }
   await upsertTrendStatus(supabase, code, 'RSS', 24)
   if (itemsWithKo.length > 0) {
-    console.log('[Trends] Saved:', { country_code: code, count: itemsWithKo.length, source_type: 'RSS' })
   }
   return itemsWithKo
 }
@@ -376,11 +375,9 @@ export async function refreshTrendsForCountry(countryCode: string): Promise<Tren
  */
 export async function refreshGlobalTrends(): Promise<{ KR: TrendItem[]; US: TrendItem[]; JP: TrendItem[]; TW: TrendItem[]; HK: TrendItem[]; GB: TrendItem[]; DE: TrendItem[] }> {
   const results: Record<string, TrendItem[]> = { KR: [], US: [], JP: [], TW: [], HK: [], GB: [], DE: [] }
-  console.log('[Trends] 수집 시작. RSS 전용 (전체 국가)')
   for (const [countryCode] of Object.entries(COUNTRY_GEO)) {
     results[countryCode] = await refreshTrendsForCountry(countryCode)
   }
-  console.log('[Trends] 수집 종료. KR:', results.KR.length, 'US:', results.US.length, 'JP:', results.JP.length, 'TW:', results.TW.length, 'HK:', results.HK.length, 'GB:', results.GB.length, 'DE:', results.DE.length)
   return {
     KR: results.KR,
     US: results.US,

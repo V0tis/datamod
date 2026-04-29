@@ -42,7 +42,7 @@ export function CountryFlagIcon({
     <span
       className={cn(
         'inline-flex shrink-0 rounded-sm overflow-hidden',
-        'dark:ring-1 dark:ring-white/20 dark:shadow-sm dark:bg-white/5',
+        '   ',
         className
       )}
       style={{ width: displayW, height: displayH, minWidth: displayW, minHeight: displayH }}
@@ -85,7 +85,7 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
               'shrink-0 rounded-lg p-1.5 transition-all duration-200 inline-flex items-center justify-center outline-none',
               'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
               value === code
-                ? 'bg-primary/15 shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.06] dark:bg-primary/25 dark:ring-primary/90'
+                ? 'bg-primary/15 shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.06]  '
                 : 'hover:bg-muted/80 opacity-85 hover:opacity-100 hover:scale-[1.02]'
             )}
           >
@@ -115,8 +115,8 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
               'shrink-0 rounded-full pl-3 pr-4 py-2 text-sm font-medium transition-all duration-200 ease-out inline-flex items-center gap-2',
               'hover:scale-[1.03] active:scale-[0.98]',
               value === code
-                ? 'bg-primary text-primary-foreground shadow-sm dark:bg-blue-950/60 dark:text-blue-400 dark:font-semibold dark:border dark:border-blue-500/30'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground hover:ring-2 hover:ring-primary/20 dark:bg-[#202226] dark:text-[#9ca3af] dark:border dark:border-[#2d2f34] dark:hover:bg-[#2a2d32] dark:hover:text-[#e1e3e6] dark:hover:ring-primary/30'
+                ? 'bg-primary text-primary-foreground shadow-sm     '
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground hover:ring-2 hover:ring-primary/20       '
             )}
           >
             <CountryFlagIcon code={code} size="chip" />
@@ -126,10 +126,10 @@ export function CountryChips({ value, onChange, updatedAt, rightElement, classNa
       </div>
       {rightElement != null && <div className="flex items-center gap-2">{rightElement}</div>}
       {updatedAt != null && (
-        <p className="text-muted-foreground dark:text-slate-400 text-xs w-full sm:w-auto mt-1 sm:mt-0 flex items-center gap-1.5">
+        <p className="text-muted-foreground  text-xs w-full sm:w-auto mt-1 sm:mt-0 flex items-center gap-1.5">
           데이터 기준: {formatDataTimestamp(updatedAt)}
-          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-primary dark:bg-[#00d19a]/20 dark:text-[#00d19a] dark:border dark:border-[#00d19a]/50" aria-label="실시간">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary dark:bg-[#00d19a] animate-pulse" aria-hidden />
+          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-primary    " aria-label="실시간">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary  animate-pulse" aria-hidden />
             실시간
           </span>
         </p>

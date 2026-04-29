@@ -25,7 +25,7 @@ export async function getGeminiKeyForRequest(
       .eq('user_id', userId)
       .maybeSingle()
     if (process.env.NODE_ENV === 'production' || process.env.DEBUG_KEYS === '1') {
-      console.log('[getGeminiKeyForRequest]', {
+      console.info('[ResearchKeys] gemini lookup', {
         userId: userId?.slice(0, 8) + '...',
         hasRow: !!row,
         hasGeminiInRow: !!(row?.gemini_api_key && String(row.gemini_api_key).trim()),

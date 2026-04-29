@@ -34,9 +34,9 @@ export function DashboardTrendsRecentTabs({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           id="dashboard-trends-block"
-          className={cn('flex min-h-0 shrink-0 flex-col border-b border-[#E5E7EB] dark:border-zinc-800', pad, 'pb-3 pt-3')}
+          className={cn('flex min-h-0 shrink-0 flex-col border-b border-[#E5E7EB] ', pad, 'pb-3 pt-3')}
         >
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 ">
             급상승 트렌드
           </h3>
           <div className="min-h-0 max-h-[min(52vh,420px)] flex-1 overflow-y-auto pr-0.5">{trendsPanel}</div>
@@ -45,7 +45,7 @@ export function DashboardTrendsRecentTabs({
           id="dashboard-recent-block"
           className={cn('flex min-h-0 flex-1 flex-col', pad, 'pb-4 pt-4')}
         >
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 ">
             최근 분석
           </h3>
           <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">{recentPanel}</div>

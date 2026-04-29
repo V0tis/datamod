@@ -113,7 +113,7 @@ export function SectionHeader({
             (action ? (
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 className="h-8 border-[var(--dm-color-border-strong)] text-[13px] font-semibold text-[var(--dm-color-primary)] hover:bg-[var(--dm-color-primary-light)]"
                 onClick={action.onClick}

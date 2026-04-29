@@ -54,7 +54,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
 
   return (
     <div className="w-full">
-      <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+      <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ">
         긴급 액션
       </h3>
       <ul className="space-y-3">
@@ -63,7 +63,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
             key={key}
             className={cn(
               'w-full rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-none',
-              'dark:border-zinc-600 dark:bg-zinc-900/50'
+              ' '
             )}
           >
             <div className="flex w-full items-start gap-4">
@@ -71,20 +71,20 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
                 <span
                   className={cn(
                     'text-xl font-bold tabular-nums',
-                    count > 0 ? 'text-slate-900 dark:text-zinc-50' : 'text-slate-300 dark:text-zinc-600'
+                    count > 0 ? 'text-slate-900 ' : 'text-slate-300 '
                   )}
                 >
                   {count}
                 </span>
-                <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500">건</span>
+                <span className="text-[10px] font-medium text-slate-400 ">건</span>
               </div>
               <div className="flex min-w-0 flex-1 items-start gap-3">
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 " aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold leading-snug text-slate-900 dark:text-zinc-50 whitespace-normal break-keep break-words [word-break:keep-all]">
+                  <p className="text-[11px] font-semibold leading-snug text-slate-900  whitespace-normal break-keep break-words [word-break:keep-all]">
                     {label}
                   </p>
-                  <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600 dark:text-zinc-400 whitespace-normal break-keep break-words [word-break:keep-all]">
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600  whitespace-normal break-keep break-words [word-break:keep-all]">
                     {hint}
                   </p>
                 </div>
@@ -93,7 +93,7 @@ export function UrgentTaskCards({ result, taskData, analysisTasks, onNavigateToR
             <button
               type="button"
               onClick={() => onNavigateToReportSection(sectionId)}
-              className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-sky-500 py-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-sky-600 dark:bg-sky-600 dark:hover:bg-sky-500"
+              className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-sky-500 py-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-sky-600  "
             >
               {cta}
               <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />

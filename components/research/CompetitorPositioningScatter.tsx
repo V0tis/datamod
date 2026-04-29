@@ -159,7 +159,7 @@ function CompetitorScatterTooltip({
       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
         시장 존재감 {row.x.toFixed(1)} · 혁신 {row.y.toFixed(1)}
         {row.inferred ? (
-          <span className="ml-1 text-amber-600/90 dark:text-amber-400/90">(일부 추정)</span>
+          <span className="ml-1 text-amber-600/90 ">(일부 추정)</span>
         ) : null}
       </p>
       {row.positioning ? (

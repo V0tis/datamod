@@ -258,7 +258,7 @@ export function KeyMarketInsightsCard({
   return (
     <div className="space-y-0">
       {showStreamingComplete && (
-        <div className="mb-6 inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div className="mb-6 inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800   ">
           분석 완료
         </div>
       )}

@@ -66,8 +66,8 @@ export function ProductStrategySection({
       className={cn(
         'scroll-mt-24 overflow-visible',
         flat
-          ? 'border-0 border-b border-border/45 bg-transparent pb-8 shadow-none'
-          : 'rounded-xl border-2 border-border/70 bg-card bg-gradient-to-b from-card to-muted/5 shadow-sm',
+          ? 'rounded-xl border border-[#E5E8EF] bg-white pb-8 shadow-none'
+          : 'rounded-xl border border-[#E5E8EF] bg-white shadow-sm',
         className
       )}
       aria-labelledby={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}
@@ -75,7 +75,7 @@ export function ProductStrategySection({
       <div
         className={cn(
           'flex items-center justify-between gap-2 border-b border-border/60',
-          flat ? 'bg-transparent px-0 py-3' : 'bg-muted/20 px-5 py-4 sm:px-6 sm:py-4'
+          flat ? 'bg-white px-5 py-4 sm:px-6 sm:py-4' : 'bg-white px-5 py-4 sm:px-6 sm:py-4'
         )}
       >
         <h2
@@ -95,7 +95,7 @@ export function ProductStrategySection({
           </span>
         )}
       </div>
-      <div className={cn(flat ? 'px-0 pt-6' : 'p-5 sm:p-6 md:p-6')}>{children}</div>
+      <div className="p-5 sm:p-6 md:p-6">{children}</div>
     </section>
   )
 }

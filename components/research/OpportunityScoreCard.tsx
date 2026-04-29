@@ -69,9 +69,9 @@ function isNewFormat(b: NonNullable<OpportunityScoreCardProps['breakdown']>): bo
 }
 
 function scoreColor(score: number): string {
-  if (score >= 70) return 'text-emerald-600 dark:text-emerald-500'
-  if (score >= 50) return 'text-amber-600 dark:text-amber-500'
-  return 'text-rose-600 dark:text-rose-500'
+  if (score >= 70) return 'text-emerald-600 '
+  if (score >= 50) return 'text-amber-600 '
+  return 'text-rose-600 '
 }
 
 export function OpportunityScoreCard({
@@ -171,7 +171,7 @@ export function OpportunityScoreCard({
             </span>
           </div>
           <div
-            className="h-2.5 rounded-full bg-muted/70 dark:bg-muted/50 border border-border/60 overflow-hidden"
+            className="h-2.5 rounded-full bg-muted/70  border border-border/60 overflow-hidden"
             role="progressbar"
             aria-valuenow={normScore ?? 0}
             aria-valuemin={0}
@@ -214,7 +214,7 @@ export function OpportunityScoreCard({
                     <span
                       className={cn(
                         'text-sm font-bold tabular-nums',
-                        isPositive ? 'text-emerald-600 dark:text-emerald-500' : 'text-rose-600 dark:text-rose-500'
+                        isPositive ? 'text-emerald-600 ' : 'text-rose-600 '
                       )}
                     >
                       {displayValue}

@@ -153,7 +153,7 @@ function ConsensusInsightComponent({
         <h2 className="text-sm font-semibold text-foreground mb-4 tracking-tight">전략적 통찰 및 컨센서스</h2>
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
           <p className="text-sm text-destructive">두 엔진 모두 분석에 실패했습니다. 전략 통찰을 만들 수 없습니다. 아래 버튼으로 다시 시도해 주세요.</p>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 다시 분석">
+          <Button type="button" variant="secondary" size="sm" className="gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 다시 분석">
             <RefreshCw className="h-3.5 w-3.5" /> 다시 분석하기
           </Button>
         </div>
@@ -185,7 +185,7 @@ function ConsensusInsightComponent({
           description="인사이트 탭 분석이 끝나면 여기에 요약과 감성 점수가 표시돼요. 아래 버튼으로 재분석해 주세요."
           className="py-6"
           action={
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 재분석">
+            <Button type="button" variant="secondary" size="sm" className="gap-1.5" disabled={loading} onClick={onRetry} aria-label="전략 통찰 재분석">
               <RefreshCw className="h-3.5 w-3.5" /> 재분석
             </Button>
           }
@@ -225,7 +225,7 @@ function ConsensusInsightComponent({
               일부 데이터로 분석됨
             </span>
           )}
-          <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0" disabled={loading} onClick={onRetry}>
+          <Button type="button" variant="secondary" size="sm" className="gap-1.5 shrink-0" disabled={loading} onClick={onRetry}>
             <RefreshCw className="h-3.5 w-3.5" /> 재분석
           </Button>
         </div>

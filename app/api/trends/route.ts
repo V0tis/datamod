@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { refreshTrendsForCountry, TrendsFetchError, TRENDS_CACHE_TTL_MS } from '@/lib/trends-cache'
 import { buildTrendsResponse } from '@/lib/trends-types'
+import { filterAndRerankTrendRows } from '@/lib/filterTrendingKeywords'
 
 /** 트렌드 캐시 저장 테이블: global_trends. 국가별 캐시, 1시간 유효. */
 const TRENDS_TABLE = 'global_trends'
@@ -72,7 +73,6 @@ export async function GET(req: Request) {
       .order('rank', { ascending: true })
 
     if (error) {
-      if (isDev) console.log('[Dev] Trends GET Supabase error:', error, new Error().stack)
       console.error('[Trends GET]', error)
       return NextResponse.json(formatErrorPayload(error), {
         status: 500,
@@ -80,7 +80,7 @@ export async function GET(req: Request) {
       })
     }
 
-    const list = rows ?? []
+    const list = filterAndRerankTrendRows(rows ?? [])
     const lastUpdatedAt = getLastUpdatedAt(list)
     const now = Date.now()
     const lastMs = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0
@@ -97,7 +97,6 @@ export async function GET(req: Request) {
     }
 
     if (shouldRefresh) {
-      if (isDev) console.log('[Trends GET]', forceRefresh ? '강제 갱신' : '캐시 없음/만료', { country, lastUpdatedAt })
       try {
         await refreshTrendsForCountry(country)
         const { data: freshRows, error: selectError } = await supabase
@@ -110,10 +109,9 @@ export async function GET(req: Request) {
           return NextResponse.json(formatErrorPayload(selectError), { status: 500, headers: JSON_HEADERS })
         }
         const trendStatusRows = await selectTrendStatus()
-        const body = buildTrendsResponse(freshRows ?? [], trendStatusRows)
+        const body = buildTrendsResponse(filterAndRerankTrendRows(freshRows ?? []), trendStatusRows)
         return NextResponse.json({ ...body, refreshed: true }, { headers: JSON_HEADERS })
       } catch (refreshErr) {
-        if (isDev) console.log('[Dev] Trends GET refresh failed, returning stale:', refreshErr)
         console.warn('[Trends GET] RSS 갱신 실패, 기존 데이터 반환:', refreshErr)
         if (list.length === 0) {
           const payload = formatErrorPayload(refreshErr) as Record<string, unknown>
@@ -132,7 +130,6 @@ export async function GET(req: Request) {
     const trendStatusRows = await selectTrendStatus()
     return NextResponse.json(buildTrendsResponse(list, trendStatusRows), { headers: JSON_HEADERS })
   } catch (err) {
-    if (isDev) console.log('[Dev] Trends GET exception:', err, err instanceof Error ? err.stack : '')
     console.error('[Trends GET]', err)
     const payload = formatErrorPayload(err) as Record<string, unknown>
     if (err instanceof TrendsFetchError) {

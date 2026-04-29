@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "@fontsource/pretendard";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers";
-import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
 import { ErrorToastProvider } from "@/components/error-toast-provider";
 import { ApiKeyValidationProvider } from "@/components/api-key-validation-provider";
@@ -42,21 +41,19 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
         />
       </head>
-      <body className="font-sans antialiased text-foreground bg-background transition-colors duration-300">
-        <ThemeProvider>
-          <ResearchStoreRehydrate />
-          <AuthProvider>
-            <SupabaseConfigGate>
-              <LogoutProvider>
-                <RootErrorBoundary>
-                  <AppShell>{children}</AppShell>
-                  <ErrorToastProvider />
-                  <ApiKeyValidationProvider />
-                </RootErrorBoundary>
-              </LogoutProvider>
-            </SupabaseConfigGate>
-          </AuthProvider>
-        </ThemeProvider>
+      <body className="font-sans antialiased text-foreground bg-background">
+        <ResearchStoreRehydrate />
+        <AuthProvider>
+          <SupabaseConfigGate>
+            <LogoutProvider>
+              <RootErrorBoundary>
+                <AppShell>{children}</AppShell>
+                <ErrorToastProvider />
+                <ApiKeyValidationProvider />
+              </RootErrorBoundary>
+            </LogoutProvider>
+          </SupabaseConfigGate>
+        </AuthProvider>
         <SpeedInsights />
       </body>
     </html>

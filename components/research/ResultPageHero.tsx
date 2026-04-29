@@ -23,9 +23,9 @@ function outlookLabel(outlook: MarketOutlook): string {
 
 function outlookColor(outlook: MarketOutlook): string {
   switch (outlook) {
-    case 'high': return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-    case 'medium': return 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
-    case 'low': return 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30'
+    case 'high': return 'bg-emerald-500/15 text-emerald-700  border-emerald-500/30'
+    case 'medium': return 'bg-amber-500/15 text-amber-700  border-amber-500/30'
+    case 'low': return 'bg-rose-500/15 text-rose-700  border-rose-500/30'
   }
 }
 
@@ -71,7 +71,7 @@ function ScoreExplanationPanel({ breakdown }: { breakdown: BreakdownData }) {
           return (
             <div key={key} className="flex items-center justify-between gap-2 text-sm">
               <span className="text-muted-foreground">{label}</span>
-              <span className={cn('font-semibold tabular-nums', isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+              <span className={cn('font-semibold tabular-nums', isPositive ? 'text-emerald-600 ' : 'text-rose-600 ')}>
                 {isPositive ? '+' : ''}{val}
               </span>
             </div>

@@ -18,13 +18,13 @@ export function NineStagePipelineOverview({
   return (
     <div
       className={cn(
-        'rounded-xl border border-indigo-200/70 bg-gradient-to-b from-indigo-50/80 to-white p-4 shadow-sm dark:border-indigo-900/50 dark:from-indigo-950/50 dark:to-zinc-950',
+        'rounded-xl border border-indigo-200/70 bg-gradient-to-b from-indigo-50/80 to-white p-4 shadow-sm   ',
         className
       )}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">9단계 분석 파이프라인</h3>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+        <h3 className="text-sm font-semibold text-slate-900 ">9단계 분석 파이프라인</h3>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-indigo-600 ">
           Deep research path
         </span>
       </div>
@@ -37,22 +37,22 @@ export function NineStagePipelineOverview({
               className={cn(
                 'flex items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
                 done
-                  ? 'border-indigo-200/80 bg-white/80 dark:border-indigo-800/50 dark:bg-zinc-900/50'
-                  : 'border-slate-100 bg-slate-50/50 opacity-60 dark:border-zinc-800 dark:bg-zinc-900/30'
+                  ? 'border-indigo-200/80 bg-white/80  '
+                  : 'border-slate-100 bg-slate-50/50 opacity-60  '
               )}
             >
               <span
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white dark:bg-indigo-500"
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white "
                 aria-hidden
               >
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-900 dark:text-zinc-100">
+                <p className="font-medium text-slate-900 ">
                   {s.label} <span className="text-slate-400">·</span> {s.subtitle}
                 </p>
                 {done ? (
-                  <p className="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  <p className="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-600 ">
                     <CheckCircle2 className="h-3 w-3" aria-hidden />
                     반영
                   </p>

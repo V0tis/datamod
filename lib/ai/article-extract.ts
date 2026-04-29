@@ -92,7 +92,6 @@ export async function extractArticleContent(
   }
 
   if (!item.url || !item.url.startsWith('http')) {
-    console.log('[article-extract] skip (no url):', item.title.slice(0, 50))
     return fallback
   }
 
@@ -134,18 +133,15 @@ export async function extractArticleContent(
     }
 
     if (!text.trim()) {
-      console.log('[article-extract] fallback (no body):', item.title.slice(0, 50))
       return fallback
     }
 
     const content = trimContent(text, MAX_ARTICLE_CHARS)
-    console.log('[article-extract] ok:', item.title.slice(0, 50), '| contentLen:', content.length)
     return {
       ...item,
       content,
     }
   } catch (err) {
-    console.log('[article-extract] fallback (error):', item.title.slice(0, 50), '| err:', err instanceof Error ? err.message : String(err))
     return fallback
   }
 }

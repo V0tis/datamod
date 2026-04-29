@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/auth/login',
   '/auth/signup',
   '/auth/verify',
+  '/auth/verify-email',
   '/auth/callback',
 ]
 
@@ -52,7 +53,7 @@ export async function proxy(request: NextRequest) {
 
   // 이메일 미인증 사용자: 인증 요청 페이지로 리다이렉트
   if (!user.email_confirmed_at) {
-    const verifyUrl = new URL('/auth/verify', request.url)
+    const verifyUrl = new URL('/auth/verify-email', request.url)
     verifyUrl.searchParams.set('reason', 'email_verification_required')
     return NextResponse.redirect(verifyUrl)
   }

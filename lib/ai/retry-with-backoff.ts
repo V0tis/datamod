@@ -118,7 +118,7 @@ export async function withRetry<T>(
           err,
         })
       } else {
-        console.log('[AI Error]', {
+        console.error('[AI retry]', {
           provider,
           step,
           reason,

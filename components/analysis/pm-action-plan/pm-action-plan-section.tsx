@@ -156,7 +156,7 @@ export function PmActionPlanSection({
         rowsForCsv={exportRows}
       />
 
-      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
+      <div className="grid grid-cols-1 items-stretch gap-6 px-2 sm:px-3 lg:grid-cols-2 lg:gap-8">
         <PrioritySuggestionsCard
           items={priorityItems}
           block={priorityBlock}

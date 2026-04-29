@@ -205,7 +205,6 @@ function logRemoval(
   })
   if (quiet) return
   const msg = detail ? `${reason} | ${detail}` : reason
-  console.log(`[CleanDataPipe] 제거 — Reason: ${msg} | ${item.title.slice(0, 100)}${item.title.length > 100 ? '…' : ''}`)
 }
 
 export type CleanDataPipeOptions = {

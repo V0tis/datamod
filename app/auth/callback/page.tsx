@@ -74,7 +74,7 @@ export default function AuthCallbackPage() {
             recoveryLabel="로그인 페이지로"
             onRecovery={() => { window.location.href = '/auth/login' }}
             secondaryAction={
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="secondary" size="sm" asChild>
                 <Link href="/">홈으로</Link>
               </Button>
             }

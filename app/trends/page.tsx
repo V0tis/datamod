@@ -233,7 +233,7 @@ function TrendsPageInner() {
                   출처: 구글 트렌드 (RSS)
                 </span>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="icon"
                   onClick={handleRefresh}
                   disabled={requesting}

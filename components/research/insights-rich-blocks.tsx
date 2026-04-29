@@ -49,7 +49,7 @@ function BlockShell({
 
 function SectionRetryCard({ onRetry }: { onRetry?: () => void }) {
   return (
-    <div className="rounded-lg border border-amber-300/90 bg-amber-50 px-4 py-4 text-sm text-amber-950 shadow-sm dark:border-amber-800/80 dark:bg-amber-950/35 dark:text-amber-50">
+    <div className="rounded-lg border border-amber-300/90 bg-amber-50 px-4 py-4 text-sm text-amber-950 shadow-sm   ">
       <p className="flex items-start gap-2 font-medium leading-relaxed">
         <span className="shrink-0" aria-hidden>
           ⚠️
@@ -57,7 +57,7 @@ function SectionRetryCard({ onRetry }: { onRetry?: () => void }) {
         <span>이 섹션의 데이터를 불러오지 못했습니다.</span>
       </p>
       {onRetry ? (
-        <Button type="button" size="sm" variant="outline" className="mt-3 border-amber-700/40 bg-white hover:bg-amber-100 dark:bg-zinc-900 dark:hover:bg-zinc-800" onClick={onRetry}>
+        <Button type="button" size="sm" variant="secondary" className="mt-3 border-amber-700/40 bg-white hover:bg-amber-100  " onClick={onRetry}>
           이 섹션만 재분석
         </Button>
       ) : null}
@@ -75,9 +75,9 @@ function BlockSkeleton() {
 }
 
 const prioritySquareClass: Record<0 | 1 | 2, string> = {
-  0: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300',
-  1: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300',
-  2: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  0: 'bg-red-100 text-red-700  ',
+  1: 'bg-orange-100 text-orange-700  ',
+  2: 'bg-blue-100 text-blue-700  ',
 }
 
 /**
@@ -121,7 +121,7 @@ export function InsightsRichBlocks({
             {priorityItems.map((item, i) => (
               <div
                 key={`${item.title}-${i}`}
-                className="group flex items-start gap-3 rounded-xl border border-gray-100 bg-card/50 p-4 transition-all hover:border-blue-200 hover:bg-blue-50/40 dark:border-zinc-700/80 dark:bg-zinc-900/30 dark:hover:border-blue-800 dark:hover:bg-blue-950/20 sm:gap-4"
+                className="group flex items-start gap-3 rounded-xl border border-gray-100 bg-card/50 p-4 transition-all hover:border-blue-200 hover:bg-blue-50/40     sm:gap-4"
               >
                 <div
                   className={cn(
@@ -133,19 +133,19 @@ export function InsightsRichBlocks({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <h4 className="text-sm font-semibold leading-snug text-gray-900 dark:text-zinc-50">{item.title}</h4>
+                    <h4 className="text-sm font-semibold leading-snug text-gray-900 ">{item.title}</h4>
                     <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-4 sm:justify-end">
-                      <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-zinc-800 dark:text-zinc-400">
+                      <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500  ">
                         기간 {normalizeActionTimeline(item.timeline)}
                       </span>
-                      <span className="max-w-[14rem] truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-zinc-800 dark:text-zinc-400" title={item.impact}>
+                      <span className="max-w-[14rem] truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500  " title={item.impact}>
                         임팩트: {item.impact}
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm leading-relaxed text-gray-600 dark:text-zinc-400">{item.description}</p>
+                  <p className="text-sm leading-relaxed text-gray-600 ">{item.description}</p>
                 </div>
-                <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-blue-500 dark:text-zinc-600 dark:group-hover:text-blue-400" aria-hidden />
+                <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-blue-500  " aria-hidden />
               </div>
             ))}
           </div>
@@ -168,11 +168,11 @@ export function InsightsRichBlocks({
                 {outcomeMetrics.slice(0, 3).map((metric, i) => (
                   <div
                     key={`primary-${metric.label}-${i}`}
-                    className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 dark:border-blue-900/40 dark:from-blue-950/40 dark:to-indigo-950/30"
+                    className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4   "
                   >
-                    <div className="mb-1 text-2xl font-bold tabular-nums text-blue-700 dark:text-blue-300">{metric.value}</div>
-                    <div className="mb-1 text-sm font-medium text-blue-900 dark:text-blue-100">{metric.label}</div>
-                    <div className="text-xs leading-snug text-blue-600/90 dark:text-blue-400/90">{metric.basis}</div>
+                    <div className="mb-1 text-2xl font-bold tabular-nums text-blue-700 ">{metric.value}</div>
+                    <div className="mb-1 text-sm font-medium text-blue-900 ">{metric.label}</div>
+                    <div className="text-xs leading-snug text-blue-600/90 ">{metric.basis}</div>
                   </div>
                 ))}
               </div>
@@ -181,10 +181,10 @@ export function InsightsRichBlocks({
                   {outcomeMetrics.slice(3).map((metric, i) => (
                     <div
                       key={`compact-${metric.label}-${i}`}
-                      className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/50"
+                      className="rounded-lg border border-gray-100 bg-gray-50 p-3  "
                     >
-                      <div className="text-lg font-bold tabular-nums text-gray-800 dark:text-zinc-100">{metric.value}</div>
-                      <div className="text-xs text-gray-600 dark:text-zinc-400">{metric.label}</div>
+                      <div className="text-lg font-bold tabular-nums text-gray-800 ">{metric.value}</div>
+                      <div className="text-xs text-gray-600 ">{metric.label}</div>
                     </div>
                   ))}
                 </div>

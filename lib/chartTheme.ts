@@ -29,7 +29,7 @@ export const chartCardStyle: CSSProperties = {
 
 /** Tailwind + dark 보더 */
 export const chartCardClassName =
-  'rounded-2xl border border-black/[0.08] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] sm:p-6 dark:border-white/[0.1] dark:bg-zinc-950/80 dark:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_4px_16px_rgba(0,0,0,0.15)]'
+  'rounded-2xl border border-black/[0.08] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] sm:p-6   '
 
 export const chartFontFamily =
   "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif"

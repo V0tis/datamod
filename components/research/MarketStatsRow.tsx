@@ -56,15 +56,15 @@ export function MarketStatsRow({
       {stats.map((stat) => (
         <div
           key={stat.label}
-          className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80"
+          className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 shadow-sm  "
         >
           <div className="h-10 w-1 shrink-0 rounded-full" style={{ background: stat.color }} />
           <div className="min-w-0">
             <div className="text-xl font-bold tabular-nums" style={{ color: stat.color }}>
               {stat.value}
             </div>
-            <div className="text-xs font-medium text-slate-600 dark:text-zinc-400">{stat.label}</div>
-            <div className="truncate text-xs text-slate-400 dark:text-zinc-500" title={stat.sub}>
+            <div className="text-xs font-medium text-slate-600 ">{stat.label}</div>
+            <div className="truncate text-xs text-slate-400 " title={stat.sub}>
               {stat.sub}
             </div>
           </div>

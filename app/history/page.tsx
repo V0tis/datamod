@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -8,13 +8,29 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Search, Loader2, ChevronDown, Trash2, Copy, Eye, BarChart3 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
+import {
+  Search,
+  Loader2,
+  ChevronDown,
+  Trash2,
+  Copy,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+} from 'lucide-react'
 import { HistoryCardSkeletonList } from '@/components/research/HistoryCardSkeleton'
 import { COUNTRY_CHIP_CODES, COUNTRY_LABELS } from '@/components/country-chips'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
+
+const PAGE_SIZE = 10
 
 const TARGET_LABELS: Record<string, string> = {
   product: '제품',
@@ -24,6 +40,8 @@ const TARGET_LABELS: Record<string, string> = {
   policy: '정책',
   technology: '기술',
 }
+
+const MARKET_TYPE_OPTIONS = Object.keys(TARGET_LABELS).sort()
 
 interface ResearchRecord {
   id: string
@@ -75,23 +93,17 @@ const PERIOD_CHIPS: { value: PeriodFilter; label: string }[] = [
   { value: '6m', label: '6개월' },
 ]
 
-const SCORE_FILTER_OPTIONS: { value: ScoreFilterOption; label: string; range: [number, number] | null }[] = [
-  { value: 'all', label: '전체', range: null },
-  { value: 'high', label: '70+', range: [70, 100] },
-  { value: 'medium', label: '40–69', range: [40, 69] },
-  { value: 'low', label: '0–39', range: [0, 39] },
+const SCORE_FILTER_OPTIONS: { value: ScoreFilterOption; label: string }[] = [
+  { value: 'all', label: '전체' },
+  { value: 'high', label: '70+' },
+  { value: 'medium', label: '40–69' },
+  { value: 'low', label: '0–39' },
 ]
 
 function formatCreatedDate(isoString: string | null): string {
   if (!isoString) return '—'
   const d = new Date(isoString)
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
-}
-
-function formatDateTime(isoString: string | null): string {
-  if (!isoString) return '—'
-  const d = new Date(isoString)
-  return `${formatCreatedDate(isoString)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function analysisModeLabel(depth: string | null | undefined): string {
@@ -107,21 +119,21 @@ function AnalysisStatusBadge({ status }: { status: string | undefined }) {
   const s = status ?? 'completed'
   if (s === 'completed') {
     return (
-      <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">
+      <Badge variant="secondary" className="border-emerald-300 bg-emerald-50 text-emerald-800   ">
         {STATUS_LABELS.completed}
       </Badge>
     )
   }
   if (s === 'failed') {
     return (
-      <Badge variant="outline" className="border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+      <Badge variant="secondary" className="border-red-300 bg-red-50 text-red-800   ">
         {STATUS_LABELS.failed}
       </Badge>
     )
   }
   if (s === 'analyzing' || s === 'queued') {
     return (
-      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+      <Badge variant="secondary" className="border-amber-300 bg-amber-50 text-amber-900   ">
         {STATUS_LABELS[s]}
       </Badge>
     )
@@ -133,15 +145,41 @@ function AnalysisStatusBadge({ status }: { status: string | undefined }) {
   )
 }
 
+function buildHistoryListUrl(options: {
+  page: number
+  searchText: string
+  periodFilter: PeriodFilter
+  scoreFilter: ScoreFilterOption
+  marketTypeFilter: MarketTypeFilterOption
+  sortOrder: SortOption
+  statusFilter: StatusFilterOption
+  countryFilter: CountryFilterOption
+}) {
+  const params = new URLSearchParams()
+  params.set('page', String(options.page))
+  params.set('pageSize', String(PAGE_SIZE))
+  const q = options.searchText.trim()
+  if (q) params.set('q', q)
+  if (options.periodFilter !== 'all') params.set('period', options.periodFilter)
+  if (options.scoreFilter !== 'all') params.set('score', options.scoreFilter)
+  if (options.marketTypeFilter !== 'all') params.set('analysis_target', options.marketTypeFilter)
+  if (options.statusFilter !== 'all') params.set('status', options.statusFilter)
+  if (options.countryFilter !== 'all') params.set('country', options.countryFilter)
+  if (options.sortOrder !== 'newest') params.set('sort', options.sortOrder)
+  return `/api/research/history?${params.toString()}`
+}
+
 export default function HistoryPage() {
   const router = useRouter()
   const startStreamingResearch = useResearchStore((s) => s.startStreamingResearch)
   const [records, setRecords] = useState<ResearchRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [listRefreshing, setListRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
-  const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
   const [scoreFilter, setScoreFilter] = useState<ScoreFilterOption>('all')
@@ -149,144 +187,156 @@ export default function HistoryPage() {
   const [sortOrder, setSortOrder] = useState<SortOption>('newest')
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all')
   const [countryFilter, setCountryFilter] = useState<CountryFilterOption>('all')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [page, setPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [totalAllCount, setTotalAllCount] = useState(0)
 
-  const filteredRecords = useMemo(() => {
-    let result = records
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE) || 1)
 
-    const q = searchQuery.trim().toLowerCase()
-    if (q) {
-      result = result.filter(
-        (r) =>
-          r.keyword.toLowerCase().includes(q) ||
-          (COUNTRY_LABELS[r.country_code] ?? r.country_code).toLowerCase().includes(q) ||
-          (TARGET_LABELS[r.analysis_target ?? ''] ?? r.analysis_target ?? '').toLowerCase().includes(q)
-      )
-    }
-
-    if (periodFilter !== 'all') {
-      const months = periodFilter === '1m' ? 1 : periodFilter === '3m' ? 3 : 6
-      const cutoff = new Date()
-      cutoff.setMonth(cutoff.getMonth() - months)
-      result = result.filter((r) => {
-        if (!r.updated_at) return false
-        return new Date(r.updated_at) >= cutoff
-      })
-    }
-
-    if (scoreFilter !== 'all') {
-      const range = SCORE_FILTER_OPTIONS.find((o) => o.value === scoreFilter)?.range
-      if (range) {
-        result = result.filter((r) => {
-          const score = getOpportunityScore(r)
-          return score != null && score >= range[0] && score <= range[1]
-        })
-      }
-    }
-
-    if (marketTypeFilter !== 'all') {
-      result = result.filter((r) => (r.analysis_target ?? '') === marketTypeFilter)
-    }
-
-    if (statusFilter !== 'all') {
-      result = result.filter((r) => (r.analysis_status ?? 'completed') === statusFilter)
-    }
-
-    if (countryFilter !== 'all') {
-      result = result.filter((r) => (r.country_code ?? 'KR') === countryFilter)
-    }
-
-    const sorted = [...result]
-    sorted.sort((a, b) => {
-      const da = new Date(a.updated_at ?? a.date ?? 0).getTime()
-      const db = new Date(b.updated_at ?? b.date ?? 0).getTime()
-      return sortOrder === 'newest' ? db - da : da - db
-    })
-    return sorted
-  }, [records, searchQuery, periodFilter, scoreFilter, marketTypeFilter, statusFilter, sortOrder, countryFilter])
-
-  const filteredIdList = useMemo(() => filteredRecords.map((r) => r.id), [filteredRecords])
-  const allFilteredSelected =
-    filteredIdList.length > 0 && filteredIdList.every((id) => selectedIds.has(id))
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify({
+        debouncedSearch,
+        periodFilter,
+        scoreFilter,
+        marketTypeFilter,
+        sortOrder,
+        statusFilter,
+        countryFilter,
+      }),
+    [debouncedSearch, periodFilter, scoreFilter, marketTypeFilter, sortOrder, statusFilter, countryFilter]
+  )
 
   useEffect(() => {
-    const valid = new Set(records.map((r) => r.id))
-    setSelectedIds((prev) => {
-      let changed = false
-      const next = new Set<string>()
-      prev.forEach((id) => {
-        if (valid.has(id)) next.add(id)
-        else changed = true
-      })
-      if (next.size !== prev.size) changed = true
-      return changed ? next : prev
-    })
-  }, [records])
+    const t = window.setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => window.clearTimeout(t)
+  }, [searchQuery])
 
-  const marketTypes = useMemo(() => {
-    const set = new Set<string>()
-    records.forEach((r) => {
-      const t = r.analysis_target?.trim()
-      if (t) set.add(t)
-    })
-    return Array.from(set).sort()
-  }, [records])
+  const isFirstLoad = useRef(true)
+  const prevFilterKey = useRef(filterKey)
+
+  useEffect(() => {
+    const keyChanged = prevFilterKey.current !== filterKey
+    prevFilterKey.current = filterKey
+    if (keyChanged && page !== 0) {
+      setPage(0)
+      return
+    }
+
+    let cancelled = false
+    const initial = isFirstLoad.current
+
+    void (async () => {
+      if (initial) setLoading(true)
+      else setListRefreshing(true)
+      setError(null)
+      try {
+        const url = buildHistoryListUrl({
+          page,
+          searchText: debouncedSearch,
+          periodFilter,
+          scoreFilter,
+          marketTypeFilter,
+          sortOrder,
+          statusFilter,
+          countryFilter,
+        })
+        const res = await fetch(url)
+        const data = await res.json()
+        if (cancelled) return
+        if (!res.ok) {
+          setError(data?.error ?? '목록을 불러오지 못했습니다.')
+          return
+        }
+        const list = (data.list ?? []) as ResearchRecord[]
+        const t = typeof data.total === 'number' ? data.total : list.length
+        setRecords(list.map((r) => ({ ...r, analysis_status: r.analysis_status ?? 'completed' })))
+        setTotalCount(t)
+        setTotalAllCount(typeof data.totalAll === 'number' ? data.totalAll : 0)
+        const maxPage = Math.max(0, Math.ceil(t / PAGE_SIZE) - 1)
+        setPage((p) => (p > maxPage ? maxPage : p))
+      } catch {
+        if (!cancelled) setError('목록을 불러오지 못했습니다.')
+      } finally {
+        if (!cancelled) {
+          isFirstLoad.current = false
+          setLoading(false)
+          setListRefreshing(false)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [page, filterKey])
 
   const fetchList = useCallback(async () => {
+    isFirstLoad.current = false
+    setListRefreshing(true)
+    setError(null)
     try {
-      const res = await fetch('/api/research/history?limit=200&offset=0')
+      const url = buildHistoryListUrl({
+        page,
+        searchText: debouncedSearch,
+        periodFilter,
+        scoreFilter,
+        marketTypeFilter,
+        sortOrder,
+        statusFilter,
+        countryFilter,
+      })
+      const res = await fetch(url)
       const data = await res.json()
       if (!res.ok) {
         setError(data?.error ?? '목록을 불러오지 못했습니다.')
         return
       }
       const list = (data.list ?? []) as ResearchRecord[]
+      const t = typeof data.total === 'number' ? data.total : list.length
       setRecords(list.map((r) => ({ ...r, analysis_status: r.analysis_status ?? 'completed' })))
+      setTotalCount(t)
+      setTotalAllCount(typeof data.totalAll === 'number' ? data.totalAll : 0)
+      const maxPage = Math.max(0, Math.ceil(t / PAGE_SIZE) - 1)
+      setPage((p) => (p > maxPage ? maxPage : p))
     } catch {
       setError('목록을 불러오지 못했습니다.')
     } finally {
-      setLoading(false)
+      setListRefreshing(false)
     }
-  }, [])
+  }, [
+    page,
+    debouncedSearch,
+    periodFilter,
+    scoreFilter,
+    marketTypeFilter,
+    sortOrder,
+    statusFilter,
+    countryFilter,
+  ])
 
   useEffect(() => {
-    fetchList()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchList()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [fetchList])
 
   useEffect(() => {
-    const onVisible = () => fetchList()
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', onVisible)
-      return () => document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [fetchList])
+    const valid = new Set(records.map((r) => r.id))
+    setSelectedIds((prev) => prev.filter((id) => valid.has(id)))
+  }, [records])
 
   const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }, [])
 
-  const toggleSelectAllFiltered = useCallback(() => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (allFilteredSelected) {
-        filteredIdList.forEach((id) => next.delete(id))
-      } else {
-        filteredIdList.forEach((id) => next.add(id))
-      }
-      return next
-    })
-  }, [allFilteredSelected, filteredIdList])
-
   const deleteBulkSelected = useCallback(async () => {
-    const ids = [...selectedIds].filter((id) => records.some((r) => r.id === id))
+    const ids = [...selectedIds]
     if (ids.length === 0) return
-    if (!confirm(`선택한 ${ids.length}건의 분석 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.`)) return
     setBulkDeleting(true)
     try {
       const res = await fetch('/api/research/history', {
@@ -295,13 +345,9 @@ export default function HistoryPage() {
         body: JSON.stringify({ ids }),
       })
       if (res.status === 204) {
-        setRecords((prev) => prev.filter((r) => !ids.includes(r.id)))
-        setSelectedIds((prev) => {
-          const next = new Set(prev)
-          ids.forEach((id) => next.delete(id))
-          return next
-        })
+        setSelectedIds([])
         toast.success(`${ids.length}건을 삭제했습니다.`)
+        await fetchList()
       } else {
         const data = await res.json().catch(() => ({}))
         toast.error((data as { error?: string }).error ?? '삭제에 실패했습니다.')
@@ -311,34 +357,33 @@ export default function HistoryPage() {
     } finally {
       setBulkDeleting(false)
     }
-  }, [records, selectedIds])
+  }, [selectedIds, fetchList])
 
-  const deleteRecord = useCallback(async (id: string) => {
-    setDeletingId(id)
-    try {
-      const res = await fetch('/api/research/history', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
-      if (res.status === 204) {
-        setRecords((prev) => prev.filter((r) => r.id !== id))
-        setSelectedIds((prev) => {
-          const next = new Set(prev)
-          next.delete(id)
-          return next
+  const deleteRecord = useCallback(
+    async (id: string) => {
+      setDeletingId(id)
+      try {
+        const res = await fetch('/api/research/history', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
         })
-        toast.success('삭제되었습니다.')
-      } else {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data?.error ?? '삭제에 실패했습니다.')
+        if (res.status === 204) {
+          setSelectedIds((prev) => prev.filter((x) => x !== id))
+          toast.success('삭제되었습니다.')
+          await fetchList()
+        } else {
+          const data = await res.json().catch(() => ({}))
+          toast.error(data?.error ?? '삭제에 실패했습니다.')
+        }
+      } catch {
+        toast.error('삭제에 실패했습니다.')
+      } finally {
+        setDeletingId(null)
       }
-    } catch {
-      toast.error('삭제에 실패했습니다.')
-    } finally {
-      setDeletingId(null)
-    }
-  }, [])
+    },
+    [fetchList]
+  )
 
   const handleDuplicate = useCallback(
     async (record: ResearchRecord) => {
@@ -353,7 +398,7 @@ export default function HistoryPage() {
     [router, startStreamingResearch]
   )
 
-  const handleClearAll = useCallback(async () => {
+  const handleDeleteAll = useCallback(async () => {
     setClearingAll(true)
     try {
       const res = await fetch('/api/research/history', {
@@ -363,7 +408,11 @@ export default function HistoryPage() {
       })
       if (res.status === 204) {
         setRecords([])
-        setClearAllOpen(false)
+        setTotalCount(0)
+        setTotalAllCount(0)
+        setShowDeleteConfirm(false)
+        setPage(0)
+        setSelectedIds([])
         toast.success('모든 분석 로그가 삭제되었습니다.')
       } else {
         const data = await res.json().catch(() => ({}))
@@ -375,6 +424,10 @@ export default function HistoryPage() {
       setClearingAll(false)
     }
   }, [])
+
+  const startItem = totalCount === 0 ? 0 : page * PAGE_SIZE + 1
+  const endItem = Math.min(totalCount, page * PAGE_SIZE + records.length)
+  const pageWindowStart = Math.max(0, Math.min(page - 2, totalPages - 5))
 
   if (loading) {
     return (
@@ -388,7 +441,7 @@ export default function HistoryPage() {
     )
   }
 
-  if (error) {
+  if (error && records.length === 0 && totalAllCount === 0) {
     return (
       <div className="rin-page flex flex-col min-h-[40vh]">
         <ErrorState
@@ -397,7 +450,8 @@ export default function HistoryPage() {
           recoveryLabel="다시 시도"
           onRecovery={() => {
             setError(null)
-            fetchList()
+            setLoading(true)
+            void fetchList().finally(() => setLoading(false))
           }}
           detail={error}
         />
@@ -405,7 +459,7 @@ export default function HistoryPage() {
     )
   }
 
-  if (records.length === 0) {
+  if (totalAllCount === 0) {
     return (
       <div className="rin-page min-h-[60vh]">
         <header className="rin-page-header">
@@ -419,7 +473,7 @@ export default function HistoryPage() {
             icon={<BarChart3 className="h-12 w-12 text-primary/70" strokeWidth={1.5} />}
             action={
               <Link href="/">
-                <Button variant="default" size="lg" className="gap-2">
+                <Button variant="primary" size="lg" className="gap-2">
                   <Search className="w-4 h-4" />
                   시장 분석 시작하기
                 </Button>
@@ -432,67 +486,54 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="rin-page">
-      <header className="rin-page-header flex items-start justify-between gap-4">
+    <div className="rin-page relative pb-24">
+      <Dialog open={showDeleteConfirm} onOpenChange={(open) => !clearingAll && setShowDeleteConfirm(open)}>
+        <DialogContent className="max-w-md border-0 bg-transparent p-0 shadow-none">
+          <div className="rounded-xl border border-border bg-card p-6 text-center shadow-xl">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+            </div>
+            <h3 className="mb-2 text-lg font-bold text-gray-900">전체 기록을 삭제하시겠습니까?</h3>
+            <p className="mb-6 text-sm text-gray-500">
+              {totalAllCount}건의 분석 기록이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={clearingAll}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteAll()}
+                disabled={clearingAll}
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-60"
+              >
+                {clearingAll ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : '삭제 확인'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <header className="rin-page-header">
         <div>
           <h1 className="rin-page-title">분석 기록</h1>
           <p className="rin-page-subtitle">키워드 · 일시 · 기회 점수 · 분석 모드를 한눈에 확인하세요.</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0 text-destructive border-destructive/50 hover:bg-destructive/10"
-          onClick={() => setClearAllOpen(true)}
-        >
-          분석 로그 전체 삭제
-        </Button>
       </header>
 
-      {clearAllOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="clear-all-title"
-        >
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => !clearingAll && setClearAllOpen(false)}
-            aria-hidden
-          />
-          <div className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-5">
-            <h2 id="clear-all-title" className="font-semibold text-foreground mb-2">
-              모든 분석 로그를 삭제하시겠습니까?
-            </h2>
-            <p className="text-sm text-muted-foreground mb-5">
-              삭제된 로그는 복구할 수 없습니다.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={clearingAll}
-                onClick={() => setClearAllOpen(false)}
-              >
-                취소
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={clearingAll}
-                onClick={handleClearAll}
-              >
-                {clearingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {error ? (
+        <p className="mb-4 text-sm text-destructive">{error}</p>
+      ) : null}
 
       <div className="rin-pro-card mb-6 space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
           <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               value={searchQuery}
@@ -502,13 +543,13 @@ export default function HistoryPage() {
               aria-label="키워드 검색"
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">국가</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="whitespace-nowrap text-xs font-semibold text-muted-foreground">국가</span>
             <div className="relative min-w-[140px]">
               <select
                 value={countryFilter}
                 onChange={(e) => setCountryFilter(e.target.value as CountryFilterOption)}
-                className="h-11 w-full rounded-xl border border-[#E8EAED] bg-[#F8F9FA] px-3 pr-9 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#2AC1BC]/30"
+                className="h-11 w-full cursor-pointer rounded-xl border border-[#E8EAED] bg-[#F8F9FA] px-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#2AC1BC]/30"
                 aria-label="국가 필터"
               >
                 <option value="all">전체</option>
@@ -518,7 +559,7 @@ export default function HistoryPage() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
         </div>
@@ -540,210 +581,263 @@ export default function HistoryPage() {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-3 items-center border-t border-border pt-4">
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">점수</span>
+            <span className="shrink-0 text-xs text-muted-foreground">기회 점수</span>
             <div className="relative">
               <select
                 value={scoreFilter}
                 onChange={(e) => setScoreFilter(e.target.value as ScoreFilterOption)}
-                className="h-9 rounded-lg border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 cursor-pointer appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {SCORE_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">Market type</span>
+            <span className="shrink-0 text-xs text-muted-foreground">시장 유형</span>
             <div className="relative">
               <select
                 value={marketTypeFilter}
                 onChange={(e) => setMarketTypeFilter(e.target.value as MarketTypeFilterOption)}
-                className="h-9 rounded-lg border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring min-w-[100px]"
+                className="h-9 min-w-[100px] cursor-pointer appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">전체</option>
-                {marketTypes.map((t) => (
-                  <option key={t} value={t}>{TARGET_LABELS[t] ?? t}</option>
+                {MARKET_TYPE_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {TARGET_LABELS[t] ?? t}
+                  </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">상태</span>
+            <span className="shrink-0 text-xs text-muted-foreground">상태</span>
             <div className="relative">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as StatusFilterOption)}
-                className="h-9 rounded-lg border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 cursor-pointer appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {STATUS_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">정렬</span>
+            <span className="shrink-0 text-xs text-muted-foreground">정렬</span>
             <div className="relative">
               <select
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value as SortOption)}
-                className="h-9 rounded-lg border border-border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 cursor-pointer appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             </div>
           </div>
         </div>
       </div>
 
-      {filteredRecords.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-12 text-center">
-          검색·필터 결과가 없습니다.
-        </p>
+      {listRefreshing ? (
+        <p className="mb-2 text-xs text-muted-foreground">목록을 불러오는 중…</p>
+      ) : null}
+
+      {totalCount === 0 ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">검색·필터 결과가 없습니다.</p>
       ) : (
-        <>
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border/80 bg-muted/25 px-4 py-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
-            <input
-              type="checkbox"
-              checked={allFilteredSelected}
-              onChange={toggleSelectAllFiltered}
-              className="h-4 w-4 rounded border-[#E8EAED] text-[#2AC1BC] focus:ring-[#2AC1BC]"
-              aria-label="현재 목록 전체 선택"
-            />
-            <span className="text-muted-foreground">전체 선택</span>
-            <span className="text-xs tabular-nums text-muted-foreground">({filteredRecords.length}건)</span>
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {selectedIds.size > 0 && (
-              <span className="text-xs font-semibold text-muted-foreground">{selectedIds.size}개 선택됨</span>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 border-red-300 font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
-              disabled={selectedIds.size === 0 || bulkDeleting}
-              onClick={deleteBulkSelected}
-            >
-              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              선택 삭제
-            </Button>
-          </div>
-        </div>
-        <ul className="space-y-3 list-none p-0 m-0">
-          {filteredRecords.map((record) => {
+        <ul className="m-0 list-none space-y-0 overflow-hidden rounded-xl border border-gray-100 bg-white p-0 shadow-sm">
+          {records.map((record) => {
             const resultsHref = `/results?keyword=${encodeURIComponent(record.keyword)}${record.country_code ? `&country=${encodeURIComponent(record.country_code)}` : ''}`
             const opportunityScore = getOpportunityScore(record)
 
             return (
-              <li key={record.id}>
-                <article
-                  className={cn(
-                    'rin-pro-card flex flex-row gap-3 p-4 transition-shadow hover:shadow-md sm:gap-4',
-                    (record.analysis_status === 'analyzing' || record.analysis_status === 'queued') && 'opacity-80'
-                  )}
-                >
-                  <label className="flex shrink-0 cursor-pointer items-start pt-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(record.id)}
-                      onChange={() => toggleSelect(record.id)}
-                      className="mt-0.5 h-4 w-4 rounded border-[#E8EAED] text-[#2AC1BC] focus:ring-[#2AC1BC]"
-                      aria-label={`${record.keyword} 선택`}
-                    />
-                  </label>
-                  <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-bold tracking-tight text-foreground">{record.keyword}</h3>
-                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              <li key={record.id} className="group">
+                <div className="flex items-center gap-4 border-b border-gray-100 px-5 py-4 transition-colors last:border-0 hover:bg-gray-50/70">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(record.id)}
+                    onChange={() => toggleSelect(record.id)}
+                    className={cn(
+                      'h-4 w-4 shrink-0 rounded border-[#E8EAED] text-[#2AC1BC] transition-opacity focus:ring-[#2AC1BC]',
+                      selectedIds.includes(record.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    )}
+                    aria-label={`${record.keyword} 선택`}
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{record.keyword}</span>
+                      <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                         {analysisModeLabel(record.analysis_depth)}
                       </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                      <span className="tabular-nums">{formatDateTime(record.updated_at)}</span>
-                      {record.country_code ? (
-                        <span>{COUNTRY_LABELS[record.country_code] ?? record.country_code}</span>
-                      ) : null}
                       {record.analysis_target ? (
-                        <span>{TARGET_LABELS[record.analysis_target] ?? record.analysis_target}</span>
+                        <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
+                          {TARGET_LABELS[record.analysis_target] ?? record.analysis_target}
+                        </span>
                       ) : null}
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
-                    {opportunityScore != null ? (
-                      <span
-                        className={cn(
-                          'inline-flex min-w-[3.5rem] items-center justify-center rounded-lg px-3 py-2 text-lg font-bold tabular-nums',
-                          opportunityScore >= 70 && 'bg-[#E8FAF9] text-[#0d9488]',
-                          opportunityScore >= 40 && opportunityScore < 70 && 'bg-muted text-foreground',
-                          opportunityScore < 40 && 'bg-red-50 text-[#FF5F5F] dark:bg-red-950/30 dark:text-red-300'
-                        )}
-                      >
-                        {opportunityScore}
-                      </span>
-                    ) : (
-                      <span className="text-sm font-medium text-muted-foreground">점수 —</span>
-                    )}
-                    <AnalysisStatusBadge status={record.analysis_status} />
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Link href={resultsHref}>
-                        <Button
-                          size="sm"
-                          className="h-9 rounded-lg bg-[#2AC1BC] font-semibold text-white hover:bg-[#26b0ab]"
-                          disabled={record.analysis_status !== 'completed'}
-                        >
-                          {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Eye className="mr-1 h-4 w-4" />
-                              보기
-                            </>
-                          )}
-                        </Button>
-                      </Link>
-                      <Button size="sm" variant="outline" className="h-9" title="다시 분석" onClick={() => handleDuplicate(record)}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-9 text-[#FF5F5F] border-[#FF5F5F]/40 hover:bg-red-50"
-                        disabled={deletingId === record.id}
-                        onClick={() => deleteRecord(record.id)}
-                        aria-label="삭제"
-                      >
-                        {deletingId === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </Button>
+                    <div className="text-xs text-gray-400">
+                      {formatCreatedDate(record.updated_at)} · {COUNTRY_LABELS[record.country_code] ?? record.country_code}
                     </div>
                   </div>
+
+                  <div className="w-16 shrink-0 text-right">
+                    {opportunityScore != null ? (
+                      <span className="text-lg font-bold tabular-nums text-gray-900">{opportunityScore}</span>
+                    ) : (
+                      <span className="text-sm text-gray-300">--</span>
+                    )}
                   </div>
-                </article>
+
+                  <div className="shrink-0">
+                    <AnalysisStatusBadge status={record.analysis_status} />
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Link href={resultsHref}>
+                      <button
+                        type="button"
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                        disabled={record.analysis_status !== 'completed'}
+                      >
+                        {record.analysis_status === 'analyzing' || record.analysis_status === 'queued' ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          '보기'
+                        )}
+                      </button>
+                    </Link>
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                      title="다시 분석"
+                      onClick={() => handleDuplicate(record)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                      disabled={deletingId === record.id}
+                      onClick={() => deleteRecord(record.id)}
+                      aria-label="삭제"
+                    >
+                      {deletingId === record.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
               </li>
             )
           })}
         </ul>
-        </>
       )}
 
-      {filteredRecords.length > 0 && (
-        <p className="text-sm text-muted-foreground mt-8">
-          {searchQuery || periodFilter !== 'all' || scoreFilter !== 'all' || marketTypeFilter !== 'all' || statusFilter !== 'all' || countryFilter !== 'all'
-            ? `검색·필터 결과 ${filteredRecords.length}건`
-            : `총 ${records.length}건`}
+      {totalCount > 0 ? (
+        <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-4">
+          <span className="text-sm text-gray-400">
+            전체 {totalCount}건 중 {startItem}–{endItem}번째
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 0}
+              className="rounded-lg p-2 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label="이전 페이지"
+            >
+              <ChevronLeft className="h-4 w-4 text-gray-600" />
+            </button>
+
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              const pageNum = pageWindowStart + i
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setPage(pageNum)}
+                  className={cn(
+                    'h-8 w-8 rounded-lg text-sm font-medium transition-colors',
+                    page === pageNum ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  )}
+                >
+                  {pageNum + 1}
+                </button>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= totalPages - 1}
+              className="rounded-lg p-2 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label="다음 페이지"
+            >
+              <ChevronRight className="h-4 w-4 text-gray-600" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-8 flex justify-end border-t border-gray-100 pt-6">
+        <button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="flex items-center gap-1.5 text-sm text-red-500 transition-colors hover:text-red-600"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          전체 기록 삭제
+        </button>
+      </div>
+
+      {totalCount > 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          {searchQuery ||
+          periodFilter !== 'all' ||
+          scoreFilter !== 'all' ||
+          marketTypeFilter !== 'all' ||
+          statusFilter !== 'all' ||
+          countryFilter !== 'all'
+            ? `검색·필터 결과 ${totalCount}건`
+            : `총 ${totalAllCount}건`}
         </p>
-      )}
+      ) : null}
+
+      {selectedIds.length > 0 ? (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 transform items-center gap-4 rounded-2xl bg-gray-900 px-6 py-3 text-white shadow-xl">
+          <span className="text-sm font-medium">{selectedIds.length}건 선택됨</span>
+          <button
+            type="button"
+            onClick={() => void deleteBulkSelected()}
+            disabled={bulkDeleting}
+            className="text-sm font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+          >
+            {bulkDeleting ? '삭제 중…' : '삭제'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="text-sm text-gray-400 hover:text-white"
+          >
+            취소
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

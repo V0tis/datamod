@@ -106,5 +106,4 @@ export function logCacheEvent(event: 'hit' | 'miss' | 'expired' | 'write' | 'run
   if (detail) parts.push(detail)
   if (skippedAi === true) parts.push('skipped_ai')
   if (updatedAt) parts.push(`at=${updatedAt}`)
-  console.log(parts.join(' '))
 }

@@ -10,7 +10,6 @@ import { getFriendlyMessage, formatErrorDetail } from '@/lib/error-handler'
  */
 export function showErrorToast(err: unknown, options?: { fallbackMessage?: string }): void {
   if (process.env.NODE_ENV === 'development') {
-    console.log('[Dev] Error:', err)
   }
   const friendly = options?.fallbackMessage ?? getFriendlyMessage(err)
   const detail = formatErrorDetail(err)

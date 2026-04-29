@@ -25,7 +25,7 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: React.ElementType }
 
 const PRIORITY_COLORS = {
   high: 'text-destructive font-semibold',
-  medium: 'text-amber-600 dark:text-amber-500 font-medium',
+  medium: 'text-amber-600  font-medium',
   low: 'text-muted-foreground',
 } as const
 

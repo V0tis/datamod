@@ -51,6 +51,25 @@ type HistoryRow = {
   updated_at: string
 }
 
+/** Apply opportunity score band using DB column and/or JSON path (PostgREST `or`). */
+function applyScoreFilter<T extends { or: (filters: string) => T }>(query: T, score: string): T {
+  if (score === 'all' || score === '') return query
+  if (score === 'high') {
+    return query.or('market_temperature_score.gte.70,key_metrics->opportunity_score.gte.70')
+  }
+  if (score === 'medium') {
+    return query.or(
+      'and(market_temperature_score.gte.40,market_temperature_score.lte.69),and(key_metrics->opportunity_score.gte.40,key_metrics->opportunity_score.lte.69)'
+    )
+  }
+  if (score === 'low') {
+    return query.or(
+      'and(market_temperature_score.gte.0,market_temperature_score.lte.39),and(key_metrics->opportunity_score.gte.0,key_metrics->opportunity_score.lte.39)'
+    )
+  }
+  return query
+}
+
 /** GET: no params → list of research_history for current user. ?keyword=xxx&country=KR → single cached report. */
 export async function GET(req: Request) {
   try {
@@ -64,8 +83,22 @@ export async function GET(req: Request) {
     const country = countryRaw.length === 2 ? countryRaw.toUpperCase() : countryRaw
 
     if (!keyword) {
-      const limit = Math.min(500, Math.max(10, parseInt(searchParams.get('limit') ?? '50', 10) || 50))
-      const offset = Math.max(0, parseInt(searchParams.get('offset') ?? '0', 10) || 0)
+      const pageRaw = searchParams.get('page')
+      const hasPage = pageRaw !== null && pageRaw !== ''
+      const pageSizeParam = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') ?? '10', 10) || 10))
+      const legacyLimit = Math.min(500, Math.max(10, parseInt(searchParams.get('limit') ?? '50', 10) || 50))
+      const legacyOffset = Math.max(0, parseInt(searchParams.get('offset') ?? '0', 10) || 0)
+
+      const limit = hasPage ? pageSizeParam : legacyLimit
+      const offset = hasPage ? Math.max(0, parseInt(pageRaw ?? '0', 10) || 0) * pageSizeParam : legacyOffset
+
+      const q = searchParams.get('q')?.trim() ?? ''
+      const period = searchParams.get('period')?.trim() ?? 'all'
+      const score = searchParams.get('score')?.trim() ?? 'all'
+      const analysisTarget = searchParams.get('analysis_target')?.trim() ?? ''
+      const status = searchParams.get('status')?.trim() ?? 'all'
+      const countryFilter = searchParams.get('country')?.trim() ?? 'all'
+      const sort = searchParams.get('sort')?.trim() === 'oldest' ? 'oldest' : 'newest'
 
       // Mark stale "analyzing" (> 5 min) as failed so UI does not show analyzing forever
       const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString()
@@ -81,12 +114,44 @@ export async function GET(req: Request) {
         .eq('analysis_status', 'analyzing')
         .lt('updated_at', staleThreshold)
 
-      const { data: rows, error } = await supabase
+      let listQuery = supabase
         .from('research_history')
-        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, updated_at, error_message, analysis_depth')
+        .select('id, keyword, country_code, report_id, analysis_status, analysis_target, confidence_score, market_temperature_score, summary_insights, key_metrics, updated_at, error_message, analysis_depth', {
+          count: 'exact',
+        })
         .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .range(offset, offset + limit - 1)
+
+      if (q.length > 0) {
+        listQuery = listQuery.ilike('keyword', `%${q}%`)
+      }
+
+      if (period === '1m' || period === '3m' || period === '6m') {
+        const months = period === '1m' ? 1 : period === '3m' ? 3 : 6
+        const cutoff = new Date()
+        cutoff.setMonth(cutoff.getMonth() - months)
+        listQuery = listQuery.gte('updated_at', cutoff.toISOString())
+      }
+
+      if (analysisTarget && analysisTarget !== 'all') {
+        listQuery = listQuery.eq('analysis_target', analysisTarget)
+      }
+
+      if (countryFilter && countryFilter !== 'all') {
+        const cc = countryFilter.length === 2 ? countryFilter.toUpperCase() : countryFilter
+        listQuery = listQuery.eq('country_code', cc)
+      }
+
+      if (status === 'completed') {
+        listQuery = listQuery.or('analysis_status.eq.completed,analysis_status.is.null')
+      } else if (status === 'failed') {
+        listQuery = listQuery.eq('analysis_status', 'failed')
+      }
+
+      listQuery = applyScoreFilter(listQuery, score)
+
+      listQuery = listQuery.order('updated_at', { ascending: sort === 'oldest' }).range(offset, offset + limit - 1)
+
+      const { data: rows, error, count } = await listQuery
 
       if (error) {
         logger.error('API failure: research history list', {
@@ -109,7 +174,12 @@ export async function GET(req: Request) {
         const topActionLine = typeof topAction === 'object' && topAction != null && typeof (topAction as { title?: string }).title === 'string'
           ? (topAction as { title: string }).title
           : null
-        const opportunityScore = typeof km?.opportunity_score === 'number' ? km.opportunity_score : null
+        const opportunityScore =
+          typeof km?.opportunity_score === 'number'
+            ? km.opportunity_score
+            : typeof (r as { market_temperature_score?: number }).market_temperature_score === 'number'
+              ? (r as { market_temperature_score: number }).market_temperature_score
+              : null
         const analysisStatus = ensureAnalysisStatus((r as { analysis_status?: string }).analysis_status)
         const confidenceScore = typeof (r as { confidence_score?: number }).confidence_score === 'number'
           ? (r as { confidence_score: number }).confidence_score
@@ -135,12 +205,17 @@ export async function GET(req: Request) {
           date: r.updated_at ? new Date(r.updated_at).toLocaleDateString('ko-KR') : '',
         }
       })
-      const { count } = await supabase
+
+      const { count: totalAll } = await supabase
         .from('research_history')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
 
-      const resp = NextResponse.json({ list, total: count ?? list.length })
+      const resp = NextResponse.json({
+        list,
+        total: count ?? list.length,
+        totalAll: totalAll ?? 0,
+      })
       resp.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=30')
       return resp
     }

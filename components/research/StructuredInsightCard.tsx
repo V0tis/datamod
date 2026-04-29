@@ -62,9 +62,9 @@ function extractKeyMetrics(text: string): string[] {
 
 function PriorityBadge({ priority }: { priority: 'high' | 'mid' | 'low' }) {
   const styles = {
-    high: 'border-rose-200/90 bg-rose-50 text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/45 dark:text-rose-100',
-    mid: 'border-amber-200/90 bg-amber-50 text-amber-950 dark:border-amber-900/45 dark:bg-amber-950/40 dark:text-amber-100',
-    low: 'border-slate-200/90 bg-slate-100 text-slate-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
+    high: 'border-rose-200/90 bg-rose-50 text-rose-900   ',
+    mid: 'border-amber-200/90 bg-amber-50 text-amber-950   ',
+    low: 'border-slate-200/90 bg-slate-100 text-slate-800   ',
   } as const
   const labels = { high: '높음', mid: '중간', low: '낮음' } as const
   return (
@@ -112,12 +112,12 @@ export function StructuredInsightCard({
 
   const shellClass = isList
     ? cn(
-        'border-b border-slate-100 py-6 last:border-b-0 dark:border-zinc-800/80',
+        'border-b border-slate-100 py-6 last:border-b-0 ',
         hasDetail && 'cursor-pointer',
         className
       )
     : cn(
-        'rounded-lg border border-slate-100 bg-white dark:border-zinc-800 dark:bg-zinc-900',
+        'rounded-lg border border-slate-100 bg-white  ',
         hasDetail && 'cursor-pointer',
         className
       )
@@ -126,7 +126,7 @@ export function StructuredInsightCard({
     <div
       className={cn(
         'space-y-3 border-t',
-        padList ? 'mt-4 border-slate-100 bg-slate-50/50 px-0 py-4 dark:border-zinc-800 dark:bg-zinc-900/30' : 'border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7 dark:border-zinc-800 dark:bg-zinc-900/40'
+        padList ? 'mt-4 border-slate-100 bg-slate-50/50 px-0 py-4  ' : 'border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7  '
       )}
       onClick={(e) => e.stopPropagation()}
     >
@@ -153,7 +153,7 @@ export function StructuredInsightCard({
           {metrics.map((m, i) => (
             <span
               key={i}
-              className="inline-flex items-center rounded-md border border-emerald-100/90 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200"
+              className="inline-flex items-center rounded-md border border-emerald-100/90 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800   "
             >
               {m}
             </span>
@@ -169,7 +169,7 @@ export function StructuredInsightCard({
         <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             {!titleSameAsContents && (
-              <h4 className="line-clamp-2 text-base font-semibold leading-snug text-slate-900 dark:text-zinc-50">
+              <h4 className="line-clamp-2 text-base font-semibold leading-snug text-slate-900 ">
                 {displayTitle}
               </h4>
             )}
@@ -178,20 +178,20 @@ export function StructuredInsightCard({
             <InsightDataFreshness iso={insight.sourceTimestamp} className="max-w-[11rem] shrink-0 text-right text-[10px] leading-tight" />
           ) : null}
         </div>
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 ">
           AI 코멘트
         </p>
         <div
           className={cn(
-            'line-clamp-3 [&_.rin-doc]:text-sm [&_.rin-doc]:text-slate-600 dark:[&_.rin-doc]:text-zinc-400',
-            titleSameAsContents && '[&_.rin-doc]:text-slate-800 dark:[&_.rin-doc]:text-zinc-100'
+            'line-clamp-3 [&_.rin-doc]:text-sm [&_.rin-doc]:text-slate-600 ',
+            titleSameAsContents && '[&_.rin-doc]:text-slate-800 '
           )}
         >
           <MarkdownBody className="text-sm leading-relaxed">{displaySummary}</MarkdownBody>
         </div>
         {insight.priority ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 ">
               우선순위
             </span>
             <PriorityBadge priority={insight.priority} />
@@ -201,7 +201,7 @@ export function StructuredInsightCard({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-3 h-7 -ml-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+            className="mt-3 h-7 -ml-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50  "
             onClick={(e) => {
               e.stopPropagation()
               setExpanded((v) => !v)
@@ -231,7 +231,7 @@ export function StructuredInsightCard({
           <div className="mb-1.5 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               {!titleSameAsContents && (
-                <h4 className="line-clamp-1 text-base font-semibold leading-snug text-slate-900 dark:text-zinc-50">
+                <h4 className="line-clamp-1 text-base font-semibold leading-snug text-slate-900 ">
                   {displayTitle}
                 </h4>
               )}
@@ -243,8 +243,8 @@ export function StructuredInsightCard({
         )}
         <div
           className={cn(
-            'line-clamp-3 [&_.rin-doc]:text-sm [&_.rin-doc]:text-slate-600 dark:[&_.rin-doc]:text-zinc-400',
-            titleSameAsContents && '[&_.rin-doc]:text-slate-800 dark:[&_.rin-doc]:text-zinc-100'
+            'line-clamp-3 [&_.rin-doc]:text-sm [&_.rin-doc]:text-slate-600 ',
+            titleSameAsContents && '[&_.rin-doc]:text-slate-800 '
           )}
         >
           <MarkdownBody className="text-sm leading-relaxed">{displaySummary}</MarkdownBody>
@@ -256,14 +256,14 @@ export function StructuredInsightCard({
         ) : null}
         {showImpact && (
           <div className="mt-2 space-y-1.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">영향</div>
-            <MarkdownBody className="text-sm text-slate-600 dark:text-zinc-400">{displayImpact}</MarkdownBody>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 ">영향</div>
+            <MarkdownBody className="text-sm text-slate-600 ">{displayImpact}</MarkdownBody>
           </div>
         )}
         {showReason && (
           <div className="mt-2 space-y-1.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">근거 / 시사점</div>
-            <MarkdownBody className="text-sm text-slate-600 dark:text-zinc-400">{displayReason}</MarkdownBody>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 ">근거 / 시사점</div>
+            <MarkdownBody className="text-sm text-slate-600 ">{displayReason}</MarkdownBody>
           </div>
         )}
         {hasMetrics && (
@@ -271,7 +271,7 @@ export function StructuredInsightCard({
             {metrics.map((m, i) => (
               <span
                 key={i}
-                className="inline-flex items-center rounded-md border border-emerald-100/90 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200"
+                className="inline-flex items-center rounded-md border border-emerald-100/90 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800   "
               >
                 {m}
               </span>
@@ -282,7 +282,7 @@ export function StructuredInsightCard({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-2 h-7 -ml-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+            className="mt-2 h-7 -ml-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50  "
             onClick={(e) => {
               e.stopPropagation()
               setExpanded((v) => !v)
@@ -304,7 +304,7 @@ export function StructuredInsightCard({
 
       {expanded && cardExpandable ? (
         <div
-          className="space-y-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7 dark:border-zinc-800 dark:bg-zinc-900/40"
+          className="space-y-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6 lg:px-7  "
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">인사이트 전체</div>
@@ -321,12 +321,12 @@ export function StructuredInsightCard({
   const masonryShellClass = cn(
     'rounded-xl border p-5 transition-shadow hover:shadow-md border-l-4',
     insight.priority === 'high' &&
-      'border-rose-200 bg-[#FFF1F0] border-l-rose-500 dark:border-rose-900/45 dark:bg-rose-950/30 dark:border-l-rose-500',
+      'border-rose-200 bg-[#FFF1F0] border-l-rose-500   ',
     insight.priority === 'mid' &&
-      'border-amber-200 bg-[#FFFBEB] border-l-amber-500 dark:border-amber-900/45 dark:bg-amber-950/25 dark:border-l-amber-400',
+      'border-amber-200 bg-[#FFFBEB] border-l-amber-500   ',
     insight.priority === 'low' &&
-      'border-emerald-200 bg-[#F0FFF4] border-l-emerald-500 dark:border-emerald-900/45 dark:bg-emerald-950/25 dark:border-l-emerald-500',
-    !insight.priority && 'border-gray-200 bg-[#F9FAFB] border-l-gray-500 dark:border-zinc-700 dark:bg-zinc-950/90 dark:border-l-zinc-500',
+      'border-emerald-200 bg-[#F0FFF4] border-l-emerald-500   ',
+    !insight.priority && 'border-gray-200 bg-[#F9FAFB] border-l-gray-500   ',
     listExpandable && 'cursor-pointer'
   )
 
@@ -357,15 +357,15 @@ export function StructuredInsightCard({
               {priorityVisual.label}
             </span>
             {insight.sourceTimestamp ? (
-              <InsightDataFreshness iso={insight.sourceTimestamp} className="text-[11px] text-gray-400 dark:text-zinc-500" />
+              <InsightDataFreshness iso={insight.sourceTimestamp} className="text-[11px] text-gray-400 " />
             ) : null}
           </div>
-          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-gray-300 dark:text-zinc-600" aria-hidden />
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-gray-300 " aria-hidden />
         </div>
         {!titleSameAsContents && (
-          <h3 className="mb-2 text-base font-semibold leading-snug text-gray-900 dark:text-zinc-50">{displayTitle}</h3>
+          <h3 className="mb-2 text-base font-semibold leading-snug text-gray-900 ">{displayTitle}</h3>
         )}
-        <div className="mb-3 text-sm leading-relaxed text-gray-600 dark:text-zinc-400 [&_.rin-doc]:text-sm">
+        <div className="mb-3 text-sm leading-relaxed text-gray-600  [&_.rin-doc]:text-sm">
           <MarkdownBody className="text-sm leading-relaxed">{displaySummary}</MarkdownBody>
         </div>
         {hasMetrics ? (
@@ -373,7 +373,7 @@ export function StructuredInsightCard({
             {metrics.map((m, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white/80 px-2 py-1 text-xs text-gray-600 dark:border-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white/80 px-2 py-1 text-xs text-gray-600   "
               >
                 <Paperclip className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                 {m}
@@ -384,7 +384,7 @@ export function StructuredInsightCard({
         {listExpandable ? (
           <button
             type="button"
-            className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400 dark:hover:text-sky-300"
+            className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700  "
             onClick={(e) => {
               e.stopPropagation()
               setExpanded((v) => !v)

@@ -34,13 +34,13 @@ const DASHBOARD_CHART_LOGIC = {
 function ChartTitleWithInfo({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="mb-3 flex items-center gap-1.5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 ">{title}</p>
       <TooltipProvider delayDuration={200}>
         <UiTooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700  "
               aria-label="이 데이터는 어떻게 산출되었는가"
             >
               <Info className="h-3.5 w-3.5" aria-hidden />
@@ -75,7 +75,7 @@ function CategoryXAxisTick({
         fill="currentColor"
         fontSize={10}
         transform="rotate(-45)"
-        className="fill-slate-500 dark:fill-zinc-400"
+        className="fill-slate-500 "
         dy={12}
       >
         <title>{raw}</title>
@@ -146,7 +146,7 @@ export function DashboardChartsBlock({
             key={i}
             className={cn(
               chartFrameClass,
-              'animate-pulse rounded-lg bg-slate-100 dark:bg-zinc-900'
+              'animate-pulse rounded-lg bg-slate-100 '
             )}
           />
         ))}
@@ -154,7 +154,7 @@ export function DashboardChartsBlock({
     )
   }
 
-  const emptyHint = (msg: string) => <p className="py-8 text-center text-xs text-slate-500 dark:text-zinc-400">{msg}</p>
+  const emptyHint = (msg: string) => <p className="py-8 text-center text-xs text-slate-500 ">{msg}</p>
 
   return (
     <div className={layoutClass}>
@@ -186,7 +186,7 @@ export function DashboardChartsBlock({
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-400">평균 대비 편차 (상위 키워드 목록 기준)</p>
+            <p className="text-[10px] text-slate-500 ">평균 대비 편차 (상위 키워드 목록 기준)</p>
             <div className="aspect-[16/5] w-full min-h-[100px] max-h-[160px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trendDeltaData} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>

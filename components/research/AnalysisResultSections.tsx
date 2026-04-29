@@ -87,7 +87,7 @@ function getSectionStatus(
 
 function EvidenceChip({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] leading-snug text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+    <span className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] leading-snug text-slate-700">
       {children}
     </span>
   )
@@ -113,7 +113,7 @@ function MarketGrowthDimensionCards({
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
       {(loading || mg10 != null) && (
-        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none">
           <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">시장 성장성</p>
           {loading && mg10 == null ? (
             <p className="mt-2 text-xl font-semibold tabular-nums text-muted-foreground">산출 중...</p>
@@ -130,7 +130,7 @@ function MarketGrowthDimensionCards({
         </div>
       )}
       {(loading || tm10 != null) && (
-        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="rounded-lg border border-slate-100 bg-white p-6 shadow-none">
           <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">검색·트렌드 모멘텀</p>
           {loading && tm10 == null ? (
             <p className="mt-2 text-xl font-semibold tabular-nums text-muted-foreground">산출 중...</p>
@@ -572,7 +572,7 @@ export function AnalysisResultSections({
           status={getSectionStatus('strategy_generation', analysisTasks, loading)}
           loading={loading}
           streamingComplete={!loading && (risks.length > 0 || riskSignalItems.length > 0)}
-          variant="flat"
+          variant="default"
         >
           {loading && risks.length === 0 && riskSignalItems.length === 0 ? (
             <SectionContentSkeleton variant="list" />
@@ -598,7 +598,7 @@ export function AnalysisResultSections({
           status={getSectionStatus('execution_layer', analysisTasks, loading)}
           loading={loading}
           streamingComplete={!loading && (strategyBullets.length > 0 || allActionItems.length > 0 || strategicActions.length > 0)}
-          variant="flat"
+          variant="default"
         >
           <div className="space-y-5">
             <StartupConceptCard
@@ -673,7 +673,6 @@ export function AnalysisResultSections({
         <div
           className={cn(
             'rounded-xl border-2 border-primary/40 bg-gradient-to-br from-primary/15 via-primary/8 to-amber-500/10',
-            'dark:from-primary/20 dark:via-primary/10 dark:to-amber-500/5',
             'p-5 sm:p-6 shadow-lg'
           )}
         >

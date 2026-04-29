@@ -80,7 +80,7 @@ export default function ResultDetailPage() {
           onRecovery={() => { window.location.href = '/history' }}
           detail={error}
           secondaryAction={
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <Link href="/">홈으로</Link>
             </Button>
           }

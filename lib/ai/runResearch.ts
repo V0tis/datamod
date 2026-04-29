@@ -67,7 +67,7 @@ import { runCleanDataPipe, SIGNAL_LAYER_TOP_K, RSS_SIGNAL_LAYER_FETCH_CAP } from
 const AI_MAX_RETRIES = 2
 
 function logAiError(provider: string, step: string, reason: string, retryAttempt: number, err: unknown) {
-  console.log('[AI Error]', {
+  console.error('[AI Pipeline]', {
     provider,
     step,
     reason,
@@ -2768,7 +2768,7 @@ export async function* runResearch(
   const skipDataCollection = !!resumeState
   const skipInsightExtraction = resumeState?.kind === 'before_strategy'
 
-  console.log('[AI Pipeline] Start', {
+  console.info('[runResearch] pipeline start', {
     keyword,
     primaryProvider,
     hasGemini: !!geminiKey,
@@ -2778,7 +2778,6 @@ export async function* runResearch(
     rerunFromPhase,
   })
   const log = (step: string, detail: string, extra?: Record<string, unknown>) => {
-    console.log('[AI Timeline]', { step, detail, provider: primaryProvider, analysisId: analysisId.slice(0, 40) + '...', keyword, elapsedMs: Date.now() - pipelineStartMs, ...extra })
   }
 
   const upsertAnalysisTask = async (
@@ -2870,7 +2869,6 @@ export async function* runResearch(
 
   await updateProgress(0, 'analyzing')
   log('start', 'analysis_started')
-  console.log('[AI Analysis] 시작', { keyword: cacheKey.keyword, countryCode: cacheKey.countryCode, analysisId: analysisId.slice(0, 50) + '...' })
   yield { type: 'analysis_started', analysisId }
 
   let news: NewsItem[] = []
@@ -2926,7 +2924,7 @@ export async function* runResearch(
     const cleanResult = runCleanDataPipe(rssBeforeClean, { topK: SIGNAL_LAYER_TOP_K })
     news = cleanResult.items
     if (rssBeforeClean.length > 0) {
-      console.log('[CleanDataPipe] signal_layer 요약', {
+      console.info('[runResearch] clean-data-pipe', {
         rssFetched: rssBeforeClean.length,
         kept: news.length,
         removed: cleanResult.removals.length,
@@ -3007,7 +3005,6 @@ export async function* runResearch(
     if (end < articlesToExtract.length) await sleep(ARTICLE_REQUEST_DELAY_MS)
   }
   const articlesWithContent = resultsSlots
-  console.log('[article-extract] done:', articlesWithContent.length, '| items:', articlesWithContent.map((a) => ({ title: a.title.slice(0, 40), contentLen: a.content.length })))
 
   const marketProvider = resolveAIForStep(effectiveStepSettings, 'market')
   const competitorProvider = resolveAIForStep(effectiveStepSettings, 'competitor')
@@ -3059,7 +3056,6 @@ export async function* runResearch(
         : anyLlmFallback
           ? 'gemini'
           : 'groq'
-    console.log('[article-summary] done:', articlesForAnalysis.length, '| items:', articlesForAnalysis.map((a) => ({ title: a.title.slice(0, 40), summaryLen: a.summary?.length ?? 0, summaryPreview: (a.summary ?? '').slice(0, 100) })))
     yield {
       type: 'task',
       task: 'article_summary',
@@ -3338,38 +3334,6 @@ export async function* runResearch(
     strategy_risks_count: flattenRiskSignalsForPrompt(insightData.risk_signals).length,
   }
 
-  let strategyData: StrategicRecommendationResult
-  let executionData: {
-    product_actions: Array<{ action: string; priority?: string; reasoning?: string }>
-    feature_ideas: string[]
-    go_to_market_steps: string[]
-    product_idea?: string
-    target_customer?: string
-    monetization?: string
-    pm_action_plan?: PMActionPlanItem[]
-    strategic_decision_layer?: {
-      market_opportunity_explanation?: string
-      competition_intensity?: 'low' | 'medium' | 'high'
-      competition_explanation?: string
-      product_market_fit?: 'low' | 'medium' | 'high'
-      product_market_fit_explanation?: string
-      entry_strategy?: string
-      entry_explanation?: string
-    }
-    chart_insights?: { search_trend?: { insight?: string; takeaway?: string }; market_size?: { insight?: string; takeaway?: string }; adoption_rate?: { insight?: string; takeaway?: string }; score_distribution?: { insight?: string; takeaway?: string } }
-    swot_analysis?: { strengths?: string[]; weaknesses?: string[]; opportunities?: string[]; threats?: string[] }
-    jtbd?: {
-      main_jobs?: string[]
-      pains?: string[]
-      gains?: string[]
-      functional_jobs?: string[]
-      social_jobs?: string[]
-      emotional_jobs?: string[]
-    }
-    porter_5_forces?: Porter5ForcesShape
-    next_actions_pm?: Array<{ action: string; why?: string; how_to_execute?: string; priority?: 'high' | 'medium' | 'low'; estimated_effort?: string }>
-  }
-
   const pack = await runStrategyExecutionBundleTask(
     geminiKey,
     groqKey,
@@ -3384,8 +3348,8 @@ export async function* runResearch(
     pmFactsForBundle,
     depthLlm
   )
-  strategyData = pack.strategy.data
-  executionData = { ...pack.execution.executionData }
+  const strategyData: StrategicRecommendationResult = pack.strategy.data
+  const executionData = { ...pack.execution.executionData }
 
   const stratProvider =
     effectiveStrategyProvider === 'gemini' ? (pack.strategy.usedFallback ? 'groq' : 'gemini') : pack.strategy.usedFallback ? 'gemini' : 'groq'
@@ -3534,7 +3498,7 @@ export async function* runResearch(
         : undefined,
     pm_action_plan: executionData.pm_action_plan,
     strategic_decision_layer: executionData.strategic_decision_layer,
-    chart_insights: executionData.chart_insights,
+    chart_insights: (executionData as any).chart_insights,
     swot_analysis: executionData.swot_analysis,
     jtbd: executionData.jtbd,
     porter_5_forces: executionData.porter_5_forces,
@@ -3801,7 +3765,6 @@ export async function* runResearch(
     return
   }
 
-  console.log('[AI Analysis] 완료', { keyword: cacheKey.keyword, reportId, hasKeyMetrics: !!structured, serperUsed })
 
   const FINAL_REFINING_MESSAGES = [
     '추출된 데이터의 중복 및 노이즈를 제거하고 있습니다...',

@@ -190,26 +190,26 @@ export function ConclusionActionStrip({
   return (
     <div
       className={cn(
-        'w-full rounded-xl border border-slate-100 bg-gradient-to-br from-sky-50/80 to-white px-4 py-4 dark:border-zinc-800 dark:from-sky-950/30 dark:to-zinc-900/80 sm:px-5',
+        'w-full rounded-xl border border-slate-100 bg-gradient-to-br from-sky-50/80 to-white px-4 py-4    sm:px-5',
         className
       )}
     >
-      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-200">
+      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-800 ">
         <ListTodo className="h-4 w-4 shrink-0" aria-hidden />
         3줄 요약 액션
       </div>
-      <p className="mb-3 text-xs leading-relaxed tracking-wide text-slate-500 dark:text-zinc-400">
+      <p className="mb-3 text-xs leading-relaxed tracking-wide text-slate-500 ">
         현상(경쟁·문제) → 기회(니치) → 실행(최우선 과제) 순. 전략 단계 산출값이 있으면 즉시 반영됩니다.
       </p>
       {lines.length === 0 ? (
-        <p className="text-sm leading-relaxed tracking-wide text-slate-600 dark:text-zinc-400">
+        <p className="text-sm leading-relaxed tracking-wide text-slate-600 ">
           전략·실행 단계 산출 또는 요약 필드가 없어 3줄을 구성할 수 없습니다. 재분석 후에도 비면 모델 응답 형식을 확인해 주세요.
         </p>
       ) : (
-        <ol className="m-0 list-none space-y-3 p-0 text-sm leading-[1.65] tracking-wide text-pretty text-slate-700 dark:text-zinc-300 [word-break:keep-all]">
+        <ol className="m-0 list-none space-y-3 p-0 text-sm leading-[1.65] tracking-wide text-pretty text-slate-700  [word-break:keep-all]">
           {lines.map((line, i) => (
             <li key={i} className="flex gap-3">
-              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-sky-700/90 dark:text-sky-300/90">
+              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-sky-700/90 ">
                 {labels[i] ?? PILLAR_LABELS[Math.min(i, 2)]}
               </span>
               <span className="min-w-0 flex-1">{line}</span>

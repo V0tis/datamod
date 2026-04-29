@@ -117,7 +117,7 @@ export function ResearchReportView({
         <h1 className={embedded ? 'text-xl font-bold font-serif' : 'text-3xl font-bold font-serif'}>
           &quot;{keyword}&quot; 리서치 리포트
         </h1>
-        <Badge variant="outline" className="text-sm">Verified by Datamod</Badge>
+        <Badge variant="secondary" className="text-sm">Verified by Datamod</Badge>
       </header>
 
       <motion.div
@@ -150,7 +150,7 @@ export function ResearchReportView({
             key: 'pain',
             title: '😫 유저 페인 포인트',
             children: (
-              <ul className="list-disc pl-5 space-y-2 text-red-600 dark:text-red-400">
+              <ul className="list-disc pl-5 space-y-2 text-red-600 ">
                 {(painPoints ?? []).map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
@@ -205,12 +205,12 @@ export function ResearchReportView({
 
       {!embedded && shared && (
         <div className="pt-6 flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-2">
+          <Button variant="secondary" size="sm" onClick={handleCopyLink} className="gap-2">
             {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
             {copied ? '복사됨' : '링크 복사'}
           </Button>
           <Link href="/">
-            <Button variant="outline" size="sm">
+            <Button variant="secondary" size="sm">
               Datamod 홈으로
             </Button>
           </Link>
@@ -219,13 +219,13 @@ export function ResearchReportView({
       {!embedded && !shared && (
         <div className="pt-4 flex gap-2">
           <Link href="/history">
-            <Button variant="outline">
+            <Button variant="secondary">
               <ArrowLeft className="mr-2 size-4" />
               히스토리
             </Button>
           </Link>
           <Link href="/">
-            <Button variant="outline">
+            <Button variant="secondary">
               새 검색
             </Button>
           </Link>

@@ -146,7 +146,7 @@ export function AnalysisEngineSection({
                         {display.primary}
                       </span>
                       {showFallback && (
-                        <span className="text-emerald-600 dark:text-emerald-400 block">
+                        <span className="text-emerald-600  block">
                           {display.fallback}
                         </span>
                       )}

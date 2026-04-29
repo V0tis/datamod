@@ -30,18 +30,18 @@ function priorityLabel(p?: NextActionItem['priority']): string {
 }
 
 const STATUS_BADGE: Record<RowStatus, string> = {
-  todo: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
-  doing: 'border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200',
-  done: 'border-emerald-200 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
+  todo: 'border-slate-200 bg-slate-100 text-slate-700   ',
+  doing: 'border-blue-200 bg-blue-100 text-blue-800   ',
+  done: 'border-emerald-200 bg-emerald-100 text-emerald-900   ',
 }
 
 /** Compact markdown for table cells (line-clamp friendly; headings inline). */
 const TABLE_MD_COMPONENTS: Partial<Components> = {
   p: ({ children }) => <span className="block [&:not(:first-child)]:mt-1">{children}</span>,
-  h1: ({ children }) => <span className="block font-semibold text-slate-900 dark:text-zinc-100">{children}</span>,
-  h2: ({ children }) => <span className="block font-semibold text-slate-900 dark:text-zinc-100">{children}</span>,
-  h3: ({ children }) => <span className="block font-semibold text-slate-900 dark:text-zinc-100">{children}</span>,
-  h4: ({ children }) => <span className="block font-semibold text-slate-900 dark:text-zinc-100">{children}</span>,
+  h1: ({ children }) => <span className="block font-semibold text-slate-900 ">{children}</span>,
+  h2: ({ children }) => <span className="block font-semibold text-slate-900 ">{children}</span>,
+  h3: ({ children }) => <span className="block font-semibold text-slate-900 ">{children}</span>,
+  h4: ({ children }) => <span className="block font-semibold text-slate-900 ">{children}</span>,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   ul: ({ children }) => (
@@ -57,10 +57,10 @@ const TABLE_MD_COMPONENTS: Partial<Components> = {
     </a>
   ),
   code: ({ children }) => (
-    <code className="rounded bg-slate-100 px-0.5 font-mono text-[0.85em] dark:bg-zinc-800">{children}</code>
+    <code className="rounded bg-slate-100 px-0.5 font-mono text-[0.85em] ">{children}</code>
   ),
   blockquote: ({ children }) => (
-    <span className="my-0 block border-l-2 border-slate-300 pl-2 text-slate-600 dark:border-zinc-600 dark:text-zinc-400">
+    <span className="my-0 block border-l-2 border-slate-300 pl-2 text-slate-600  ">
       {children}
     </span>
   ),
@@ -82,12 +82,12 @@ function ClampedTableMarkdownCell({
   const text = repairMultilingualText(raw ?? '').trim()
   if (!text) {
     return (
-      <span className="text-sm text-slate-400 dark:text-zinc-500">
+      <span className="text-sm text-slate-400 ">
         {mutedPlaceholder ?? '—'}
       </span>
     )
   }
-  const baseText = tone === 'muted' ? 'text-slate-600 dark:text-zinc-300' : 'font-medium text-slate-900 dark:text-zinc-100'
+  const baseText = tone === 'muted' ? 'text-slate-600 ' : 'font-medium text-slate-900 '
   return (
     <button
       type="button"
@@ -95,7 +95,7 @@ function ClampedTableMarkdownCell({
       title="클릭하여 전체 보기"
       className={cn(
         'min-w-0 w-full max-w-full rounded-md px-0.5 py-0 text-left align-top transition-colors',
-        'hover:bg-slate-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]/40 dark:hover:bg-zinc-800/70'
+        'hover:bg-slate-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]/40 '
       )}
     >
       <div
@@ -200,20 +200,20 @@ export function StrategyExecutionTable({
   const consulting = variant === 'consulting'
   const shell =
     consulting
-      ? 'rounded-none border-0 bg-transparent shadow-none dark:bg-transparent'
+      ? 'rounded-none border-0 bg-transparent shadow-none '
       : nested
-        ? 'rounded-md border border-slate-200/90 bg-transparent dark:border-zinc-700'
-        : 'rounded-xl border border-[#E5E7EB] bg-white dark:border-zinc-700 dark:bg-zinc-900'
+        ? 'rounded-md border border-slate-200/90 bg-transparent '
+        : 'rounded-xl border border-[#E5E7EB] bg-white  '
 
   const theadRowClass = consulting
-    ? 'border-b border-[var(--color-border)] bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:border-zinc-800 dark:bg-zinc-900/95 dark:text-zinc-500'
-    : 'border-b border-slate-100 bg-slate-50/95 text-xs font-semibold uppercase tracking-wide text-slate-500 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95 dark:text-zinc-400'
+    ? 'border-b border-[var(--color-border)] bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-400   '
+    : 'border-b border-slate-100 bg-slate-50/95 text-xs font-semibold uppercase tracking-wide text-slate-500 backdrop-blur-sm   '
 
   if ((loading || executionPending) && rows.length === 0) {
     const loadingInner = (
       <>
         <SectionContentSkeleton variant="list" />
-        <p className="mt-3 text-center text-xs text-slate-500 dark:text-zinc-400">
+        <p className="mt-3 text-center text-xs text-slate-500 ">
           실행 과제·GTM 항목을 불러오는 중입니다…
         </p>
       </>
@@ -240,10 +240,10 @@ export function StrategyExecutionTable({
       <div
         className={cn(
           consulting
-            ? 'border-t border-border px-6 py-10 text-center text-sm text-slate-500 dark:text-zinc-400'
+            ? 'border-t border-border px-6 py-10 text-center text-sm text-slate-500 '
             : nested
-              ? 'border border-dashed border-slate-200/90 px-5 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:text-zinc-400'
-              : 'rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-card)] px-6 py-10 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+              ? 'border border-dashed border-slate-200/90 px-5 py-10 text-center text-sm text-slate-500  '
+              : 'rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-card)] px-6 py-10 text-center text-sm text-slate-500   '
         )}
       >
         PM 액션 플랜이 비어 있습니다. 분석을 완료했는데도 비어 있으면 &ldquo;다시 분석하기&rdquo;로 재실행하거나, 인사이트 탭의 전략 요약을 참고하세요.
@@ -269,8 +269,8 @@ export function StrategyExecutionTable({
   const tableBlock = (
     <div className={cn('max-w-full min-w-0 overflow-hidden', shell)}>
       {!consulting ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-zinc-800 sm:px-4">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">전략 실행 테이블</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5  sm:px-4">
+          <h3 className="text-sm font-semibold text-slate-900 ">전략 실행 테이블</h3>
           <AnalysisSourceButton result={result} label="출처 보기" />
         </div>
       ) : null}
@@ -285,7 +285,7 @@ export function StrategyExecutionTable({
             <col style={{ width: 132 }} />
             <col style={{ width: 88 }} />
           </colgroup>
-          <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)]">
+          <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ">
             <tr
               className={cn(
                 theadRowClass,
@@ -310,10 +310,10 @@ export function StrategyExecutionTable({
                 <Fragment key={i}>
                   <tr
                     className={cn(
-                      'border-b border-slate-100 transition-colors dark:border-zinc-800',
+                      'border-b border-slate-100 transition-colors ',
                       consulting
-                        ? 'hover:bg-blue-50/30 dark:hover:bg-blue-950/15'
-                        : 'hover:bg-blue-50/50 dark:hover:bg-blue-950/20',
+                        ? 'hover:bg-blue-50/30 '
+                        : 'hover:bg-blue-50/50 ',
                       hasDetail && 'cursor-pointer'
                     )}
                     onClick={(e) => {
@@ -332,7 +332,7 @@ export function StrategyExecutionTable({
                         }}
                         disabled={!hasDetail}
                         className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-slate-500 hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 dark:hover:bg-zinc-800',
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-slate-500 hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 ',
                           hasDetail && 'cursor-pointer'
                         )}
                         aria-expanded={isOpen}
@@ -353,7 +353,7 @@ export function StrategyExecutionTable({
                       {consulting ? (
                         <PriorityBadge level={urgencyToPLevel(row.priority)} size="sm" />
                       ) : (
-                        <span className="inline-flex whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200">
+                        <span className="inline-flex whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700   ">
                           {priorityLabel(row.priority)}
                         </span>
                       )}
@@ -401,7 +401,7 @@ export function StrategyExecutionTable({
                           value={st}
                           onChange={(e) => setRowStatus(i, e.target.value as RowStatus)}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-1.5 py-1 text-[11px] font-medium text-slate-800 shadow-sm focus:border-[var(--color-ring)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                          className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-1.5 py-1 text-[11px] font-medium text-slate-800 shadow-sm focus:border-[var(--color-ring)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ring)]/40   "
                         >
                           {STATUS_OPTIONS.map((o) => (
                             <option key={o.value} value={o.value}>
@@ -416,11 +416,11 @@ export function StrategyExecutionTable({
                     </td>
                   </tr>
                   {isOpen && hasDetail ? (
-                    <tr key={`${i}-detail`} className="border-b border-slate-100 bg-slate-50/50 dark:border-zinc-800 dark:bg-zinc-900/50">
-                      <td colSpan={7} className="px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
+                    <tr key={`${i}-detail`} className="border-b border-slate-100 bg-slate-50/50  ">
+                      <td colSpan={7} className="px-4 py-3 text-xs leading-relaxed text-slate-600 ">
                         {row.how_to_execute ? (
                           <div>
-                            <p className="font-semibold text-slate-700 dark:text-zinc-300">실행 상세</p>
+                            <p className="font-semibold text-slate-700 ">실행 상세</p>
                             <div className="mt-1 text-foreground">
                               <MarkdownBody className="!text-xs !leading-relaxed">
                                 {repairMultilingualText(row.how_to_execute)}
@@ -430,7 +430,7 @@ export function StrategyExecutionTable({
                         ) : null}
                         {row.why ? (
                           <div className={row.how_to_execute ? 'mt-3' : ''}>
-                            <p className="font-semibold text-slate-700 dark:text-zinc-300">기대 효과</p>
+                            <p className="font-semibold text-slate-700 ">기대 효과</p>
                             <div className="mt-1 text-foreground">
                               <MarkdownBody className="!text-xs !leading-relaxed">
                                 {repairMultilingualText(row.why)}

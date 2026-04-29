@@ -41,7 +41,6 @@ export async function GET(req: Request) {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('[research/tasks] GET 폴링', { analysisId: analysisId.slice(0, 50) + '...' })
     }
 
     const { data: rows, error } = await supabase
@@ -108,7 +107,7 @@ export async function GET(req: Request) {
 
     const failedTask = tasks.find((t) => t.status === 'failed')
     if (failedTask) {
-      console.log('[research/tasks] 실패한 태스크', {
+      console.error('[Research tasks] failed task', {
         step: failedTask.step_name,
         error_message: failedTask.error_message,
         analysisId: analysisId.slice(0, 50) + '...',
@@ -123,7 +122,6 @@ export async function GET(req: Request) {
       running_step: runningStep?.step_name ?? null,
     })
   } catch (e) {
-    console.log('[research/tasks] 예외', e)
     return NextResponse.json(
       { error: '태스크 상태를 불러오지 못했습니다.' },
       { status: 500 }

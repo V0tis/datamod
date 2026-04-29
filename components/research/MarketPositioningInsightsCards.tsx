@@ -22,26 +22,26 @@ export function MarketPositioningInsightsCards({
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80 sm:p-5',
+        'rounded-xl border border-slate-100 bg-white p-4 shadow-sm   sm:p-5',
         className
       )}
     >
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 ">
         시장 포지셔닝 인사이트
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {insights.map((insight, i) => (
           <div
             key={`${i}-${insight.content.slice(0, 24)}`}
-            className="rounded-lg border border-slate-100 bg-slate-50/90 p-3 dark:border-zinc-800 dark:bg-zinc-900/50"
+            className="rounded-lg border border-slate-100 bg-slate-50/90 p-3  "
           >
             <div className="mb-2 flex items-center gap-2">
-              <div className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-950/60">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">{i + 1}</span>
+              <div className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-100 ">
+                <span className="text-xs font-bold text-blue-600 ">{i + 1}</span>
               </div>
-              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200">{insight.type}</span>
+              <span className="text-xs font-semibold text-slate-700 ">{insight.type}</span>
             </div>
-            <p className="text-pretty text-sm leading-relaxed text-slate-600 dark:text-zinc-400">{insight.content}</p>
+            <p className="text-pretty text-sm leading-relaxed text-slate-600 ">{insight.content}</p>
           </div>
         ))}
       </div>

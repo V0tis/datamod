@@ -37,16 +37,16 @@ export function DashboardInsightStrip({
           <LineChart className="h-5 w-5" style={{ color: dashboardMint }} aria-hidden />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">AI Insight</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 ">AI 인사이트</p>
           {loading ? (
             <div className="space-y-2">
-              <div className="h-4 w-full max-w-md animate-pulse rounded bg-slate-100 dark:bg-zinc-800" />
-              <div className="h-4 w-4/5 max-w-sm animate-pulse rounded bg-slate-100 dark:bg-zinc-800" />
+              <div className="h-4 w-full max-w-md animate-pulse rounded bg-slate-100 " />
+              <div className="h-4 w-4/5 max-w-sm animate-pulse rounded bg-slate-100 " />
             </div>
           ) : (
             <>
-              <p className="text-sm font-semibold leading-snug text-slate-900 dark:text-zinc-100">{line1}</p>
-              <p className="text-xs leading-relaxed text-slate-600 dark:text-zinc-400">{line2}</p>
+              <p className="text-sm font-semibold leading-snug text-slate-900 ">{line1}</p>
+              <p className="text-xs leading-relaxed text-slate-600 ">{line2}</p>
             </>
           )}
         </div>
@@ -64,7 +64,7 @@ export function DashboardInsightStrip({
           분석 시작
         </Button>
         {data.strategyHref ? (
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <Link href={`${data.strategyHref}#tab-insight`}>전략 보기</Link>
           </Button>
         ) : null}

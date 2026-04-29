@@ -37,8 +37,8 @@ export function DashboardCountryTabsFour({
             className={cn(
               'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] font-medium transition-colors',
               active
-                ? 'border-sky-500 bg-sky-50 text-sky-900 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-200'
-                : 'border-[#E5E9F2] bg-white text-[#374151] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                ? 'border-sky-500 bg-sky-50 text-sky-900   '
+                : 'border-[#E5E9F2] bg-white text-[#374151] hover:bg-slate-50    '
             )}
           >
             <CountryFlagIcon code={code} size="chip" />

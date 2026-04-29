@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-const EXCLUDED_PATHS = ['/login', '/auth/signup', '/auth/verify', '/settings']
+const EXCLUDED_PATHS = ['/login', '/auth/signup', '/auth/verify', '/auth/verify-email', '/settings']
 const SESSION_STORAGE_KEY = 'rin_api_key_toast_shown'
 
 function isExcludedPath(path: string | null): boolean {

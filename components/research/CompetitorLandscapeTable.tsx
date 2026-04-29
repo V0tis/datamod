@@ -50,7 +50,7 @@ export function CompetitorLandscapeTable({
   return (
     <section
       className={cn(
-        'max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80',
+        'max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm  ',
         className
       )}
       aria-label="경쟁사 분석 테이블"
@@ -107,14 +107,14 @@ export function CompetitorLandscapeTable({
                     </td>
                     <td className="max-w-[200px] px-3 py-4 align-top">
                       {gap || fallbackGap ? (
-                        <span className="text-xs font-medium text-red-600 dark:text-red-400">{gap || fallbackGap}</span>
+                        <span className="text-xs font-medium text-red-600 ">{gap || fallbackGap}</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="max-w-[200px] px-3 py-4 align-top">
                       {ours ? (
-                        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{ours}</span>
+                        <span className="text-xs font-medium text-blue-600 ">{ours}</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

@@ -57,17 +57,17 @@ export function ChartWithInsight({
     <div
       className={cn(
         flat
-          ? 'rounded-lg border border-slate-100 bg-white p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950/50'
-          : 'rounded-xl border border-border/60 bg-white p-4 dark:bg-zinc-950/40',
+          ? 'rounded-lg border border-slate-100 bg-white p-3 sm:p-4  '
+          : 'rounded-xl border border-border/60 bg-white p-4 ',
         className
       )}
     >
       {cap ? (
-        <div className="mb-3 rounded-lg border border-zinc-200/80 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">
+        <div className="mb-3 rounded-lg border border-zinc-200/80 bg-zinc-50/90 px-3 py-2  ">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 ">
             AI PM의 한 줄 평
           </p>
-          <p className="mt-1 text-sm font-medium leading-snug text-zinc-800 dark:text-zinc-100">{cap}</p>
+          <p className="mt-1 text-sm font-medium leading-snug text-zinc-800 ">{cap}</p>
         </div>
       ) : null}
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -81,7 +81,7 @@ export function ChartWithInsight({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-zinc-800"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground "
                     aria-label="이 데이터는 어떻게 산출되었는가"
                   >
                     <Info className="h-3.5 w-3.5" aria-hidden />
@@ -97,7 +97,7 @@ export function ChartWithInsight({
         {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
       </div>
       {desc ? (
-        <p className="mb-3 text-[13px] leading-snug text-[#6B7280] dark:text-zinc-400">{desc}</p>
+        <p className="mb-3 text-[13px] leading-snug text-[#6B7280] ">{desc}</p>
       ) : null}
       <div className="mb-3">{children}</div>
       {hasInsight && (

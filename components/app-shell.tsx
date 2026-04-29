@@ -17,6 +17,8 @@ const isAuthOnlyPath = (path: string) =>
   path.startsWith('/auth/signup/') ||
   path === '/auth/verify' ||
   path.startsWith('/auth/verify/') ||
+  path === '/auth/verify-email' ||
+  path.startsWith('/auth/verify-email/') ||
   path === '/auth/login' ||
   path.startsWith('/auth/login/') ||
   path === '/auth/callback' ||
@@ -88,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             'min-h-screen overflow-auto px-2 sm:px-4 lg:px-8 xl:px-10',
-            isResultsPage ? 'bg-white dark:bg-zinc-950' : 'bg-muted/25'
+            isResultsPage ? 'bg-white ' : 'bg-muted/25'
           )}
         >
           <ErrorBoundary>

@@ -44,7 +44,7 @@ export function InsightDataFreshness({ iso, className }: InsightDataFreshnessPro
     const fallback =
       Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     return (
-      <span className={cn('text-xs text-gray-400 dark:text-gray-500', className)} suppressHydrationWarning>
+      <span className={cn('text-xs text-gray-400 ', className)} suppressHydrationWarning>
         [{fallback} 기준]
       </span>
     )
@@ -52,7 +52,7 @@ export function InsightDataFreshness({ iso, className }: InsightDataFreshnessPro
 
   return (
     <span
-      className={cn('text-xs text-gray-400 dark:text-gray-500 tabular-nums', className)}
+      className={cn('text-xs text-gray-400  tabular-nums', className)}
       title={new Date(iso).toLocaleString('ko-KR')}
     >
       [{label} 데이터]

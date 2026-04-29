@@ -114,8 +114,8 @@ export function StrategicActionsSection({
               >
                 <td className="align-top px-3 py-3 tabular-nums text-muted-foreground">{index + 1}</td>
                 <td className="align-top px-3 py-3 font-medium text-foreground">{action.title}</td>
-                <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 leading-snug">{action.description}</td>
-                <td className="align-top px-3 py-3 text-slate-600 dark:text-zinc-400 leading-snug">{action.opportunity}</td>
+                <td className="align-top px-3 py-3 text-slate-600  leading-snug">{action.description}</td>
+                <td className="align-top px-3 py-3 text-slate-600  leading-snug">{action.opportunity}</td>
                 <td className="align-top px-3 py-3">
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <Button

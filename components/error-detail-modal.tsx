@@ -13,9 +13,9 @@ function looksLikeHtml(str: string): boolean {
   return t.startsWith('<') || t.includes('<!DOCTYPE') || t.includes('<!doctype')
 }
 
-const sectionLabel = 'text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5'
+const sectionLabel = 'text-xs font-semibold text-slate-400  uppercase tracking-wider mb-1.5'
 const preBlock =
-  'rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 p-3 text-zinc-800 dark:text-[#e1e3e6] font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words'
+  'rounded-lg border border-zinc-200  bg-zinc-50  p-3 text-zinc-800  font-mono text-xs overflow-x-auto whitespace-pre-wrap break-words'
 
 export function ErrorDetailModal() {
   const { detail, errorId, closeDetail } = useErrorDetailStore()
@@ -40,13 +40,13 @@ export function ErrorDetailModal() {
       aria-labelledby="error-detail-title"
     >
       <div
-        className="absolute inset-0 bg-black/60 dark:bg-black/70"
+        className="absolute inset-0 bg-black/60 "
         onClick={closeDetail}
         aria-hidden
       />
-      <div className="relative w-full max-w-lg rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#15171a] shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 shrink-0">
-          <h2 id="error-detail-title" className="font-semibold text-zinc-900 dark:text-[#e1e3e6]">
+      <div className="relative w-full max-w-lg rounded-xl border border-zinc-200  bg-white  shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between border-b border-zinc-200  px-4 py-3 bg-zinc-50  shrink-0">
+          <h2 id="error-detail-title" className="font-semibold text-zinc-900 ">
             {isDev ? '에러 상세 정보' : '오류 안내'}
           </h2>
           <Button
@@ -54,7 +54,7 @@ export function ErrorDetailModal() {
             variant="ghost"
             size="icon"
             onClick={closeDetail}
-            className="shrink-0 text-zinc-600 dark:text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            className="shrink-0 text-zinc-600  hover:bg-zinc-200 "
             aria-label="닫기"
           >
             <X className="h-5 w-5" />
@@ -100,7 +100,7 @@ export function ErrorDetailModal() {
             </>
           ) : (
             <>
-              <p className="text-zinc-700 dark:text-slate-300">
+              <p className="text-zinc-700 ">
                 시스템 오류가 발생했습니다. 아래 메시지를 확인한 뒤 잠시 후 다시 시도해 주세요.
               </p>
               <section>
@@ -131,7 +131,7 @@ export function ErrorDetailModal() {
                   <pre className={preBlock}>
                     <code>{errorId}</code>
                   </pre>
-                  <p className="text-zinc-500 dark:text-slate-500 text-xs mt-1">
+                  <p className="text-zinc-500  text-xs mt-1">
                     문의 시 위 ID를 알려주시면 도움이 됩니다.
                   </p>
                 </section>
@@ -139,12 +139,12 @@ export function ErrorDetailModal() {
             </>
           )}
         </div>
-        <div className="border-t border-zinc-200 dark:border-zinc-800 px-4 py-3 shrink-0 bg-zinc-50 dark:bg-zinc-800/30">
+        <div className="border-t border-zinc-200  px-4 py-3 shrink-0 bg-zinc-50 ">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={closeDetail}
-            className="w-full border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-slate-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+            className="w-full border-zinc-300  text-zinc-700  hover:bg-zinc-100 "
           >
             닫기
           </Button>

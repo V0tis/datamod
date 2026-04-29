@@ -111,7 +111,7 @@ export function QuickActions({
       {actions.map(({ id, label, icon: Icon, onClick, disabled: actionDisabled }) => (
         <Button
           key={id}
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onClick}
           disabled={actionDisabled}

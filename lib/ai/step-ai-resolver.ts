@@ -72,7 +72,6 @@ export function resolveAIForStep(
     stepValue === 'gemini' || stepValue === 'groq'
       ? stepValue
       : primary
-  console.log('[AI Step]', step, '->', resolved)
   return resolved
 }
 

@@ -15,7 +15,6 @@ import {
   Menu,
   X,
 } from 'lucide-react'
-import { ThemeSwitcher } from '@/components/theme-switcher'
 import { RinLogo } from '@/components/rin-logo'
 import { DatamodWordmark } from '@/components/datamod-wordmark'
 import { cn } from '@/lib/utils'
@@ -26,11 +25,13 @@ import { useResultsMainScrolledPast } from '@/hooks/use-results-main-scroll'
 const ICON_NAV = 20
 
 const navItems = [
-  { href: '/', label: '대시보드', icon: LayoutDashboard, tooltip: '키워드 검색 및 새 분석 시작' },
-  { href: '/history', label: '분석 기록', icon: History, tooltip: '과거 리서치 결과 관리 및 조회' },
-  { href: '/insights', label: '저장한 인사이트', icon: BookmarkCheck, tooltip: '북마크한 인사이트 모아보기' },
-  { href: '/settings', label: '설정', icon: Settings, tooltip: 'API 키, 프로필 및 분석 설정' },
+  { href: '/', label: '\uB300\uC2DC\uBCF4\uB4DC', icon: LayoutDashboard, tooltip: '\uC624\uB298 \uC2DC\uC7A5 \uD750\uB984\uACFC \uD575\uC2EC \uC9C0\uD45C\uB97C \uD655\uC778' },
+  { href: '/history', label: '\uBD84\uC11D \uAE30\uB85D', icon: History, tooltip: '\uC9C0\uB09C \uBD84\uC11D \uACB0\uACFC\uB97C \uC870\uD68C \uBC0F \uAD00\uB9AC' },
+  { href: '/insights', label: '\uC800\uC7A5\uD55C \uC778\uC0AC\uC774\uD2B8', icon: BookmarkCheck, tooltip: '\uBD81\uB9C8\uD06C\uD55C \uC778\uC0AC\uC774\uD2B8 \uBAA8\uC74C' },
+  { href: '/settings', label: '\uC124\uC815', icon: Settings, tooltip: 'API \uD0A4, \uACC4\uC815 \uBC0F \uD658\uACBD\uC124\uC815 \uAD00\uB9AC' },
 ]
+
+const shellBorder = 'border-[#E5E8EF]'
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -41,9 +42,9 @@ export function AppSidebar() {
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) =>
-      setUser(session?.user ?? null)
-    )
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null))
     return () => subscription.unsubscribe()
   }, [])
 
@@ -60,31 +61,24 @@ export function AppSidebar() {
   const hideResultsTopNav = useResultsMainScrolledPast(28)
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col bg-[#111827] text-gray-300">
-      <div className="shrink-0 border-b border-white/10 px-6 py-6">
+    <div className={cn('flex h-full w-full flex-col bg-white text-gray-700', shellBorder)}>
+      <div className={cn('shrink-0 border-b px-6 py-6', shellBorder)}>
         <Link
           href="/"
-          className="flex items-center gap-2 text-white transition-opacity hover:opacity-90"
-          aria-label="Datamod 홈(대시보드)으로 이동"
+          className="flex items-center gap-2 text-neutral-900 transition-opacity hover:opacity-90"
+          aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
         >
-          <RinLogo className="h-8 w-8 shrink-0 text-white" />
-          <DatamodWordmark className="text-sm" textClassName="text-white" />
+          <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
+          <DatamodWordmark className="text-sm" textClassName="text-neutral-900" />
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="메인 메뉴">
+      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="\uC8FC\uC694 \uBA54\uB274">
         <ul className="space-y-0.5" role="list">
           {navItems.map((item) => {
             const active = isActive(item)
             return (
-              <li key={item.href + item.label} className="relative">
-                <motion.span
-                  aria-hidden
-                  initial={false}
-                  animate={{ opacity: active ? 1 : 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-r-full bg-sky-600"
-                />
+              <li key={item.href + item.label}>
                 <Link href={item.href} title={item.tooltip} className="block">
                   <motion.span
                     layout={false}
@@ -94,10 +88,7 @@ export function AppSidebar() {
                     }}
                     className={cn(
                       'relative flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200',
-                      'border-l-2 border-transparent pl-[11px]',
-                      active
-                        ? 'border-sky-600 bg-white/10 text-sky-600'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                      active ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
                     )}
                   >
                     {item.label}
@@ -109,11 +100,7 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      <div className="shrink-0 space-y-3 border-t border-white/10 px-3 py-4">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs text-gray-500">테마</span>
-          <ThemeSwitcher />
-        </div>
+      <div className={cn('shrink-0 space-y-3 border-t px-3 py-4', shellBorder)}>
         {user ? (
           <div className="space-y-1">
             <p className="truncate px-3 py-1.5 text-xs text-gray-500" title={user.email ?? ''}>
@@ -123,28 +110,24 @@ export function AppSidebar() {
               type="button"
               onClick={() => void logout()}
               disabled={isLoggingOut}
-              title="로그아웃"
+              title="\uB85C\uADF8\uC544\uC6C3"
               className={cn(
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                'text-slate-400 hover:bg-white/5 hover:text-slate-200',
+                'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
               <LogOut size={ICON_NAV} className="shrink-0 opacity-90" aria-hidden />
-              로그아웃
+              \uB85C\uADF8\uC544\uC6C3
             </button>
           </div>
         ) : (
           <Link
             href="/login"
-            title="로그인"
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-            )}
+            title="\uB85C\uADF8\uC778"
+            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <LogOut size={ICON_NAV} className="shrink-0 opacity-90" aria-hidden />
-            로그인
+            \uB85C\uADF8\uC778
           </Link>
         )}
       </div>
@@ -152,19 +135,19 @@ export function AppSidebar() {
   )
 
   const topbarContent = (
-    <div className="flex min-h-[3.5rem] w-full items-center justify-between gap-2 border-b border-border bg-white px-3 py-2 sm:gap-4 sm:px-4 dark:border-zinc-800 dark:bg-zinc-950">
+    <div className={cn('flex min-h-[3.5rem] w-full items-center justify-between gap-2 border-b bg-white px-3 py-2 sm:gap-4 sm:px-4', shellBorder)}>
       <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-90"
-          aria-label="Datamod 홈(대시보드)으로 이동"
+          aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
         >
-          <RinLogo className="h-8 w-8 shrink-0 text-neutral-900 dark:text-zinc-100" />
-          <DatamodWordmark className="text-sm" textClassName="text-neutral-900 dark:text-zinc-100" />
+          <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
+          <DatamodWordmark className="text-sm" textClassName="text-neutral-900" />
         </Link>
         <nav
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden"
-          aria-label="메인 메뉴"
+          aria-label="\uC8FC\uC694 \uBA54\uB274"
         >
           {navItems.map((item) => {
             const active = isActive(item)
@@ -175,9 +158,7 @@ export function AppSidebar() {
                 title={item.tooltip}
                 className={cn(
                   'flex shrink-0 items-center rounded-lg px-2.5 py-2 text-sm font-medium transition-colors duration-200 sm:px-3',
-                  active
-                    ? 'bg-slate-100 text-sky-600 dark:bg-zinc-800 dark:text-sky-400'
-                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
+                  active ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 )}
               >
                 <span className="whitespace-nowrap">{item.label}</span>
@@ -187,11 +168,10 @@ export function AppSidebar() {
         </nav>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <ThemeSwitcher />
         {user ? (
           <>
             <span
-              className="hidden max-w-[min(10rem,28vw)] truncate text-xs text-slate-500 md:inline dark:text-zinc-400"
+              className="hidden max-w-[min(10rem,28vw)] truncate text-xs text-gray-500 md:inline"
               title={user.email ?? ''}
             >
               {user.email ?? 'User'}
@@ -200,46 +180,45 @@ export function AppSidebar() {
               type="button"
               onClick={() => void logout()}
               disabled={isLoggingOut}
-              title="로그아웃"
+              title="\uB85C\uADF8\uC544\uC6C3"
               className={cn(
                 'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
-                'text-slate-600 hover:bg-slate-100 hover:text-neutral-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
+                'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
                 'disabled:pointer-events-none disabled:opacity-50'
               )}
             >
-              <LogOut size={ICON_NAV} className="shrink-0 text-slate-400" aria-hidden />
-              <span className="hidden sm:inline">로그아웃</span>
+              <LogOut size={ICON_NAV} className="shrink-0 text-gray-400" aria-hidden />
+              <span className="hidden sm:inline">\uB85C\uADF8\uC544\uC6C3</span>
             </button>
           </>
         ) : (
           <Link
             href="/login"
-            title="로그인"
+            title="\uB85C\uADF8\uC778"
             className={cn(
               'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
-              'text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+              'text-gray-600 hover:bg-gray-100'
             )}
           >
-            <LogOut size={ICON_NAV} className="shrink-0 text-slate-400" aria-hidden />
-            <span className="hidden sm:inline">로그인</span>
+            <LogOut size={ICON_NAV} className="shrink-0 text-gray-400" aria-hidden />
+            <span className="hidden sm:inline">\uB85C\uADF8\uC778</span>
           </Link>
         )}
       </div>
     </div>
   )
 
-  /** 768px~1023px: 아이콘만 고정 레일 (전체 사이드바 대신) */
   const sidebarIconRail = (
-    <div className="flex h-full w-full flex-col items-center border-r border-white/10 bg-[#111827] pt-6 pb-3 text-gray-300">
+    <div className={cn('flex h-full w-full flex-col items-center border-r bg-white pt-6 pb-3 text-gray-700', shellBorder)}>
       <Link
         href="/"
-        className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10"
-        title="대시보드"
-        aria-label="Datamod 홈(대시보드)으로 이동"
+        className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-gray-50"
+        title="\uD648"
+        aria-label="Datamod \uD648\uC73C\uB85C \uC774\uB3D9"
       >
-        <RinLogo className="h-8 w-8 shrink-0 text-white" />
+        <RinLogo className="h-8 w-8 shrink-0 text-blue-600" />
       </Link>
-      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto px-0 py-1" aria-label="메인 메뉴">
+      <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto px-0 py-1" aria-label="\uC8FC\uC694 \uBA54\uB274">
         {navItems.map((item) => {
           const active = isActive(item)
           const Icon = item.icon
@@ -250,9 +229,7 @@ export function AppSidebar() {
               title={item.tooltip}
               className={cn(
                 'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                active
-                  ? 'bg-white/10 text-sky-600'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                active ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
               )}
             >
               <Icon size={ICON_NAV} className="shrink-0" aria-hidden />
@@ -261,30 +238,29 @@ export function AppSidebar() {
           )
         })}
       </nav>
-      <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
-        <ThemeSwitcher className="border-white/10 bg-white/5 text-white" />
+      <div className={cn('mt-auto flex flex-col items-center gap-2 border-t pt-3', shellBorder)}>
         {user ? (
           <button
             type="button"
             onClick={() => void logout()}
             disabled={isLoggingOut}
-            title="로그아웃"
+            title="\uB85C\uADF8\uC544\uC6C3"
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-white',
+              'flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900',
               'disabled:pointer-events-none disabled:opacity-50'
             )}
           >
             <LogOut size={ICON_NAV} className="shrink-0" aria-hidden />
-            <span className="sr-only">로그아웃</span>
+            <span className="sr-only">\uB85C\uADF8\uC544\uC6C3</span>
           </button>
         ) : (
           <Link
             href="/login"
-            title="로그인"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white"
+            title="\uB85C\uADF8\uC778"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
           >
             <LogOut size={ICON_NAV} className="shrink-0" aria-hidden />
-            <span className="sr-only">로그인</span>
+            <span className="sr-only">\uB85C\uADF8\uC778</span>
           </Link>
         )}
       </div>
@@ -295,7 +271,7 @@ export function AppSidebar() {
     return (
       <header
         className={cn(
-          'fixed left-0 right-0 top-0 z-40 min-h-14 shrink-0 border-b border-border bg-white transition-transform duration-200 ease-out will-change-transform dark:border-zinc-800 dark:bg-zinc-950',
+          'fixed left-0 right-0 top-0 z-40 min-h-14 shrink-0 border-b border-[#E5E8EF] bg-white transition-transform duration-200 ease-out will-change-transform',
           hideResultsTopNav && '-translate-y-full pointer-events-none'
         )}
       >
@@ -306,28 +282,23 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* &lt;768px: 햄버거 + 풀 너비 드로어 */}
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-neutral-900 shadow-sm md:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        className="fixed left-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E8EF] bg-white text-neutral-900 shadow-sm md:hidden"
         aria-expanded={mobileOpen}
-        aria-label={mobileOpen ? '메뉴 닫기' : '메뉴 열기'}
+        aria-label={mobileOpen ? '\uBA54\uB274 \uB2EB\uAE30' : '\uBA54\uB274 \uC5F4\uAE30'}
       >
         {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
       {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => setMobileOpen(false)}
-          aria-hidden
-        />
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
       )}
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-white/10 shadow-xl md:hidden',
+          'fixed left-0 top-0 z-40 h-screen w-[220px] flex-col border-r border-[#E5E8EF] bg-white shadow-xl md:hidden',
           'transition-transform duration-200 ease-out',
           mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
         )}
@@ -335,16 +306,14 @@ export function AppSidebar() {
         {sidebarContent}
       </aside>
 
-      {/* 768px~1023px: 아이콘 레일 */}
       <aside
-        className="fixed left-0 top-0 z-30 hidden h-screen w-[4.5rem] flex-col md:flex lg:hidden"
-        aria-label="축소 내비게이션"
+        className="fixed left-0 top-0 z-30 hidden h-screen w-[4.5rem] flex-col border-r border-[#E5E8EF] bg-white md:flex lg:hidden"
+        aria-label="\uACB0\uACFC \uD398\uC774\uC9C0 \uBE60\uB978 \uBA54\uB274"
       >
         {sidebarIconRail}
       </aside>
 
-      {/* ≥1024px: 전체 사이드바 */}
-      <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[220px] flex-col border-r border-white/10 shadow-xl lg:flex">
+      <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[220px] flex-col border-r border-[#E5E8EF] bg-white shadow-sm lg:flex">
         {sidebarContent}
       </aside>
     </>

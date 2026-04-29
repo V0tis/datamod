@@ -103,7 +103,7 @@ function NewsDetailModal({
               </p>
             )}
             {item.url && (
-              <Button variant="outline" size="sm" className="mt-3 gap-1.5" asChild>
+              <Button variant="secondary" size="sm" className="mt-3 gap-1.5" asChild>
                 <a
                   href={item.url}
                   target="_blank"
@@ -630,10 +630,17 @@ function ResultsContent() {
     streamingState.status === 'streaming' ||
     streamingState.status === 'completed'
 
-  /** 하단 고정 배너: 실제 파이프라인이 돌 때만 (완료·캐시 조회 시 숨김) */
-  const pipelineActive = loading || analysisPipelineBusy
-
-  const liveAnalysisBanner = showAnalysisShell && !needsRunAction && hasKeyword && pipelineActive
+  /** 하단 고정 배너: 완료/캐시/오류 상태에서는 항상 숨김 */
+  const progressFooterStatus: 'running' | 'completed' | 'cached' | 'error' =
+    hasFailure
+      ? 'error'
+      : displayResult?.reportId && !loading
+        ? hasCachedResult === true
+          ? 'cached'
+          : 'completed'
+        : loading || analysisPipelineBusy
+          ? 'running'
+          : 'completed'
 
   /** reportId 변경 시 insight 초기화 */
   useEffect(() => {
@@ -1249,7 +1256,7 @@ function ResultsContent() {
             modelToggle={
               <div className="flex items-center gap-1.5" role="group" aria-label="AI 우선 분석">
                 <span className="shrink-0 text-[11px] font-medium text-muted-foreground">AI 우선</span>
-                <div className="flex gap-0.5 rounded-md bg-muted/60 p-0.5 dark:bg-muted/40">
+                <div className="flex gap-0.5 rounded-md bg-muted/60 p-0.5 ">
                   {(['gemini', 'groq'] as const).map((v) => (
                     <button
                       key={v}
@@ -1423,19 +1430,19 @@ function ResultsContent() {
                     setEngineModalOpen(true)
                   }
                 }}
-                className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900"
+                className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2  "
               >
                 <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
                   <div className="min-w-0 flex-1">
-                    <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg dark:text-zinc-50">
-                      <Cpu className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
+                    <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg ">
+                      <Cpu className="h-5 w-5 shrink-0 text-slate-500 " aria-hidden />
                       AI 분석 엔진
                     </h2>
-                    <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 dark:text-zinc-400">단계별 파이프라인과 실행 상태를 모달에서 확인합니다.</p>
+                    <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 ">단계별 파이프라인과 실행 상태를 모달에서 확인합니다.</p>
                   </div>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     className="shrink-0 gap-2 pointer-events-none"
                     tabIndex={-1}
@@ -1465,19 +1472,19 @@ function ResultsContent() {
                 setDetailModalOpen(true)
               }
             }}
-            className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900"
+            className="scroll-mt-24 mt-6 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-slate-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2  "
           >
             <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
               <div className="min-w-0 flex-1">
-                <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg dark:text-zinc-50">
-                  <Database className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" aria-hidden />
+                <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg ">
+                  <Database className="h-5 w-5 shrink-0 text-slate-500 " aria-hidden />
                   상세 (데이터 출처 · 뉴스)
                 </h2>
-                <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 dark:text-zinc-400">출처·뉴스 전체는 모달에서 동일 너비로 표시됩니다.</p>
+                <p className="mt-1 text-sm font-normal leading-relaxed text-slate-600 ">출처·뉴스 전체는 모달에서 동일 너비로 표시됩니다.</p>
               </div>
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 className="shrink-0 gap-2 pointer-events-none"
                 tabIndex={-1}
@@ -1721,11 +1728,7 @@ function ResultsContent() {
         )}
         </div>
         </div>
-        {liveAnalysisBanner ? (
-          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/90 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center backdrop-blur-sm dark:bg-background/85">
-            <p className="text-xs text-muted-foreground">실시간 분석 진행 중…</p>
-          </div>
-        ) : null}
+        <AnalysisProgressFooter status={progressFooterStatus} />
         </main>
         </div>
       </div>
@@ -1741,7 +1744,7 @@ function ResultsContent() {
             description="검색하면 인사이트 요약을 먼저 볼 수 있습니다. 상세 리포트는 필요할 때 펼쳐보시면 됩니다."
             action={
               <Link href="/">
-                <Button variant="outline">홈에서 검색하기</Button>
+                <Button variant="secondary">홈에서 검색하기</Button>
               </Link>
             }
           />
@@ -1779,5 +1782,17 @@ export default function ResultsPage() {
     >
       <ResultsContent />
     </Suspense>
+  )
+}
+
+function AnalysisProgressFooter({ status }: { status: 'running' | 'completed' | 'cached' | 'error' }) {
+  if (status === 'completed' || status === 'cached' || status === 'error') return null
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-blue-600 py-2.5 text-center text-sm font-medium text-white">
+      <span className="inline-flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        실시간 분석 진행 중...
+      </span>
+    </div>
   )
 }

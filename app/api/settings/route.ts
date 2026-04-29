@@ -30,7 +30,6 @@ export async function GET() {
   const hasGeminiInDb = !!(row?.gemini_api_key && String(row.gemini_api_key).trim().length > 0)
   const hasGroqInDb = !!(row && (row as { groq_api_key?: string }).groq_api_key && String((row as { groq_api_key?: string }).groq_api_key).trim().length > 0)
   if (process.env.NODE_ENV === 'development') {
-    console.log('[Settings GET] user_id:', user.id, '| row:', !!row, '| hasGeminiInDb:', hasGeminiInDb, '| hasGroqInDb:', hasGroqInDb)
   }
 
   const effective = getEffectiveLicenseKeys(row?.gemini_api_key)

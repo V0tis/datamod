@@ -597,16 +597,16 @@ export function StrategyEnginePipeline({
     <div
       className={cn(
         !embedded &&
-          'rounded-[12px] border border-zinc-200/90 bg-zinc-50/50 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden dark:border-zinc-800 dark:bg-zinc-950/30',
+          'rounded-[12px] border border-zinc-200/90 bg-zinc-50/50 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden  ',
         className
       )}
     >
       <div className={cn('flex flex-col gap-4', embedded ? 'py-2' : 'p-5 sm:p-6')}>
         {!hidePipelineTitle ? (
-          <div className={cn('flex items-center gap-2 min-w-0', embedded ? '' : 'pb-0.5 border-b border-slate-200/70 dark:border-zinc-800')}>
-            <Sparkles className="h-4 w-4 text-slate-600 dark:text-zinc-400 shrink-0" />
+          <div className={cn('flex items-center gap-2 min-w-0', embedded ? '' : 'pb-0.5 border-b border-slate-200/70 ')}>
+            <Sparkles className="h-4 w-4 text-slate-600  shrink-0" />
             <div className="min-w-0">
-              <span className={cn(embedded ? 'text-xs font-medium text-muted-foreground' : 'text-sm font-semibold tracking-tight text-slate-800 dark:text-zinc-100')}>
+              <span className={cn(embedded ? 'text-xs font-medium text-muted-foreground' : 'text-sm font-semibold tracking-tight text-slate-800 ')}>
                 {allCompleted ? `분석 완료 · "${keyword}"` : `분석 파이프라인 · "${keyword}"`}
               </span>
             </div>
@@ -617,14 +617,14 @@ export function StrategyEnginePipeline({
           <GlobalPipelineActivityStrip logs={activityRows} stripRef={globalStripRef} />
           {queueWaitingBanner ? (
             <div
-              className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50/95 px-3 py-2.5 text-xs leading-snug text-sky-950 dark:border-sky-900/80 dark:bg-sky-950/50 dark:text-sky-100"
+              className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50/95 px-3 py-2.5 text-xs leading-snug text-sky-950   "
               role="status"
               aria-live="polite"
             >
-              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-sky-600 dark:text-sky-400" aria-hidden />
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-sky-600 " aria-hidden />
               <div>
-                <p className="font-semibold text-sky-950 dark:text-sky-50">다음 분석 준비 중…</p>
-                <p className="mt-0.5 text-[11px] text-sky-900/90 dark:text-sky-200/95">
+                <p className="font-semibold text-sky-950 ">다음 분석 준비 중…</p>
+                <p className="mt-0.5 text-[11px] text-sky-900/90 ">
                   큐 대기 중이거나 서버가 다음 단계를 배정하는 중입니다. 실시간 상태와 함께 곧 이어집니다.
                 </p>
               </div>
@@ -644,16 +644,16 @@ export function StrategyEnginePipeline({
                     className={cn(
                       'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums shadow-sm ring-1 transition-colors',
                       stStatus === 'completed' &&
-                        'bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-zinc-600',
+                        'bg-zinc-100 text-zinc-700 ring-zinc-200   ',
                       stStatus === 'running' &&
                         'bg-primary text-primary-foreground ring-primary/35 shadow-md',
-                      stStatus === 'pending' && 'bg-zinc-50 text-zinc-400 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-600',
-                      stStatus === 'failed' && 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950 dark:text-red-200',
+                      stStatus === 'pending' && 'bg-zinc-50 text-zinc-400 ring-zinc-200/80  ',
+                      stStatus === 'failed' && 'bg-red-50 text-red-700 ring-red-200  ',
                     )}
                   >
                     {j + 1}
                   </span>
-                  <span className="hidden sm:block text-[9px] font-medium leading-tight text-zinc-500 dark:text-zinc-400 truncate max-w-full px-0.5">
+                  <span className="hidden sm:block text-[9px] font-medium leading-tight text-zinc-500  truncate max-w-full px-0.5">
                     {st.label}
                   </span>
                 </div>
@@ -679,15 +679,15 @@ export function StrategyEnginePipeline({
                 key={stage.id}
                 className={cn(
                   'relative border-l-2 pl-5 pb-8 last:pb-2',
-                  !isError && 'border-slate-200 dark:border-zinc-700',
+                  !isError && 'border-slate-200 ',
                   isError &&
-                    'rounded-r-lg border-red-300/90 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/30',
-                  isError && prominentFailedRetry && 'ring-2 ring-red-500/45 shadow-md dark:ring-red-500/35',
+                    'rounded-r-lg border-red-300/90 bg-red-50/70  ',
+                  isError && prominentFailedRetry && 'ring-2 ring-red-500/45 shadow-md ',
                 )}
               >
                 <div className="absolute -left-[9px] top-1.5 z-[1]" aria-hidden>
                   {status === 'completed' && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-background ring-4 ring-background dark:border-zinc-600 dark:bg-zinc-950 dark:ring-zinc-950">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-background ring-4 ring-background   ">
                       <Check className="h-2.5 w-2.5 text-slate-500" strokeWidth={3} />
                     </span>
                   )}
@@ -697,11 +697,11 @@ export function StrategyEnginePipeline({
                     </span>
                   )}
                   {status === 'pending' && (
-                    <span className="block h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-background dark:bg-zinc-600 dark:ring-zinc-950" />
+                    <span className="block h-2.5 w-2.5 rounded-full bg-slate-300 ring-4 ring-background  " />
                   )}
                   {status === 'failed' && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-red-200 bg-red-50 ring-4 ring-background dark:border-red-800 dark:bg-red-950/80 dark:ring-zinc-950">
-                      <AlertCircle className="h-2.5 w-2.5 text-red-600 dark:text-red-400" strokeWidth={2.5} />
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-red-200 bg-red-50 ring-4 ring-background   ">
+                      <AlertCircle className="h-2.5 w-2.5 text-red-600 " strokeWidth={2.5} />
                     </span>
                   )}
                 </div>
@@ -710,27 +710,27 @@ export function StrategyEnginePipeline({
                   <div
                     className={cn(
                       'text-sm font-semibold leading-snug',
-                      status === 'completed' && 'text-slate-500 dark:text-slate-400',
+                      status === 'completed' && 'text-slate-500 ',
                       status === 'running' && 'text-foreground',
                       status === 'pending' && 'text-muted-foreground',
-                      status === 'failed' && 'text-red-800 dark:text-red-200',
+                      status === 'failed' && 'text-red-800 ',
                     )}
                   >
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="tracking-tight">{stage.label}</span>
-                        <span className="text-[11px] font-normal text-zinc-500 dark:text-zinc-500">
+                        <span className="text-[11px] font-normal text-zinc-500 ">
                           {status === 'completed' && '완료'}
                           {status === 'running' && '진행 중'}
                           {status === 'pending' && '대기'}
                           {status === 'failed' && '실패'}
                         </span>
                       </div>
-                      <p className="text-[11px] font-normal leading-snug text-zinc-500 dark:text-zinc-400">
+                      <p className="text-[11px] font-normal leading-snug text-zinc-500 ">
                         {stage.subtitle}
                       </p>
                       {status === 'completed' && insight?.summary ? (
-                        <p className="mt-1 rounded-md border border-zinc-200/90 bg-white/90 px-2.5 py-1.5 text-xs font-medium leading-snug text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-100">
+                        <p className="mt-1 rounded-md border border-zinc-200/90 bg-white/90 px-2.5 py-1.5 text-xs font-medium leading-snug text-zinc-800 shadow-sm   ">
                           {insight.summary}
                         </p>
                       ) : null}
@@ -760,7 +760,7 @@ export function StrategyEnginePipeline({
                       {(task as { fallback_used?: boolean; primary_provider_error?: string | null } | null)?.fallback_used &&
                       (task as { primary_provider_error?: string | null })?.primary_provider_error ? (
                         <>
-                          <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-500">
+                          <div className="flex items-center gap-1.5 text-amber-700 ">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             <span className="text-xs font-medium">
                               {((task as { provider?: string }).provider ?? aiPrimaryModel) === 'groq' ? 'Gemini' : 'Groq'}{' '}
@@ -776,7 +776,7 @@ export function StrategyEnginePipeline({
                               })()}
                             </span>
                           </div>
-                          <div className="flex items-start gap-2 text-xs text-slate-600 dark:text-zinc-400">
+                          <div className="flex items-start gap-2 text-xs text-slate-600 ">
                             <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 mt-0.5" aria-hidden />
                             <span>
                               {((task as { provider?: string }).provider ?? aiPrimaryModel) === 'groq' ? 'Groq' : 'Gemini'}로 재시도 중...
@@ -786,7 +786,7 @@ export function StrategyEnginePipeline({
                       ) : (
                         <div className="flex items-start gap-2 min-w-0">
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500 shrink-0 mt-0.5" aria-hidden />
-                          <span className="text-[11px] leading-snug text-slate-600 dark:text-zinc-400 line-clamp-2 min-w-0">
+                          <span className="text-[11px] leading-snug text-slate-600  line-clamp-2 min-w-0">
                             {(() => {
                               const lastEntry = stageLogs[stageLogs.length - 1]
                               if (lastEntry?.message) return plainActivityPreview(lastEntry.message, 180)
@@ -846,7 +846,7 @@ export function StrategyEnginePipeline({
                                 'gap-1.5 h-9 text-xs font-medium',
                                 prominentFailedRetry
                                   ? 'shadow-sm'
-                                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800'
+                                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50    '
                               )}
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
@@ -872,11 +872,11 @@ export function StrategyEnginePipeline({
                   <PipelineStepActivityLog logs={stageLogs} status={status} previewCount={3} compact />
 
                   {showInsightPanel && insight && (
-                    <div className="mt-3 border-t border-slate-100 pt-3 dark:border-zinc-800/90">
+                    <div className="mt-3 border-t border-slate-100 pt-3 ">
                       <button
                         type="button"
                         onClick={() => setInsightOpen((o) => ({ ...o, [i]: !o[i] }))}
-                        className="flex w-full items-center justify-between gap-2 rounded-md border border-slate-200/90 bg-white/70 px-3 py-2 text-left text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50/90 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-200 dark:hover:bg-zinc-900/80"
+                        className="flex w-full items-center justify-between gap-2 rounded-md border border-slate-200/90 bg-white/70 px-3 py-2 text-left text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50/90    "
                       >
                         <span>분석 결과</span>
                         {insightOpen[i] ? (
@@ -887,9 +887,9 @@ export function StrategyEnginePipeline({
                       </button>
                       {insightOpen[i] ? (
                         <div className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                          <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 px-4 py-3 space-y-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+                          <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 px-4 py-3 space-y-2.5  ">
                             {insight.sectionLabel ? (
-                              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 ">
                                 {insight.sectionLabel}
                               </div>
                             ) : null}
@@ -906,7 +906,7 @@ export function StrategyEnginePipeline({
                                         href={item.url}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="font-medium text-slate-700 underline-offset-2 hover:underline truncate max-w-full dark:text-zinc-200"
+                                        className="font-medium text-slate-700 underline-offset-2 hover:underline truncate max-w-full "
                                       >
                                         {item.title}
                                       </a>

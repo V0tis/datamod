@@ -38,14 +38,14 @@ function CustomTooltip({
   const p = payload[0].payload
   const href = `/results?keyword=${encodeURIComponent(p.keyword)}${p.countryCode ? `&country=${encodeURIComponent(p.countryCode)}` : ''}`
   return (
-    <div className="rounded-lg border border-[#E5E9F2] bg-white px-3 py-2 text-xs shadow-lg dark:border-zinc-600 dark:bg-zinc-900">
-      <p className="font-semibold text-[#111827] dark:text-zinc-100">{p.keyword}</p>
-      <p className="mt-1 tabular-nums text-[#374151] dark:text-zinc-300">
+    <div className="rounded-lg border border-[#E5E9F2] bg-white px-3 py-2 text-xs shadow-lg  ">
+      <p className="font-semibold text-[#111827] ">{p.keyword}</p>
+      <p className="mt-1 tabular-nums text-[#374151] ">
         기회 {Math.round(p.기회점수)} · 리스크 {Math.round(p.리스크점수)} · 강도 {Math.round(p.트렌드강도)}
       </p>
       <Link
         href={href}
-        className="mt-2 inline-block text-[13px] font-semibold text-blue-600 hover:underline dark:text-sky-400"
+        className="mt-2 inline-block text-[13px] font-semibold text-blue-600 hover:underline "
       >
         분석 보기 →
       </Link>
@@ -73,7 +73,7 @@ export function OpportunityRiskScatter({
     return (
       <div
         className={cn(
-          'flex min-h-[280px] w-full animate-pulse rounded-[12px] border border-[#E5E9F2] bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900',
+          'flex min-h-[280px] w-full animate-pulse rounded-[12px] border border-[#E5E9F2] bg-slate-100  ',
           className
         )}
       />
@@ -84,7 +84,7 @@ export function OpportunityRiskScatter({
     return (
       <div
         className={cn(
-          'flex min-h-[280px] w-full items-center justify-center rounded-[12px] border border-[#E5E9F2] bg-white px-4 text-center text-sm text-[#6B7280] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400',
+          'flex min-h-[280px] w-full items-center justify-center rounded-[12px] border border-[#E5E9F2] bg-white px-4 text-center text-sm text-[#6B7280]   ',
           className
         )}
       >
@@ -95,16 +95,16 @@ export function OpportunityRiskScatter({
 
   return (
     <div className={cn('relative min-h-[280px] w-full', className)}>
-      <div className="pointer-events-none absolute left-3 top-2 z-10 max-w-[45%] text-[10px] font-semibold leading-tight text-emerald-700/90 dark:text-emerald-300/90">
+      <div className="pointer-events-none absolute left-3 top-2 z-10 max-w-[45%] text-[10px] font-semibold leading-tight text-emerald-700/90 ">
         고기회·저리스크 ✅
       </div>
-      <div className="pointer-events-none absolute right-3 top-2 z-10 max-w-[45%] text-right text-[10px] font-semibold leading-tight text-amber-800/90 dark:text-amber-200/90">
+      <div className="pointer-events-none absolute right-3 top-2 z-10 max-w-[45%] text-right text-[10px] font-semibold leading-tight text-amber-800/90 ">
         고기회·고리스크 ⚠️
       </div>
-      <div className="pointer-events-none absolute bottom-8 left-3 z-10 max-w-[45%] text-[10px] font-semibold leading-tight text-slate-600 dark:text-zinc-400">
+      <div className="pointer-events-none absolute bottom-8 left-3 z-10 max-w-[45%] text-[10px] font-semibold leading-tight text-slate-600 ">
         저기회·저리스크
       </div>
-      <div className="pointer-events-none absolute bottom-8 right-3 z-10 max-w-[45%] text-right text-[10px] font-semibold leading-tight text-red-800/90 dark:text-red-300/90">
+      <div className="pointer-events-none absolute bottom-8 right-3 z-10 max-w-[45%] text-right text-[10px] font-semibold leading-tight text-red-800/90 ">
         저기회·고리스크 ❌
       </div>
       <ResponsiveContainer width="100%" height={300}>

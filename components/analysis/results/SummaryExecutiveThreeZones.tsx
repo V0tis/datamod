@@ -133,10 +133,10 @@ export function SummaryExecutiveThreeZones({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-stretch">
         {/* Zone 1 */}
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-100 bg-white px-4 py-8 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-100 bg-white px-4 py-8  ">
           <div className="relative mb-4 h-32 w-32">
             <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden>
-              <circle cx="60" cy="60" r={DONUT_R} fill="none" stroke={dmColors.border} strokeWidth="10" className="dark:stroke-zinc-700" />
+              <circle cx="60" cy="60" r={DONUT_R} fill="none" stroke={dmColors.border} strokeWidth="10" className="" />
               {displayScore != null && !scoreLoading ? (
                 <circle
                   cx="60"
@@ -153,22 +153,22 @@ export function SummaryExecutiveThreeZones({
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               {scoreLoading && displayScore == null && !analysisFailed ? (
-                <span className="text-lg font-semibold text-slate-400 dark:text-zinc-500">…</span>
+                <span className="text-lg font-semibold text-slate-400 ">…</span>
               ) : displayScore != null ? (
                 <>
-                  <span className="text-3xl font-extrabold tabular-nums text-slate-900 dark:text-zinc-50">{displayScore}</span>
-                  <span className="text-xs font-medium text-slate-400 dark:text-zinc-500">/ 100</span>
+                  <span className="text-3xl font-extrabold tabular-nums text-slate-900 ">{displayScore}</span>
+                  <span className="text-xs font-medium text-slate-400 ">/ 100</span>
                 </>
               ) : (
                 <>
-                  <span className="text-2xl font-bold tabular-nums text-slate-400 dark:text-zinc-500">—</span>
-                  <span className="text-xs font-medium text-slate-400 dark:text-zinc-500">/ 100</span>
+                  <span className="text-2xl font-bold tabular-nums text-slate-400 ">—</span>
+                  <span className="text-xs font-medium text-slate-400 ">/ 100</span>
                 </>
               )}
             </div>
           </div>
-          <div className="mb-1 text-sm font-semibold text-slate-700 dark:text-zinc-200">시장 기회 점수</div>
-          <div className="mb-6 text-center text-xs text-slate-400 dark:text-zinc-500">
+          <div className="mb-1 text-sm font-semibold text-slate-700 ">시장 기회 점수</div>
+          <div className="mb-6 text-center text-xs text-slate-400 ">
             긍정 신호 {positiveCount}건 · 경쟁사 {competitorCount}개 · 리스크 {riskCount}건
           </div>
           <div className="w-full max-w-sm space-y-3">
@@ -181,7 +181,7 @@ export function SummaryExecutiveThreeZones({
             ).map((kpi) => (
               <div key={kpi.label}>
                 <div className="mb-1 flex justify-between text-xs">
-                  <span className="font-medium text-slate-500 dark:text-zinc-400">{kpi.label}</span>
+                  <span className="font-medium text-slate-500 ">{kpi.label}</span>
                   <span
                     className="font-bold tabular-nums"
                     style={{ color: getKpiBarColor(kpi.value, kpi.max, kpi.invert) }}
@@ -189,7 +189,7 @@ export function SummaryExecutiveThreeZones({
                     {kpi.value !== null ? `${kpi.value}/10` : '--'}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800">
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 ">
                   <div
                     className="h-full rounded-full transition-all duration-1000"
                     style={{
@@ -204,19 +204,19 @@ export function SummaryExecutiveThreeZones({
         </div>
 
         {/* Zone 2 */}
-        <div className="flex flex-col rounded-xl border border-slate-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+        <div className="flex flex-col rounded-xl border border-slate-100 bg-white p-4   sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 dark:bg-blue-500">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 ">
                 <Zap className="h-3.5 w-3.5 text-white" aria-hidden />
               </div>
-              <span className="text-sm font-bold text-slate-900 dark:text-zinc-50">우선 PM 액션</span>
+              <span className="text-sm font-bold text-slate-900 ">우선 PM 액션</span>
             </div>
-            <span className="text-xs text-slate-400 dark:text-zinc-500">지금 당장 실행 가능한 순서</span>
+            <span className="text-xs text-slate-400 ">지금 당장 실행 가능한 순서</span>
           </div>
           <div className="min-h-[8rem] flex-1 space-y-2">
             {topActions.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center text-sm text-slate-500   ">
                 실행 단계 산출 또는 PM 액션 플랜이 없습니다. 분석 완료 후 다시 확인해 주세요.
               </p>
             ) : (
@@ -225,25 +225,25 @@ export function SummaryExecutiveThreeZones({
                   key={action.id}
                   type="button"
                   onClick={scrollToAction}
-                  className="group flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-zinc-900/80"
+                  className="group flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-slate-50 "
                 >
                   <div
                     className={cn(
                       'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold',
-                      action.priority === 0 && 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-200',
-                      action.priority === 1 && 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-200',
-                      action.priority === 2 && 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
+                      action.priority === 0 && 'bg-red-100 text-red-700  ',
+                      action.priority === 1 && 'bg-orange-100 text-orange-700  ',
+                      action.priority === 2 && 'bg-blue-100 text-blue-700  '
                     )}
                   >
                     P{action.priority}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-800 dark:text-zinc-100">{action.title}</p>
-                    <p className="truncate text-xs text-slate-400 dark:text-zinc-500">
+                    <p className="truncate text-sm font-medium text-slate-800 ">{action.title}</p>
+                    <p className="truncate text-xs text-slate-400 ">
                       {action.impact} · {action.timeline}
                     </p>
                   </div>
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-300 transition-colors group-hover:text-blue-500 dark:text-zinc-600 dark:group-hover:text-blue-400" aria-hidden />
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-300 transition-colors group-hover:text-blue-500  " aria-hidden />
                 </button>
               ))
             )}
@@ -251,7 +251,7 @@ export function SummaryExecutiveThreeZones({
           <button
             type="button"
             onClick={scrollToAction}
-            className="mt-4 w-full rounded-lg border border-blue-100 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-900/50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+            className="mt-4 w-full rounded-lg border border-blue-100 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50   "
           >
             전체 PM 액션 플랜 보기 →
           </button>
@@ -259,42 +259,42 @@ export function SummaryExecutiveThreeZones({
       </div>
 
       {/* Zone 3 */}
-      <div className="rounded-xl border border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-5 dark:border-zinc-800 dark:from-zinc-900/80 dark:to-zinc-950 sm:px-5">
+      <div className="rounded-xl border border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-5    sm:px-5">
         <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-200 dark:bg-zinc-700">
-            <AlignLeft className="h-4 w-4 text-slate-500 dark:text-zinc-300" aria-hidden />
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-200 ">
+            <AlignLeft className="h-4 w-4 text-slate-500 " aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 ">
               AI 3줄 요약
             </div>
             {summary.current || summary.opportunity || summary.action ? (
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <span className="w-8 flex-shrink-0 text-xs font-bold text-orange-500">현상</span>
-                  <p className="text-pretty text-sm leading-relaxed text-slate-700 dark:text-zinc-300">{summary.current || '—'}</p>
+                  <p className="text-pretty text-sm leading-relaxed text-slate-700 ">{summary.current || '—'}</p>
                 </div>
                 <div className="flex gap-2">
-                  <span className="w-8 flex-shrink-0 text-xs font-bold text-blue-600 dark:text-blue-400">기회</span>
-                  <p className="text-pretty text-sm leading-relaxed text-slate-700 dark:text-zinc-300">{summary.opportunity || '—'}</p>
+                  <span className="w-8 flex-shrink-0 text-xs font-bold text-blue-600 ">기회</span>
+                  <p className="text-pretty text-sm leading-relaxed text-slate-700 ">{summary.opportunity || '—'}</p>
                 </div>
                 <div className="flex gap-2">
-                  <span className="w-8 flex-shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400">실행</span>
-                  <p className="text-pretty text-sm leading-relaxed text-slate-700 dark:text-zinc-300">{summary.action || '—'}</p>
+                  <span className="w-8 flex-shrink-0 text-xs font-bold text-emerald-600 ">실행</span>
+                  <p className="text-pretty text-sm leading-relaxed text-slate-700 ">{summary.action || '—'}</p>
                 </div>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
+              <p className="text-sm leading-relaxed text-slate-600 ">
                 전략·실행 단계 산출 또는 요약 필드가 없어 3줄을 구성할 수 없습니다. 재분석 후에도 비면 모델 응답 형식을 확인해 주세요.
               </p>
             )}
           </div>
         </div>
-        <details className="mt-3 border-t border-slate-100 pt-3 dark:border-zinc-800">
-          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300">
+        <details className="mt-3 border-t border-slate-100 pt-3 ">
+          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600  ">
             배경 및 근거 자세히 보기
           </summary>
-          <div className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
+          <div className="mt-2 text-sm leading-relaxed text-slate-600 ">
             <ConclusionStructuredBlocks markdown={conclusionBackgroundMarkdown} highlightTerms={highlightTerms} />
           </div>
         </details>

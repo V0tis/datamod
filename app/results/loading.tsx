@@ -4,7 +4,7 @@
 export default function ResultsPageLoading() {
   return (
     <div
-      className="w-full min-h-[min(100dvh,960px)] bg-white dark:bg-zinc-950 rin-doc"
+      className="w-full min-h-[min(100dvh,960px)] bg-white  rin-doc"
       aria-busy
       aria-label="분석 페이지 불러오는 중"
     >

@@ -3,15 +3,14 @@
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { showErrorToast } from '@/lib/error-toast'
-import { Eye, EyeOff, User, KeyRound, Loader2, CheckCircle2, XCircle, Wifi, ExternalLink, Cpu, Copy, HelpCircle } from 'lucide-react'
+import { User, KeyRound, Loader2, ExternalLink, Cpu, ChevronUp, ChevronDown, HelpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getDepthEstimates, formatEstimatedTime } from '@/lib/analysis-estimates'
 import { ChangePasswordForm } from '@/components/settings/change-password-form'
@@ -102,10 +101,9 @@ const AI_PRIMARY_OPTIONS: {
   },
 ]
 
-const SETTINGS_TAB_PARAM = 'tab'
-const TAB_LICENSE = 'license'
-const TAB_PROFILE = 'profile'
-const TAB_AI_CONFIG = 'ai-config'
+type SettingsTab = 'profile' | 'license' | 'ai-settings'
+type ProviderKey = 'gemini' | 'groq'
+type ConnectionStatus = 'unconfigured' | 'connected' | 'failed' | 'testing'
 
 const STEP_AI_FIELDS: { key: keyof StepAIModels; label: string; desc: string }[] = [
   {
@@ -124,35 +122,22 @@ const STEP_AI_FIELDS: { key: keyof StepAIModels; label: string; desc: string }[]
 
 function SettingsPageInner() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const tabFromUrl = searchParams.get(SETTINGS_TAB_PARAM)
-  const activeTab = tabFromUrl === TAB_LICENSE ? TAB_LICENSE : tabFromUrl === TAB_AI_CONFIG ? TAB_AI_CONFIG : TAB_PROFILE
-
-  const setActiveTab = (value: string) => {
-    const query = value === TAB_PROFILE ? '' : `?${SETTINGS_TAB_PARAM}=${value}`
-    router.replace(`/settings${query}`)
-  }
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
 
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<SettingsData | null>(null)
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
-  const [showGeminiKey, setShowGeminiKey] = useState(false)
-  const [showGroqKey, setShowGroqKey] = useState(false)
-  const [editingGemini, setEditingGemini] = useState(false)
-  const [editingGroq, setEditingGroq] = useState(false)
   const [serperApiKey, setSerperApiKey] = useState('')
-  const [showSerperKey, setShowSerperKey] = useState(false)
-  const [editingSerper, setEditingSerper] = useState(false)
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
+  const [saving, setSaving] = useState<ProviderKey | null>(null)
   const [savingSerper, setSavingSerper] = useState(false)
-  const [saveSuccessSerper, setSaveSuccessSerper] = useState(false)
-  const [savingGemini, setSavingGemini] = useState(false)
-  const [savingGroq, setSavingGroq] = useState(false)
-  const [testingGemini, setTestingGemini] = useState(false)
-  const [testingGroq, setTestingGroq] = useState(false)
-  const [saveSuccessGemini, setSaveSuccessGemini] = useState(false)
-  const [saveSuccessGroq, setSaveSuccessGroq] = useState(false)
+  const [testing, setTesting] = useState<ProviderKey | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<Record<ProviderKey, ConnectionStatus>>({
+    gemini: 'unconfigured',
+    groq: 'unconfigured',
+  })
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('standard')
   const [aiPrimaryModel, setAiPrimaryModel] = useState<'gemini' | 'groq'>('gemini')
   const [stepAIModels, setStepAIModels] = useState<StepAIModels>({
@@ -160,22 +145,12 @@ function SettingsPageInner() {
     ai_action_model: null, ai_risk_model: null, ai_creative_model: null, ai_consensus_model: null,
   })
   const [savingStepAI, setSavingStepAI] = useState(false)
-  const [geminiConnVerified, setGeminiConnVerified] = useState(false)
-  const [groqConnVerified, setGroqConnVerified] = useState(false)
   const [llmUsage, setLlmUsage] = useState<{
     totalPromptTokens: number
     totalCompletionTokens: number
     totalTokens: number
     callCount: number
   } | null>(null)
-
-  useEffect(() => {
-    setGeminiConnVerified(false)
-  }, [geminiApiKey])
-
-  useEffect(() => {
-    setGroqConnVerified(false)
-  }, [groqApiKey])
 
   useEffect(() => {
     const supabase = createClient()
@@ -236,6 +211,10 @@ function SettingsPageInner() {
           setGroqApiKey(typeof json.groqApiKey === 'string' ? json.groqApiKey : '')
           setSerperApiKey(typeof json.serperApiKey === 'string' ? json.serperApiKey : '')
           if (json.stepAIModels) setStepAIModels(json.stepAIModels)
+          setConnectionStatus({
+            gemini: json.hasGeminiKey ? 'connected' : 'unconfigured',
+            groq: json.hasGroqKey ? 'connected' : 'unconfigured',
+          })
         }
       })
       .catch((err) => showErrorToast(err, { fallbackMessage: '설정을 불러오지 못했습니다.' }))
@@ -307,86 +286,58 @@ function SettingsPageInner() {
     }
   }
 
-  const handleSaveGemini = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    const rawKey = geminiApiKey.trim()
-    if (rawKey && rawKey !== MASKED_PLACEHOLDER) {
-      const val = validateGeminiKey(geminiApiKey)
-      if (!val.valid) {
-        toast.error(val.error ?? '유효하지 않은 키입니다.')
+  const handleSaveApiKey = useCallback(
+    async (provider: ProviderKey, value: string) => {
+      if (!user) return
+      const validation = provider === 'gemini' ? validateGeminiKey(value) : validateGroqKey(value)
+      if (!validation.valid) {
+        toast.error(validation.error ?? '유효하지 않은 키입니다.')
         return
       }
-    }
-    setSavingGemini(true)
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gemini_api_key: geminiApiKey || undefined }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
-        return
-      }
-      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
-      if (nextRes.ok) {
-        const nextJson = (await nextRes.json()) as SettingsData
-        setData(nextJson)
-        setGeminiApiKey(typeof nextJson.geminiApiKey === 'string' ? nextJson.geminiApiKey : '')
-      } else {
-        setGeminiApiKey('')
-      }
-      toast.success('Gemini API 키가 저장되었습니다.')
-      setSaveSuccessGemini(true)
-      setTimeout(() => setSaveSuccessGemini(false), 3000)
-    } finally {
-      setSavingGemini(false)
-    }
-  }
 
-  const handleSaveGroq = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    const rawKey = groqApiKey.trim()
-    if (rawKey && rawKey !== MASKED_PLACEHOLDER) {
-      const val = validateGroqKey(groqApiKey)
-      if (!val.valid) {
-        toast.error(val.error ?? '유효하지 않은 키입니다.')
-        return
-      }
-    }
-    setSavingGroq(true)
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groq_api_key: groqApiKey || undefined }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
-        return
-      }
-      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
-      if (nextRes.ok) {
-        const nextJson = (await nextRes.json()) as SettingsData
-        setData(nextJson)
-        setGroqApiKey(typeof nextJson.groqApiKey === 'string' ? nextJson.groqApiKey : '')
-      } else {
-        setGroqApiKey('')
-      }
-      toast.success('Groq API 키가 저장되었습니다.')
-      setSaveSuccessGroq(true)
-      setTimeout(() => setSaveSuccessGroq(false), 3000)
-    } finally {
-      setSavingGroq(false)
-    }
-  }
+      setSaving(provider)
+      const trimmed = value.trim()
+      const hasValue = trimmed.length > 0
+      const previous = connectionStatus[provider]
+      setConnectionStatus((prev) => ({ ...prev, [provider]: hasValue ? 'connected' : 'unconfigured' }))
 
-  const handleSaveSerper = async (e: React.FormEvent) => {
-    e.preventDefault()
+      try {
+        const body =
+          provider === 'gemini'
+            ? { gemini_api_key: trimmed || undefined }
+            : { groq_api_key: trimmed || undefined }
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setConnectionStatus((prev) => ({ ...prev, [provider]: previous }))
+          showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
+          return
+        }
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                hasGeminiKey: provider === 'gemini' ? hasValue : prev.hasGeminiKey,
+                hasGroqKey: provider === 'groq' ? hasValue : prev.hasGroqKey,
+              }
+            : prev
+        )
+        toast.success(`${provider === 'gemini' ? 'Gemini' : 'Groq'} API 키가 저장되었습니다.`)
+      } catch {
+        setConnectionStatus((prev) => ({ ...prev, [provider]: previous }))
+        toast.error('저장에 실패했습니다.')
+      } finally {
+        setSaving(null)
+      }
+    },
+    [user, connectionStatus]
+  )
+
+  const handleSaveSerper = async () => {
     if (!user) return
     const rawKey = serperApiKey.trim()
     if (rawKey && rawKey !== MASKED_PLACEHOLDER && rawKey.length < 20) {
@@ -405,23 +356,14 @@ function SettingsPageInner() {
         showErrorToast(json, { fallbackMessage: '저장에 실패했습니다.' })
         return
       }
-      const nextRes = await fetch('/api/settings', { cache: 'no-store', credentials: 'include' })
-      if (nextRes.ok) {
-        const nextJson = (await nextRes.json()) as SettingsData
-        setData(nextJson)
-        setSerperApiKey(typeof nextJson.serperApiKey === 'string' ? nextJson.serperApiKey : '')
-      } else {
-        setSerperApiKey('')
-      }
+      setData((prev) => (prev ? { ...prev, hasSerperKey: !!rawKey } : prev))
       toast.success('Serper API 키가 저장되었습니다.')
-      setSaveSuccessSerper(true)
-      setTimeout(() => setSaveSuccessSerper(false), 3000)
     } finally {
       setSavingSerper(false)
     }
   }
 
-  const handleTestConnection = useCallback(async (provider: 'gemini' | 'groq') => {
+  const handleTestConnection = useCallback(async (provider: ProviderKey) => {
     const key = provider === 'gemini' ? geminiApiKey : groqApiKey
     const val = provider === 'gemini' ? validateGeminiKey(key) : validateGroqKey(key)
     if (!val.valid) {
@@ -432,8 +374,8 @@ function SettingsPageInner() {
       toast.error('테스트할 API 키를 입력해 주세요.')
       return
     }
-    if (provider === 'gemini') setTestingGemini(true)
-    else setTestingGroq(true)
+    setTesting(provider)
+    setConnectionStatus((prev) => ({ ...prev, [provider]: 'testing' }))
     try {
       const res = await fetch('/api/settings/test-connection', {
         method: 'POST',
@@ -442,70 +384,21 @@ function SettingsPageInner() {
       })
       const json = await res.json().catch(() => ({}))
       if (json.ok) {
-        if (provider === 'gemini') setGeminiConnVerified(true)
-        else setGroqConnVerified(true)
+        setConnectionStatus((prev) => ({ ...prev, [provider]: 'connected' }))
         toast.success(`${provider === 'gemini' ? 'Gemini' : 'Groq'} 연결에 성공했습니다.`)
       } else {
-        if (provider === 'gemini') setGeminiConnVerified(false)
-        else setGroqConnVerified(false)
+        setConnectionStatus((prev) => ({ ...prev, [provider]: 'failed' }))
         toast.error(json?.error ?? '연결에 실패했습니다.')
       }
     } catch {
-      if (provider === 'gemini') setGeminiConnVerified(false)
-      else setGroqConnVerified(false)
+      setConnectionStatus((prev) => ({ ...prev, [provider]: 'failed' }))
       toast.error('연결 확인 중 오류가 발생했습니다.')
     } finally {
-      if (provider === 'gemini') setTestingGemini(false)
-      else setTestingGroq(false)
+      setTesting(null)
     }
   }, [geminiApiKey, groqApiKey])
 
-  const copyApiKeyToClipboard = useCallback(async (raw: string, label: string) => {
-    const v = raw.trim()
-    if (!v || v === MASKED_PLACEHOLDER) {
-      toast.error('복사할 수 있는 키가 없습니다. 키를 입력하거나 편집한 뒤 다시 시도해 주세요.')
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(v)
-      toast.success(`${label} 키가 클립보드에 복사되었습니다.`)
-    } catch {
-      toast.error('클립보드 복사에 실패했습니다.')
-    }
-  }, [])
-
-  const getKeyState = (provider: 'gemini' | 'groq') => {
-    if (provider === 'gemini') {
-      const hasUser = !!data?.hasGeminiKey
-      const hasServer = !!data?.hasServerGemini
-      const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
-      const canReveal = geminiApiKey.length > 0
-      const showMask = hasUser && !geminiApiKey && !editingGemini
-      const displayValue = geminiApiKey || (showMask ? MASKED_PLACEHOLDER : '')
-      return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showGeminiKey, setShow: setShowGeminiKey, setValue: setGeminiApiKey, setEditing: setEditingGemini }
-    }
-    const hasUser = !!data?.hasGroqKey
-    const hasServer = !!data?.hasServerGroq
-    const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
-    const canReveal = groqApiKey.length > 0
-    const showMask = hasUser && !groqApiKey && !editingGroq
-    const displayValue = groqApiKey || (showMask ? MASKED_PLACEHOLDER : '')
-    return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showGroqKey, setShow: setShowGroqKey, setValue: setGroqApiKey, setEditing: setEditingGroq }
-  }
-
-  const getSerperKeyState = () => {
-    const hasUser = !!data?.hasSerperKey
-    const hasServer = !!data?.hasServerSerper
-    const placeholder = hasServer && !hasUser ? MASKED_PLACEHOLDER : hasUser ? MASKED_PLACEHOLDER : '키를 입력하세요'
-    const canReveal = serperApiKey.length > 0
-    const showMask = hasUser && !serperApiKey && !editingSerper
-    const displayValue = serperApiKey || (showMask ? MASKED_PLACEHOLDER : '')
-    return { value: displayValue, hasUser, hasServer, placeholder, canReveal, show: showSerperKey, setShow: setShowSerperKey, setValue: setSerperApiKey, setEditing: setEditingSerper }
-  }
-
-  const geminiConnected = !!(data?.hasGeminiKey || data?.hasServerGemini)
-  const groqConnected = !!(data?.hasGroqKey || data?.hasServerGroq)
-  const serperConnected = !!(data?.hasSerperKey || data?.hasServerSerper)
+  const hasConfiguredAnyKey = [geminiApiKey, groqApiKey, serperApiKey].some((key) => key.trim().length > 0)
 
   if (!user) {
     return (
@@ -556,377 +449,230 @@ function SettingsPageInner() {
         </p>
       </header>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full rin-section gap-0">
-        <TabsList className="w-full max-w-lg grid grid-cols-3 min-h-10 sm:h-10 rounded-lg bg-muted/50 p-1 gap-1">
-          <TabsTrigger value="profile" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            내 정보
-          </TabsTrigger>
-          <TabsTrigger value="license" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <KeyRound className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            라이선스
-          </TabsTrigger>
-          <TabsTrigger value="ai-config" className="rounded-md gap-1.5 sm:gap-2 text-xs sm:text-sm px-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Cpu className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            <span className="truncate">AI 분석 설정</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="mb-8 border-b border-gray-200">
+        <div className="flex gap-0">
+          {[
+            { id: 'profile' as const, label: '내 정보', icon: User },
+            { id: 'license' as const, label: '라이선스', icon: KeyRound },
+            { id: 'ai-settings' as const, label: 'AI 분석 설정', icon: Cpu },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-medium transition-all',
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        <TabsContent value="profile" className="m-0 mt-4 sm:mt-6">
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">내 정보</CardTitle>
-              <CardDescription>로그인 이메일과 비밀번호를 한곳에서 확인·변경합니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6 sm:gap-8 pb-6 sm:pb-8">
-              <div className="max-w-md space-y-2 min-w-0">
-                <Label htmlFor="email">이메일</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={data?.email ?? ''}
-                  readOnly
-                  className="cursor-not-allowed border-[#E5E7EB] bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900/80"
-                />
+      {activeTab === 'profile' && (
+        <div className="max-w-lg space-y-6">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">이메일</label>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+              {data?.email ?? ''}
+              <span className="ml-auto rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">인증 완료</span>
+            </div>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowPasswordChange((prev) => !prev)}
+              className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              비밀번호 변경 {showPasswordChange ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+            {showPasswordChange && user && (
+              <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-5">
+                <ChangePasswordForm user={user} userEmail={(data?.email ?? user.email ?? '').trim()} />
               </div>
-              {user && <ChangePasswordForm user={user} userEmail={(data?.email ?? user.email ?? '').trim()} />}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            )}
+          </div>
+        </div>
+      )}
 
-        <TabsContent value="license" className="m-0 mt-4 sm:mt-6 rin-section">
-          {/* 1. AI Provider Settings */}
-          <Card className="border border-border bg-card shadow-sm rounded-xl">
-            <CardHeader>
-              <CardTitle className="text-lg">AI Provider 설정</CardTitle>
-              <CardDescription>시장 분석에 사용되는 AI API 키를 설정합니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {/* Gemini API Key */}
-              <div className="space-y-3">
+      {activeTab === 'license' && (
+        <Card className="border border-border bg-card shadow-sm">
+          <CardContent className="space-y-3 p-5">
+            <p className="text-sm font-semibold text-foreground">라이선스</p>
+            <p className="text-sm text-muted-foreground">
+              현재 계정의 라이선스 및 사용량 정보를 확인합니다.
+            </p>
+            {llmUsage != null && (
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div>
-                  <Label className="text-base font-medium">Gemini API Key</Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    시장 신호 분석, 뉴스 요약, 인사이트 생성에 사용됩니다. Google AI Studio에서 발급받을 수 있습니다.
-                  </p>
+                  <p className="text-xs text-muted-foreground">총 토큰</p>
+                  <p className="font-semibold tabular-nums">{llmUsage.totalTokens.toLocaleString('ko-KR')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">프롬프트</p>
+                  <p className="font-semibold tabular-nums">{llmUsage.totalPromptTokens.toLocaleString('ko-KR')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">완성</p>
+                  <p className="font-semibold tabular-nums">{llmUsage.totalCompletionTokens.toLocaleString('ko-KR')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">LLM 호출</p>
+                  <p className="font-semibold tabular-nums">{llmUsage.callCount.toLocaleString('ko-KR')}회</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === 'ai-settings' && (
+        <div className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 gap-4">
+            {([
+              {
+                type: 'gemini' as const,
+                label: 'Gemini API',
+                description: '시장 신호 분석, 뉴스 요약, 인사이트 생성에 사용됩니다.',
+                docsUrl: 'https://aistudio.google.com/apikey',
+                value: geminiApiKey,
+                setValue: setGeminiApiKey,
+              },
+              {
+                type: 'groq' as const,
+                label: 'Groq API',
+                description: 'Logic·Creative·Fact 인사이트와 합의 요약에 사용됩니다.',
+                docsUrl: 'https://console.groq.com/keys',
+                value: groqApiKey,
+                setValue: setGroqApiKey,
+              },
+            ]).map((item) => {
+              const status = connectionStatus[item.type]
+              return (
+                <div key={item.type} className="rounded-xl border border-gray-200 bg-white p-5">
+                  <div className="mb-3 flex items-start justify-between">
+                    <div>
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">{item.label}</span>
+                        {status === 'connected' && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">✓ 연결됨</span>
+                        )}
+                        {status === 'failed' && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">연결 실패</span>
+                        )}
+                        {status === 'unconfigured' && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">미설정</span>
+                        )}
+                        {status === 'testing' && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-600">테스트 중</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400">{item.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder="API 키를 입력하세요"
+                      value={item.value}
+                      onChange={(e) => item.setValue(e.target.value)}
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none transition-all focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveApiKey(item.type, item.value)}
+                      className="rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+                    >
+                      {saving === item.type ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleTestConnection(item.type)}
+                      disabled={!item.value || testing === item.type}
+                      className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {testing === item.type ? <Loader2 className="h-4 w-4 animate-spin" /> : '테스트'}
+                    </button>
+                  </div>
                   <a
-                    href="https://aistudio.google.com/apikey"
+                    href={item.docsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
                   >
-                    Google AI Studio에서 API 키 발급 <ExternalLink className="h-3 w-3" />
+                    {item.label} 발급 방법 <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
-                <form onSubmit={handleSaveGemini} className="space-y-3">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <Input
-                          type={getKeyState('gemini').show && getKeyState('gemini').canReveal ? 'text' : 'password'}
-                          placeholder={getKeyState('gemini').placeholder}
-                          value={getKeyState('gemini').value}
-                          onChange={(e) => setGeminiApiKey(e.target.value)}
-                          onFocus={() => getKeyState('gemini').hasUser && !geminiApiKey && getKeyState('gemini').setEditing(true)}
-                          onBlur={() => getKeyState('gemini').setEditing(false)}
-                          className="pr-10 bg-muted/50 focus:bg-background"
-                          autoComplete="off"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => getKeyState('gemini').canReveal && setShowGeminiKey(!showGeminiKey)}
-                          title={getKeyState('gemini').canReveal ? (showGeminiKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('gemini').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                          aria-label={showGeminiKey ? '숨기기' : '보기'}
-                        >
-                          {showGeminiKey && getKeyState('gemini').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 w-full gap-1.5 sm:w-auto"
-                        onClick={() => copyApiKeyToClipboard(geminiApiKey, 'Gemini API')}
-                      >
-                        <Copy className="h-4 w-4" />
-                        복사
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button type="submit" disabled={savingGemini} className="shrink-0">
-                        {savingGemini ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={geminiConnVerified ? 'default' : 'outline'}
-                        size="default"
-                        className={cn(
-                          geminiConnVerified &&
-                            'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:ring-emerald-500/40 dark:bg-emerald-600 dark:hover:bg-emerald-600'
-                        )}
-                        disabled={
-                          testingGemini ||
-                          geminiConnVerified ||
-                          !geminiApiKey ||
-                          geminiApiKey === MASKED_PLACEHOLDER
-                        }
-                        onClick={() => handleTestConnection('gemini')}
-                        title={geminiConnVerified ? '연결됨' : '연결 테스트'}
-                      >
-                        {testingGemini ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : geminiConnVerified ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <Wifi className="h-4 w-4" />
-                        )}
-                        {geminiConnVerified ? '연결됨' : '연결 테스트'}
-                      </Button>
-                      {saveSuccessGemini && (
-                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                          <CheckCircle2 className="h-4 w-4" /> 저장됨
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </form>
-              </div>
+              )
+            })}
+          </div>
 
-              {/* Groq API Key */}
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-base font-medium">Groq API Key</Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Logic·Creative·Fact 탭별 AI 인사이트, 합의 요약에 사용됩니다. Groq Console에서 발급받을 수 있습니다.
-                  </p>
-                  <a
-                    href="https://console.groq.com/keys"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <p className="mb-2 text-sm font-semibold text-gray-900">Serper API (웹 검색)</p>
+            <p className="mb-3 text-xs text-gray-400">트렌드/경쟁사 웹 검색 데이터 수집에 사용됩니다.</p>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="API 키를 입력하세요"
+                value={serperApiKey}
+                onChange={(e) => setSerperApiKey(e.target.value)}
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveSerper()}
+                disabled={savingSerper}
+                className="rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                {savingSerper ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+              </button>
+            </div>
+            <a
+              href="https://serper.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+            >
+              Serper API 발급 방법 <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+
+          {hasConfiguredAnyKey && (
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-semibold text-gray-700">시스템 상태</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { name: 'Gemini', status: connectionStatus.gemini },
+                  { name: 'Groq', status: connectionStatus.groq },
+                  { name: 'Serper', status: serperApiKey.trim().length > 0 ? 'connected' : 'unconfigured' as ConnectionStatus },
+                ].map((item) => (
+                  <div
+                    key={item.name}
+                    className={cn(
+                      'rounded-xl border p-3 text-center',
+                      item.status === 'connected' ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                    )}
                   >
-                    Groq Console에서 API 키 발급 <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-                <form onSubmit={handleSaveGroq} className="space-y-3">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <Input
-                          type={getKeyState('groq').show && getKeyState('groq').canReveal ? 'text' : 'password'}
-                          placeholder={getKeyState('groq').placeholder}
-                          value={getKeyState('groq').value}
-                          onChange={(e) => setGroqApiKey(e.target.value)}
-                          onFocus={() => getKeyState('groq').hasUser && !groqApiKey && getKeyState('groq').setEditing(true)}
-                          onBlur={() => getKeyState('groq').setEditing(false)}
-                          className="pr-10 bg-muted/50 focus:bg-background"
-                          autoComplete="off"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => getKeyState('groq').canReveal && setShowGroqKey(!showGroqKey)}
-                          title={getKeyState('groq').canReveal ? (showGroqKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getKeyState('groq').canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                          aria-label={showGroqKey ? '숨기기' : '보기'}
-                        >
-                          {showGroqKey && getKeyState('groq').canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 w-full gap-1.5 sm:w-auto"
-                        onClick={() => copyApiKeyToClipboard(groqApiKey, 'Groq API')}
-                      >
-                        <Copy className="h-4 w-4" />
-                        복사
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button type="submit" disabled={savingGroq}>
-                        {savingGroq ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={groqConnVerified ? 'default' : 'outline'}
-                        size="default"
-                        className={cn(
-                          groqConnVerified &&
-                            'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:ring-emerald-500/40 dark:bg-emerald-600 dark:hover:bg-emerald-600'
-                        )}
-                        disabled={
-                          testingGroq ||
-                          groqConnVerified ||
-                          !groqApiKey ||
-                          groqApiKey === MASKED_PLACEHOLDER
-                        }
-                        onClick={() => handleTestConnection('groq')}
-                        title={groqConnVerified ? '연결됨' : '연결 테스트'}
-                      >
-                        {testingGroq ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : groqConnVerified ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <Wifi className="h-4 w-4" />
-                        )}
-                        {groqConnVerified ? '연결됨' : '연결 테스트'}
-                      </Button>
-                      {saveSuccessGroq && (
-                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                          <CheckCircle2 className="h-4 w-4" /> 저장됨
-                        </span>
+                    <div
+                      className={cn(
+                        'mb-0.5 text-xs font-semibold',
+                        item.status === 'connected' ? 'text-green-700' : 'text-gray-500'
                       )}
+                    >
+                      {item.name}
                     </div>
+                    <div className="text-xs text-gray-400">{item.status === 'connected' ? '✓ 연결됨' : '미설정'}</div>
                   </div>
-                </form>
+                ))}
               </div>
+            </div>
+          )}
 
-              {/* Serper API Key */}
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-base font-medium">Serper API Key (웹 검색)</Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    트렌드 분석·경쟁사 검색 시 키워드로 웹 검색 후 상위 소스를 LLM 컨텍스트로 전달합니다. 미설정 시 경쟁사·포지셔닝이 나오지 않을 수 있습니다.
-                  </p>
-                  <a
-                    href="https://serper.dev"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
-                  >
-                    Serper에서 API 키 발급 <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-                <form onSubmit={handleSaveSerper} className="space-y-3">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <Input
-                          type={getSerperKeyState().show && getSerperKeyState().canReveal ? 'text' : 'password'}
-                          placeholder={getSerperKeyState().placeholder}
-                          value={getSerperKeyState().value}
-                          onChange={(e) => setSerperApiKey(e.target.value)}
-                          onFocus={() => getSerperKeyState().hasUser && !serperApiKey && setEditingSerper(true)}
-                          onBlur={() => setEditingSerper(false)}
-                          className="pr-10 bg-muted/50 focus:bg-background"
-                          autoComplete="off"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => getSerperKeyState().canReveal && setShowSerperKey(!showSerperKey)}
-                          title={getSerperKeyState().canReveal ? (showSerperKey ? '숨기기' : '보기') : '입력한 키만 확인할 수 있습니다'}
-                          className={cn('absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded', getSerperKeyState().canReveal ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/50 cursor-default')}
-                          aria-label={showSerperKey ? '숨기기' : '보기'}
-                        >
-                          {showSerperKey && getSerperKeyState().canReveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 w-full gap-1.5 sm:w-auto"
-                        onClick={() => copyApiKeyToClipboard(serperApiKey, 'Serper API')}
-                      >
-                        <Copy className="h-4 w-4" />
-                        복사
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button type="submit" disabled={savingSerper}>
-                        {savingSerper ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-                      </Button>
-                      {saveSuccessSerper && (
-                        <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                          <CheckCircle2 className="h-4 w-4" /> 저장됨
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 2. System Status */}
-          <Card className="border border-border bg-card shadow-sm rounded-xl">
-            <CardHeader>
-              <CardTitle className="text-lg">시스템 상태</CardTitle>
-              <CardDescription>API 연결 상태를 확인합니다.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
-                  {geminiConnected ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
-                  ) : (
-                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  )}
-                  <div>
-                    <p className="font-medium">Gemini API</p>
-                    <p className="text-sm text-muted-foreground">{geminiConnected ? '연결됨' : '연결되지 않음'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
-                  {groqConnected ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
-                  ) : (
-                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  )}
-                  <div>
-                    <p className="font-medium">Groq API</p>
-                    <p className="text-sm text-muted-foreground">{groqConnected ? '연결됨' : '연결되지 않음'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-lg border border-border/80 p-4">
-                  {serperConnected ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-500" />
-                  ) : (
-                    <XCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  )}
-                  <div>
-                    <p className="font-medium">Serper API (웹 검색)</p>
-                    <p className="text-sm text-muted-foreground">{serperConnected ? '연결됨' : '연결되지 않음'}</p>
-                  </div>
-                </div>
-                {llmUsage != null && (
-                  <div className="sm:col-span-2 rounded-lg border border-border/80 bg-muted/20 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                      분석 LLM 누적 사용량 (이 계정)
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      파이프라인 완료 시점에 기록됩니다. API가 반환한 토큰 수이며, 일부 호출은 추정치만 포함될 수 있습니다.
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs">총 토큰</p>
-                        <p className="font-semibold tabular-nums">{llmUsage.totalTokens.toLocaleString('ko-KR')}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">프롬프트</p>
-                        <p className="font-semibold tabular-nums">{llmUsage.totalPromptTokens.toLocaleString('ko-KR')}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">완성</p>
-                        <p className="font-semibold tabular-nums">{llmUsage.totalCompletionTokens.toLocaleString('ko-KR')}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">LLM 호출</p>
-                        <p className="font-semibold tabular-nums">{llmUsage.callCount.toLocaleString('ko-KR')}회</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* AI 분석 설정 탭 */}
-        <TabsContent value="ai-config" className="m-0 mt-4 sm:mt-6 space-y-4 sm:space-y-6">
           {/* 기본 분석 설정 (License에서 이동) */}
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
@@ -1068,8 +814,8 @@ function SettingsPageInner() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
       </div>
     </div>
     </TooltipProvider>

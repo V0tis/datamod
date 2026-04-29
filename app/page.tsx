@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Loader2, X, Sparkles, Search, Play, CheckCircle2 } from 'lucide-react'
+import { Loader2, X, Search, Play, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { getRandomDatamodMessage, DATAMOD_LOADING_MESSAGES } from '@/components/common/RinAnimation'
 import { AnalysisProgressOverlay, useAnalysisTypewriter } from '@/components/research/AnalysisProgressOverlay'
@@ -25,19 +24,31 @@ import { LandingPage } from '@/components/landing/landing-page'
 import { FullPageBrandLoader } from '@/components/full-page-brand-loader'
 import type { SavedInsight } from '@/lib/insights-types'
 import type { DashboardKeywordRow } from '@/lib/types/dashboard-keyword-row'
-import { DEPTH_LABELS, depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
+import { depthToApiMode, getDepthEstimates, formatEstimatedTime, type DepthMode } from '@/lib/analysis-estimates'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
-import { DashboardCardShell } from '@/components/dashboard/dashboard-card-shell'
 import { dashboardPageBg } from '@/components/dashboard/dashboard-tokens'
-import { DashboardHeroPro } from '@/components/dashboard/dashboard-hero-pro'
-import { DashboardMarketIntelligence } from '@/components/dashboard/dashboard-market-intelligence'
-import { DashboardBottomSection, type AiSignalCard } from '@/components/dashboard/dashboard-bottom-section'
+import {
+  DashboardScatterMatrixCard,
+  DashboardTrendGrowthCard,
+  DashboardTopOpportunitiesCard,
+} from '@/components/dashboard/dashboard-market-intelligence'
+import {
+  DashboardRisingTrendsPanel,
+  DashboardAiSignalsPanel,
+  type AiSignalCard,
+} from '@/components/dashboard/dashboard-bottom-section'
+import { filterTrendItems, isBusinessRelevantKeyword } from '@/lib/filterTrendingKeywords'
 import { DASHBOARD_TREND_REGIONS } from '@/components/dashboard/dashboard-country-tabs-four'
 import { buildDashboardScatterPoints, inferTrendCategory } from '@/lib/dashboard-scatter-points'
-import { useDashboardSignalCounts } from '@/hooks/use-dashboard-data'
 
 const TRENDS_COUNTRY_STORAGE_KEY = 'trends_selected_country'
 const ANALYSIS_DEPTH_KEY = 'rin_analysis_depth'
+
+const DEPTH_SHORT_LABEL: Record<DepthMode, string> = {
+  fast: '빠른',
+  standard: '표준',
+  deep: '심층',
+}
 
 function recentInsightLabel(score: number | null | undefined, analyzing: boolean): string {
   if (analyzing) return '분석 중'
@@ -48,7 +59,7 @@ function recentInsightLabel(score: number | null | undefined, analyzing: boolean
 }
 
 const itemCardClass =
-  'rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950'
+  'rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm  '
 
 function DatamodSearchInner() {
   const router = useRouter()
@@ -151,22 +162,9 @@ function DatamodSearchInner() {
     ]
   }, [liveInsightSuggestion])
 
-  const liveDashboardRiskRows = useMemo((): DashboardKeywordRow[] => {
-    if (!liveInsightSuggestion) return []
-    const li = liveInsightSuggestion
-    return [
-      {
-        keyword: li.focus_market_keyword,
-        opportunity_score: li.opportunity_score,
-        risk_score: li.risk_score,
-        analysis_count: 1,
-      },
-    ]
-  }, [liveInsightSuggestion])
-
   const scrollToSearchAndFocus = useCallback(() => {
     searchInputRef.current?.focus()
-    document.getElementById('quick-analysis-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    document.getElementById('dashboard-quick-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
 
   useEffect(() => {
@@ -195,13 +193,6 @@ function DatamodSearchInner() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
-  const [searchShortcutLabel, setSearchShortcutLabel] = useState('⌘K')
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && !/Mac|iPhone|iPad/.test(navigator.platform)) {
-      setSearchShortcutLabel('Ctrl+K')
-    }
   }, [])
 
   useEffect(() => {
@@ -322,8 +313,7 @@ function DatamodSearchInner() {
     fetchTrends(false)
   }, [trendCountry])
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const startDashboardAnalysis = async () => {
     const k = query.trim()
     if (!k) {
       setError('검색어를 입력해 주세요.')
@@ -418,18 +408,10 @@ function DatamodSearchInner() {
       Boolean(analysisProgressLine)
   )
 
-  const displayName = useMemo(() => {
-    if (!user) return 'PM'
-    const meta = user.user_metadata as { full_name?: string } | undefined
-    return meta?.full_name?.trim() || user.email?.split('@')[0] || 'PM'
-  }, [user])
-
-  const { strongOppCount, strongRiskCount } = useDashboardSignalCounts(
-    liveDashboardOpportunityRows,
-    liveDashboardRiskRows
-  )
-
-  const trendItemsForDash = useMemo(() => (sharedTrends[trendCountry] ?? []).slice(0, 14), [sharedTrends, trendCountry])
+  const trendItemsForDash = useMemo(() => {
+    const raw = sharedTrends[trendCountry] ?? []
+    return filterTrendItems(raw).slice(0, 24)
+  }, [sharedTrends, trendCountry])
 
   const scatterData = useMemo(
     () => buildDashboardScatterPoints(trendItemsForDash, recentReports, liveDashboardOpportunityRows, trendCountry),
@@ -446,7 +428,10 @@ function DatamodSearchInner() {
 
   const aiSignals = useMemo((): AiSignalCard[] => {
     const out: AiSignalCard[] = []
-    if (liveInsightSuggestion) {
+    if (
+      liveInsightSuggestion &&
+      isBusinessRelevantKeyword(liveInsightSuggestion.focus_market_keyword.trim())
+    ) {
       out.push({
         keyword: liveInsightSuggestion.focus_market_keyword,
         score: liveInsightSuggestion.opportunity_score,
@@ -458,6 +443,7 @@ function DatamodSearchInner() {
     for (const t of trendItemsForDash) {
       if (out.length >= 3) break
       if (seen.has(t.keyword)) continue
+      if (!isBusinessRelevantKeyword(t.keyword)) continue
       seen.add(t.keyword)
       out.push({
         keyword: t.keyword,
@@ -468,14 +454,6 @@ function DatamodSearchInner() {
     }
     return out.slice(0, 3)
   }, [liveInsightSuggestion, trendItemsForDash, trendCountry])
-
-  const marketSignalCount = useMemo(() => {
-    const n = trendItemsForDash.length
-    if (n > 0) return n
-    return Math.max(strongOppCount + strongRiskCount, liveInsightSuggestion ? 1 : 0)
-  }, [trendItemsForDash.length, strongOppCount, strongRiskCount, liveInsightSuggestion])
-
-  const trendSignalCount = trendItemsForDash.length
 
   const getButtonLabel = () => {
     if (showAnalysisUI) {
@@ -556,9 +534,9 @@ function DatamodSearchInner() {
                 )}
                 {user && canSearch === false && (
                   <div className="flex flex-col flex-wrap gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-amber-800 dark:text-amber-400">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
+                    <p className="text-sm text-amber-800 ">Gemini API 키를 등록하면 분석을 사용할 수 있습니다.</p>
                     <Link href="/settings?tab=license" className="shrink-0">
-                      <Button variant="outline" size="sm" className="border-amber-500/50 text-amber-800 dark:text-amber-400 hover:bg-amber-500/10">
+                      <Button variant="secondary" size="sm" className="border-amber-500/50 text-amber-800  hover:bg-amber-500/10">
                         키 등록
                       </Button>
                     </Link>
@@ -567,233 +545,234 @@ function DatamodSearchInner() {
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="mb-2 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">대시보드</h1>
+                <p className="mt-0.5 text-sm text-gray-400">
+                  데이터 기준:{' '}
+                  {sharedTrends.updatedAt
+                    ? new Date(sharedTrends.updatedAt).toLocaleString('ko-KR', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—'}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => scrollToSearchAndFocus()}
-                className="inline-flex items-center gap-2 rounded-full border border-[#E5E9F2] bg-white px-3 py-1.5 text-[13px] font-medium text-[#374151] shadow-[0_1px_4px_rgba(0,0,0,0.06)] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
               >
-                <Search className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                검색
-                <kbd className="rounded border border-[#E5E9F2] bg-slate-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-[#6B7280] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                  {searchShortcutLabel}
-                </kbd>
+                <Plus className="h-4 w-4" aria-hidden />
+                새 분석 시작
               </button>
             </div>
 
-            <DashboardHeroPro
-              displayName={displayName}
-              marketSignalCount={marketSignalCount}
-              highOpportunityCount={strongOppCount}
-              highRiskCount={strongRiskCount}
-              trendSignalCount={trendSignalCount}
-              onNewAnalysis={scrollToSearchAndFocus}
-            />
-
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-stretch xl:gap-5">
-              <div id="quick-analysis-card" className="w-full shrink-0 xl:w-[240px]">
-                <DashboardCardShell
-                  id="dashboard-analysis"
-                  compact
-                  className="h-full min-h-0 rounded-[12px] border border-[#E5E9F2] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:border-zinc-700 dark:bg-zinc-950"
-                  icon={<Search size={18} className="text-sky-600 dark:text-sky-400" aria-hidden />}
-                  title="빠른 분석"
-                  description="키워드와 깊이를 선택한 뒤 분석을 시작하세요."
-                  footer={
-                    <Link href="/history" className="text-[12px] font-medium text-sky-600 hover:underline dark:text-sky-400">
-                      분석 기록 열기 →
-                    </Link>
+            <div
+              id="dashboard-quick-analysis"
+              className="mb-4 flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:gap-3"
+            >
+              <Search className="hidden h-5 w-5 shrink-0 text-gray-400 sm:block" aria-hidden />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="분석할 시장 키워드를 입력하세요 (예: AI 작성 도구, 에듀테크 플랫폼)"
+                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400 disabled:opacity-60"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setError(null)
+                }}
+                disabled={showAnalysisUI}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void startDashboardAnalysis()
                   }
-                >
-                  <form onSubmit={handleSearch} className="space-y-3">
-                    <div
-                      className={cn(
-                        'relative flex min-h-[2.75rem] w-full items-center rounded-xl border border-[#E5E9F2] bg-white px-3 py-1.5 shadow-sm transition-all focus-within:border-[#2AC1BC] focus-within:ring-2 focus-within:ring-[#2AC1BC]/20 dark:border-zinc-700 dark:bg-zinc-950',
-                        showAnalysisUI && 'opacity-70'
-                      )}
-                    >
-                      <Sparkles size={18} className="mr-1.5 shrink-0 text-primary/60" aria-hidden />
-                      <Input
-                        ref={searchInputRef}
-                        id="dashboard-keyword-input"
-                        type="search"
-                        aria-label="분석할 시장 키워드"
-                        placeholder="키워드 입력"
-                        value={query}
-                        onChange={(e) => { setQuery(e.target.value); setError(null) }}
-                        disabled={showAnalysisUI}
-                        className="h-full min-h-[2.25rem] flex-1 min-w-0 border-0 bg-transparent py-2 pl-0 pr-[5.5rem] text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                      />
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
-                        {(searching || isAnalyzingNow()) ? (
-                          <Button type="button" variant="destructive" onClick={handleAbort} size="sm" className="h-10 rounded-xl px-4 text-sm font-semibold">
-                            <X className="mr-1.5 h-3.5 w-3.5" />중단
-                          </Button>
-                        ) : (
-                          <Button
-                            type="submit"
-                            disabled={!query.trim()}
-                            size="sm"
-                            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2AC1BC] px-6 text-sm font-bold text-white hover:bg-[#26b0ab]"
-                          >
-                            <Play size={20} className="shrink-0" fill="currentColor" aria-hidden />
-                            분석 시작
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-xs font-medium text-muted-foreground">분석 깊이</span>
-                      {(['fast', 'standard', 'deep'] as const).map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => {
-                            setAnalysisDepth(d)
-                            try { window.localStorage.setItem(ANALYSIS_DEPTH_KEY, d) } catch { /* ignore */ }
-                            fetch('/api/settings', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ analysis_depth: d }),
-                            }).catch(() => { /* 설정 저장 실패 시 무시 */ })
-                          }}
-                          disabled={showAnalysisUI}
-                          className={cn(
-                            'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
-                            analysisDepth === d
-                              ? 'border-sky-500 bg-sky-50 text-sky-800 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-200'
-                              : 'border-[#E5E7EB] bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
-                          )}
-                        >
-                          {DEPTH_LABELS[d]}
-                        </button>
-                      ))}
-                    </div>
-                    {!showAnalysisUI && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span>예상 시간 {formatEstimatedTime(depthEstimates.estimatedTimeSec)}</span>
-                        <span>예상 토큰 약 {(depthEstimates.estimatedTokens / 1000).toFixed(0)}K</span>
-                      </div>
+                }}
+                aria-label="분석할 시장 키워드"
+              />
+              <div className="flex flex-wrap items-center gap-1 border-gray-100 sm:border-l sm:pl-3">
+                {(['fast', 'standard', 'deep'] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setAnalysisDepth(d)
+                      try {
+                        window.localStorage.setItem(ANALYSIS_DEPTH_KEY, d)
+                      } catch {
+                        /* ignore */
+                      }
+                      fetch('/api/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ analysis_depth: d }),
+                      }).catch(() => {})
+                    }}
+                    disabled={showAnalysisUI}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
+                      analysisDepth === d ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
                     )}
-                    <div className="space-y-2 pt-1">
-                      <p className="text-[12px] font-semibold text-[#374151] dark:text-zinc-400">빠른 분석 키워드</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크', 'B2B 결제', '클린뷰티 D2C'].map((k) => (
-                          <button
-                            key={k}
-                            type="button"
-                            onClick={() => { setQuery(k); setError(null) }}
-                            disabled={showAnalysisUI}
-                            className="rounded-full border border-[#E5E9F2] bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-[#374151] transition hover:bg-white disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-                          >
-                            {k}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </form>
-
-                  {showAnalysisUI && streamingState.status !== 'idle' && (
-                    <div className="mt-3 rounded-xl border border-[#E5E7EB] bg-sky-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-sky-950/30">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Loader2 size={18} className="shrink-0 animate-spin text-primary" aria-hidden />
-                        <p className="min-w-0 flex-1 text-xs font-medium text-foreground">
-                          {(streamingState.status === 'running' || streamingState.status === 'streaming')
-                            ? bannerAnalysisTyping
-                            : getButtonLabel()}
-                        </p>
-                        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                          {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
-                          (refiningPhaseDashboard === 1 || refiningPhaseDashboard === 2 || refiningPhaseDashboard === 3)
-                            ? `정제 ${refiningPhaseDashboard}/3`
-                            : (streamingState.status === 'running' || streamingState.status === 'streaming') &&
-                                typeof streamingState.currentStep === 'number'
-                              ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
-                              : ''}
-                        </span>
-                      </div>
-                      {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
-                          <div
-                            className={cn(
-                              'h-full rounded-full bg-primary',
-                              refiningPhaseDashboard === 3 ? 'transition-all duration-[550ms] ease-out' : 'transition-all duration-500'
-                            )}
-                            style={{ width: `${dashboardProgressPercent}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="mt-4 border-t border-[#F3F4F6] pt-4 dark:border-zinc-800">
-                    <p className="text-[12px] font-semibold text-[#374151] dark:text-zinc-400">최근 분석</p>
-                    <div className="mt-2 space-y-2">
-                      {recentReportsLoading ? (
-                        [1, 2, 3].map((i) => (
-                          <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100 dark:bg-zinc-900" />
-                        ))
-                      ) : recentReports.length === 0 ? (
-                        <p className="text-[12px] text-[#6B7280]">아직 기록이 없습니다</p>
-                      ) : (
-                        recentReports.slice(0, 3).map((r, i) => {
-                          const analyzing = r.analysis_status === 'analyzing'
-                          const href = `/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`
-                          return (
-                            <Link
-                              key={r.keyword + String(i)}
-                              href={href}
-                              className={cn(itemCardClass, 'block rounded-[10px] p-3 transition-shadow hover:shadow-md')}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="min-w-0 truncate text-[13px] font-semibold text-neutral-900 dark:text-zinc-100">{r.keyword}</span>
-                                {analyzing ? (
-                                  <Loader2 size={16} className="shrink-0 animate-spin text-amber-600" aria-hidden />
-                                ) : r.opportunity_score != null ? (
-                                  <span className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{r.opportunity_score}</span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 text-[11px] text-[#6B7280]">{recentInsightLabel(r.opportunity_score, analyzing)}</p>
-                              <div className="mt-1.5 flex items-center justify-between text-[10px] text-[#9CA3AF]">
-                                {r.created_at ? <TimeAgo isoString={r.created_at} /> : <span>—</span>}
-                                <span className="font-medium text-sky-600 dark:text-sky-400">열기</span>
-                              </div>
-                            </Link>
-                          )
-                        })
-                      )}
-                    </div>
-                  </div>
-                </DashboardCardShell>
+                  >
+                    {DEPTH_SHORT_LABEL[d]}
+                  </button>
+                ))}
               </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[#374151] dark:text-zinc-300">시장 인텔리전스</h2>
-                  {sharedTrends.updatedAt ? (
-                    <p className="text-[11px] text-[#9CA3AF]">데이터 기준 {new Date(sharedTrends.updatedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                  ) : null}
-                </div>
-                <DashboardMarketIntelligence
-                  scatterData={scatterData}
-                  scatterLoading={liveInsightSuggestionLoading || trendsLoading}
-                  trendItems={trendItemsForDash}
-                  trendsLoading={trendsLoading}
-                  topOpportunities={topOpportunities}
-                  countryCode={trendCountry}
-                />
-              </div>
+              {(searching || isAnalyzingNow()) ? (
+                <Button type="button" variant="danger" onClick={handleAbort} size="sm" className="shrink-0 rounded-xl px-5 py-2">
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  중단
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={!query.trim() || showAnalysisUI}
+                  onClick={() => void startDashboardAnalysis()}
+                  className="shrink-0 rounded-xl px-5 py-2 text-sm font-semibold"
+                >
+                  <Play className="mr-1 h-3.5 w-3.5" />
+                  분석 시작
+                </Button>
+              )}
             </div>
 
-            <DashboardBottomSection
-              trendCountry={trendCountry}
-              onTrendCountryChange={setTrendCountry}
-              trendItems={trendItemsForDash}
-              trendsLoading={trendsLoading}
-              onTrendAnalyze={goToTrendAnalysis}
-              showAnalysisUI={showAnalysisUI}
-              aiSignals={aiSignals}
-            />
+            {!showAnalysisUI && (
+              <p className="-mt-2 mb-6 text-xs text-gray-400">
+                예상 시간 {formatEstimatedTime(depthEstimates.estimatedTimeSec)} · 예상 토큰 약{' '}
+                {(depthEstimates.estimatedTokens / 1000).toFixed(0)}K
+              </p>
+            )}
+
+            {showAnalysisUI && streamingState.status !== 'idle' && (
+              <div className="mb-6 rounded-xl border border-[#E5E7EB] bg-sky-50 px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Loader2 size={18} className="shrink-0 animate-spin text-primary" aria-hidden />
+                  <p className="min-w-0 flex-1 text-xs font-medium text-foreground">
+                    {(streamingState.status === 'running' || streamingState.status === 'streaming')
+                      ? bannerAnalysisTyping
+                      : getButtonLabel()}
+                  </p>
+                  <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                    {(streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                    (refiningPhaseDashboard === 1 || refiningPhaseDashboard === 2 || refiningPhaseDashboard === 3)
+                      ? `정제 ${refiningPhaseDashboard}/3`
+                      : (streamingState.status === 'running' || streamingState.status === 'streaming') &&
+                          typeof streamingState.currentStep === 'number'
+                        ? `${progressStepIndex + 1}/${PROGRESS_STEPS.length}`
+                        : ''}
+                  </span>
+                </div>
+                {(streamingState.status === 'running' || streamingState.status === 'streaming') && (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
+                    <div
+                      className={cn(
+                        'h-full rounded-full bg-primary',
+                        refiningPhaseDashboard === 3 ? 'transition-all duration-[550ms] ease-out' : 'transition-all duration-500'
+                      )}
+                      style={{ width: `${dashboardProgressPercent}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[11fr_9fr] lg:items-stretch">
+              <DashboardScatterMatrixCard
+                scatterData={scatterData}
+                scatterLoading={liveInsightSuggestionLoading || trendsLoading}
+                countryCode={trendCountry}
+                className="min-h-[320px]"
+              />
+              <DashboardRisingTrendsPanel
+                trendCountry={trendCountry}
+                onTrendCountryChange={setTrendCountry}
+                trendItems={trendItemsForDash}
+                trendsLoading={trendsLoading}
+                onTrendAnalyze={goToTrendAnalysis}
+                showAnalysisUI={showAnalysisUI}
+                maxItems={10}
+                className="min-h-[280px] lg:max-h-[min(70vh,560px)]"
+              />
+            </div>
+
+            <DashboardAiSignalsPanel aiSignals={aiSignals} className="mb-6" />
+
+            <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <DashboardTrendGrowthCard trendItems={trendItemsForDash} trendsLoading={trendsLoading} />
+              <DashboardTopOpportunitiesCard topOpportunities={topOpportunities} />
+            </div>
+
+            <section className="rounded-[12px] border border-[#E5E9F2] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[14px] font-semibold text-[#374151]">최근 분석 기록</h2>
+                <Link href="/history" className="shrink-0 text-[12px] font-medium text-blue-600 hover:underline">
+                  전체 보기
+                </Link>
+              </div>
+              <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 pt-1">
+                {recentReportsLoading ? (
+                  [1, 2, 3].map((i) => (
+                    <div key={i} className="h-[120px] min-w-[200px] shrink-0 animate-pulse rounded-xl bg-slate-100" />
+                  ))
+                ) : recentReports.length === 0 ? (
+                  <p className="py-6 text-sm text-[#6B7280]">아직 기록이 없습니다</p>
+                ) : (
+                  recentReports.map((r, i) => {
+                    const analyzing = r.analysis_status === 'analyzing'
+                    const href = `/results?keyword=${encodeURIComponent(r.keyword)}${r.country_code ? `&country=${encodeURIComponent(r.country_code)}` : ''}`
+                    return (
+                      <Link
+                        key={r.keyword + String(i)}
+                        href={href}
+                        className={cn(
+                          itemCardClass,
+                          'block min-w-[220px] max-w-[260px] shrink-0 rounded-[12px] p-4 transition-shadow hover:shadow-md'
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="min-w-0 truncate text-[13px] font-semibold text-neutral-900">{r.keyword}</span>
+                          {analyzing ? (
+                            <Loader2 size={16} className="shrink-0 animate-spin text-amber-600" aria-hidden />
+                          ) : r.opportunity_score != null ? (
+                            <span className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-700">{r.opportunity_score}</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-[11px] text-[#6B7280]">{recentInsightLabel(r.opportunity_score, analyzing)}</p>
+                        <div className="mt-2 flex items-center justify-between text-[10px] text-[#9CA3AF]">
+                          {r.created_at ? <TimeAgo isoString={r.created_at} /> : <span>—</span>}
+                          <span className="font-medium text-blue-600">열기</span>
+                        </div>
+                      </Link>
+                    )
+                  })
+                )}
+              </div>
+            </section>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <p className="text-[12px] font-semibold text-[#374151]">빠른 예시 키워드</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['AI 작성 도구', '리모트워크 SaaS', '푸드테크', '에듀테크', 'B2B 결제', '클린뷰티 D2C'].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      setQuery(k)
+                      setError(null)
+                    }}
+                    disabled={showAnalysisUI}
+                    className="rounded-full border border-[#E5E9F2] bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-[#374151] transition hover:bg-white disabled:opacity-40"
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
             </DashboardLayout>
           </motion.div>
         )}

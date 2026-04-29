@@ -154,9 +154,6 @@ export function useResultPageState(params: UseResultPageStateParams): UseResultP
   useEffect(() => {
     if (typeof window !== 'undefined' && resultState !== prevResultStateRef.current) {
       prevResultStateRef.current = resultState
-      console.log('Result state:', resultState)
-      console.log('Cache found:', params.hasCachedResult)
-      console.log('Insight status:', insightStatus)
     }
   }, [resultState, params.hasCachedResult, insightStatus])
 

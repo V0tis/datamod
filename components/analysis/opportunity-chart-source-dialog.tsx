@@ -38,7 +38,7 @@ export function OpportunityChartSourceDialog({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0 text-xs">
+        <Button type="button" variant="secondary" size="sm" className="gap-1.5 shrink-0 text-xs">
           <Info className="h-3.5 w-3.5" aria-hidden />
           {triggerLabel}
         </Button>

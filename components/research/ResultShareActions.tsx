@@ -55,7 +55,7 @@ export function ResultShareActions({
   return (
     <div className={cn('flex flex-wrap items-center gap-2 sm:border-l sm:border-border/60 sm:pl-4', className)}>
       <Button
-        variant="outline"
+        variant="secondary"
         size="sm"
         onClick={handleDownloadPdf}
         disabled={disabled || pdfLoading}

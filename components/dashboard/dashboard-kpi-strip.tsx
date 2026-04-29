@@ -14,19 +14,19 @@ function avg(nums: number[]): number | null {
 /** 기회 점수(높을수록 유리) 정성 구간 */
 function opportunityLevel(score: number | null): { text: string; className: string } | null {
   if (score == null) return null
-  if (score >= 75) return { text: '매우 높음', className: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200' }
-  if (score >= 60) return { text: '높음', className: 'bg-[#E8FAF9] text-[#0f766e] dark:bg-teal-950/50 dark:text-teal-200' }
-  if (score >= 42) return { text: '보통', className: 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300' }
-  return { text: '낮음', className: 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400' }
+  if (score >= 75) return { text: '매우 높음', className: 'bg-emerald-100 text-emerald-900  ' }
+  if (score >= 60) return { text: '높음', className: 'bg-[#E8FAF9] text-[#0f766e]  ' }
+  if (score >= 42) return { text: '보통', className: 'bg-slate-100 text-slate-700  ' }
+  return { text: '낮음', className: 'bg-slate-100 text-slate-600  ' }
 }
 
 /** 리스크 점수(높을수록 부담 큼) 정성 구간 */
 function riskPressureLevel(score: number | null): { text: string; className: string } | null {
   if (score == null) return null
-  if (score >= 72) return { text: '매우 높음', className: 'bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200' }
-  if (score >= 58) return { text: '높음', className: 'bg-orange-50 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200' }
-  if (score >= 42) return { text: '보통', className: 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300' }
-  return { text: '낮음', className: 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400' }
+  if (score >= 72) return { text: '매우 높음', className: 'bg-red-100 text-red-900  ' }
+  if (score >= 58) return { text: '높음', className: 'bg-orange-50 text-orange-900  ' }
+  if (score >= 42) return { text: '보통', className: 'bg-slate-100 text-slate-700  ' }
+  return { text: '낮음', className: 'bg-slate-100 text-slate-600  ' }
 }
 
 function formatTrendsUpdated(iso: string | null): string | null {
@@ -54,11 +54,11 @@ function KpiCard({
   return (
     <div className={cn(dashboardCardClass, 'flex min-h-[128px] flex-col justify-between p-4 shadow-sm sm:p-5')}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 ">{label}</p>
         <MiniSparkline seed={sparkSeed} tone={sparkTone} className="h-10 w-20 shrink-0 opacity-90" />
       </div>
       <div className="mt-3 space-y-2">
-        <span className="block text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl dark:text-zinc-50">
+        <span className="block text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl ">
           {value}
         </span>
         {qualityBadge ? (
@@ -66,7 +66,7 @@ function KpiCard({
             {qualityBadge.text}
           </span>
         ) : null}
-        {footNote ? <p className="text-xs leading-snug text-slate-500 dark:text-zinc-400">{footNote}</p> : null}
+        {footNote ? <p className="text-xs leading-snug text-slate-500 ">{footNote}</p> : null}
       </div>
     </div>
   )
@@ -115,7 +115,7 @@ export function DashboardKpiStrip({
     return (
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className={cn(dashboardCardClass, 'h-[128px] animate-pulse bg-slate-50 shadow-sm dark:bg-zinc-900')} />
+          <div key={i} className={cn(dashboardCardClass, 'h-[128px] animate-pulse bg-slate-50 shadow-sm ')} />
         ))}
       </div>
     )

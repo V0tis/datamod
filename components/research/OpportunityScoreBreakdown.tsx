@@ -185,7 +185,7 @@ export function OpportunityScoreBreakdown({
           <OpportunityWaterfallSvg segments={waterfallSegments} height={140} finalLabel="최종 점수" />
         )}
         {normScore != null && !loading && analysisFailed ? (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 ">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
             일부 분석 단계가 실패했습니다. 마지막으로 유효한 점수를 반영했습니다.
           </p>

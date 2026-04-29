@@ -20,7 +20,7 @@ export function AnalysisSidebar({ className }: AnalysisSidebarProps) {
     <aside
       className={cn(
         /** 고정 좁은 폭 — 본문이 행의 나머지 전부를 사용 */
-        'hidden w-36 shrink-0 border-r border-border/60 bg-background/95 backdrop-blur-sm dark:border-zinc-800 dark:bg-background/90 lg:block',
+        'hidden w-36 shrink-0 border-r border-border/60 bg-background/95 backdrop-blur-sm   lg:block',
         className
       )}
       aria-label="분석 리포트 목차"

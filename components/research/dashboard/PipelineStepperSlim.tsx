@@ -43,13 +43,13 @@ export function PipelineStepperSlim({
     <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          'rounded-xl border border-slate-200/70 bg-white px-2 py-2.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60',
+          'rounded-xl border border-slate-200/70 bg-white px-2 py-2.5 shadow-sm  ',
           className
         )}
         role="navigation"
         aria-label={`분석 파이프라인 · ${keyword}`}
       >
-        <div className="border-b border-slate-100 pb-1.5 dark:border-zinc-800">
+        <div className="border-b border-slate-100 pb-1.5 ">
           <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             분석 단계
           </p>
@@ -70,8 +70,8 @@ export function PipelineStepperSlim({
                     <div
                       role="presentation"
                       className={cn(
-                        'h-0 min-w-[6px] max-w-[20px] flex-1 shrink border-t border-slate-200/90 dark:border-zinc-700',
-                        connectorBlue && 'border-blue-500 dark:border-blue-400'
+                        'h-0 min-w-[6px] max-w-[20px] flex-1 shrink border-t border-slate-200/90 ',
+                        connectorBlue && 'border-blue-500 '
                       )}
                       aria-hidden
                     />
@@ -82,16 +82,16 @@ export function PipelineStepperSlim({
                       'group relative flex min-w-[3.25rem] max-w-[4.6rem] shrink-0 flex-col rounded-lg border text-center transition-colors',
                       onStepClick && 'cursor-default',
                       st === 'completed' &&
-                        'border-slate-200/90 bg-slate-50/90 dark:border-zinc-700 dark:bg-zinc-900/50',
+                        'border-slate-200/90 bg-slate-50/90  ',
                       st === 'running' &&
                         cn(
-                          'border border-blue-300/80 bg-white shadow-[0_0_14px_rgba(59,130,246,0.28)] dark:border-blue-500/50 dark:bg-zinc-950',
+                          'border border-blue-300/80 bg-white shadow-[0_0_14px_rgba(59,130,246,0.28)]  ',
                           'animate-pulse',
                           isHi && 'ring-1 ring-blue-400/35'
                         ),
                       st === 'pending' &&
-                        'border border-slate-200/80 bg-slate-50/70 dark:border-zinc-700 dark:bg-zinc-900/40',
-                      st === 'failed' && 'border border-red-200 bg-red-50/90 dark:border-red-900/45 dark:bg-red-950/30'
+                        'border border-slate-200/80 bg-slate-50/70  ',
+                      st === 'failed' && 'border border-red-200 bg-red-50/90  '
                     )}
                   >
                     <div className="flex min-h-[3.65rem] w-full flex-row items-stretch overflow-hidden rounded-[inherit]">
@@ -100,9 +100,9 @@ export function PipelineStepperSlim({
                         onClick={() => onStepClick?.(i)}
                         className={cn(
                           'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1.5 py-2 text-center',
-                          onStepClick ? 'cursor-pointer hover:bg-slate-100/90 dark:hover:bg-zinc-800/80' : 'cursor-default',
-                          st === 'completed' && onStepClick && 'hover:bg-slate-100/80 dark:hover:bg-zinc-800/70',
-                          st === 'running' && onStepClick && 'hover:bg-blue-50/80 dark:hover:bg-blue-950/20'
+                          onStepClick ? 'cursor-pointer hover:bg-slate-100/90 ' : 'cursor-default',
+                          st === 'completed' && onStepClick && 'hover:bg-slate-100/80 ',
+                          st === 'running' && onStepClick && 'hover:bg-blue-50/80 '
                         )}
                         aria-label={`${label} 섹션으로 이동`}
                       >
@@ -114,25 +114,25 @@ export function PipelineStepperSlim({
                           aria-hidden
                         >
                           {showLoader && (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 " />
                           )}
                           {!showLoader && st === 'completed' && (
-                            <Check className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
+                            <Check className="h-3.5 w-3.5 text-blue-600 " strokeWidth={2.5} />
                           )}
                           {!showLoader && st === 'pending' && (
-                            <span className="block h-2 w-2 rounded-full bg-slate-400 dark:bg-zinc-500" />
+                            <span className="block h-2 w-2 rounded-full bg-slate-400 " />
                           )}
                           {!showLoader && st === 'failed' && (
-                            <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                            <AlertCircle className="h-3.5 w-3.5 text-red-600 " />
                           )}
                         </span>
                         <span
                           className={cn(
                             'max-w-[4.5rem] truncate text-[9.5px] font-semibold leading-tight',
-                            st === 'completed' && 'text-slate-800 dark:text-zinc-100',
-                            (st === 'running' || pendingHere) && 'font-semibold text-blue-800 dark:text-blue-200',
-                            st === 'pending' && 'font-medium text-slate-500 dark:text-zinc-400',
-                            st === 'failed' && 'text-red-800 dark:text-red-200'
+                            st === 'completed' && 'text-slate-800 ',
+                            (st === 'running' || pendingHere) && 'font-semibold text-blue-800 ',
+                            st === 'pending' && 'font-medium text-slate-500 ',
+                            st === 'failed' && 'text-red-800 '
                           )}
                         >
                           {label}
@@ -147,7 +147,7 @@ export function PipelineStepperSlim({
                               className={cn(
                                 'flex w-8 shrink-0 flex-col items-center justify-start border-l border-slate-200/80 px-1.5 py-2',
                                 'text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-500',
-                                'dark:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-blue-400',
+                                '  ',
                                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40',
                                 rerunDisabled && 'cursor-not-allowed opacity-40 hover:bg-transparent'
                               )}

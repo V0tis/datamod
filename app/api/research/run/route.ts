@@ -267,9 +267,7 @@ export async function POST(req: Request) {
           for await (const event of generator) {
             if (isClosed) break
             if (event.type === 'task') {
-              console.log('[Research Run API] 이벤트', { type: event.type, task: event.task, status: event.status, error: event.error })
             } else if (event.type === 'error' || event.type === 'done' || event.type === 'cached') {
-              console.log('[Research Run API] 이벤트', { type: event.type, message: 'message' in event ? event.message : undefined })
             }
             send(event)
 

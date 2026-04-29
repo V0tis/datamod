@@ -40,24 +40,24 @@ const tierConfig: Record<
 > = {
   high: {
     label: '고위험',
-    barClass: 'bg-rose-500 dark:bg-rose-500',
-    stripeClass: 'bg-rose-500 dark:bg-rose-400',
-    badgeClass: 'bg-rose-500/12 text-rose-700 ring-rose-500/25 dark:text-rose-200 dark:ring-rose-400/30',
-    iconClass: 'text-rose-600 dark:text-rose-400',
+    barClass: 'bg-rose-500 ',
+    stripeClass: 'bg-rose-500 ',
+    badgeClass: 'bg-rose-500/12 text-rose-700 ring-rose-500/25  ',
+    iconClass: 'text-rose-600 ',
   },
   medium: {
     label: '중위험',
-    barClass: 'bg-amber-500 dark:bg-amber-500',
-    stripeClass: 'bg-amber-500 dark:bg-amber-400',
-    badgeClass: 'bg-amber-500/12 text-amber-800 ring-amber-500/25 dark:text-amber-100 dark:ring-amber-400/30',
-    iconClass: 'text-amber-600 dark:text-amber-400',
+    barClass: 'bg-amber-500 ',
+    stripeClass: 'bg-amber-500 ',
+    badgeClass: 'bg-amber-500/12 text-amber-800 ring-amber-500/25  ',
+    iconClass: 'text-amber-600 ',
   },
   low: {
     label: '저위험',
-    barClass: 'bg-emerald-500 dark:bg-emerald-500',
-    stripeClass: 'bg-emerald-500 dark:bg-emerald-400',
-    badgeClass: 'bg-emerald-500/12 text-emerald-800 ring-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/25',
-    iconClass: 'text-emerald-600 dark:text-emerald-400',
+    barClass: 'bg-emerald-500 ',
+    stripeClass: 'bg-emerald-500 ',
+    badgeClass: 'bg-emerald-500/12 text-emerald-800 ring-emerald-500/20  ',
+    iconClass: 'text-emerald-600 ',
   },
 }
 
@@ -128,10 +128,10 @@ function RiskSignalRow({ item }: { item: RiskSignalItem }) {
                     className={cn(
                       'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold tabular-nums',
                       item.mitigation_level === '상'
-                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 '
                         : item.mitigation_level === '하'
-                          ? 'border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-200'
-                          : 'border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+                          ? 'border-rose-500/40 bg-rose-500/10 text-rose-800 '
+                          : 'border-amber-500/35 bg-amber-500/10 text-amber-900 ',
                     )}
                   >
                     완화 {item.mitigation_level}

@@ -133,7 +133,7 @@ export function BreakdownHorizontalBars({
                 position="right"
                 formatter={(v: number) => formatChartInt(v)}
                 style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
-                className="dark:fill-zinc-300"
+                className=""
               />
             </Bar>
           </BarChart>

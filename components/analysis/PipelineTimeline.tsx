@@ -155,11 +155,11 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
       return (
         <div
           className={cn(
-            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white dark:border-zinc-600 dark:bg-zinc-900',
+            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white  ',
             clickable && 'cursor-pointer hover:opacity-90'
           )}
         >
-          <ArrowRight className="h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" aria-hidden />
+          <ArrowRight className="h-3.5 w-3.5 text-gray-400 " aria-hidden />
         </div>
       )
     }
@@ -168,7 +168,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
       return (
         <div
           className={cn(
-            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500 dark:bg-green-600',
+            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500 ',
             clickable && 'cursor-pointer hover:opacity-90'
           )}
         >
@@ -179,7 +179,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
 
     if (s.status === 'error') {
       return (
-        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500 dark:bg-red-600">
+        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500 ">
           <X className="h-4 w-4 text-white" strokeWidth={2.5} aria-hidden />
         </div>
       )
@@ -188,17 +188,17 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
     if (s.status === 'running') {
       return (
         <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
-          <div className="absolute inset-0 rounded-full border-2 border-blue-400 opacity-50 motion-safe:animate-ping dark:border-sky-400" aria-hidden />
-          <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/50">
-            <Icon className="h-3.5 w-3.5 text-blue-500 dark:text-sky-400" aria-hidden />
+          <div className="absolute inset-0 rounded-full border-2 border-blue-400 opacity-50 motion-safe:animate-ping " aria-hidden />
+          <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50  ">
+            <Icon className="h-3.5 w-3.5 text-blue-500 " aria-hidden />
           </div>
         </div>
       )
     }
 
     return (
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white dark:border-zinc-600 dark:bg-zinc-900">
-        <Icon className="h-3.5 w-3.5 text-gray-300 dark:text-zinc-600" aria-hidden />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white  ">
+        <Icon className="h-3.5 w-3.5 text-gray-300 " aria-hidden />
       </div>
     )
   }
@@ -217,7 +217,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
           className={cn(
             !clickable && 'cursor-default',
             clickable && 'cursor-pointer',
-            selected && clickable && 'ring-2 ring-sky-500/70 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950 rounded-full'
+            selected && clickable && 'ring-2 ring-sky-500/70 ring-offset-2 ring-offset-white  rounded-full'
           )}
           aria-label={
             clickable
@@ -230,17 +230,17 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
 
         {compact ? (
           <div className="mt-2 flex w-[72px] flex-col items-center">
-            <span className="line-clamp-2 text-center text-xs font-medium leading-tight text-gray-700 dark:text-zinc-200">
+            <span className="line-clamp-2 text-center text-xs font-medium leading-tight text-gray-700 ">
               {s.label}
             </span>
             {s.status === 'running' && (
-              <span className="mt-0.5 whitespace-nowrap text-[10px] text-blue-500 dark:text-sky-400">~{s.eta}</span>
+              <span className="mt-0.5 whitespace-nowrap text-[10px] text-blue-500 ">~{s.eta}</span>
             )}
             {s.status === 'done' && dur != null && (
-              <span className="mt-0.5 text-[10px] text-gray-400 dark:text-zinc-500">{dur}초</span>
+              <span className="mt-0.5 text-[10px] text-gray-400 ">{dur}초</span>
             )}
             {s.status === 'skipped' && (
-              <span className="mt-0.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400">캐시 히트</span>
+              <span className="mt-0.5 text-[10px] font-medium text-zinc-500 ">캐시 히트</span>
             )}
             {(s.status === 'pending' || s.status === 'error') && !(s.status === 'error' && onRetry) && (
               <span className="mt-0.5 block h-3" aria-hidden />
@@ -258,17 +258,17 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
     if (leftDone && rightRunning) {
       return (
         <div
-          className="mx-1 mt-4 h-0.5 min-w-[4px] flex-1 self-start bg-gradient-to-r from-green-400 to-blue-300 motion-safe:animate-pulse dark:from-green-500 dark:to-blue-400"
+          className="mx-1 mt-4 h-0.5 min-w-[4px] flex-1 self-start bg-gradient-to-r from-green-400 to-blue-300 motion-safe:animate-pulse  "
           aria-hidden
         />
       )
     }
     if (leftDone) {
-      return <div className="mx-1 mt-4 h-0.5 min-w-[4px] flex-1 self-start bg-green-400 dark:bg-green-500" aria-hidden />
+      return <div className="mx-1 mt-4 h-0.5 min-w-[4px] flex-1 self-start bg-green-400 " aria-hidden />
     }
     return (
       <div
-        className="mx-1 mt-4 h-px min-w-[4px] flex-1 self-start border-t-2 border-dashed border-gray-200 dark:border-zinc-600"
+        className="mx-1 mt-4 h-px min-w-[4px] flex-1 self-start border-t-2 border-dashed border-gray-200 "
         aria-hidden
       />
     )
@@ -280,29 +280,29 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
       <div className="min-w-0 flex-1 text-left">
         <p
           className={cn(
-            'text-sm font-medium leading-snug text-gray-800 dark:text-zinc-100',
-            s.status === 'running' && 'font-semibold text-blue-900 dark:text-sky-100',
-            s.status === 'pending' && 'text-zinc-500 dark:text-zinc-400',
-            s.status === 'error' && 'font-semibold text-red-700 dark:text-red-300',
-            (s.status === 'done' || s.status === 'skipped') && 'text-zinc-800 dark:text-zinc-200'
+            'text-sm font-medium leading-snug text-gray-800 ',
+            s.status === 'running' && 'font-semibold text-blue-900 ',
+            s.status === 'pending' && 'text-zinc-500 ',
+            s.status === 'error' && 'font-semibold text-red-700 ',
+            (s.status === 'done' || s.status === 'skipped') && 'text-zinc-800 '
           )}
         >
           {s.label}
         </p>
         {s.status === 'running' ? (
-          <p className="mt-0.5 whitespace-nowrap text-[10px] text-blue-500 dark:text-sky-400">~{s.eta}</p>
+          <p className="mt-0.5 whitespace-nowrap text-[10px] text-blue-500 ">~{s.eta}</p>
         ) : s.status === 'error' ? (
-          <p className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">단계 오류</p>
+          <p className="mt-0.5 text-[10px] text-red-600 ">단계 오류</p>
         ) : (
-          <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">예상 {s.eta}</p>
+          <p className="mt-0.5 text-[10px] text-zinc-400 ">예상 {s.eta}</p>
         )}
         {s.status === 'done' && dur != null && (
-          <p className="mt-0.5 text-[10px] text-gray-400 dark:text-zinc-500">{dur}초 소요</p>
+          <p className="mt-0.5 text-[10px] text-gray-400 ">{dur}초 소요</p>
         )}
         {s.status === 'error' && onRetry ? (
           <button
             type="button"
-            className="mt-1 text-[10px] font-semibold text-red-600 underline underline-offset-2 hover:text-red-700 dark:text-red-400"
+            className="mt-1 text-[10px] font-semibold text-red-600 underline underline-offset-2 hover:text-red-700 "
             onClick={() => onRetry(s.id)}
           >
             재시도
@@ -321,18 +321,18 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-          className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/80"
+          className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50/80  "
         >
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold text-zinc-800 dark:text-zinc-100"
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold text-zinc-800 "
             onClick={() => setDetailExpanded((e) => !e)}
           >
             <span>{stageById(outputOpenId)?.label ?? outputOpenId} 단계 출력</span>
             {detailExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
           </button>
           {detailExpanded ? (
-            <pre className="max-h-[200px] overflow-auto border-t border-zinc-200 px-3 py-2 text-[11px] leading-relaxed text-zinc-800 dark:border-zinc-700 dark:text-zinc-200">
+            <pre className="max-h-[200px] overflow-auto border-t border-zinc-200 px-3 py-2 text-[11px] leading-relaxed text-zinc-800  ">
               {formatRawJson(merged.find((m) => m.id === outputOpenId)?.rawOutput)}
             </pre>
           ) : null}
@@ -347,41 +347,41 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
     <div className="w-full space-y-3">
       {hasError ? (
         <div
-          className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 dark:border-red-900/50 dark:bg-red-950/40"
+          className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2  "
           role="status"
           aria-live="polite"
         >
           <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" aria-hidden />
-          <span className="text-sm font-medium text-red-800 dark:text-red-200">
+          <span className="text-sm font-medium text-red-800 ">
             {merged[errorIdx]?.label ?? '해당'} 단계 오류 · 재시도 가능
           </span>
         </div>
       ) : allDone ? (
         <div
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 dark:border-green-900/50 dark:bg-green-950/40"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2  "
           role="status"
           aria-live="polite"
         >
           <CheckCircle className="h-4 w-4 shrink-0 text-green-500" aria-hidden />
-          <span className="text-sm font-medium text-green-800 dark:text-green-200">분석 완료</span>
-          <span className="text-sm text-green-600 dark:text-green-300/90">
+          <span className="text-sm font-medium text-green-800 ">분석 완료</span>
+          <span className="text-sm text-green-600 ">
             {kw && cc ? `${kw} · ${cc}` : kw ? kw : cc ? cc : ''}
             {totalAnalysisSec != null ? ` · ${totalAnalysisSec}초 소요` : ''}
           </span>
         </div>
       ) : (
         <div
-          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 dark:border-blue-900/50 dark:bg-blue-950/40"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2  "
           role="status"
           aria-live="polite"
         >
           <div className="h-2 w-2 shrink-0 rounded-full bg-blue-500 motion-safe:animate-pulse" aria-hidden />
-          <span className="text-sm font-medium text-blue-800 dark:text-blue-200">분석 진행 중</span>
-          <span className="text-sm text-blue-600 dark:text-blue-300">
+          <span className="text-sm font-medium text-blue-800 ">분석 진행 중</span>
+          <span className="text-sm text-blue-600 ">
             {doneCount}/9 단계 완료
           </span>
           {nextStageName && (
-            <span className="ml-auto text-xs text-blue-500 dark:text-blue-400">
+            <span className="ml-auto text-xs text-blue-500 ">
               다음 단계: {nextStageName} (~약 {runningEtaSec}초)
             </span>
           )}
@@ -390,7 +390,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
 
       {/* Desktop: horizontal */}
       <div className="hidden md:block">
-        <div className="rounded-xl border border-zinc-200/90 bg-white px-2 py-4 shadow-sm sm:px-3 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="rounded-xl border border-zinc-200/90 bg-white px-2 py-4 shadow-sm sm:px-3  ">
           <div className="flex w-full min-w-0 items-start justify-center">
             {merged.map((s, i) => (
               <div key={s.id} className="contents">
@@ -402,15 +402,15 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
             ))}
           </div>
           {merged.some((s) => s.status === 'error' && onRetry) ? (
-            <div className="mt-4 flex flex-wrap justify-center gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+            <div className="mt-4 flex flex-wrap justify-center gap-2 border-t border-zinc-100 pt-3 ">
               {merged.map((s) =>
                 s.status === 'error' && onRetry ? (
                   <Button
                     key={`retry-${s.id}`}
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
-                    className="gap-1 border-red-300 text-red-800 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/40"
+                    className="gap-1 border-red-300 text-red-800 hover:bg-red-50   "
                     onClick={() => onRetry(s.id)}
                   >
                     이 단계만 재시도
@@ -428,11 +428,11 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
         <button
           type="button"
           onClick={() => setMobileOpen((o) => !o)}
-          className="flex w-full items-center justify-between gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 text-left text-sm font-semibold text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+          className="flex w-full items-center justify-between gap-2 rounded-xl border border-zinc-200/90 bg-white px-3 py-2.5 text-left text-sm font-semibold text-zinc-900 shadow-sm   "
           aria-expanded={mobileOpen}
         >
           <span>
-            파이프라인 <span className="font-normal text-zinc-500 dark:text-zinc-400">{doneCount}/9</span>
+            파이프라인 <span className="font-normal text-zinc-500 ">{doneCount}/9</span>
           </span>
           {mobileOpen ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
         </button>
@@ -445,7 +445,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
               transition={{ duration: 0.24, ease: [0.4, 0, 0.2, 1] }}
               className="overflow-hidden"
             >
-              <div className="mt-2 space-y-0 rounded-xl border border-zinc-200/90 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="mt-2 space-y-0 rounded-xl border border-zinc-200/90 bg-white px-3 py-3  ">
                 {merged.map((s, i) => {
                   const isLast = i === merged.length - 1
                   const lineDone = s.status === 'done' || s.status === 'skipped'
@@ -457,7 +457,7 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
                           <div
                             className={cn(
                               'my-0.5 min-h-[14px] w-0.5 flex-1 rounded-full',
-                              lineDone ? 'bg-green-400 dark:bg-green-600' : 'bg-zinc-200 dark:bg-zinc-700'
+                              lineDone ? 'bg-green-400 ' : 'bg-zinc-200 '
                             )}
                             aria-hidden
                           />
@@ -468,9 +468,9 @@ export function PipelineTimeline({ stages, onRetry, keyword, countryLabel }: Pip
                         {s.status === 'error' && onRetry ? (
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
-                            className="mt-2 gap-1 border-red-300 text-xs text-red-800 dark:border-red-800 dark:text-red-200"
+                            className="mt-2 gap-1 border-red-300 text-xs text-red-800  "
                             onClick={() => onRetry(s.id)}
                           >
                             이 단계만 재시도

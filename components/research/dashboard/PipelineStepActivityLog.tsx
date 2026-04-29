@@ -45,14 +45,14 @@ export function GlobalPipelineActivityStrip({
   return (
     <div
       ref={stripRef}
-      className="mb-4 rounded-lg border border-slate-200/90 bg-slate-50/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40"
+      className="mb-4 rounded-lg border border-slate-200/90 bg-slate-50/90 px-3 py-2  "
     >
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">공통 알림</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 ">공통 알림</div>
       <div className="mt-1 space-y-1.5">
         {global.slice(-6).map((row, i) => (
           <div
             key={`${row.ts}-${i}`}
-            className={cn('text-[11px] leading-snug text-slate-600 dark:text-zinc-300', row.kind === 'error' && 'text-red-600 dark:text-red-400')}
+            className={cn('text-[11px] leading-snug text-slate-600 ', row.kind === 'error' && 'text-red-600 ')}
           >
             <ActivityLogMarkdown source={row.message} />
           </div>
@@ -107,12 +107,12 @@ export function PipelineStepActivityLog({
   const canToggle = (status === 'completed' || status === 'failed') && logs.length > 1
 
   return (
-    <div className={cn('mt-2', compact && 'border-t border-slate-100/90 pt-2 dark:border-zinc-800/80')}>
+    <div className={cn('mt-2', compact && 'border-t border-slate-100/90 pt-2 ')}>
       {canToggle && (
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="mb-1 flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-800 dark:text-zinc-500 dark:hover:text-zinc-200"
+          className="mb-1 flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-800  "
         >
           {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           <span>활동 로그 {logs.length}건{expanded ? ' · 전체' : ' · 요약'}</span>
@@ -122,8 +122,8 @@ export function PipelineStepActivityLog({
         ref={scrollRef}
         className={cn(
           compact
-            ? 'rounded-md bg-slate-50/80 px-2 py-1.5 dark:bg-zinc-900/35'
-            : 'rounded-md border border-slate-100 bg-white/90 px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-950/40',
+            ? 'rounded-md bg-slate-50/80 px-2 py-1.5 '
+            : 'rounded-md border border-slate-100 bg-white/90 px-2.5 py-2  ',
           status === 'running' && 'max-h-24 overflow-y-auto scroll-smooth',
           (status === 'completed' || status === 'failed') && expanded && 'max-h-40 overflow-y-auto scroll-smooth',
           (status === 'completed' || status === 'failed') && !expanded && 'max-h-14 overflow-hidden'
@@ -134,15 +134,15 @@ export function PipelineStepActivityLog({
             <div
               key={`${row.ts}-${i}`}
               className={cn(
-                'border-b border-slate-100/80 pb-1.5 last:border-0 last:pb-0 dark:border-zinc-800/80',
-                row.kind === 'error' && 'rounded bg-red-50/90 px-1 py-0.5 dark:bg-red-950/30'
+                'border-b border-slate-100/80 pb-1.5 last:border-0 last:pb-0 ',
+                row.kind === 'error' && 'rounded bg-red-50/90 px-1 py-0.5 '
               )}
             >
-              <div className="text-[10px] tabular-nums text-slate-400 dark:text-zinc-500">
+              <div className="text-[10px] tabular-nums text-slate-400 ">
                 {new Date(row.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </div>
-              <div className={cn(compact ? 'text-[11px]' : 'text-xs', row.kind === 'error' && 'text-red-700 dark:text-red-300')}>
-                <ActivityLogMarkdown source={row.message} className={compact ? 'text-[11px] text-slate-600 dark:text-zinc-300' : undefined} />
+              <div className={cn(compact ? 'text-[11px]' : 'text-xs', row.kind === 'error' && 'text-red-700 ')}>
+                <ActivityLogMarkdown source={row.message} className={compact ? 'text-[11px] text-slate-600 ' : undefined} />
               </div>
             </div>
           ))}

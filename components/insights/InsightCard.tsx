@@ -25,7 +25,7 @@ const IMPORTANCE_STYLES: Record<ImportanceLevel, { badge: string; border: string
     bg: 'bg-[#E8FAF9]/40',
   },
   medium: {
-    badge: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    badge: 'bg-amber-500/15 text-amber-600  border-amber-500/30',
     border: 'border-l-amber-500/60',
     bg: 'bg-amber-500/5',
   },
@@ -64,7 +64,7 @@ function buildStrategyMarkdown(
 function InsightSectionBadge({ label }: { label: string }) {
   return (
     <div className="mb-2">
-      <span className="inline-flex rounded-lg bg-sky-100 px-2.5 py-1 text-xs font-semibold tracking-wide text-sky-900 shadow-sm dark:bg-sky-950/55 dark:text-sky-100">
+      <span className="inline-flex rounded-lg bg-sky-100 px-2.5 py-1 text-xs font-semibold tracking-wide text-sky-900 shadow-sm  ">
         {label}
       </span>
     </div>
@@ -143,7 +143,7 @@ export function InsightCard({
       className={cn(
         'rin-pro-card flex h-full min-h-[22rem] flex-col overflow-hidden border-l-4 transition-shadow hover:shadow-md',
         styles.border,
-        selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA] dark:ring-offset-zinc-950'
+        selected && 'ring-2 ring-[#2AC1BC]/50 ring-offset-2 ring-offset-[#F8F9FA] '
       )}
     >
       <div className={cn('flex flex-1 flex-col p-4 sm:p-5', hasMemo && 'pb-0')}>
@@ -169,7 +169,7 @@ export function InsightCard({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <h3 className="break-words text-base font-bold text-[#222] dark:text-zinc-50">{item.name}</h3>
+                  <h3 className="break-words text-base font-bold text-[#222] ">{item.name}</h3>
                   <span
                     className={cn(
                       'shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
@@ -190,7 +190,7 @@ export function InsightCard({
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-1.5">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   className="h-9 w-full border-[#FF5F5F]/40 text-[#FF5F5F] hover:bg-red-50 sm:w-auto"
                   onClick={() => onDelete(item.id)}
                   disabled={deletingId === item.id}
@@ -252,7 +252,7 @@ export function InsightCard({
 
             {!summaryExpanded && needsMoreToggle && (
               <div
-                className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent dark:from-card"
+                className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent "
                 aria-hidden
               />
             )}
@@ -303,12 +303,12 @@ export function InsightCard({
         </div>
       </div>
 
-      <div className="mt-auto border-t border-border/70 bg-slate-50/50 px-4 py-4 dark:bg-zinc-900/40 sm:px-5">
+      <div className="mt-auto border-t border-border/70 bg-slate-50/50 px-4 py-4  sm:px-5">
         <div className="mb-3 flex flex-wrap gap-1.5">
           {tagItems.map((t) => (
             <span
               key={t.key}
-              className="inline-flex max-w-full items-center rounded-md border border-[#E8EAED] bg-white px-2 py-1 text-[11px] font-medium text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+              className="inline-flex max-w-full items-center rounded-md border border-[#E8EAED] bg-white px-2 py-1 text-[11px] font-medium text-slate-700   "
             >
               <span className="truncate">{t.label}</span>
             </span>
@@ -316,8 +316,8 @@ export function InsightCard({
         </div>
         <Button
           size="sm"
-          variant="outline"
-          className="h-10 w-full gap-2 border-[#2AC1BC]/50 font-semibold text-[#0f766e] hover:bg-[#E8FAF9] dark:text-emerald-300 dark:hover:bg-emerald-950/40 sm:w-auto"
+          variant="secondary"
+          className="h-10 w-full gap-2 border-[#2AC1BC]/50 font-semibold text-[#0f766e] hover:bg-[#E8FAF9]   sm:w-auto"
           asChild
         >
           <Link href={resultsHref}>

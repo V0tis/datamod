@@ -38,16 +38,16 @@ export function OverviewOpportunityRiskChart({
   const showSkeleton = loading && (result == null || scoreRaw == null)
 
   return (
-    <div className={cn(analysisCardClass, 'bg-white p-5 dark:bg-zinc-950', className)}>
+    <div className={cn(analysisCardClass, 'bg-white p-5 ', className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-50">리스크 요인 (상위 5)</h3>
+          <h3 className="text-sm font-semibold text-slate-900 ">리스크 요인 (상위 5)</h3>
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-zinc-800"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground "
                   aria-label="이 데이터는 어떻게 산출되었는가"
                 >
                   <Info className="h-3.5 w-3.5" aria-hidden />

@@ -32,9 +32,9 @@ export function resolveCompetitionScore10(
 }
 
 const P_BADGE: Record<0 | 1 | 2, string> = {
-  0: 'border-rose-300/80 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-100',
-  1: 'border-amber-300/80 bg-amber-100 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100',
-  2: 'border-border bg-muted text-muted-foreground dark:bg-zinc-800 dark:text-zinc-200',
+  0: 'border-rose-300/80 bg-rose-100 text-rose-900   ',
+  1: 'border-amber-300/80 bg-amber-100 text-amber-950   ',
+  2: 'border-border bg-muted text-muted-foreground  ',
 }
 
 function formatAnalysisDate(iso?: string | null): string | null {
@@ -57,8 +57,8 @@ export function AnalysisMetaRow({
 }) {
   const dateLine = formatAnalysisDate(updatedAt)
   return (
-    <div className={cn('flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-600 dark:text-zinc-400', className)}>
-      <span className="font-semibold text-slate-900 dark:text-zinc-100">&quot;{keyword.trim()}&quot;</span>
+    <div className={cn('flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-600 ', className)}>
+      <span className="font-semibold text-slate-900 ">&quot;{keyword.trim()}&quot;</span>
       <span className="text-muted-foreground">·</span>
       <span>국가 {countryCode}</span>
       {dateLine ? (
@@ -85,7 +85,7 @@ export function SummaryStatPills({ result }: { result: ResearchResponse | null }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3  ">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">시장 성장성</p>
         {marketDim != null ? (
           <DimensionScoreBar value10={marketDim} className="mt-2" />
@@ -93,7 +93,7 @@ export function SummaryStatPills({ result }: { result: ResearchResponse | null }
           <p className="mt-2 text-sm text-muted-foreground">—</p>
         )}
       </div>
-      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3  ">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">경쟁 강도</p>
         {competition10 != null ? (
           <DimensionScoreBar value10={competition10} className="mt-2" />
@@ -101,7 +101,7 @@ export function SummaryStatPills({ result }: { result: ResearchResponse | null }
           <p className="mt-2 text-sm text-muted-foreground">—</p>
         )}
       </div>
-      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3  ">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">시장 기회</p>
         {opp != null ? (
           <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-foreground">{formatPrimaryScore100(opp)}</p>
@@ -144,7 +144,7 @@ export function TopPmActionsStrip({
         {rows.map((r, i) => (
           <li
             key={`${r.title}-${i}`}
-            className="flex items-start gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-950/60"
+            className="flex items-start gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2.5 text-sm  "
           >
             <span
               className={cn(

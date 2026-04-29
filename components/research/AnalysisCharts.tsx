@@ -100,12 +100,12 @@ function ScoreDistributionBars({ data }: { data: { name: string; v: number }[] }
               position="right"
               formatter={(v: number) => formatChartInt(v)}
               style={{ fill: '#374151', fontSize: 12, fontWeight: 600 }}
-              className="dark:fill-zinc-200"
+              className=""
             />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500 dark:text-zinc-400">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500 ">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-3 w-3 rounded bg-[#0D9F6E]" aria-hidden />
           70+ 강한 긍정

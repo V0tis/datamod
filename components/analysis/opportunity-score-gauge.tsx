@@ -71,7 +71,7 @@ export function OpportunityScoreGauge({
     >
       <div className="relative h-[120px] w-[120px]">
         <svg className="-rotate-90 transform" width="120" height="120" viewBox="0 0 120 120" aria-hidden>
-          <circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100 dark:text-zinc-800" />
+          <circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100 " />
           <circle
             cx="60"
             cy="60"
@@ -85,18 +85,18 @@ export function OpportunityScoreGauge({
             className={cn(
               'transition-[stroke-dashoffset] duration-150 ease-out',
               showSkeleton && 'opacity-30',
-              ringPct != null && !analysisFailed && ringPct >= 70 ? 'text-emerald-500' : ringPct != null && !analysisFailed && ringPct >= 40 ? 'text-sky-500' : ringPct != null ? 'text-amber-500' : 'text-slate-200 dark:text-zinc-700'
+              ringPct != null && !analysisFailed && ringPct >= 70 ? 'text-emerald-500' : ringPct != null && !analysisFailed && ringPct >= 40 ? 'text-sky-500' : ringPct != null ? 'text-amber-500' : 'text-slate-200 '
             )}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-1">
           {showSkeleton ? (
-            <span className="h-9 w-14 rounded-md bg-slate-200/90 animate-pulse dark:bg-zinc-700/80" aria-hidden />
+            <span className="h-9 w-14 rounded-md bg-slate-200/90 animate-pulse " aria-hidden />
           ) : ringPct != null ? (
             <>
               <span
                 className={cn(
-                  'text-3xl font-bold tabular-nums text-slate-900 dark:text-zinc-50',
+                  'text-3xl font-bold tabular-nums text-slate-900 ',
                   analysisFailed && 'opacity-85'
                 )}
               >
@@ -106,31 +106,31 @@ export function OpportunityScoreGauge({
             </>
           ) : showProvisionalZero ? (
             <>
-              <span className="text-3xl font-bold tabular-nums text-slate-300 dark:text-zinc-600">0</span>
+              <span className="text-3xl font-bold tabular-nums text-slate-300 ">0</span>
               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">점</span>
             </>
           ) : (
-            <span className="text-lg font-semibold text-slate-400 dark:text-zinc-500">—</span>
+            <span className="text-lg font-semibold text-slate-400 ">—</span>
           )}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-1.5 text-center">
-        <p className="text-xs text-slate-500 dark:text-zinc-400">최종 기회 점수</p>
+        <p className="text-xs text-slate-500 ">최종 기회 점수</p>
         <span
-          className="inline-flex items-center justify-center rounded-full p-0.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+          className="inline-flex items-center justify-center rounded-full p-0.5 text-slate-400 hover:text-slate-600  "
           title={tooltipText}
         >
           <Info className="h-3.5 w-3.5" aria-hidden />
         </span>
         {analysisFailed ? (
-          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ">
             <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
             일부 오류
           </span>
         ) : null}
       </div>
       {rationaleSummary?.trim() ? (
-        <p className="max-w-[260px] text-center text-[11px] leading-snug text-slate-500 dark:text-zinc-500 line-clamp-3">
+        <p className="max-w-[260px] text-center text-[11px] leading-snug text-slate-500  line-clamp-3">
           {rationaleSummary.trim()}
         </p>
       ) : null}

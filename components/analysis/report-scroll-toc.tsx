@@ -30,12 +30,12 @@ export function ReportScrollToc({
   return (
     <nav
       className={cn(
-        'rounded-lg border border-slate-100 bg-white/95 p-2 shadow-none backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95',
+        'rounded-lg border border-slate-100 bg-white/95 p-2 shadow-none backdrop-blur-sm  ',
         className
       )}
       aria-label="리포트 목차"
     >
-      <p className="mb-1.5 px-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">목차</p>
+      <p className="mb-1.5 px-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 ">목차</p>
       <ul className="flex gap-0.5 overflow-x-auto pb-0.5 lg:flex-col lg:overflow-visible lg:pb-0">
         {items.map((item) => (
           <li key={item.id} className="shrink-0 lg:w-full">
@@ -44,7 +44,7 @@ export function ReportScrollToc({
               onClick={() => scrollToSection(item.id)}
               className={cn(
                 'w-full whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[11px] font-medium leading-snug text-slate-600 transition-colors',
-                'hover:bg-emerald-50 hover:text-emerald-900 dark:text-zinc-400 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-100',
+                'hover:bg-emerald-50 hover:text-emerald-900   ',
                 'lg:whitespace-normal'
               )}
             >

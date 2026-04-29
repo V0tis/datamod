@@ -202,7 +202,6 @@ export async function synthesizeConsensus(
   if (!prompt) return FALLBACK_CONSENSUS
 
   const useGroq = preferredProvider === 'groq' && !!groqKey
-  console.log('[Unified AI] Consensus provider:', useGroq ? 'groq' : 'gemini')
 
   try {
     let rawText: string

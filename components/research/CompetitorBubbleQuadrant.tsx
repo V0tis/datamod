@@ -37,7 +37,7 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 4 }}
       transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-      className="max-w-[280px] rounded-xl border border-zinc-200/90 bg-white/98 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-950/95"
+      className="max-w-[280px] rounded-xl border border-zinc-200/90 bg-white/98 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md  "
       style={{ fontFamily: chartFontFamily }}
     >
       <p className="text-sm font-semibold text-foreground">{row.name}</p>
@@ -49,7 +49,7 @@ function BubbleTooltip({ active, payload }: TooltipProps<number, string>) {
         <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">{row.score_rationale}</p>
       ) : null}
       {row.inferred ? (
-        <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-500">일부 좌표는 데이터 보강 추정</p>
+        <p className="mt-1 text-[10px] text-amber-600 ">일부 좌표는 데이터 보강 추정</p>
       ) : null}
     </motion.div>
   )
@@ -68,7 +68,7 @@ const X_AXIS_CAPTION = '시장 점유 · 존재감 (1–10)'
 const quadrantCaptionGrid =
   'grid w-full grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] gap-x-2 px-2 sm:px-3'
 const quadrantCaptionText =
-  'text-[11px] font-medium leading-snug text-slate-300 [word-break:keep-all] dark:text-zinc-500'
+  'text-[11px] font-medium leading-snug text-slate-300 [word-break:keep-all] '
 
 function truncateName(s: string, max: number): string {
   const t = s.trim()
@@ -109,8 +109,8 @@ export function CompetitorBubbleQuadrant({
   const chartCard = (
     <div
       className={cn(
-        'rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-950/30',
-        embedded && 'h-full border-border bg-card shadow-sm dark:bg-zinc-950/80'
+        'rounded-[12px] border border-zinc-200/90 bg-zinc-50/40 px-2 py-4 sm:px-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]  ',
+        embedded && 'h-full border-border bg-card shadow-sm '
       )}
     >
       <div className="flex min-w-0 flex-col">
@@ -133,10 +133,10 @@ export function CompetitorBubbleQuadrant({
               className="pointer-events-none absolute left-[12%] right-[10%] top-2 bottom-4 z-[1] grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg"
               aria-hidden
             >
-              <div className="dark:bg-[rgba(27,100,218,0.08)]" style={{ background: 'rgba(27, 100, 218, 0.05)' }} title={QUADRANT.tl} />
-              <div className="dark:bg-[rgba(13,159,110,0.08)]" style={{ background: 'rgba(13, 159, 110, 0.05)' }} title={QUADRANT.tr} />
-              <div className="dark:bg-[rgba(255,255,255,0.04)]" style={{ background: 'rgba(0, 0, 0, 0.02)' }} title={QUADRANT.bl} />
-              <div className="dark:bg-[rgba(217,119,6,0.08)]" style={{ background: 'rgba(217, 119, 6, 0.05)' }} title={QUADRANT.br} />
+              <div className="" style={{ background: 'rgba(27, 100, 218, 0.05)' }} title={QUADRANT.tl} />
+              <div className="" style={{ background: 'rgba(13, 159, 110, 0.05)' }} title={QUADRANT.tr} />
+              <div className="" style={{ background: 'rgba(0, 0, 0, 0.02)' }} title={QUADRANT.bl} />
+              <div className="" style={{ background: 'rgba(217, 119, 6, 0.05)' }} title={QUADRANT.br} />
             </div>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 20, left: 28, bottom: 36 }} style={{ fontFamily: chartFontFamily }}>
@@ -293,7 +293,7 @@ export function CompetitorBubbleQuadrant({
         <div
           className={cn(
             quadrantCaptionGrid,
-            'pointer-events-none items-end gap-y-0.5 border-t border-zinc-200/60 pt-2.5 pb-0.5 dark:border-zinc-700/60'
+            'pointer-events-none items-end gap-y-0.5 border-t border-zinc-200/60 pt-2.5 pb-0.5 '
           )}
           aria-hidden
         >
@@ -355,7 +355,7 @@ export function CompetitorBubbleQuadrant({
                   </span>
                 </p>
                 {selected?.inferred ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                  <p className="text-xs text-amber-600 ">
                     일부 축은 리서치 데이터 보강을 위해 추정되었습니다.
                   </p>
                 ) : null}

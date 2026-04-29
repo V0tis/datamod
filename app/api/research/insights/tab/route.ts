@@ -126,7 +126,6 @@ export async function POST(req: Request) {
   const primaryModel = stepAISettings.ai_primary_model
   const creativeModel = resolveAIForStep(stepAISettings, 'creative')
   const provider: 'groq' | 'gemini' | 'all' = creativeModel === 'groq' ? 'groq' : creativeModel === 'gemini' ? 'gemini' : 'all'
-  console.log('[Tab Route] AI provider selection:', { primaryModel, creativeModel, provider, keyword })
 
   if (!tab || !['logic', 'creative', 'fact'].includes(tab)) {
     return NextResponse.json({ error: 'tab must be one of logic, creative, fact' }, { status: 400 })
@@ -286,7 +285,6 @@ export async function POST(req: Request) {
       if (creativeGemini) mergedGemini = mergedGemini ?? creativeGemini
       if (mergedGroq != null && mergedGemini != null) {
         // Cost: reanalyze path — no Groq/Gemini tab calls; only Consensus (one Gemini call) below.
-        console.log('[AI Insight Consensus] 재분석: DB에서 Creative만 사용, Groq/Gemini API 호출 생략')
       }
     }
   }
@@ -415,7 +413,6 @@ export async function POST(req: Request) {
   if (tab === 'creative' && hasConsensusKey && atLeastOneSuccess) {
     const geminiInput = (geminiResult ?? '').trim()
     const groqInput = (groqResult ?? '').trim()
-    console.log('[AI Insight Consensus] generateConsensus', { provider: consensusModel, keyword })
     try {
       consensus = await synthesizeConsensus({
         apiKey: geminiKey || '',
@@ -433,7 +430,6 @@ export async function POST(req: Request) {
       consensus = FALLBACK_CONSENSUS
     }
     if (isReanalyze) {
-      console.log('[AI Insight Consensus] generateConsensus 완료', { keyword, summaryLen: consensus?.strategicSummary?.summary?.length ?? 0, sentimentScore: consensus?.sentiment?.score })
     }
   }
 

@@ -92,9 +92,9 @@ export function ReportSectionTabBar({ className, scrollAnchorTopPx }: ReportSect
   }, [computeActive])
 
   const activeClass =
-    'border-[var(--dm-color-primary)] text-[var(--dm-color-primary)] dark:border-[#58a6ff] dark:text-[#58a6ff]'
+    'border-[var(--dm-color-primary)] text-[var(--dm-color-primary)]  '
   const inactiveClass =
-    'border-transparent text-[var(--dm-color-text-muted)] hover:border-[var(--dm-color-border-strong)] hover:text-[var(--dm-color-text-secondary)] dark:hover:border-zinc-600'
+    'border-transparent text-[var(--dm-color-text-muted)] hover:border-[var(--dm-color-border-strong)] hover:text-[var(--dm-color-text-secondary)] '
 
   return (
     <nav

@@ -29,7 +29,6 @@ function log(level: LogLevel, msg: string, meta?: Record<string, unknown>): void
   } else if (level === 'warn') {
     console.warn(line)
   } else {
-    console.log(line)
   }
 }
 

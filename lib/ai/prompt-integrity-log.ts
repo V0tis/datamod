@@ -31,8 +31,6 @@ export function logRssNewsCollectionCheck(
     return
   }
   const titles = news.map((n) => (typeof n.title === 'string' ? n.title : ''))
-  console.log(`[DATA_CHECK] 수집된 뉴스: ${news.length}건 발견${resumed ? ' (저장된 결과 재사용)' : ''} | keyword=${keyword}`)
-  console.log('[DATA_CHECK] 제목 배열:', titles)
   if (news.length === 0) {
     console.warn('[WARNING] [DATA_CHECK] 검색 결과가 0건입니다.', { keyword, resumed })
   }
@@ -78,16 +76,15 @@ export function logDataDrivenPromptInjection(opts: {
 
   const injectedDisplay = injectedLen == null ? 'N/A' : injectedLen.toLocaleString()
 
-  console.log(
+  console.info(
     `[PROMPT_CHECK] ${phase} | keyword=${keyword} | 프롬프트 총 ${totalLen.toLocaleString()}자 | 토큰 근사(÷4): ~${approxTokens.toLocaleString()}`
   )
-  console.log(
+  console.info(
     `[PROMPT_CHECK] 프롬프트 주입 데이터 길이: ${injectedDisplay}자 / 원본 데이터 길이: ${assembledLen.toLocaleString()}자 (${integrityNote})${origPart}`
   )
   if (originalSourceChars != null && originalSourceChars > 0 && assembledLen < originalSourceChars) {
-    console.log(
+    console.info(
       '[PROMPT_CHECK] 참고: 조립 데이터가 추출 본문 합보다 짧음 — 요약·추출 단계에서 압축된 경우가 많음(프롬프트 잘림과는 별개).'
     )
   }
-  console.log(`[PROMPT_CHECK] 샘플(첫 500자):\n${prompt.slice(0, 500)}`)
 }

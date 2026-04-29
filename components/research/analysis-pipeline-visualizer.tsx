@@ -58,7 +58,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full bg-green-500 text-white dark:bg-green-600',
+          'flex shrink-0 items-center justify-center rounded-full bg-green-500 text-white ',
           size
         )}
       >
@@ -70,16 +70,16 @@ function StepDot({
     return (
       <div className={cn('relative flex shrink-0 items-center justify-center', size)}>
         <div
-          className="absolute inset-0 rounded-full border-2 border-blue-400 opacity-50 motion-safe:animate-ping dark:border-sky-400"
+          className="absolute inset-0 rounded-full border-2 border-blue-400 opacity-50 motion-safe:animate-ping "
           aria-hidden
         />
         <div
           className={cn(
-            'relative flex items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/50',
+            'relative flex items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50  ',
             size
           )}
         >
-          <Loader2 className={cn(iconSm, 'animate-spin text-blue-500 dark:text-sky-400')} strokeWidth={2} aria-hidden />
+          <Loader2 className={cn(iconSm, 'animate-spin text-blue-500 ')} strokeWidth={2} aria-hidden />
         </div>
       </div>
     )
@@ -88,7 +88,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full border-2 border-red-600 bg-red-500 text-white dark:border-red-500',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-red-600 bg-red-500 text-white ',
           size
         )}
       >
@@ -100,7 +100,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gray-300 bg-white text-muted-foreground dark:border-zinc-600 dark:bg-zinc-900',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gray-300 bg-white text-muted-foreground  ',
           size
         )}
       >
@@ -112,7 +112,7 @@ function StepDot({
     return (
       <div
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground opacity-50 dark:border-zinc-700 dark:bg-zinc-900',
+          'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground opacity-50  ',
           size
         )}
       >
@@ -123,7 +123,7 @@ function StepDot({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground dark:border-zinc-600 dark:bg-zinc-900',
+        'flex shrink-0 items-center justify-center rounded-full border-2 border-gray-200 bg-white text-muted-foreground  ',
         size
       )}
     >
@@ -147,7 +147,7 @@ function ConnectorSegment({
   if (leftDone && rightRunning) {
     return (
       <div
-        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-gradient-to-r from-green-400 to-blue-300 motion-safe:animate-pulse dark:from-green-500 dark:to-blue-400"
+        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-gradient-to-r from-green-400 to-blue-300 motion-safe:animate-pulse  "
         aria-hidden
       />
     )
@@ -155,14 +155,14 @@ function ConnectorSegment({
   if (leftDone) {
     return (
       <div
-        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-green-400 dark:bg-green-500"
+        className="mt-[15px] h-0.5 min-w-[2px] flex-1 rounded-full bg-green-400 "
         aria-hidden
       />
     )
   }
   return (
     <div
-      className="mt-[15px] h-px min-w-[2px] flex-1 border-t-2 border-dashed border-gray-200 dark:border-zinc-600"
+      className="mt-[15px] h-px min-w-[2px] flex-1 border-t-2 border-dashed border-gray-200 "
       aria-hidden
     />
   )
@@ -213,8 +213,8 @@ export function AnalysisPipelineDesktopStepper({
                 <span
                   title={PROGRESS_STEPS[i].labelKo}
                   className={cn(
-                    'mt-2 line-clamp-2 max-w-[72px] text-center text-[10px] font-medium leading-tight text-gray-700 dark:text-zinc-200',
-                    kind === 'running' && 'font-semibold text-blue-800 dark:text-sky-200',
+                    'mt-2 line-clamp-2 max-w-[72px] text-center text-[10px] font-medium leading-tight text-gray-700 ',
+                    kind === 'running' && 'font-semibold text-blue-800 ',
                     kind === 'done' && 'text-foreground/90',
                     (kind === 'pending' || kind === 'after_failure') && 'text-muted-foreground',
                     kind === 'failed' && 'text-destructive',

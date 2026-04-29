@@ -41,9 +41,9 @@ function confidenceLabel(c: DataSourceConfidence): string {
 function confidenceColor(c: DataSourceConfidence): string {
   switch (c) {
     case 'high':
-      return 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+      return 'bg-emerald-500/20 text-emerald-700 '
     case 'medium':
-      return 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
+      return 'bg-amber-500/20 text-amber-700 '
     case 'low':
       return 'bg-muted text-muted-foreground'
     default:

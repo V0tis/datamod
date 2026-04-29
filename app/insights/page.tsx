@@ -272,7 +272,7 @@ export default function InsightsPage() {
                 <span className="text-xs font-semibold text-muted-foreground">{selectedIds.size}개 선택됨</span>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   className="h-9 gap-1 border-[#2AC1BC]/40 font-semibold text-[#0f766e] hover:bg-[#E8FAF9]"
                   onClick={handleBulkExport}
@@ -283,7 +283,7 @@ export default function InsightsPage() {
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   className="h-9 gap-1 border-[#FF5F5F]/40 font-semibold text-[#FF5F5F] hover:bg-red-50"
                   onClick={handleBulkDelete}
@@ -309,7 +309,7 @@ export default function InsightsPage() {
             description="결과 페이지에서 인사이트를 저장하면 이곳에 모아 다시 열람할 수 있습니다. 시장 분석을 실행한 뒤 마음에 드는 요약을 저장해 보세요."
             action={
               <Link href="/">
-                <Button variant="default" size="lg" className="gap-2">
+                <Button variant="primary" size="lg" className="gap-2">
                   <Search className="h-4 w-4" />
                   시장 분석 시작하기
                 </Button>
@@ -322,7 +322,7 @@ export default function InsightsPage() {
           <p className="text-sm text-muted-foreground mb-4">검색·시장 필터에 맞는 인사이트가 없습니다.</p>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="font-semibold"
             onClick={() => {

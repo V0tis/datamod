@@ -166,7 +166,7 @@ export function LandingPage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="h-12 px-8">
+            <Button asChild variant="secondary" size="lg" className="h-12 px-8">
               <Link href="/auth/signup">회원가입</Link>
             </Button>
           </div>

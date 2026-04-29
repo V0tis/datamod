@@ -23,7 +23,7 @@ export function AnalysisSourceButton({
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-sky-300 hover:text-sky-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
+          'inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-sky-300 hover:text-sky-700   ',
           className
         )}
       >
@@ -37,7 +37,7 @@ export function AnalysisSourceButton({
     <a
       href="#section-detail"
       className={cn(
-        'inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-sky-300 hover:text-sky-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
+        'inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-sky-300 hover:text-sky-700   ',
         className
       )}
     >

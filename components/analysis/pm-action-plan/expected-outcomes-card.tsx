@@ -44,14 +44,14 @@ export function ExpectedOutcomesCard({
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-amber-300/90 bg-amber-50 px-4 py-4 text-sm text-amber-950 shadow-sm dark:border-amber-800/80 dark:bg-amber-950/35 dark:text-amber-50">
+          <div className="rounded-lg border border-amber-300/90 bg-amber-50 px-4 py-4 text-sm text-amber-950 shadow-sm   ">
             <p className="font-medium leading-relaxed">이 섹션의 데이터를 불러오지 못했습니다.</p>
             {onRetry ? (
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                className="mt-3 border-amber-700/40 bg-white hover:bg-amber-100 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                variant="secondary"
+                className="mt-3 border-amber-700/40 bg-white hover:bg-amber-100  "
                 onClick={onRetry}
               >
                 이 섹션만 재분석

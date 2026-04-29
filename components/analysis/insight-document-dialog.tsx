@@ -101,10 +101,10 @@ export function InsightDocumentDialog({
         </div>
 
         <DialogFooter className="shrink-0">
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
             닫기
           </Button>
-          <Button type="button" variant="default" size="sm" onClick={handleCopy} className="gap-1.5">
+          <Button type="button" variant="primary" size="sm" onClick={handleCopy} className="gap-1.5">
             <Copy className="h-4 w-4" />
             인사이트 복사
           </Button>

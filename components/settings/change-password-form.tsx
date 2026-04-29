@@ -160,7 +160,7 @@ export function ChangePasswordForm({ user, userEmail }: { user: User; userEmail:
           </div>
           <p className="text-xs text-muted-foreground">{MIN_LEN}자 이상, 현재 비밀번호와 달라야 합니다.</p>
           {newPassword.length > 0 && newPassword.length < MIN_LEN && (
-            <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+            <p className="text-xs text-amber-600  flex items-center gap-1">
               <XCircle className="h-3 w-3 shrink-0" aria-hidden />
               {MIN_LEN}자 이상 입력해 주세요.
             </p>
@@ -198,7 +198,7 @@ export function ChangePasswordForm({ user, userEmail }: { user: User; userEmail:
               className={cn(
                 'text-xs flex items-center gap-1.5',
                 !bothNewFilled && 'text-muted-foreground',
-                bothNewFilled && passwordsMatch && 'text-emerald-600 dark:text-emerald-500',
+                bothNewFilled && passwordsMatch && 'text-emerald-600 ',
                 bothNewFilled && !passwordsMatch && 'text-destructive'
               )}
             >

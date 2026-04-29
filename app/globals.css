@@ -2,12 +2,11 @@
 @plugin '@tailwindcss/typography';
 @import '../node_modules/tw-animate-css/dist/tw-animate.css';
 
-/* 다크 모드: Tailwind dark 전략은 'class'. html에 .dark 클래스 적용 시 다크 모드 (next-themes와 동일) */
-@custom-variant dark (&:is(.dark *));
+/* 라이트 모드 고정 */
 
-/* Datamod: B2B+B2C — 배경 #F8F9FA, 포지티브 #2AC1BC, 리스크 #FF5F5F, 본문 #222 */
+/* Datamod: B2B+B2C — 라이트 + 블루 프라이머리 */
 :root {
-  --rin-primary: #2ac1bc;
+  --rin-primary: #1b64da;
   --rin-bg: #ffffff;
   --rin-foreground: #222222;
   --rin-risk: #ff5f5f;
@@ -19,7 +18,7 @@
   --card-foreground: #222222;
   --popover: #ffffff;
   --popover-foreground: #222222;
-  --primary: #2ac1bc;
+  --primary: #1b64da;
   --primary-foreground: #ffffff;
   --secondary: #eef1f4;
   --secondary-foreground: #222222;
@@ -30,7 +29,7 @@
   --accent-foreground: #222222;
   --destructive: #ff5f5f;
   --destructive-foreground: #ffffff;
-  --success: #2ac1bc;
+  --success: #1b64da;
   --success-foreground: #ffffff;
   --warning: #e5a84b;
   --warning-foreground: #222222;
@@ -38,8 +37,8 @@
   --error-foreground: #ffffff;
   --border: #e8eaed;
   --input: #e8eaed;
-  --ring: #2ac1bc;
-  --chart-1: #2ac1bc;
+  --ring: #1b64da;
+  --chart-1: #1b64da;
   --chart-2: #ff5f5f;
   --chart-3: #3b82f6;
   --chart-4: #94a3b8;
@@ -51,12 +50,12 @@
   --sidebar-active: rgba(42, 193, 188, 0.15);
   --sidebar: #111827;
   --sidebar-foreground: #f9fafb;
-  --sidebar-primary: #2ac1bc;
+  --sidebar-primary: #1b64da;
   --sidebar-primary-foreground: #111827;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: #f9fafb;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #2ac1bc;
+  --sidebar-ring: #1b64da;
 
   /* Datamod B2B analytics (results·charts) — lib/designTokens.ts 와 동기화 */
   --dm-color-primary: #1b64da;
@@ -81,71 +80,6 @@
   --dm-score-risk: #dc2626;
 }
 
-/* Dark theme: 부드러운 다크 그레이, 명확한 계층·대비, 순수 검정 배제 */
-.dark {
-  --background: #0f1216;
-  --background-elevated: #161b22;
-  --foreground: #e8eaed;
-  --foreground-muted: #8b92a0;
-  --card: #1a1f29;
-  --card-foreground: #e8eaed;
-  --popover: #1c2129;
-  --popover-foreground: #e8eaed;
-  --primary: #58a6ff;
-  --primary-foreground: #0f1216;
-  --secondary: #1c2129;
-  --secondary-foreground: #e8eaed;
-  --muted: #1c2129;
-  --muted-hover: #252b36;
-  --muted-foreground: #8b92a0;
-  --accent: #21262d;
-  --accent-foreground: #e8eaed;
-  --destructive: #f85149;
-  --destructive-foreground: #e8eaed;
-  --success: #3fb950;
-  --success-foreground: #0f1216;
-  --warning: #d29922;
-  --warning-foreground: #0f1216;
-  --error: #f85149;
-  --error-foreground: #e8eaed;
-  --border: #30363d;
-  --input: #21262d;
-  --ring: #58a6ff;
-  --chart-1: #58a6ff;
-  --chart-2: #3fb950;
-  --chart-3: #d29922;
-  --chart-4: #a371f7;
-  --chart-5: #f85149;
-  --sidebar: #0f1216;
-  --sidebar-foreground: #e8eaed;
-  --sidebar-primary: #58a6ff;
-  --sidebar-primary-foreground: #0f1216;
-  --sidebar-accent: #21262d;
-  --sidebar-accent-foreground: #e8eaed;
-  --sidebar-border: #30363d;
-  --sidebar-ring: #58a6ff;
-
-  --dm-color-primary: #58a6ff;
-  --dm-color-primary-light: rgba(88, 166, 255, 0.12);
-  --dm-color-success: #3fb950;
-  --dm-color-success-light: rgba(63, 185, 80, 0.12);
-  --dm-color-warning: #d29922;
-  --dm-color-warning-light: rgba(210, 153, 34, 0.12);
-  --dm-color-danger: #f85149;
-  --dm-color-danger-light: rgba(248, 81, 73, 0.12);
-  --dm-color-neutral: #8b92a0;
-  --dm-color-bg: #0f1216;
-  --dm-color-surface: #161b22;
-  --dm-color-border: #30363d;
-  --dm-color-border-strong: #484f58;
-  --dm-color-text-primary: #e8eaed;
-  --dm-color-text-secondary: #b1bac4;
-  --dm-color-text-muted: #8b949e;
-  --dm-score-high: #3fb950;
-  --dm-score-mid: #58a6ff;
-  --dm-score-low: #d29922;
-  --dm-score-risk: #f85149;
-}
 
 @theme inline {
   --font-sans: 'Pretendard', 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
@@ -220,20 +154,6 @@
   --warning-border: hsl(38 85% 88%);
   --warning-text: hsl(38 92% 35%);
 }
-[data-sonner-toaster][data-theme='dark'] {
-  --error-bg: hsl(0 45% 12%);
-  --error-border: hsl(0 45% 22%);
-  --error-text: hsl(0 80% 85%);
-  --success-bg: hsl(142 45% 12%);
-  --success-border: hsl(142 40% 22%);
-  --success-text: hsl(142 70% 75%);
-  --info-bg: hsl(214 25% 12%);
-  --info-border: hsl(214 20% 22%);
-  --info-text: hsl(214 60% 80%);
-  --warning-bg: hsl(38 45% 12%);
-  --warning-border: hsl(38 40% 22%);
-  --warning-text: hsl(38 80% 80%);
-}
 
 /* 배민 스타일 타이포 계층: 큰 폰트(핵심 수치·메인 타이틀) / 중간(섹션·위젯 제목) / 작은(보조·캡션) */
 @layer base {
@@ -287,21 +207,6 @@
 .rin-doc .prose {
   max-width: 72ch;
 }
-.dark .prose,
-.dark .prose p,
-.dark .prose li,
-.dark .prose strong,
-.dark .prose h1,
-.dark .prose h2,
-.dark .prose h3,
-.dark .prose h4,
-.dark .prose span,
-.dark .prose div {
-  color: var(--foreground);
-}
-.dark .prose a {
-  color: var(--primary);
-}
 .rin-doc .prose p + p {
   margin-top: 0.875em;
 }
@@ -352,9 +257,6 @@ body {
 /* 상용 대시보드 공통 카드 */
 .rin-pro-card {
   @apply rounded-xl border border-border bg-white p-5 shadow-sm;
-}
-.dark .rin-pro-card {
-  @apply bg-card border-border;
 }
 .rin-section {
   @apply space-y-6;
