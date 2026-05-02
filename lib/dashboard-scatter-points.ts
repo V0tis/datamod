@@ -12,6 +12,22 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
 }
 
+/** 트렌드 파생 점: 키워드별로 (50,50) 주변에 넓게 퍼지도록 극좌표 스프레드 */
+function trendDerivedScores(keyword: string, index: number, rank: number): { o: number; r: number } {
+  const h = hashKeyword(`${keyword}:${index}`)
+  const angle = ((h % 628) / 628) * 2 * Math.PI
+  const rad = 16 + (h % 28)
+  let o = 50 + Math.cos(angle) * rad
+  let rs = 50 + Math.sin(angle) * rad
+  const rankN = typeof rank === 'number' && rank > 0 ? rank : index + 1
+  o += (12 - Math.min(rankN, 10)) * 1.4
+  rs += ((h >> 5) % 9) - 4
+  const jitter = ((h * 7 + index * 13) % 17) - 8
+  o += jitter
+  rs += ((h >> 2) % 17) - 8
+  return { o: clamp(o, 10, 96), r: clamp(rs, 10, 96) }
+}
+
 export function buildDashboardScatterPoints(
   trendItems: TrendItem[],
   recentReports: Array<{ keyword: string; opportunity_score?: number | null }>,
@@ -34,24 +50,29 @@ export function buildDashboardScatterPoints(
     if (r.opportunity_score == null) continue
     if (map.has(r.keyword)) continue
     const h = hashKeyword(r.keyword)
+    const oBase = clamp(r.opportunity_score, 8, 98)
+    const riskBase = clamp(32 + (h % 48) + ((r.opportunity_score ?? 50) % 7), 15, 92)
     map.set(r.keyword, {
       keyword: r.keyword,
-      기회점수: clamp(r.opportunity_score, 8, 98),
-      리스크점수: clamp(28 + (h % 52), 15, 90),
-      트렌드강도: clamp(35 + (h % 45), 30, 98),
+      기회점수: oBase,
+      리스크점수: riskBase,
+      트렌드강도: clamp(38 + (h % 42), 30, 98),
       countryCode,
     })
   }
 
-  for (const t of trendItems.slice(0, 14)) {
+  const trendsSlice = trendItems.slice(0, 14)
+  for (let i = 0; i < trendsSlice.length; i++) {
+    const t = trendsSlice[i]
     if (map.has(t.keyword)) continue
-    const rank = typeof t.rank === 'number' ? t.rank : 5
+    const rank = typeof t.rank === 'number' ? t.rank : i + 1
+    const { o, r } = trendDerivedScores(t.keyword, i, rank)
     const h = hashKeyword(t.keyword)
     map.set(t.keyword, {
       keyword: t.keyword,
-      기회점수: clamp(82 - rank * 5 + (h % 9), 18, 96),
-      리스크점수: clamp(30 + rank * 4 + (h % 14), 20, 88),
-      트렌드강도: clamp(105 - rank * 7 + (h % 12), 28, 100),
+      기회점수: o,
+      리스크점수: r,
+      트렌드강도: clamp(42 + (rank % 8) * 5 + (h % 15), 28, 100),
       countryCode,
     })
   }

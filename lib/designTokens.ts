@@ -1,6 +1,6 @@
 /**
  * Datamod B2B analytics design tokens.
- * Mirrors `app/globals.css` `:root` / `.dark` variables `--dm-*` for charts and inline styles.
+ * Mirrors `app/globals.css` `:root` variables `--dm-*` for charts and inline styles.
  */
 export const dmColors = {
   primary: '#1B64DA',

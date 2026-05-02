@@ -79,18 +79,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           'min-h-screen w-full transition-[padding] duration-200',
-          /* <md: 햄버거만, md~lg: 아이콘 레일 72px, lg+: 전체 사이드바 220px */
+          /* <md: 햄버거만, md~lg: 아이콘 레일 72px, lg+: 전체 사이드바 180px */
           isResultsPage
             ? resultsScrollPastHeader
               ? 'pt-0'
               : 'pt-14'
-            : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[calc(220px+1.5rem)]'
+            : 'pt-14 md:pl-[4.5rem] lg:pt-0 lg:pl-[calc(180px+1.5rem)]'
         )}
       >
         <main
           className={cn(
             'min-h-screen overflow-auto px-2 sm:px-4 lg:px-8 xl:px-10',
-            isResultsPage ? 'bg-white ' : 'bg-muted/25'
+            isResultsPage ? 'bg-white ' : 'bg-[#F7F8FA]'
           )}
         >
           <ErrorBoundary>

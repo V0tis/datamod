@@ -7,10 +7,10 @@
 /* Datamod: B2B+B2C — 라이트 + 블루 프라이머리 */
 :root {
   --rin-primary: #1b64da;
-  --rin-bg: #ffffff;
+  --rin-bg: #f7f8fa;
   --rin-foreground: #222222;
   --rin-risk: #ff5f5f;
-  --background: #f8f9fa;
+  --background: #f7f8fa;
   --background-elevated: #ffffff;
   --foreground: #222222;
   --foreground-muted: #5c5c5c;
@@ -44,17 +44,17 @@
   --chart-4: #94a3b8;
   --chart-5: #222222;
   --radius: 0.75rem;
-  --sidebar-bg: #111827;
-  --sidebar-fg: #f9fafb;
-  --sidebar-fg-muted: #9ca3af;
-  --sidebar-active: rgba(42, 193, 188, 0.15);
-  --sidebar: #111827;
-  --sidebar-foreground: #f9fafb;
+  --sidebar-bg: #ffffff;
+  --sidebar-fg: #374151;
+  --sidebar-fg-muted: #6b7280;
+  --sidebar-active: rgba(37, 99, 235, 0.08);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #374151;
   --sidebar-primary: #1b64da;
-  --sidebar-primary-foreground: #111827;
-  --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #f9fafb;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f4f6;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #f3f4f6;
   --sidebar-ring: #1b64da;
 
   /* Datamod B2B analytics (results·charts) — lib/designTokens.ts 와 동기화 */
@@ -85,7 +85,7 @@
   --font-sans: 'Pretendard', 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   --font-mono: ui-monospace, monospace;
   --color-rin-primary: #2ac1bc;
-  --color-rin-bg: #ffffff;
+  --color-rin-bg: #f7f8fa;
   --color-rin-risk: #ff5f5f;
   --shadow-rin-card: 0 1px 3px rgba(0, 0, 0, 0.06);
   --color-background: var(--background);

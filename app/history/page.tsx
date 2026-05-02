@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useResearchStore } from '@/lib/stores/research-store'
 import { DEPTH_LABELS, type DepthMode } from '@/lib/analysis-estimates'
+import { formatDisplayKeyword } from '@/lib/format-display-keyword'
 
 const PAGE_SIZE = 10
 
@@ -677,12 +678,14 @@ export default function HistoryPage() {
                       'h-4 w-4 shrink-0 rounded border-[#E8EAED] text-[#2AC1BC] transition-opacity focus:ring-[#2AC1BC]',
                       selectedIds.includes(record.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                     )}
-                    aria-label={`${record.keyword} 선택`}
+                    aria-label={`${formatDisplayKeyword(record.keyword)} 선택`}
                   />
 
                   <div className="min-w-0 flex-1">
                     <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900">{record.keyword}</span>
+                      <span className="text-sm font-semibold text-gray-900" title={record.keyword || undefined}>
+                        {formatDisplayKeyword(record.keyword)}
+                      </span>
                       <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                         {analysisModeLabel(record.analysis_depth)}
                       </span>

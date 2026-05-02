@@ -30,7 +30,7 @@
 ## 기술 스택 (2026)
 
 - **Framework**: Next.js 16, React 19
-- **스타일**: Tailwind CSS 4, Pretendard 폰트, 다크 모드 (next-themes)
+- **스타일**: Tailwind CSS 4, Pretendard 폰트, 라이트 테마 고정
 - **AI**: Google Gemini (gemini-2.5-flash), Groq (llama-3.3-70b-versatile)
 - **DB**: Supabase (Auth, Postgres, RLS)
 - **상태**: Zustand, SWR

@@ -9,7 +9,7 @@ export default function ResultsPageLoading() {
       aria-label="분석 페이지 불러오는 중"
     >
       <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-[min(100%,1920px)] px-3 py-4 sm:px-4 sm:py-5">
-        <aside className="hidden w-[220px] shrink-0 lg:block">
+        <aside className="hidden w-[180px] shrink-0 lg:block">
           <div className="sticky top-20 space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
             <div className="h-3 w-24 rounded bg-muted animate-pulse" />
             <div className="h-2 w-full rounded bg-muted/80 animate-pulse" />

@@ -11,7 +11,6 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
-  Cell,
 } from 'recharts'
 import type { ScatterKeywordPoint } from '@/lib/types/scatter-keyword-point'
 import { cn } from '@/lib/utils'
@@ -25,6 +24,42 @@ function quadrantFill(o: number, r: number): string {
   if (highO && highR) return '#D97706'
   if (!highO && !highR) return '#64748B'
   return '#DC2626'
+}
+
+function ScatterBubblePoint(props: {
+  cx?: number
+  cy?: number
+  width?: number
+  height?: number
+  payload?: ScatterKeywordPoint
+}) {
+  const { cx = 0, cy = 0, payload, width = 28, height = 28 } = props
+  const o = payload?.기회점수 ?? 0
+  const rsk = payload?.리스크점수 ?? 0
+  const fill = quadrantFill(o, rsk)
+  const side = Math.min(width, height)
+  const radius = Math.max(7, Math.min(side / 2, 22))
+  const kw = payload?.keyword ?? ''
+  const label = kw.length > 8 ? `${kw.slice(0, 8)}…` : kw
+  const tip = `${kw} · 기회: ${Math.round(o)} · 리스크: ${Math.round(rsk)}`
+  return (
+    <g className="cursor-pointer">
+      <title>{tip}</title>
+      <circle cx={cx} cy={cy} r={radius} fill={fill} opacity={0.85} />
+      <text
+        x={cx}
+        y={cy - radius - 4}
+        textAnchor="middle"
+        fontSize={10}
+        fontWeight={500}
+        fill="#374151"
+        style={{ fontFamily: 'Pretendard, system-ui, sans-serif' }}
+        pointerEvents="none"
+      >
+        {label}
+      </text>
+    </g>
+  )
 }
 
 function CustomTooltip({
@@ -108,7 +143,7 @@ export function OpportunityRiskScatter({
         저기회·고리스크 ❌
       </div>
       <ResponsiveContainer width="100%" height={300}>
-        <ScatterChart margin={{ top: 28, right: 16, bottom: 28, left: 8 }}>
+        <ScatterChart margin={{ top: 36, right: 16, bottom: 28, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F2" />
           <XAxis
             type="number"
@@ -126,15 +161,17 @@ export function OpportunityRiskScatter({
             tick={{ fontSize: 11, fill: '#6B7280' }}
             label={{ value: '리스크 점수', angle: -90, position: 'insideLeft', fill: '#374151', fontSize: 12 }}
           />
-          <ZAxis type="number" dataKey="트렌드강도" range={[40, 400]} />
+          <ZAxis type="number" dataKey="트렌드강도" range={[48, 320]} />
           <ReferenceLine x={50} stroke="#94A3B8" strokeDasharray="4 4" />
           <ReferenceLine y={50} stroke="#94A3B8" strokeDasharray="4 4" />
           <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
-          <Scatter name="키워드" data={chartData}>
-            {chartData.map((entry, index) => (
-              <Cell key={`${entry.keyword}-${index}`} fill={quadrantFill(entry.기회점수, entry.리스크점수)} />
-            ))}
-          </Scatter>
+          <Scatter
+            name="키워드"
+            data={chartData}
+            shape={(props: { cx?: number; cy?: number; width?: number; height?: number; payload?: ScatterKeywordPoint }) => (
+              <ScatterBubblePoint {...props} />
+            )}
+          />
         </ScatterChart>
       </ResponsiveContainer>
     </div>
